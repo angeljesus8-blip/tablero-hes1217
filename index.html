@@ -91,6 +91,12 @@
   .stock.cero .num { color:var(--rojo); }
   .exh { font-size:10px; font-weight:700; color:var(--azul); background:#eef3fb;
     padding:4px 8px; border-radius:7px; flex-shrink:0; white-space:nowrap; }
+  .exh.eol-ready { background:#eafaf1; color:var(--verde); }
+  .exh.eol-pend { background:#fff5ee; color:var(--naranja); }
+  .card.t-eol.listo { border-left-color:var(--verde); background:#f7fdfa; box-shadow:0 2px 10px rgba(26,140,78,.10); }
+  .eol-status { font-size:9.5px; font-weight:800; text-transform:uppercase; letter-spacing:.4px; padding:3px 7px; border-radius:6px; flex-shrink:0; }
+  .eol-status.pend { background:#fff5ee; color:var(--naranja); }
+  .eol-status.agot { background:#f2f2f2; color:#888; }
   .dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
   .dot.ok{background:var(--verde);} .dot.bajo{background:var(--naranja);} .dot.cero{background:var(--rojo);}
 
@@ -132,7 +138,7 @@ const HOY = new Date('2026-06-22T00:00:00'); // referencia para "días restantes
 const FILTROS = [
   { id:'todo',  label:'Todo' },
   { id:'promo', label:'🔥 Promos' },
-  { id:'eol',   label:'🏷️ EOL 50%' },
+  { id:'eol',   label:'🏷️ Vender 50%' },
   { id:'nov',   label:'📦 Novedades' },
   { id:'inv',   label:'📊 Inventario' },
   { id:'aviso', label:'📢 Avisos' },
@@ -155,9 +161,26 @@ function coincide(...campos){
   return campos.join(' ').toLowerCase().includes(busqueda);
 }
 
+// ---- EOL: cruza la lista de productos en fin de vida con el inventario ----
+// Regla: el 50% (pieza de exhibición) SOLO se activa cuando el stock cerrado = 0.
+const invBySku = {};
+(D.inventario||[]).forEach(x=>{ invBySku[x.sku]=x; });
+const money = n => '$'+Number(n||0).toLocaleString('es-MX');
+function eolResolved(){
+  return (D.eol||[]).map(e=>{
+    const inv = invBySku[e.sku] || {};
+    const stock = inv.stock||0, exhibe = inv.exhibe||0;
+    const estado = (stock===0 && exhibe>0) ? 'listo' : (stock>0 ? 'pendiente' : 'agotado');
+    return { sku:e.sku, producto:e.producto||inv.producto||('SKU '+e.sku),
+      precio:e.precio, precio50:e.precio?Math.round(e.precio/2):null, stock, exhibe, estado };
+  });
+}
+const EOL = eolResolved();
+const eolMap = {}; EOL.forEach(e=>{ eolMap[e.sku]=e.estado; });
+
 function cuenta(id){
   if(id==='promo') return (D.promos||[]).filter(x=>coincide(x.titulo,x.detalle)).length;
-  if(id==='eol')   return (D.eol||[]).filter(x=>coincide(x.titulo,x.detalle,x.sku)).length;
+  if(id==='eol')   return EOL.filter(e=>coincide(e.producto,e.sku) && e.estado==='listo').length;
   if(id==='nov')   return (D.novedades||[]).filter(x=>coincide(x.titulo,x.detalle)).length;
   if(id==='inv')   return (D.inventario||[]).filter(x=>coincide(x.producto,x.sku)).length;
   if(id==='aviso') return (D.avisos||[]).filter(x=>coincide(x.titulo,x.detalle)).length;
@@ -180,14 +203,28 @@ function cardPromo(x){
     <div class="meta">${x.precio?`<span class="precio">${x.precio}</span>`:''}${x.vigencia?badgeVigencia(x.vigencia):''}</div>
   </div>`;
 }
-function cardEol(x){
-  return `<div class="card t-eol ${x.prioridad==='alta'?'alta':''}">
-    <div class="top"><h3>${x.titulo}</h3><span class="tag eol">−50%</span></div>
-    <p class="det">${x.detalle||''}</p>
-    <div class="meta">
-      <span class="precio">${x.precioAntes?`<span class="antes">${x.precioAntes}</span>`:''}${x.precioAhora||''}</span>
-      ${x.sku?`<span class="badge">SKU ${x.sku}</span>`:''}
-    </div>
+function cardEol(e){
+  if(e.estado==='listo'){
+    return `<div class="card t-eol listo">
+      <div class="top"><h3>${e.producto}</h3><span class="tag eol">−50%</span></div>
+      <p class="det"><b>✅ Ya se puede vender al 50%</b> — solo la pieza de exhibición (👁 ${e.exhibe}). Stock cerrado en 0.</p>
+      <div class="meta">
+        ${e.precio50!=null?`<span class="precio"><span class="antes">${money(e.precio)}</span>${money(e.precio50)}</span>`:''}
+        <span class="badge">SKU ${e.sku}</span>
+      </div>
+    </div>`;
+  }
+  if(e.estado==='pendiente'){
+    return `<div class="card t-eol">
+      <div class="top"><h3>${e.producto}</h3><span class="eol-status pend">EOL</span></div>
+      <p class="det">Primero agotar <b>${e.stock}</b> pza(s) de stock cerrado a precio normal${e.precio?' ('+money(e.precio)+')':''}. El <b>50%</b> se activa cuando llegue a 0.</p>
+      <div class="meta"><span class="badge">SKU ${e.sku}</span>${e.exhibe?`<span class="exh">👁 ${e.exhibe} exhib.</span>`:''}</div>
+    </div>`;
+  }
+  return `<div class="card t-eol">
+    <div class="top"><h3>${e.producto}</h3><span class="eol-status agot">Agotado</span></div>
+    <p class="det">Sin stock cerrado ni pieza de exhibición.</p>
+    <div class="meta"><span class="badge">SKU ${e.sku}</span></div>
   </div>`;
 }
 function cardNov(x){
@@ -206,11 +243,14 @@ function cardAviso(x){
 }
 function rowInv(x){
   const cls = x.stock===0 ? 'cero' : x.stock<=3 ? 'bajo' : 'ok';
+  const est = eolMap[x.sku];
+  const eolB = est==='listo' ? `<span class="exh eol-ready">🏷️ 50%</span>`
+             : est==='pendiente' ? `<span class="exh eol-pend">EOL</span>` : '';
   const exh = x.exhibe ? `<span class="exh">👁 ${x.exhibe} exhib.</span>` : '';
   return `<div class="inv-row">
     <div class="dot ${cls}"></div>
     <div class="inv-info"><h4>${x.producto}</h4><span>SKU ${x.sku||'—'}</span></div>
-    ${exh}
+    ${eolB}${exh}
     <div class="stock ${cls}"><div class="num">${x.stock}</div><div class="lbl lbl2">para vender</div></div>
   </div>`;
 }
@@ -226,13 +266,20 @@ function render(){
   let html = '';
 
   const promos = (D.promos||[]).filter(x=>coincide(x.titulo,x.detalle));
-  const eol    = (D.eol||[]).filter(x=>coincide(x.titulo,x.detalle,x.sku));
+  const eolAll = EOL.filter(e=>coincide(e.producto,e.sku));
+  const eolListo = eolAll.filter(e=>e.estado==='listo');
+  const eolPend  = eolAll.filter(e=>e.estado==='pendiente');
+  const eolAgot  = eolAll.filter(e=>e.estado==='agotado');
   const nov    = (D.novedades||[]).filter(x=>coincide(x.titulo,x.detalle));
   const inv    = (D.inventario||[]).filter(x=>coincide(x.producto,x.sku));
   const avisos = (D.avisos||[]).filter(x=>coincide(x.titulo,x.detalle));
 
   if(f==='todo'||f==='aviso') html += seccion('📢 Avisos', avisos, cardAviso);
-  if(f==='todo'||f==='eol')   html += seccion('🏷️ EOL · última pieza al 50%', eol, cardEol);
+  if(f==='todo'||f==='eol'){
+    html += seccion('🏷️ Vender al 50% · pieza de exhibición', eolListo, cardEol);
+    html += seccion('⏳ EOL próximos · agotar stock cerrado', eolPend, cardEol);
+    if(f==='eol') html += seccion('Agotados', eolAgot, cardEol);
+  }
   if(f==='todo'||f==='promo') html += seccion('🔥 Promociones vigentes', promos, cardPromo);
   if(f==='todo'||f==='nov')   html += seccion('📦 Mercancía nueva', nov, cardNov);
   if(f==='todo'||f==='inv')   html += seccion('📊 Inventario · existencias', inv, rowInv);

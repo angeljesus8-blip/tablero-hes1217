@@ -13,7 +13,11 @@ window.DATOS = {
   // 🔥 PROMOCIONES VIGENTES  (en espera del primer comunicado real)
   promos: [],
 
-  // 🏷️ EOL / ÚLTIMA PIEZA EXHIBIDA AL 50%  (en espera de comunicado real)
+  // 🏷️ EOL — productos en fin de vida (desde los comunicados de la carpeta eol/).
+  //   Solo lista SKU + precio normal. El tablero detecta SOLO cuando el stock
+  //   cerrado = 0 para marcar "✅ Vender al 50%" (la pieza de exhibición).
+  //   El 50% se calcula automático a partir de "precio".
+  //   Ej: { sku: "100295942", precio: 5499 }
   eol: [],
 
   // 📦 MERCANCÍA QUE ENTRA / NOVEDADES  (en espera de comunicado real)
