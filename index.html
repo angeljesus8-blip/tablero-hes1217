@@ -85,9 +85,12 @@
   .stock { text-align:center; flex-shrink:0; }
   .stock .num { font-size:20px; font-weight:800; line-height:1; }
   .stock .lbl { font-size:9px; color:#aaa; text-transform:uppercase; letter-spacing:.5px; }
+  .stock .lbl.lbl2 { font-size:8px; }
   .stock.ok .num { color:var(--verde); }
   .stock.bajo .num { color:var(--naranja); }
   .stock.cero .num { color:var(--rojo); }
+  .exh { font-size:10px; font-weight:700; color:var(--azul); background:#eef3fb;
+    padding:4px 8px; border-radius:7px; flex-shrink:0; white-space:nowrap; }
   .dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
   .dot.ok{background:var(--verde);} .dot.bajo{background:var(--naranja);} .dot.cero{background:var(--rojo);}
 
@@ -203,10 +206,12 @@ function cardAviso(x){
 }
 function rowInv(x){
   const cls = x.stock===0 ? 'cero' : x.stock<=3 ? 'bajo' : 'ok';
+  const exh = x.exhibe ? `<span class="exh">👁 ${x.exhibe} exhib.</span>` : '';
   return `<div class="inv-row">
     <div class="dot ${cls}"></div>
-    <div class="inv-info"><h4>${x.producto}</h4><span>SKU ${x.sku||'—'}${x.exhibe?' · 1 en exhibición':''}</span></div>
-    <div class="stock ${cls}"><div class="num">${x.stock}</div><div class="lbl">stock</div></div>
+    <div class="inv-info"><h4>${x.producto}</h4><span>SKU ${x.sku||'—'}</span></div>
+    ${exh}
+    <div class="stock ${cls}"><div class="num">${x.stock}</div><div class="lbl lbl2">para vender</div></div>
   </div>`;
 }
 
