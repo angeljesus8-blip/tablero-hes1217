@@ -8,93 +8,100 @@
 
 window.DATOS = {
   // Se muestra como "Actualizado: ..." en la app
-  actualizado: "2026-06-22 15:30",
+  actualizado: "2026-06-22 16:40",
 
-  // 🔥 PROMOCIONES VIGENTES
-  promos: [
-    {
-      titulo: "Watch Fit 5 — $300 de descuento",
-      detalle: "Aplica en todas las correas. Precio final $2,699. Mencionar en cada demo de wearables.",
-      precio: "$2,699",
-      vigencia: "2026-06-30",
-      prioridad: "alta"
-    },
-    {
-      titulo: "FreeBuds 6 + estuche gratis",
-      detalle: "Regalo de estuche protector con la compra. Stock limitado.",
-      precio: "$2,499",
-      vigencia: "2026-06-28",
-      prioridad: "normal"
-    },
-    {
-      titulo: "Pura 80 — 18 MSI",
-      detalle: "18 meses sin intereses con tarjetas participantes. Ideal para ticket alto.",
-      precio: "Desde $18,999",
-      vigencia: "2026-07-15",
-      prioridad: "normal"
-    }
-  ],
+  // 🔥 PROMOCIONES VIGENTES  (en espera del primer comunicado real)
+  promos: [],
 
-  // 🏷️ EOL / ÚLTIMA PIEZA EXHIBIDA AL 50%
-  eol: [
-    {
-      titulo: "Mate XT (última pieza exhibida)",
-      detalle: "Única pieza de piso. Autorizado vender al 50%. Revisar estética antes de cerrar.",
-      precioAntes: "$59,999",
-      precioAhora: "$29,999",
-      sku: "MATEXT-001",
-      prioridad: "alta"
-    },
-    {
-      titulo: "Watch 5 44mm (descontinuado)",
-      detalle: "Pieza de exhibición, sin caja original. 50% de descuento autorizado.",
-      precioAntes: "$8,499",
-      precioAhora: "$4,249",
-      sku: "WATCH5-44",
-      prioridad: "normal"
-    }
-  ],
+  // 🏷️ EOL / ÚLTIMA PIEZA EXHIBIDA AL 50%  (en espera de comunicado real)
+  eol: [],
 
-  // 📦 MERCANCÍA QUE ENTRA / NOVEDADES
-  novedades: [
-    {
-      titulo: "Nova 15 Max — ya en piso",
-      detalle: "Nuevo ingreso. Revisar battle card en Capacitación antes de demostrar.",
-      fecha: "2026-06-21",
-      prioridad: "normal"
-    },
-    {
-      titulo: "Watch Kids X1 — llega esta semana",
-      detalle: "Ingreso programado. Enfocar a clientes con hijos pequeños.",
-      fecha: "2026-06-25",
-      prioridad: "normal"
-    }
-  ],
+  // 📦 MERCANCÍA QUE ENTRA / NOVEDADES  (en espera de comunicado real)
+  novedades: [],
 
-  // 📊 INVENTARIO / EXISTENCIAS (lo actualizo con el export diario)
+  // 📊 INVENTARIO / EXISTENCIAS — mercancía cerrada para venta (equipo cerrado)
+  // Fuente: "Informe Artículos Totales Tienda" — 71 productos, 187 piezas.
   inventario: [
-    { producto: "Watch Fit 5 Negro",        sku: "WF5-BLK",   stock: 8,  exhibe: 1 },
-    { producto: "Watch Fit 5 Blanco",       sku: "WF5-WHT",   stock: 3,  exhibe: 1 },
-    { producto: "FreeBuds 6",               sku: "FB6",       stock: 12, exhibe: 1 },
-    { producto: "Pura 80 512GB",            sku: "PURA80-512",stock: 2,  exhibe: 1 },
-    { producto: "Nova 15 Max",              sku: "NOVA15MAX", stock: 6,  exhibe: 1 },
-    { producto: "Watch 5 44mm",             sku: "WATCH5-44", stock: 0,  exhibe: 1 },
-    { producto: "Mate XT",                  sku: "MATEXT-001",stock: 0,  exhibe: 1 }
+    { producto: "MATEPAD SE KEY 11\" 8GB 128GB GR", sku: "100219923", stock: 2 },
+    { producto: "MATEPAD SE KEY 11\" 8GB 128GB AZ", sku: "100219940", stock: 1 },
+    { producto: "M-PENCIL HUAWEI 3RA GEN BLANCO", sku: "100220019", stock: 4 },
+    { producto: "HUAWEI WATCH GT5 PRO 46MM NG", sku: "100229321", stock: 2 },
+    { producto: "AUDIF IN EAR HW F-BUDS PRO 4 NG", sku: "100245646", stock: 1 },
+    { producto: "AUDIF IN EAR HW F-BUDS PRO 4 BN", sku: "100245654", stock: 1 },
+    { producto: "AUDIF IN EAR HW F-BUDS PRO 4 VD", sku: "100245689", stock: 2 },
+    { producto: "HUAWEI MATE XT ULT 16GB 1TB RJ", sku: "100250138", stock: 1 },
+    { producto: "HUAWEI MATE XT ULT 16GB 1TB NG", sku: "100250162", stock: 2 },
+    { producto: "AUDIF OVER EAR HWEI FREEARC NG", sku: "100250541", stock: 1 },
+    { producto: "AUDIF OVER EAR HWEI FREEARC VD", sku: "100250568", stock: 5 },
+    { producto: "MOUSE HUAWEI CD26 SENSOR TOG GR", sku: "100256417", stock: 1 },
+    { producto: "AUDIF IN EAR HW FREEBUDS 6 NG", sku: "100258105", stock: 1 },
+    { producto: "AUDIF IN EAR HW FREEBUDS 6 BN", sku: "100258121", stock: 1 },
+    { producto: "AUDIF IN EAR HW FREEBUDS 6 MO", sku: "100258148", stock: 1 },
+    { producto: "HUAWEI WATCH 5 46MM TI 1.5\" PT", sku: "100259482", stock: 1 },
+    { producto: "HUAWEI WATCH FIT 4 1.82\" AL NG", sku: "100259554", stock: 8 },
+    { producto: "HUAWEI WATCH FIT 4 PRO 1.82\" AZ", sku: "100259634", stock: 2 },
+    { producto: "HUAWEI PURA 80 PRO 12/512GB BN", sku: "100269154", stock: 1 },
+    { producto: "HUAWEI MATEPAD 11.5\" 8/128GB GR", sku: "100270526", stock: 1 },
+    { producto: "MATEPAD 11.5\" 8/128GB +TECLD GR", sku: "100270542", stock: 1 },
+    { producto: "HUAWEI MATEPAD 11.5\" 8/256GB GR", sku: "100270551", stock: 2 },
+    { producto: "MATEPAD 11.5\" 8/256GB +TECLD GR", sku: "100270577", stock: 4 },
+    { producto: "MATEPAD 11.5\" 8/256GB +TECLD MO", sku: "100270585", stock: 1 },
+    { producto: "HUAWEI PURA 80 6.6\" 12/256GB NG", sku: "100272644", stock: 2 },
+    { producto: "HUAWEI PURA 80 6.6\" 12/256GB BN", sku: "100272661", stock: 3 },
+    { producto: "HUAWEI PURA 80 6.6\" 12/256GB DO", sku: "100272687", stock: 2 },
+    { producto: "AUDIF IN EAR HW FREEBUDS 7I NG", sku: "100274412", stock: 1 },
+    { producto: "AUDIF IN EAR HW FREEBUDS 7I RS", sku: "100274439", stock: 2 },
+    { producto: "HUAWEI WATCH GT6 1.47\" AMLD NG", sku: "100274877", stock: 4 },
+    { producto: "HUAWEI WATCH GT6 1.47\" AMLD CF", sku: "100274906", stock: 2 },
+    { producto: "HUAWEI WATCH GT6 1.47\" AMLD VD", sku: "100274914", stock: 1 },
+    { producto: "HUAWEI WATCH GT6 PRO 1.47\" NG", sku: "100274922", stock: 2 },
+    { producto: "HUAWEI WATCH GT6 PRO 1.47\" PT", sku: "100274931", stock: 2 },
+    { producto: "HUAWEI WATCH GT6 PRO 1.47\" CAFÉ", sku: "100274949", stock: 1 },
+    { producto: "HUAWEI WATCH GT6 1.32\" AMLD BN", sku: "100274973", stock: 8 },
+    { producto: "HUAWEI WATCH GT6 1.32\" AMLD MO", sku: "100274990", stock: 3 },
+    { producto: "HUAWEI WATCH ULTIMATE 2 1.5\" NG", sku: "100275001", stock: 1 },
+    { producto: "HUAWEI WATCH ULTIMATE 2 1.5\" AZ", sku: "100275010", stock: 2 },
+    { producto: "MESH HUAWEI X1PRO AC3600 NG PK", sku: "100276661", stock: 1 },
+    { producto: "MATEPAD 12X 12/256GB BN + TECLD", sku: "100276717", stock: 2 },
+    { producto: "M-PENCIL PRO HUAWEI CD56 BLANCO", sku: "100276725", stock: 3 },
+    { producto: "ROUTER HUAWEI BE3 PRO 3600MB NG", sku: "100278931", stock: 3 },
+    { producto: "ROUTER HUAWEI AX3S 3000MB NEGRO", sku: "100278940", stock: 2 },
+    { producto: "MATEBOOK D16 CI5 16GB 1TB GRIS", sku: "100279918", stock: 2 },
+    { producto: "AUDÍF OPEN EAR HW FREECLIP 2 BN", sku: "100280855", stock: 2 },
+    { producto: "AUDÍF OPEN EAR HW FREECLIP 2 AZ", sku: "100280863", stock: 2 },
+    { producto: "HUAWEI MATE X7 16GB 512GB NEGRO", sku: "100280871", stock: 1 },
+    { producto: "HUAWEI WATCH ULT DESIGN 1.5\" PR", sku: "100283327", stock: 1 },
+    { producto: "AUDÍF IN EAR HW F-BUDS PRO 5 NG", sku: "100285197", stock: 5 },
+    { producto: "AUDÍF IN EAR HW F-BUDS PRO 5 AN", sku: "100285218", stock: 7 },
+    { producto: "HUAWEI BAND 11 1.62\" AMLD AL NG", sku: "100288128", stock: 2 },
+    { producto: "HUAWEI BAND 11 1.62\" AMLD AL BN", sku: "100288144", stock: 5 },
+    { producto: "HUAWEI BAND 11 1.62\" AMLD AL MO", sku: "100288152", stock: 3 },
+    { producto: "HUAWEI BAND 11 1.62 AMLD AL BGE", sku: "100288161", stock: 2 },
+    { producto: "HUAWEI BAND 11 PRO 1.62\" AL VD", sku: "100288195", stock: 3 },
+    { producto: "HUAWEI BAND 11 PRO 1.62\" AL AZ", sku: "100288283", stock: 2 },
+    { producto: "HUAWEI WATCH GT RUNNER2 1.32 NG", sku: "100288662", stock: 3 },
+    { producto: "HUAWEI WATCH GT RUNNER2 1.32 NJ", sku: "100288671", stock: 4 },
+    { producto: "HUAWEI WATCH GT RUNNER2 1.32 AZ", sku: "100288742", stock: 2 },
+    { producto: "HUAWEI MATE 80 PRO 16/512GB NG", sku: "100293226", stock: 1 },
+    { producto: "HUAWEI MATE 80 PRO 16/512GB DO", sku: "100293242", stock: 1 },
+    { producto: "MATEPAD MIN 8.8 12/256GB VD+FDA", sku: "100295475", stock: 7 },
+    { producto: "HUAWEI WATCH FIT 5 1.82\" VID NG", sku: "100295900", stock: 7 },
+    { producto: "HUAWEI WATCH FIT 5 1.82\" VID PR", sku: "100295918", stock: 13 },
+    { producto: "HUAWEI WATCH FIT 5 1.82\" VID BN", sku: "100295934", stock: 5 },
+    { producto: "AUDÍF IN EAR HW FREEBUDS SE2 BN", sku: "100300975", stock: 5 },
+    { producto: "AUDÍF IN EAR HW FREEBUDS SE2 AZ", sku: "100301003", stock: 3 },
+    { producto: "HUAWEI NOVA 15 MAX 8GB 256GB NG", sku: "100302452", stock: 1 },
+    { producto: "HUAWEI NOVA 15 MAX 8GB 256GB VD", sku: "100302461", stock: 3 },
+    { producto: "HUAWEI NOVA 15 MAX 8GB 256GB DO", sku: "100302479", stock: 1 }
   ],
 
   // 📢 AVISOS GENERALES / META DEL DÍA
   avisos: [
     {
       titulo: "Meta Assurant Attach: >25%",
-      detalle: "Ofrecer garantía Assurant en CADA venta de smartphone y wearable. Es el KPI crítico.",
+      detalle: "Ofrecer garantía Assurant en CADA venta de smartphone y wearable. Es el KPI crítico de la tienda.",
       fecha: "2026-06-22",
       prioridad: "alta"
-    },
-    {
-      titulo: "Cierre de caja a las 21:00",
-      detalle: "Recordar cuadre de inventario de piso antes de cerrar.",
-      fecha: "2026-06-22",
-      prioridad: "normal"
     }
   ]
 };
