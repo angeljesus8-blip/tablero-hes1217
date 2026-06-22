@@ -1,3 +1,6 @@
 node_modules/
 .netlify/
 .DS_Store
+
+# Comunicados EOL crudos (privados, NO se publican en GitHub)
+eol/
