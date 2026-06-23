@@ -195,9 +195,20 @@ function cuenta(id){
   return 0;
 }
 
+// ¿la sección tiene algún dato? (ignora el buscador, para que las pestañas no salten al escribir)
+function seccionTieneItems(id){
+  if(id==='promo')    return (D.promos||[]).length>0;
+  if(id==='eol')      return EOL.length>0;
+  if(id==='transito') return (D.transito||[]).length>0;
+  if(id==='nov')      return (D.novedades||[]).length>0;
+  if(id==='inv')      return (D.inventario||[]).length>0;
+  if(id==='aviso')    return (D.avisos||[]).length>0;
+  return false;
+}
+
 function renderChips(){
   const c = document.getElementById('chips');
-  c.innerHTML = FILTROS.map(f=>{
+  c.innerHTML = FILTROS.filter(f=>seccionTieneItems(f.id)).map(f=>{
     const n = `<span class="n">${cuenta(f.id)}</span>`;
     return `<button class="chip ${filtroActivo===f.id?'active':''}" data-f="${f.id}">${f.label}${n}</button>`;
   }).join('');
