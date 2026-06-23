@@ -138,14 +138,13 @@ document.getElementById('updated').textContent = D.actualizado || '';
 const HOY = new Date('2026-06-22T00:00:00'); // referencia para "días restantes"
 
 const FILTROS = [
-  { id:'todo',  label:'Todo' },
-  { id:'promo', label:'🔥 Promos' },
-  { id:'eol',   label:'🏷️ Vender 50%' },
-  { id:'nov',   label:'📦 Novedades' },
   { id:'inv',   label:'📊 Inventario' },
+  { id:'eol',   label:'🏷️ Vender 50%' },
+  { id:'promo', label:'🔥 Promos' },
+  { id:'nov',   label:'📦 Novedades' },
   { id:'aviso', label:'📢 Avisos' },
 ];
-let filtroActivo = 'todo';
+let filtroActivo = 'inv';
 let busqueda = '';
 
 function diasRestantes(fecha){
@@ -193,7 +192,7 @@ function cuenta(id){
 function renderChips(){
   const c = document.getElementById('chips');
   c.innerHTML = FILTROS.map(f=>{
-    const n = f.id==='todo' ? '' : `<span class="n">${cuenta(f.id)}</span>`;
+    const n = `<span class="n">${cuenta(f.id)}</span>`;
     return `<button class="chip ${filtroActivo===f.id?'active':''}" data-f="${f.id}">${f.label}${n}</button>`;
   }).join('');
   c.querySelectorAll('.chip').forEach(b=>b.onclick=()=>{ filtroActivo=b.dataset.f; render(); });
@@ -278,15 +277,15 @@ function render(){
   const inv    = (D.inventario||[]).filter(x=>coincide(x.producto,x.sku));
   const avisos = (D.avisos||[]).filter(x=>coincide(x.titulo,x.detalle));
 
-  if(f==='todo'||f==='aviso') html += seccion('📢 Avisos', avisos, cardAviso);
-  if(f==='todo'||f==='eol'){
+  if(f==='aviso') html += seccion('📢 Avisos', avisos, cardAviso);
+  if(f==='eol'){
     html += seccion('🏷️ Vender al 50% · pieza de exhibición', eolListo, cardEol);
     html += seccion('⏳ EOL próximos · agotar stock cerrado', eolPend, cardEol);
-    if(f==='eol') html += seccion('Agotados', eolAgot, cardEol);
+    html += seccion('Agotados', eolAgot, cardEol);
   }
-  if(f==='todo'||f==='promo') html += seccion('🔥 Promociones vigentes', promos, cardPromo);
-  if(f==='todo'||f==='nov')   html += seccion('📦 Mercancía nueva', nov, cardNov);
-  if(f==='todo'||f==='inv')   html += seccion('📊 Inventario · existencias', inv, rowInv);
+  if(f==='promo') html += seccion('🔥 Promociones vigentes', promos, cardPromo);
+  if(f==='nov')   html += seccion('📦 Mercancía nueva', nov, cardNov);
+  if(f==='inv')   html += seccion('📊 Inventario · existencias', inv, rowInv);
 
   if(!html.trim()) html = `<div class="empty">Sin resultados${busqueda?` para “${busqueda}”`:''}.</div>`;
   document.getElementById('app').innerHTML = html;
