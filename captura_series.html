@@ -251,8 +251,6 @@ $('btnCam').onclick = async () => {
   $('reader').style.display = 'block';
   $('hint').style.display = 'block';
   html5Qr = new Html5Qrcode('reader', {
-    // Usa el lector de códigos nativo del teléfono si existe (mucho más rápido)
-    experimentalFeatures: { useBarCodeDetectorIfSupported: true },
     formatsToSupport: [
       Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39,
       Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
@@ -260,18 +258,17 @@ $('btnCam').onclick = async () => {
       Html5QrcodeSupportedFormats.ITF, Html5QrcodeSupportedFormats.QR_CODE
     ]
   });
-  // Recuadro grande: casi todo el ancho y bien alto para el código de barras
+  // Recuadro grande pero seguro (siempre dentro del video) para el código de barras
   const config = {
-    fps: 20,
-    qrbox: (vw, vh) => ({ width: Math.floor(vw * 0.92), height: Math.floor(Math.min(vh * 0.6, vw * 0.55)) }),
-    aspectRatio: 1.0,
-    disableFlip: true
+    fps: 10,
+    qrbox: (vw, vh) => {
+      const width = Math.floor(Math.min(vw - 20, vw * 0.9));
+      const height = Math.floor(Math.min(vh - 20, width * 0.6));
+      return { width: Math.max(width, 120), height: Math.max(height, 90) };
+    }
   };
-  // Pide buena resolución y enfoque continuo para leer más rápido
-  const camera = { facingMode: { ideal:'environment' }, width:{ ideal:1280 }, height:{ ideal:720 },
-    focusMode:'continuous', advanced:[{ focusMode:'continuous' }] };
   try{
-    await html5Qr.start(camera, config, onScan, ()=>{});
+    await html5Qr.start({ facingMode:'environment' }, config, onScan, ()=>{});
     scanning = true;
     $('btnCam').textContent = '✕ Cerrar cámara';
     $('btnCam').classList.add('on');
