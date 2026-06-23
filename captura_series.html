@@ -258,42 +258,87 @@ async function tryDetector(Detector, file){
   return codes || [];
 }
 
+// Carga OCR (Tesseract.js) bajo demanda la primera vez que se necesita
+let tesseractLoading = null;
+function loadTesseract(){
+  if(window.Tesseract) return Promise.resolve();
+  if(tesseractLoading) return tesseractLoading;
+  tesseractLoading = new Promise((res, rej)=>{
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    s.onload = res; s.onerror = rej;
+    document.head.appendChild(s);
+  });
+  return tesseractLoading;
+}
+
+// Lee el número de serie del TEXTO impreso ("S/N: ...") con OCR
+async function ocrSerial(file){
+  try{
+    await loadTesseract();
+    toast('Leyendo número de serie…');
+    const worker = await Tesseract.createWorker('eng');
+    await worker.setParameters({ tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:/-SN' });
+    const { data } = await worker.recognize(file);
+    await worker.terminate();
+    const T = (data.text || '').toUpperCase().replace(/[ \t]+/g, ' ');
+    // Busca "S/N" (o "SN") seguido del valor alfanumérico
+    const re = /S\s*\/?\s*N\s*[:#.\-]?\s*([A-Z0-9][A-Z0-9\-]{7,23})/g;
+    let m, best = null;
+    while((m = re.exec(T))){
+      const cand = m[1].replace(/-/g, '');
+      if(cand.length >= 8 && cand.length <= 22) best = cand;
+    }
+    return best;
+  }catch(e){ return null; }
+}
+
 async function processImage(file){
   toast('Procesando foto…');
-  let total = 0;
-  // 1) Decodificador potente ZXing-WASM (mejor para Código 128 en fotos, también iPhone)
-  //    y como respaldo el lector nativo del teléfono. Combinamos lo que cada uno encuentre.
-  const detectores = [ window.ZXingBD, (('BarcodeDetector' in window) ? window.BarcodeDetector : null) ].filter(Boolean);
   const vistos = new Set();
+  // 1) Códigos de barras: producto (EAN/UPC) y la serie si su código se puede leer
+  const detectores = [ window.ZXingBD, (('BarcodeDetector' in window) ? window.BarcodeDetector : null) ].filter(Boolean);
   for(const D of detectores){
     try{
       const codes = await tryDetector(D, file);
-      // ordena: primero la serie (alfanumérico) para no perderla
       codes.sort((a,b)=> (/ean|upc/i.test(a.format)?1:0) - (/ean|upc/i.test(b.format)?1:0));
+      let alguno = false;
       codes.forEach(c => {
         const v = (c.rawValue||'').trim();
-        if(v && !vistos.has(v)){ vistos.add(v); if(routeCode(v, c.format)) total++; }
+        if(v && !vistos.has(v)){ vistos.add(v); routeCode(v, c.format); alguno = true; }
       });
-      if(total) break;   // si ya leyó algo, no probamos el otro
+      if(alguno) break;
     }catch(e){ /* siguiente detector */ }
   }
-  if(total){
+  // 1b) Respaldo de la librería si ningún detector encontró código
+  if(!vistos.size){
+    try{
+      const tmp = new Html5Qrcode('reader-file', { formatsToSupport: [
+        Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E,
+        Html5QrcodeSupportedFormats.ITF, Html5QrcodeSupportedFormats.QR_CODE ] });
+      const text = await tmp.scanFile(file, false);
+      try{ tmp.clear(); }catch(e){}
+      if(text) routeCode(text, '');
+    }catch(e){ /* nada */ }
+  }
+  // 2) Si la SERIE sigue vacía, léela del TEXTO "S/N" con OCR
+  if(!$('serie').value.trim()){
+    const s = await ocrSerial(file);
+    if(s) $('serie').value = s;
+  }
+  // 3) Mensaje final según lo que se haya llenado
+  const okSerie = !!$('serie').value.trim();
+  const okProd  = !!$('sku').value.trim();
+  if(okSerie || okProd){
     beep(); if('vibrate' in navigator) navigator.vibrate(60);
-    toast(total + ' código(s) leído(s) ✓', 'ok');
+    if(okSerie && okProd) toast('Serie y producto leídos ✓ · verifica la serie', 'ok');
+    else if(okSerie)      toast('Serie leída ✓ · verifica que coincida', 'ok');
+    else                  toast('Producto leído · falta la serie, toma otra foto', 'warn');
     return;
   }
-  // 2) Último respaldo: decodificador de la librería (un código por foto)
-  try{
-    const tmp = new Html5Qrcode('reader-file', { formatsToSupport: [
-      Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39,
-      Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
-      Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E,
-      Html5QrcodeSupportedFormats.ITF, Html5QrcodeSupportedFormats.QR_CODE ] });
-    const text = await tmp.scanFile(file, false);
-    try{ tmp.clear(); }catch(e){}
-    if(text && routeCode(text, '')){ beep(); if('vibrate' in navigator) navigator.vibrate(60); return; }
-  }catch(e){ /* nada */ }
-  toast('No se detectó ningún código · acerca más el código y con buena luz', 'warn');
+  toast('No se detectó nada · acerca más, enfoca el S/N con buena luz', 'warn');
 }
 
 /* ---------- Botón "Tomar foto y procesar" ---------- */
