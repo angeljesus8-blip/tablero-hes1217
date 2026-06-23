@@ -186,10 +186,11 @@ function eolResolved(){
 const EOL = eolResolved();
 const eolMap = {}; EOL.forEach(e=>{ eolMap[e.sku]=e.estado; });
 const transitoMap = {}; (D.transito||[]).forEach(x=>{ transitoMap[x.sku]=(transitoMap[x.sku]||0)+x.cantidad; });
-// 🔄 Resurtir: en exhibición y NO en EOL (la mercancía EOL ya no se puede pedir).
+// 🔄 Resurtir: 0 piezas para vender (la de exhibición NO cuenta, no se vende),
+//   tiene pieza en exhibición y NO es EOL (la mercancía EOL ya no se puede pedir).
 const eolSkuSet = new Set((D.eol||[]).map(e=>e.sku));
-const RESURTIR = (D.inventario||[]).filter(x=>x.exhibe>0 && !eolSkuSet.has(x.sku))
-                  .sort((a,b)=> a.stock - b.stock);
+const RESURTIR = (D.inventario||[]).filter(x=>x.stock===0 && x.exhibe>0 && !eolSkuSet.has(x.sku))
+                  .sort((a,b)=> a.producto.localeCompare(b.producto));
 
 function cuenta(id){
   if(id==='promo') return (D.promos||[]).filter(x=>coincide(x.titulo,x.detalle)).length;
@@ -332,7 +333,7 @@ function render(){
   }
   if(f==='promo') html += seccion('🔥 Promociones vigentes', promos, cardPromo);
   if(f==='nov')   html += seccion('📦 Mercancía nueva', nov, cardNov);
-  if(f==='resurtir') html += seccion('🔄 Resurtir · en exhibición y NO EOL (sí se puede pedir)', resurtir, rowInv);
+  if(f==='resurtir') html += seccion('🔄 Resurtir · 0 para vender, solo queda exhibición (no EOL)', resurtir, rowInv);
   if(f==='agotados') html += seccion('📭 Agotados · se agotaron (no EOL) — pedir resurtido', agotados, rowAgotado);
   if(f==='transito') html += seccion('🚚 En tránsito · venta a promesa de entrega', transito, cardTransito);
   if(f==='inv')   html += seccion('📊 Inventario · existencias', inv, rowInv);
