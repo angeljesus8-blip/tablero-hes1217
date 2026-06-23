@@ -8,7 +8,7 @@
 
 window.DATOS = {
   // Se muestra como "Actualizado: ..." en la app
-  actualizado: "2026-06-22 18:10",
+  actualizado: "2026-06-22 18:40",
 
   // 🔥 PROMOCIONES VIGENTES  (en espera del primer comunicado real)
   promos: [],
@@ -19,31 +19,32 @@ window.DATOS = {
   //   El 50% se calcula automático a partir de "precio".
   //   Ej: { sku: "100295942", precio: 5499 }
   //   Fuente: CEA-189 + Adendums 43, 44, 47 (2026 Q2). 24 SKUs en tienda.
-  //   Los 7 sin "precio" son piezas solo-exhibición: falta su precio regular.
+  //   Precios regulares de "Artículos Totales" + "Muebles Tienda".
+  //   Falta solo 100261822 (Router AX2): no aparece en ningún reporte con precio.
   eol: [
-    { sku: "100102207" },
+    { sku: "100102207", precio: 2990 },
     { sku: "100229321", precio: 4990 },
-    { sku: "100229371" },
+    { sku: "100229371", precio: 7490 },
     { sku: "100245646", precio: 3990 },
     { sku: "100245654", precio: 3990 },
     { sku: "100245689", precio: 3998 },
     { sku: "100250541", precio: 2498 },
     { sku: "100250568", precio: 2498 },
-    { sku: "100250576" },
+    { sku: "100250576", precio: 29999 },
     { sku: "100258105", precio: 3490 },
     { sku: "100258121", precio: 3498 },
     { sku: "100258148", precio: 3490 },
-    { sku: "100259520" },
+    { sku: "100259520", precio: 8998 },
     { sku: "100259554", precio: 3498 },
     { sku: "100259634", precio: 4990 },
-    { sku: "100259651" },
+    { sku: "100259651", precio: 4998 },
     { sku: "100261822" },
     { sku: "100269154", precio: 29998 },
     { sku: "100270526", precio: 5998 },
     { sku: "100270551", precio: 7998 },
     { sku: "100275001", precio: 19998 },
     { sku: "100275010", precio: 22998 },
-    { sku: "100280759" },
+    { sku: "100280759", precio: 12990 },
     { sku: "100283327", precio: 59990 }
   ],
 
