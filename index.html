@@ -168,13 +168,14 @@ function coincide(...campos){
 const invBySku = {};
 (D.inventario||[]).forEach(x=>{ invBySku[x.sku]=x; });
 const money = n => '$'+Number(n||0).toLocaleString('es-MX');
+const money2 = n => '$'+Number(n||0).toLocaleString('es-MX',{minimumFractionDigits:2, maximumFractionDigits:2});
 function eolResolved(){
   return (D.eol||[]).map(e=>{
     const inv = invBySku[e.sku] || {};
     const stock = inv.stock||0, exhibe = inv.exhibe||0;
     const estado = (stock===0 && exhibe>0) ? 'listo' : (stock>0 ? 'pendiente' : 'agotado');
     return { sku:e.sku, producto:e.producto||inv.producto||('SKU '+e.sku),
-      precio:e.precio, precio50:e.precio?Math.round(e.precio/2):null, stock, exhibe, estado };
+      precio:e.precio, precio50:e.precio?e.precio/2:null, stock, exhibe, estado };
   }).filter(e=>e.exhibe>0); // solo SKUs con pieza en exhibición
 }
 const EOL = eolResolved();
@@ -211,7 +212,7 @@ function cardEol(e){
       <div class="top"><h3>${e.producto}</h3><span class="tag eol">−50%</span></div>
       <p class="det"><b>✅ Ya se puede vender al 50%</b> — solo la pieza de exhibición (👁 ${e.exhibe}). Stock cerrado en 0.</p>
       <div class="meta">
-        ${e.precio50!=null?`<span class="precio"><span class="antes">${money(e.precio)}</span>${money(e.precio50)}</span>`:`<span class="badge">50% del precio regular</span>`}
+        ${e.precio50!=null?`<span class="precio"><span class="antes">${money(e.precio)}</span>${money2(e.precio50)}</span>`:`<span class="badge">50% del precio regular</span>`}
         <span class="badge">SKU ${e.sku}</span>
       </div>
       <p class="warn">⚠️ Al 50% pierde garantía de fábrica y NO es elegible para Assurant.</p>
