@@ -8,7 +8,7 @@
 
 window.DATOS = {
   // Se muestra como "Actualizado: ..." en la app
-  actualizado: "2026-06-22 18:40",
+  actualizado: "2026-06-22 18:50",
 
   // 🔥 PROMOCIONES VIGENTES  (en espera del primer comunicado real)
   promos: [],
@@ -55,7 +55,7 @@ window.DATOS = {
   //   stock  = piezas para vender (equipo cerrado, "On Hand")
   //   exhibe = piezas abiertas en exhibición ("Cantidad No Disponible")
   //   Fuente: Informe Artículos Totales + Informe Inventario No Disponible.
-  //   98 productos · 187 para vender · 69 en exhibición.
+  //   94 productos · 184 para vender · 65 en exhibición.
   inventario: [
     { producto: "AUDIF IN EAR HW F-BUDS PRO 4 BN", sku: "100245654", stock: 1, exhibe: 0 },
     { producto: "AUDIF IN EAR HW F-BUDS PRO 4 NG", sku: "100245646", stock: 1, exhibe: 0 },
@@ -64,7 +64,7 @@ window.DATOS = {
     { producto: "AUDIF IN EAR HW FREEBUDS 6 MO", sku: "100258148", stock: 1, exhibe: 1 },
     { producto: "AUDIF IN EAR HW FREEBUDS 6 NG", sku: "100258105", stock: 1, exhibe: 0 },
     { producto: "AUDIF IN EAR HW FREEBUDS 7I NG", sku: "100274412", stock: 1, exhibe: 1 },
-    { producto: "AUDIF IN EAR HW FREEBUDS 7I RS", sku: "100274439", stock: 2, exhibe: 1 },
+    { producto: "AUDIF IN EAR HW FREEBUDS 7I RS", sku: "100274439", stock: 0, exhibe: 1 },
     { producto: "AUDIF IN EAR HW FREEBUDS SE4 BN", sku: "100274404", stock: 0, exhibe: 1 },
     { producto: "AUDIF IN EAR HW FREEBUDS SE4 NG", sku: "100274391", stock: 0, exhibe: 1 },
     { producto: "AUDIF OVER EAR HWEI FREEARC NG", sku: "100250541", stock: 1, exhibe: 0 },
@@ -94,7 +94,6 @@ window.DATOS = {
     { producto: "HUAWEI MATE XT ULT 16GB 1TB RJ", sku: "100250138", stock: 1, exhibe: 1 },
     { producto: "HUAWEI MATEPAD 11.5\" 8/128GB GR", sku: "100270526", stock: 1, exhibe: 0 },
     { producto: "HUAWEI MATEPAD 11.5\" 8/256GB GR", sku: "100270551", stock: 2, exhibe: 0 },
-    { producto: "HUAWEI NOVA 14 6.7\" 12/512GB BN", sku: "100280759", stock: 0, exhibe: 1 },
     { producto: "HUAWEI NOVA 15 MAX 8GB 256GB DO", sku: "100302479", stock: 1, exhibe: 0 },
     { producto: "HUAWEI NOVA 15 MAX 8GB 256GB NG", sku: "100302452", stock: 1, exhibe: 0 },
     { producto: "HUAWEI NOVA 15 MAX 8GB 256GB VD", sku: "100302461", stock: 3, exhibe: 0 },
@@ -102,10 +101,8 @@ window.DATOS = {
     { producto: "HUAWEI PURA 80 6.6\" 12/256GB DO", sku: "100272687", stock: 2, exhibe: 0 },
     { producto: "HUAWEI PURA 80 6.6\" 12/256GB NG", sku: "100272644", stock: 2, exhibe: 0 },
     { producto: "HUAWEI PURA 80 PRO 12/512GB BN", sku: "100269154", stock: 1, exhibe: 0 },
-    { producto: "HUAWEI WATCH 5 42MM 1.38\" BN", sku: "100259520", stock: 0, exhibe: 1 },
     { producto: "HUAWEI WATCH 5 46MM TI 1.5\" PT", sku: "100259482", stock: 1, exhibe: 0 },
     { producto: "HUAWEI WATCH D2 1.82\" AMOLED AZ", sku: "100275028", stock: 0, exhibe: 1 },
-    { producto: "HUAWEI WATCH D2 1.82\" AMOLED DO", sku: "100229371", stock: 0, exhibe: 1 },
     { producto: "HUAWEI WATCH D2 1.82\" AMOLED NG", sku: "100229363", stock: 0, exhibe: 1 },
     { producto: "HUAWEI WATCH FIT 4 1.82\" AL NG", sku: "100259554", stock: 8, exhibe: 1 },
     { producto: "HUAWEI WATCH FIT 4 PRO 1.82\" AZ", sku: "100259634", stock: 2, exhibe: 1 },
@@ -151,11 +148,10 @@ window.DATOS = {
     { producto: "MESH HUAWEI 3 WS8100-32 2PZ", sku: "100102207", stock: 0, exhibe: 1 },
     { producto: "MESH HUAWEI X1PRO AC3600 NG PK", sku: "100276661", stock: 1, exhibe: 1 },
     { producto: "MESH HW X3PRO AC3600 +EXT NG PK", sku: "100282252", stock: 0, exhibe: 1 },
-    { producto: "MOUSE HUAWEI CD26 SENSOR TOG GR", sku: "100256417", stock: 1, exhibe: 1 },
-    { producto: "ROUTER HUAWEI AX2 WI-FI6 1500MB", sku: "100261822", stock: 0, exhibe: 1 },
+    { producto: "MOUSE HUAWEI CD26 SENSOR TOG GR", sku: "100256417", stock: 0, exhibe: 1 },
     { producto: "ROUTER HUAWEI AX3S 3000MB NEGRO", sku: "100278940", stock: 2, exhibe: 1 },
     { producto: "ROUTER HUAWEI BE3 PRO 3600MB NG", sku: "100278931", stock: 3, exhibe: 0 }
-  ],
+    ],
 
   // 📢 AVISOS GENERALES / META DEL DÍA
   avisos: [
