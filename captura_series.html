@@ -96,9 +96,43 @@
   .toast.warn{ background:var(--naranja); }
 
   footer{ text-align:center; font-size:10px; color:#ccc; margin-top:20px; }
+
+  /* ---------- Pantalla de inicio (selección de vendedor) ---------- */
+  #gate{ position:fixed; inset:0; z-index:100; background:#fff; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; padding:24px 22px calc(24px + env(safe-area-inset-bottom));
+    text-align:center; }
+  #gate.hide{ display:none; }
+  .gate-logo{ height:46px; width:auto; margin-bottom:18px; }
+  .gate-title{ font-size:24px; font-weight:800; letter-spacing:-.4px; }
+  .gate-title::first-line{ }
+  .gate-sub{ font-size:12px; color:var(--gris); font-weight:600; letter-spacing:.5px; margin-top:4px; }
+  .gate-q{ font-size:14px; font-weight:700; color:#444; margin:28px 0 14px; }
+  .gate-names{ width:100%; max-width:360px; display:flex; flex-direction:column; gap:10px; }
+  .gate-name{ width:100%; font-family:inherit; font-size:17px; font-weight:700; color:#1a1a1a;
+    background:#fff; border:1.5px solid var(--linea); border-radius:13px; padding:15px; cursor:pointer;
+    transition:.12s; }
+  .gate-name:active{ transform:scale(.985); }
+  .gate-name.saved{ border-color:var(--rojo); color:var(--rojo); box-shadow:0 2px 10px rgba(209,32,38,.08); }
+  .gate-name .yo{ font-size:11px; font-weight:700; color:#aaa; margin-left:6px; }
+
+  /* Barra de vendedor en la pantalla de captura */
+  .vendbar{ position:sticky; top:64px; z-index:20; display:flex; align-items:center; justify-content:space-between;
+    background:#fff; border-bottom:1px solid var(--linea); padding:8px 16px; font-size:13px; color:#555; }
+  .vendbar b{ color:#1a1a1a; font-weight:700; }
+  .vendbar button{ background:#fdeaea; color:var(--rojo); border:none; font-family:inherit; font-size:12px;
+    font-weight:700; padding:6px 12px; border-radius:8px; cursor:pointer; }
 </style>
 </head>
 <body>
+
+<!-- Pantalla de inicio: selección de vendedor -->
+<div id="gate">
+  <img class="gate-logo" src="logo_odemas.png" alt="Odemás">
+  <h1 class="gate-title">Captura de Series</h1>
+  <p class="gate-sub">HES 1217 · Angelópolis</p>
+  <p class="gate-q">¿Quién eres?</p>
+  <div class="gate-names" id="gateNames"></div>
+</div>
 
 <header>
   <img src="logo_odemas.png" alt="Odemás">
@@ -108,6 +142,11 @@
   </div>
   <div class="count"><div class="n" id="count">0</div><div class="l">capturadas</div></div>
 </header>
+
+<div class="vendbar">
+  <span>👤 <b id="vendLabel">—</b></span>
+  <button id="btnChange">Cambiar</button>
+</div>
 
 <main>
   <input type="file" id="fileCam" accept="image/*" capture="environment" hidden>
@@ -133,10 +172,6 @@
     <div class="field">
       <label>Descripción</label>
       <input type="text" id="desc" placeholder="Descripción del artículo" autocomplete="off">
-    </div>
-    <div class="field">
-      <label>Vendedor</label>
-      <select id="vend"></select>
     </div>
     <button class="btn btn-add" id="btnAdd" style="margin-top:6px;">＋ Agregar al reporte</button>
   </div>
@@ -204,14 +239,14 @@ window.del = i => { items.splice(i,1); save(); render(); };
 $('btnAdd').onclick = () => {
   const serie = $('serie').value.trim();
   if(!serie){ toast('Falta el número de serie', 'warn'); $('serie').focus(); return; }
-  if(!$('vend').value.trim()){ toast('Selecciona tu nombre (Vendedor)', 'warn'); $('vend').focus(); return; }
+  if(!currentVend){ toast('Selecciona tu nombre', 'warn'); showGate(); return; }
   const d = new Date();
   items.unshift({
     serie,
     sku: $('sku').value.trim(),
     precio: $('precio').value.trim(),
     desc: $('desc').value.trim(),
-    vend: $('vend').value.trim(),
+    vend: currentVend,
     fecha: d.toLocaleDateString('es-MX'),
     hora: d.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})
   });
@@ -379,20 +414,31 @@ $('btnCsv').onclick = () => {
 // Enter en serie = agregar rápido
 $('serie').addEventListener('keydown', e => { if(e.key==='Enter') $('btnAdd').click(); });
 
-/* ---------- Lista de vendedores (HES 1217) ---------- */
+/* ---------- Vendedor / pantalla de inicio (HES 1217) ---------- */
 // Para editar el equipo, cambia esta lista:
 const VENDEDORES = ['Arnulfo González','Arturo Aguilar','Laura Bonilla','Miguel Ángel García','Ángel Perea'];
 const VKEY = 'hes1217_vend';
-(function initVend(){
-  const sel = $('vend');
-  sel.innerHTML = '<option value="">— Selecciona tu nombre —</option>' +
-    VENDEDORES.map(n => `<option>${n}</option>`).join('');
-  const saved = localStorage.getItem(VKEY);
-  if(saved && VENDEDORES.includes(saved)) sel.value = saved;
-  const paint = () => sel.classList.toggle('unset', !sel.value);
-  sel.onchange = () => { localStorage.setItem(VKEY, sel.value); paint(); };
-  paint();
+let currentVend = '';
+
+function setVend(n){ currentVend = n || ''; $('vendLabel').textContent = currentVend || '—'; }
+function hideGate(){ $('gate').classList.add('hide'); }
+function buildGate(){
+  const cur = currentVend || localStorage.getItem(VKEY) || '';
+  $('gateNames').innerHTML = VENDEDORES.map(n =>
+    `<button class="gate-name${n===cur?' saved':''}" data-name="${esc(n)}">${esc(n)}${n===cur?'<span class="yo">tú</span>':''}</button>`).join('');
+  [...$('gateNames').children].forEach(b => {
+    b.onclick = () => { const n = b.dataset.name; setVend(n); localStorage.setItem(VKEY, n); hideGate(); };
+  });
+}
+function showGate(){ buildGate(); $('gate').classList.remove('hide'); }
+
+(function initGate(){
+  const saved = localStorage.getItem(VKEY) || '';
+  if(saved && VENDEDORES.includes(saved)) setVend(saved);
+  showGate();   // siempre se muestra al cargar la página
 })();
+
+$('btnChange').onclick = showGate;
 
 render();
 </script>
