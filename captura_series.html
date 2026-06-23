@@ -103,7 +103,10 @@
   <div id="reader"></div>
   <p class="scan-hint" id="hint">📷 Apunta al código de barras · el de serie y el de producto se separan solos</p>
 
-  <button class="btn btn-cam" id="btnCam">📷 Escanear número de serie</button>
+  <button class="btn btn-cam" id="btnCam">📷 Escanear en vivo</button>
+  <input type="file" id="fileCam" accept="image/*" capture="environment" hidden>
+  <button class="btn btn-ghost" id="btnPhoto" style="margin-top:10px;">📸 Tomar foto y procesar</button>
+  <div id="reader-file" style="position:absolute;width:0;height:0;overflow:hidden;"></div>
 
   <div class="card">
     <div class="field serie">
@@ -218,14 +221,13 @@ $('btnClear').onclick = () => {
   }
 };
 
-/* ---------- Cámara / escaneo ---------- */
-// Detecta si el código es producto (EAN/UPC) o número de serie y lo manda al campo correcto
-function onScan(text, result){
+/* ---------- Enrutado de códigos ---------- */
+// Decide si el código es producto (EAN/UPC) o número de serie y lo manda al campo correcto
+const FORMATOS = ['code_128','code_39','ean_13','ean_8','upc_a','upc_e','itf','qr_code'];
+function routeCode(text, fmt){
   const val = (text||'').trim();
-  let fmt = '';
-  try{ fmt = result.result.format.formatName || ''; }catch(e){}
-  const esProducto = /EAN|UPC/.test(fmt) || /^[0-9]{8}$|^[0-9]{12,13}$/.test(val);
-
+  if(!val) return false;
+  const esProducto = /ean|upc/i.test(fmt||'') || /^[0-9]{8}$|^[0-9]{12,13}$/.test(val);
   if(esProducto){
     const hit = CATALOGO[val] || CATALOGO[val.replace(/^0+/, '')];
     if(hit){
@@ -240,10 +242,55 @@ function onScan(text, result){
     $('serie').value = val;
     toast('Número de serie leído ✓', 'ok');
   }
+  return true;
+}
+
+/* ---------- Cámara en vivo ---------- */
+function onScan(text, result){
+  let fmt = '';
+  try{ fmt = result.result.format.formatName || ''; }catch(e){}
+  routeCode(text, fmt);
   beep();
   if('vibrate' in navigator) navigator.vibrate(60);
   // pausa breve para no escanear 10 veces el mismo código
   if(html5Qr){ html5Qr.pause(true); setTimeout(()=>{ try{html5Qr.resume();}catch(e){} }, 1400); }
+}
+
+/* ---------- Tomar foto y procesar ---------- */
+async function processImage(file){
+  toast('Procesando foto…');
+  // 1) Lector nativo del teléfono: puede leer VARIOS códigos en una sola foto
+  if('BarcodeDetector' in window){
+    try{
+      const sop = await BarcodeDetector.getSupportedFormats();
+      const det = new BarcodeDetector({ formats: FORMATOS.filter(f => sop.includes(f)) });
+      const bmp = await createImageBitmap(file);
+      const codes = await det.detect(bmp);
+      if(bmp.close) bmp.close();
+      if(codes && codes.length){
+        // ordena: primero el de serie (alfanumérico) para no perderlo
+        codes.sort((a,b)=> (/ean|upc/i.test(a.format)?1:0) - (/ean|upc/i.test(b.format)?1:0));
+        codes.forEach(c => routeCode(c.rawValue, c.format));
+        beep(); if('vibrate' in navigator) navigator.vibrate(60);
+        toast(codes.length + ' código(s) leído(s) ✓', 'ok');
+        return;
+      }
+    }catch(e){ /* pasa al método de respaldo */ }
+  }
+  // 2) Respaldo: decodificador de la librería (un código por foto)
+  try{
+    const tmp = new Html5Qrcode('reader-file', { formatsToSupport: [
+      Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39,
+      Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E,
+      Html5QrcodeSupportedFormats.ITF, Html5QrcodeSupportedFormats.QR_CODE ] });
+    const text = await tmp.scanFile(file, false);
+    try{ tmp.clear(); }catch(e){}
+    if(text && routeCode(text, '')){ beep(); if('vibrate' in navigator) navigator.vibrate(60); return; }
+    toast('No se detectó ningún código en la foto', 'warn');
+  }catch(e){
+    toast('No se detectó ningún código · intenta con más luz', 'warn');
+  }
 }
 
 $('btnCam').onclick = async () => {
@@ -281,9 +328,17 @@ function stopCam(){
   if(html5Qr){ html5Qr.stop().then(()=>html5Qr.clear()).catch(()=>{}); }
   scanning = false;
   $('reader').style.display='none'; $('hint').style.display='none';
-  $('btnCam').textContent = '📷 Escanear número de serie';
+  $('btnCam').textContent = '📷 Escanear en vivo';
   $('btnCam').classList.remove('on');
 }
+
+/* ---------- Botón "Tomar foto y procesar" ---------- */
+$('btnPhoto').onclick = () => $('fileCam').click();
+$('fileCam').onchange = e => {
+  const f = e.target.files && e.target.files[0];
+  if(f) processImage(f);
+  e.target.value = '';   // permite volver a tomar otra foto del mismo producto
+};
 
 /* ---------- Exportar CSV ---------- */
 $('btnCsv').onclick = () => {
