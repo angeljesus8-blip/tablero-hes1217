@@ -58,6 +58,7 @@
   .card.t-eol   { border-left-color:var(--rojo); }
   .card.t-nov   { border-left-color:var(--azul); }
   .card.t-aviso { border-left-color:var(--verde); }
+  .card.t-trans { border-left-color:#7c3aed; }
 
   .card .top { display:flex; align-items:flex-start; gap:8px; }
   .card h3 { font-size:14.5px; font-weight:700; line-height:1.3; flex:1; }
@@ -67,6 +68,7 @@
   .tag.eol   { background:#fdeaea; color:var(--rojo); }
   .tag.nov   { background:#eef3fb; color:var(--azul); }
   .tag.aviso { background:#eafaf1; color:var(--verde); }
+  .tag.trans { background:#f3effe; color:#7c3aed; }
   .card p.det { font-size:12.5px; color:#555; line-height:1.45; margin-top:6px; }
   .card p.warn { font-size:11px; color:var(--rojo); line-height:1.4; margin-top:8px;
     background:#fdeaea; padding:6px 9px; border-radius:7px; font-weight:600; }
@@ -95,6 +97,7 @@
     padding:4px 8px; border-radius:7px; flex-shrink:0; white-space:nowrap; }
   .exh.eol-ready { background:#eafaf1; color:var(--verde); }
   .exh.eol-pend { background:#fff5ee; color:var(--naranja); }
+  .exh.trans-b { background:#f3effe; color:#7c3aed; }
   .card.t-eol.listo { border-left-color:var(--verde); background:#f7fdfa; box-shadow:0 2px 10px rgba(26,140,78,.10); }
   .eol-status { font-size:9.5px; font-weight:800; text-transform:uppercase; letter-spacing:.4px; padding:3px 7px; border-radius:6px; flex-shrink:0; }
   .eol-status.pend { background:#fff5ee; color:var(--naranja); }
@@ -140,6 +143,7 @@ const HOY = new Date('2026-06-22T00:00:00'); // referencia para "días restantes
 const FILTROS = [
   { id:'inv',   label:'📊 Inventario' },
   { id:'eol',   label:'🏷️ Vender 50%' },
+  { id:'transito', label:'🚚 En tránsito' },
   { id:'promo', label:'🔥 Promos' },
   { id:'nov',   label:'📦 Novedades' },
   { id:'aviso', label:'📢 Avisos' },
@@ -179,12 +183,14 @@ function eolResolved(){
 }
 const EOL = eolResolved();
 const eolMap = {}; EOL.forEach(e=>{ eolMap[e.sku]=e.estado; });
+const transitoMap = {}; (D.transito||[]).forEach(x=>{ transitoMap[x.sku]=(transitoMap[x.sku]||0)+x.cantidad; });
 
 function cuenta(id){
   if(id==='promo') return (D.promos||[]).filter(x=>coincide(x.titulo,x.detalle)).length;
   if(id==='eol')   return EOL.filter(e=>coincide(e.producto,e.sku) && e.estado==='listo').length;
   if(id==='nov')   return (D.novedades||[]).filter(x=>coincide(x.titulo,x.detalle)).length;
   if(id==='inv')   return (D.inventario||[]).filter(x=>coincide(x.producto,x.sku)).length;
+  if(id==='transito') return (D.transito||[]).filter(x=>coincide(x.producto,x.sku)).length;
   if(id==='aviso') return (D.avisos||[]).filter(x=>coincide(x.titulo,x.detalle)).length;
   return 0;
 }
@@ -244,16 +250,25 @@ function cardAviso(x){
     ${x.fecha?`<div class="meta"><span class="badge">📅 ${x.fecha}</span></div>`:''}
   </div>`;
 }
+function cardTransito(x){
+  return `<div class="card t-trans">
+    <div class="top"><h3>${x.producto}</h3><span class="tag trans">🚚 ${x.cantidad}</span></div>
+    <p class="det">Vienen <b>${x.cantidad}</b> pza(s) en camino desde el CD. Se puede vender a <b>promesa de entrega</b>.</p>
+    <div class="meta"><span class="badge">SKU ${x.sku}</span></div>
+  </div>`;
+}
 function rowInv(x){
   const cls = x.stock===0 ? 'cero' : x.stock<=3 ? 'bajo' : 'ok';
   const est = eolMap[x.sku];
   const eolB = est==='listo' ? `<span class="exh eol-ready">🏷️ 50%</span>`
              : est==='pendiente' ? `<span class="exh eol-pend">EOL</span>` : '';
   const exh = x.exhibe ? `<span class="exh">👁 ${x.exhibe} exhib.</span>` : '';
+  const tr = transitoMap[x.sku];
+  const trB = tr ? `<span class="exh trans-b">🚚 ${tr}</span>` : '';
   return `<div class="inv-row">
     <div class="dot ${cls}"></div>
     <div class="inv-info"><h4>${x.producto}</h4><span>SKU ${x.sku||'—'}</span></div>
-    ${eolB}${exh}
+    ${eolB}${exh}${trB}
     <div class="stock ${cls}"><div class="num">${x.stock}</div><div class="lbl lbl2">para vender</div></div>
   </div>`;
 }
@@ -275,6 +290,7 @@ function render(){
   const eolAgot  = eolAll.filter(e=>e.estado==='agotado');
   const nov    = (D.novedades||[]).filter(x=>coincide(x.titulo,x.detalle));
   const inv    = (D.inventario||[]).filter(x=>coincide(x.producto,x.sku));
+  const transito = (D.transito||[]).filter(x=>coincide(x.producto,x.sku));
   const avisos = (D.avisos||[]).filter(x=>coincide(x.titulo,x.detalle));
 
   if(f==='aviso') html += seccion('📢 Avisos', avisos, cardAviso);
@@ -285,6 +301,7 @@ function render(){
   }
   if(f==='promo') html += seccion('🔥 Promociones vigentes', promos, cardPromo);
   if(f==='nov')   html += seccion('📦 Mercancía nueva', nov, cardNov);
+  if(f==='transito') html += seccion('🚚 En tránsito · venta a promesa de entrega', transito, cardTransito);
   if(f==='inv')   html += seccion('📊 Inventario · existencias', inv, rowInv);
 
   if(!html.trim()) html = `<div class="empty">Sin resultados${busqueda?` para “${busqueda}”`:''}.</div>`;

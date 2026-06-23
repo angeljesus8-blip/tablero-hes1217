@@ -51,6 +51,47 @@ window.DATOS = {
   // 📦 MERCANCÍA QUE ENTRA / NOVEDADES  (en espera de comunicado real)
   novedades: [],
 
+  // 🚚 EN TRÁNSITO — mercancía en camino desde el CD (venta a promesa de entrega).
+  //   cantidad = piezas que vienen (columna Expected). Sin fecha estimada en el reporte.
+  //   Fuente: Transfer Receiving Report. 35 SKUs · 105 piezas.
+  transito: [
+    { producto: "AUDIF IN EAR HW FREEBUDS 7I NG", sku: "100274412", cantidad: 1 },
+    { producto: "AUDIF IN EAR HW FREEBUDS SE4 BN", sku: "100274404", cantidad: 4 },
+    { producto: "AUDIF IN EAR HW FREEBUDS SE4 NG", sku: "100274391", cantidad: 4 },
+    { producto: "AUDÍF IN EAR HW F-BUDS PRO 5 BN", sku: "100285200", cantidad: 2 },
+    { producto: "AUDÍF OPEN EAR HW FREECLIP 2 AZ", sku: "100280863", cantidad: 1 },
+    { producto: "AUDÍF OPEN EAR HW FREECLIP 2 NG", sku: "100280847", cantidad: 3 },
+    { producto: "AUDÍF OPEN EAR HW FREECLIP 2 PR", sku: "100300967", cantidad: 4 },
+    { producto: "AUDÍF OPEN EAR HW FREECLIP 2 RS", sku: "100286085", cantidad: 3 },
+    { producto: "HUAWEI BAND 11 1.62\" AMLD AL MO", sku: "100288152", cantidad: 1 },
+    { producto: "HUAWEI BAND 11 1.62\" AMLD AL NG", sku: "100288128", cantidad: 6 },
+    { producto: "HUAWEI BAND 11 1.62\" AMLD AL VD", sku: "100288179", cantidad: 2 },
+    { producto: "HUAWEI BAND 11 PRO 1.62\" AL NG", sku: "100288187", cantidad: 2 },
+    { producto: "HUAWEI MATE 80 PRO 16/512GB DO", sku: "100293242", cantidad: 1 },
+    { producto: "HUAWEI MATE 80 PRO 16/512GB NG", sku: "100293226", cantidad: 2 },
+    { producto: "HUAWEI MATE 80 PRO 16/512GB VD", sku: "100293234", cantidad: 2 },
+    { producto: "HUAWEI NOVA 15 MAX 8GB 256GB DO", sku: "100302479", cantidad: 1 },
+    { producto: "HUAWEI NOVA 15 MAX 8GB 256GB NG", sku: "100302452", cantidad: 2 },
+    { producto: "HUAWEI PURA 80 ULT 16/512GB DO", sku: "100269138", cantidad: 1 },
+    { producto: "HUAWEI WATCH FIT 5 PRO 1.92\" NG", sku: "100295942", cantidad: 5 },
+    { producto: "HUAWEI WATCH GT6 PRO 1.47\" CAFÉ", sku: "100274949", cantidad: 1 },
+    { producto: "HUAWEI WATCH KID X1 PRO 1.82 NG", sku: "100304280", cantidad: 6 },
+    { producto: "HUAWEI WATCH KID X1 PRO 1.82 PR", sku: "100304298", cantidad: 5 },
+    { producto: "HUAWEI WATCH KIDS X1 1.82\" AZ", sku: "100304263", cantidad: 10 },
+    { producto: "HUAWEI WATCH KIDS X1 1.82\" ROSA", sku: "100304271", cantidad: 9 },
+    { producto: "HUAWEI WATCH WATCH KID RS", sku: "100074509", cantidad: 1 },
+    { producto: "MATEBOOK 14 CU5 16GB 1TB GRSP", sku: "100286237", cantidad: 1 },
+    { producto: "MATEBOOK D16 CI5 16GB 1TB GRIS", sku: "100279918", cantidad: 5 },
+    { producto: "MATEBOOK D16 CI5 16GB 512GB GR", sku: "100279926", cantidad: 5 },
+    { producto: "MATEPAD 11.5\" 12/256GB GR +TCL", sku: "100280732", cantidad: 3 },
+    { producto: "MATEPAD 12X 12/256GB VD + TECLD", sku: "100276696", cantidad: 2 },
+    { producto: "MATEPAD MINI 8.8 8/256GB NG+FDA", sku: "100295483", cantidad: 2 },
+    { producto: "MATEPAD PRO 12.2\" 12GB 512GB VD", sku: "100270593", cantidad: 2 },
+    { producto: "MATEPAD PRO 13.2\" 12/512GB DO", sku: "100250576", cantidad: 1 },
+    { producto: "MATEPAD SE KEY 11\" 8GB 128GB AZ", sku: "100219940", cantidad: 2 },
+    { producto: "MOUSE HUAWEI CD26 SENSOR TOG GR", sku: "100256417", cantidad: 3 }
+  ],
+
   // 📊 INVENTARIO / EXISTENCIAS
   //   stock  = piezas para vender (equipo cerrado, "On Hand")
   //   exhibe = piezas abiertas en exhibición ("Cantidad No Disponible")
