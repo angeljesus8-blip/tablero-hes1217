@@ -4,3 +4,6 @@ node_modules/
 
 # Comunicados EOL crudos (privados, NO se publican en GitHub)
 eol/
+
+# Estado interno para comparar inventario día a día (no se publica)
+.snapshot_inventario.json

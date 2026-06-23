@@ -56,6 +56,11 @@ window.DATOS = {
   //   Fuente: Transfer Receiving Report. 35 SKUs · 105 piezas.
   transito: [],
 
+  // 📭 AGOTADOS — productos que se agotaron por completo (0 para vender, 0 exhibición)
+  //   y NO son EOL → candidatos a resurtido. Se detectan comparando el inventario
+  //   de cada día con el anterior (snapshot en .snapshot_inventario.json).
+  agotados: [],
+
   // 📊 INVENTARIO / EXISTENCIAS
   //   stock  = piezas para vender (equipo cerrado, "On Hand")
   //   exhibe = piezas abiertas en exhibición ("Cantidad No Disponible")
