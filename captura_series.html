@@ -51,6 +51,13 @@
   .field input{ width:100%; font-family:inherit; font-size:15px; padding:11px 13px;
     border:1.5px solid var(--linea); border-radius:10px; outline:none; background:#fafafa; }
   .field input:focus{ border-color:var(--rojo); background:#fff; }
+  .field select{ width:100%; font-family:inherit; font-size:15px; padding:11px 38px 11px 13px;
+    border:1.5px solid var(--linea); border-radius:10px; outline:none; background-color:#fafafa; color:#1a1a1a;
+    -webkit-appearance:none; appearance:none;
+    background-image:url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23777' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 13px center; }
+  .field select:focus{ border-color:var(--rojo); background-color:#fff; }
+  .field select.unset{ color:#aaa; }
   .field.serie input{ font-weight:700; font-size:17px; letter-spacing:.5px; color:var(--rojo); }
   .field.serie input::placeholder{ color:#ddd; font-weight:400; letter-spacing:0; }
   .row2{ display:flex; gap:10px; }
@@ -129,7 +136,7 @@
     </div>
     <div class="field">
       <label>Vendedor</label>
-      <input type="text" id="vend" placeholder="Nombre del vendedor" autocomplete="off">
+      <select id="vend"></select>
     </div>
     <button class="btn btn-add" id="btnAdd" style="margin-top:6px;">＋ Agregar al reporte</button>
   </div>
@@ -197,6 +204,7 @@ window.del = i => { items.splice(i,1); save(); render(); };
 $('btnAdd').onclick = () => {
   const serie = $('serie').value.trim();
   if(!serie){ toast('Falta el número de serie', 'warn'); $('serie').focus(); return; }
+  if(!$('vend').value.trim()){ toast('Selecciona tu nombre (Vendedor)', 'warn'); $('vend').focus(); return; }
   const d = new Date();
   items.unshift({
     serie,
@@ -370,6 +378,21 @@ $('btnCsv').onclick = () => {
 
 // Enter en serie = agregar rápido
 $('serie').addEventListener('keydown', e => { if(e.key==='Enter') $('btnAdd').click(); });
+
+/* ---------- Lista de vendedores (HES 1217) ---------- */
+// Para editar el equipo, cambia esta lista:
+const VENDEDORES = ['Arnulfo González','Arturo Aguilar','Laura Bonilla','Miguel Ángel García','Ángel Perea'];
+const VKEY = 'hes1217_vend';
+(function initVend(){
+  const sel = $('vend');
+  sel.innerHTML = '<option value="">— Selecciona tu nombre —</option>' +
+    VENDEDORES.map(n => `<option>${n}</option>`).join('');
+  const saved = localStorage.getItem(VKEY);
+  if(saved && VENDEDORES.includes(saved)) sel.value = saved;
+  const paint = () => sel.classList.toggle('unset', !sel.value);
+  sel.onchange = () => { localStorage.setItem(VKEY, sel.value); paint(); };
+  paint();
+})();
 
 render();
 </script>
