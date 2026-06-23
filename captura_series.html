@@ -264,11 +264,13 @@ $('btnClear').onclick = () => {
 };
 
 /* ---------- Enrutado de códigos ---------- */
-// Decide si el código es producto (EAN/UPC) o número de serie y lo manda al campo correcto
-const FORMATOS = ['code_128','code_39','ean_13','ean_8','upc_a','upc_e','itf','qr_code'];
+// Solo códigos de barras 1D: producto (EAN/UPC) y serie (Code 128/39). NADA de QR/2D.
+const FORMATOS = ['code_128','code_39','ean_13','ean_8','upc_a','upc_e'];
 function routeCode(text, fmt){
   const val = (text||'').trim();
   if(!val) return false;
+  // Candado: ignora QR y cualquier código 2D (no son números de serie)
+  if(/qr|matrix|aztec|pdf417|maxi/i.test(fmt||'')) return false;
   const esProducto = /ean|upc/i.test(fmt||'') || /^[0-9]{8}$|^[0-9]{12,13}$/.test(val);
   if(esProducto){
     const hit = CATALOGO[val] || CATALOGO[val.replace(/^0+/, '')];
@@ -359,8 +361,7 @@ async function processImage(file){
       const tmp = new Html5Qrcode('reader-file', { formatsToSupport: [
         Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39,
         Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
-        Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E,
-        Html5QrcodeSupportedFormats.ITF, Html5QrcodeSupportedFormats.QR_CODE ] });
+        Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E ] });
       const text = await tmp.scanFile(file, false);
       try{ tmp.clear(); }catch(e){}
       if(text) routeCode(text, '');
