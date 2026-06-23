@@ -26,7 +26,8 @@
   main{ max-width:560px; margin:0 auto; padding:14px 16px 0; }
 
   /* Cámara */
-  #reader{ width:100%; border-radius:14px; overflow:hidden; background:#000; display:none; margin-bottom:12px; }
+  #reader{ width:100%; min-height:300px; border-radius:14px; overflow:hidden; background:#000; display:none; margin-bottom:12px; }
+  #reader video{ width:100% !important; }
   #reader video{ border-radius:14px; }
   .scan-hint{ text-align:center; font-size:11px; color:var(--gris); margin:-4px 0 12px; display:none; }
 
@@ -249,16 +250,28 @@ $('btnCam').onclick = async () => {
   if(scanning){ stopCam(); return; }
   $('reader').style.display = 'block';
   $('hint').style.display = 'block';
-  html5Qr = new Html5Qrcode('reader');
-  const config = { fps:10, qrbox:{width:260,height:140},
+  html5Qr = new Html5Qrcode('reader', {
+    // Usa el lector de códigos nativo del teléfono si existe (mucho más rápido)
+    experimentalFeatures: { useBarCodeDetectorIfSupported: true },
     formatsToSupport: [
       Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39,
       Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
       Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E,
       Html5QrcodeSupportedFormats.ITF, Html5QrcodeSupportedFormats.QR_CODE
-    ] };
+    ]
+  });
+  // Recuadro grande: casi todo el ancho y bien alto para el código de barras
+  const config = {
+    fps: 20,
+    qrbox: (vw, vh) => ({ width: Math.floor(vw * 0.92), height: Math.floor(Math.min(vh * 0.6, vw * 0.55)) }),
+    aspectRatio: 1.0,
+    disableFlip: true
+  };
+  // Pide buena resolución y enfoque continuo para leer más rápido
+  const camera = { facingMode: { ideal:'environment' }, width:{ ideal:1280 }, height:{ ideal:720 },
+    focusMode:'continuous', advanced:[{ focusMode:'continuous' }] };
   try{
-    await html5Qr.start({ facingMode:'environment' }, config, onScan, ()=>{});
+    await html5Qr.start(camera, config, onScan, ()=>{});
     scanning = true;
     $('btnCam').textContent = '✕ Cerrar cámara';
     $('btnCam').classList.add('on');
