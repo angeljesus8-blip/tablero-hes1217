@@ -143,6 +143,7 @@ const HOY = new Date('2026-06-22T00:00:00'); // referencia para "días restantes
 const FILTROS = [
   { id:'inv',   label:'📊 Inventario' },
   { id:'eol',   label:'🏷️ Vender 50%' },
+  { id:'resurtir', label:'🔄 Resurtir' },
   { id:'transito', label:'🚚 En tránsito' },
   { id:'promo', label:'🔥 Promos' },
   { id:'nov',   label:'📦 Novedades' },
@@ -184,12 +185,17 @@ function eolResolved(){
 const EOL = eolResolved();
 const eolMap = {}; EOL.forEach(e=>{ eolMap[e.sku]=e.estado; });
 const transitoMap = {}; (D.transito||[]).forEach(x=>{ transitoMap[x.sku]=(transitoMap[x.sku]||0)+x.cantidad; });
+// 🔄 Resurtir: en exhibición y NO en EOL (la mercancía EOL ya no se puede pedir).
+const eolSkuSet = new Set((D.eol||[]).map(e=>e.sku));
+const RESURTIR = (D.inventario||[]).filter(x=>x.exhibe>0 && !eolSkuSet.has(x.sku))
+                  .sort((a,b)=> a.stock - b.stock);
 
 function cuenta(id){
   if(id==='promo') return (D.promos||[]).filter(x=>coincide(x.titulo,x.detalle)).length;
   if(id==='eol')   return EOL.filter(e=>coincide(e.producto,e.sku) && e.estado==='listo').length;
   if(id==='nov')   return (D.novedades||[]).filter(x=>coincide(x.titulo,x.detalle)).length;
   if(id==='inv')   return (D.inventario||[]).filter(x=>coincide(x.producto,x.sku)).length;
+  if(id==='resurtir') return RESURTIR.filter(x=>coincide(x.producto,x.sku)).length;
   if(id==='transito') return (D.transito||[]).filter(x=>coincide(x.producto,x.sku)).length;
   if(id==='aviso') return (D.avisos||[]).filter(x=>coincide(x.titulo,x.detalle)).length;
   return 0;
@@ -202,6 +208,7 @@ function seccionTieneItems(id){
   if(id==='transito') return (D.transito||[]).length>0;
   if(id==='nov')      return (D.novedades||[]).length>0;
   if(id==='inv')      return (D.inventario||[]).length>0;
+  if(id==='resurtir') return RESURTIR.length>0;
   if(id==='aviso')    return (D.avisos||[]).length>0;
   return false;
 }
@@ -301,6 +308,7 @@ function render(){
   const eolAgot  = eolAll.filter(e=>e.estado==='agotado');
   const nov    = (D.novedades||[]).filter(x=>coincide(x.titulo,x.detalle));
   const inv    = (D.inventario||[]).filter(x=>coincide(x.producto,x.sku));
+  const resurtir = RESURTIR.filter(x=>coincide(x.producto,x.sku));
   const transito = (D.transito||[]).filter(x=>coincide(x.producto,x.sku));
   const avisos = (D.avisos||[]).filter(x=>coincide(x.titulo,x.detalle));
 
@@ -312,6 +320,7 @@ function render(){
   }
   if(f==='promo') html += seccion('🔥 Promociones vigentes', promos, cardPromo);
   if(f==='nov')   html += seccion('📦 Mercancía nueva', nov, cardNov);
+  if(f==='resurtir') html += seccion('🔄 Resurtir · en exhibición y NO EOL (sí se puede pedir)', resurtir, rowInv);
   if(f==='transito') html += seccion('🚚 En tránsito · venta a promesa de entrega', transito, cardTransito);
   if(f==='inv')   html += seccion('📊 Inventario · existencias', inv, rowInv);
 
