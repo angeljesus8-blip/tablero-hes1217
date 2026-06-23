@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#D12026">
+<title>Captura de Series · HES 1217</title>
+<link rel="apple-touch-icon" href="logo_odemas.png">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  :root{ --rojo:#D12026; --naranja:#F37021; --azul:#336BB4; --verde:#1a8c4e;
+    --gris:#777; --linea:#ececec; --bg:#f6f6f7; }
+  body{ font-family:'Montserrat',sans-serif; background:var(--bg); color:#1a1a1a; padding-bottom:120px; }
+
+  header{ background:#fff; border-bottom:3px solid var(--rojo); padding:12px 16px;
+    display:flex; align-items:center; gap:12px; position:sticky; top:0; z-index:30; }
+  header img{ height:32px; width:auto; }
+  .h-txt h1{ font-size:15px; font-weight:800; letter-spacing:-.2px; }
+  .h-txt p{ font-size:11px; color:var(--gris); margin-top:1px; }
+  .count{ margin-left:auto; text-align:right; }
+  .count .n{ font-size:22px; font-weight:800; color:var(--rojo); line-height:1; }
+  .count .l{ font-size:9px; color:#aaa; text-transform:uppercase; letter-spacing:.5px; }
+
+  main{ max-width:560px; margin:0 auto; padding:14px 16px 0; }
+
+  /* Cámara */
+  #reader{ width:100%; border-radius:14px; overflow:hidden; background:#000; display:none; margin-bottom:12px; }
+  #reader video{ border-radius:14px; }
+  .scan-hint{ text-align:center; font-size:11px; color:var(--gris); margin:-4px 0 12px; display:none; }
+
+  .btn{ width:100%; border:none; font-family:inherit; font-weight:700; font-size:15px;
+    padding:14px; border-radius:12px; cursor:pointer; transition:.12s; display:flex;
+    align-items:center; justify-content:center; gap:8px; }
+  .btn:active{ transform:scale(.985); }
+  .btn-cam{ background:var(--rojo); color:#fff; }
+  .btn-cam.on{ background:#333; }
+  .btn-add{ background:var(--verde); color:#fff; }
+  .btn-ghost{ background:#fff; color:#555; border:1.5px solid var(--linea); }
+
+  .card{ background:#fff; border:1px solid var(--linea); border-radius:14px; padding:15px; margin-top:12px; }
+  .field{ margin-bottom:11px; }
+  .field:last-child{ margin-bottom:0; }
+  .field label{ font-size:11px; font-weight:700; color:#888; text-transform:uppercase;
+    letter-spacing:.5px; display:block; margin-bottom:5px; }
+  .field input{ width:100%; font-family:inherit; font-size:15px; padding:11px 13px;
+    border:1.5px solid var(--linea); border-radius:10px; outline:none; background:#fafafa; }
+  .field input:focus{ border-color:var(--rojo); background:#fff; }
+  .field.serie input{ font-weight:700; font-size:17px; letter-spacing:.5px; color:var(--rojo); }
+  .field.serie input::placeholder{ color:#ddd; font-weight:400; letter-spacing:0; }
+  .row2{ display:flex; gap:10px; }
+  .row2 .field{ flex:1; }
+
+  .lista-head{ display:flex; align-items:center; justify-content:space-between; margin:22px 4px 8px; }
+  .lista-head h2{ font-size:12px; font-weight:800; color:#999; text-transform:uppercase; letter-spacing:1px; }
+  .lista-head button{ background:none; border:none; font-family:inherit; font-size:11px;
+    font-weight:700; color:var(--rojo); cursor:pointer; }
+
+  .item{ background:#fff; border:1px solid var(--linea); border-left:4px solid var(--verde);
+    border-radius:11px; padding:11px 13px; margin-bottom:8px; display:flex; align-items:center; gap:10px; }
+  .item.dup{ border-left-color:var(--naranja); background:#fffaf4; }
+  .item-info{ flex:1; min-width:0; }
+  .item-info .serie{ font-size:14px; font-weight:800; letter-spacing:.3px; word-break:break-all; }
+  .item-info .sub{ font-size:11px; color:#999; margin-top:2px; }
+  .item-info .sub b{ color:var(--azul); font-weight:700; }
+  .item-del{ background:#fdeaea; color:var(--rojo); border:none; width:32px; height:32px;
+    border-radius:8px; font-size:18px; font-weight:700; cursor:pointer; flex-shrink:0; line-height:1; }
+  .dup-tag{ font-size:9px; font-weight:800; color:var(--naranja); background:#fff5ee;
+    padding:2px 6px; border-radius:5px; margin-left:6px; }
+
+  .empty{ text-align:center; color:#bbb; font-size:13px; padding:30px 20px; }
+
+  .footbar{ position:fixed; bottom:0; left:0; right:0; background:#fff; border-top:1px solid var(--linea);
+    padding:10px 16px calc(10px + env(safe-area-inset-bottom)); display:flex; gap:10px;
+    max-width:560px; margin:0 auto; box-shadow:0 -4px 18px rgba(0,0,0,.06); }
+  .footbar .btn{ font-size:14px; padding:13px; }
+  .btn-csv{ background:var(--azul); color:#fff; flex:1; }
+
+  .toast{ position:fixed; bottom:90px; left:50%; transform:translateX(-50%) translateY(20px);
+    background:#222; color:#fff; font-size:13px; font-weight:600; padding:11px 18px; border-radius:24px;
+    opacity:0; transition:.25s; z-index:50; pointer-events:none; white-space:nowrap; }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  .toast.ok{ background:var(--verde); }
+  .toast.warn{ background:var(--naranja); }
+
+  footer{ text-align:center; font-size:10px; color:#ccc; margin-top:20px; }
+</style>
+</head>
+<body>
+
+<header>
+  <img src="logo_odemas.png" alt="Odemás">
+  <div class="h-txt">
+    <h1>Captura de Series</h1>
+    <p>HES 1217 · Reporte de ventas</p>
+  </div>
+  <div class="count"><div class="n" id="count">0</div><div class="l">capturadas</div></div>
+</header>
+
+<main>
+  <div id="reader"></div>
+  <p class="scan-hint" id="hint">📷 Apunta al código de barras · el de serie y el de producto se separan solos</p>
+
+  <button class="btn btn-cam" id="btnCam">📷 Escanear número de serie</button>
+
+  <div class="card">
+    <div class="field serie">
+      <label>Número de serie</label>
+      <input type="text" id="serie" placeholder="Escanea o escribe aquí…" autocomplete="off">
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>SKU</label>
+        <input type="text" id="sku" placeholder="SKU" autocomplete="off">
+      </div>
+      <div class="field">
+        <label>Precio</label>
+        <input type="text" id="precio" placeholder="$" inputmode="decimal" autocomplete="off">
+      </div>
+    </div>
+    <div class="field">
+      <label>Descripción</label>
+      <input type="text" id="desc" placeholder="Descripción del artículo" autocomplete="off">
+    </div>
+    <div class="field">
+      <label>Vendedor</label>
+      <input type="text" id="vend" placeholder="Nombre del vendedor" autocomplete="off">
+    </div>
+    <button class="btn btn-add" id="btnAdd" style="margin-top:6px;">＋ Agregar al reporte</button>
+  </div>
+
+  <div class="lista-head">
+    <h2>Capturadas hoy</h2>
+    <button id="btnClear">Borrar todo</button>
+  </div>
+  <div id="lista"><p class="empty">Aún no hay series capturadas.</p></div>
+
+  <footer>Odemás · Grupo Gigante · HES Angelópolis 1217</footer>
+</main>
+
+<div class="footbar">
+  <button class="btn btn-csv" id="btnCsv">⬇️ Descargar Excel (CSV)</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const KEY = 'hes1217_series_v1';
+let items = JSON.parse(localStorage.getItem(KEY) || '[]');
+let html5Qr = null, scanning = false;
+
+const $ = id => document.getElementById(id);
+const fields = ['serie','sku','precio','desc','vend'];
+
+function toast(msg, type=''){
+  const t = $('toast'); t.textContent = msg; t.className = 'toast show ' + type;
+  clearTimeout(t._t); t._t = setTimeout(()=> t.className='toast', 1600);
+}
+function beep(){
+  try{ const a=new (window.AudioContext||window.webkitAudioContext)();
+    const o=a.createOscillator(), g=a.createGain();
+    o.connect(g); g.connect(a.destination); o.frequency.value=880; o.type='sine';
+    g.gain.setValueAtTime(.18,a.currentTime); o.start();
+    g.gain.exponentialRampToValueAtTime(.0001,a.currentTime+.15); o.stop(a.currentTime+.15);
+  }catch(e){}
+}
+function save(){ localStorage.setItem(KEY, JSON.stringify(items)); }
+
+function render(){
+  $('count').textContent = items.length;
+  const seen = {};
+  items.forEach(i => seen[i.serie] = (seen[i.serie]||0)+1);
+  if(!items.length){ $('lista').innerHTML = '<p class="empty">Aún no hay series capturadas.</p>'; return; }
+  $('lista').innerHTML = items.map((i,idx)=>{
+    const dup = seen[i.serie] > 1;
+    const sub = [i.sku && ('SKU '+i.sku), i.desc, i.precio && ('$'+i.precio), i.vend]
+                .filter(Boolean).join(' · ');
+    return `<div class="item ${dup?'dup':''}">
+      <div class="item-info">
+        <div class="serie">${esc(i.serie)}${dup?'<span class="dup-tag">REPETIDO</span>':''}</div>
+        ${sub?`<div class="sub">${esc(sub)}</div>`:''}
+      </div>
+      <button class="item-del" onclick="del(${idx})">×</button>
+    </div>`;
+  }).join('');
+}
+function esc(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+window.del = i => { items.splice(i,1); save(); render(); };
+
+$('btnAdd').onclick = () => {
+  const serie = $('serie').value.trim();
+  if(!serie){ toast('Falta el número de serie', 'warn'); $('serie').focus(); return; }
+  const d = new Date();
+  items.unshift({
+    serie,
+    sku: $('sku').value.trim(),
+    precio: $('precio').value.trim(),
+    desc: $('desc').value.trim(),
+    vend: $('vend').value.trim(),
+    fecha: d.toLocaleDateString('es-MX'),
+    hora: d.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})
+  });
+  save(); render();
+  // limpia serie/sku/precio/desc; conserva vendedor
+  ['serie','sku','precio','desc'].forEach(f=> $(f).value='');
+  toast('Agregada ✓', 'ok'); $('serie').focus();
+};
+
+$('btnClear').onclick = () => {
+  if(!items.length) return;
+  if(confirm('¿Borrar TODAS las series capturadas? Esto no se puede deshacer.')){
+    items = []; save(); render(); toast('Lista vacía');
+  }
+};
+
+/* ---------- Cámara / escaneo ---------- */
+// Detecta si el código es producto (EAN/UPC) o número de serie y lo manda al campo correcto
+function onScan(text, result){
+  const val = (text||'').trim();
+  let fmt = '';
+  try{ fmt = result.result.format.formatName || ''; }catch(e){}
+  const esProducto = /EAN|UPC/.test(fmt) || /^[0-9]{8}$|^[0-9]{12,13}$/.test(val);
+
+  if(esProducto){
+    $('sku').value = val;
+    toast('Código de producto leído ✓ (SKU)', 'ok');
+  } else {
+    $('serie').value = val;
+    toast('Número de serie leído ✓', 'ok');
+  }
+  beep();
+  if('vibrate' in navigator) navigator.vibrate(60);
+  // pausa breve para no escanear 10 veces el mismo código
+  if(html5Qr){ html5Qr.pause(true); setTimeout(()=>{ try{html5Qr.resume();}catch(e){} }, 1400); }
+}
+
+$('btnCam').onclick = async () => {
+  if(scanning){ stopCam(); return; }
+  $('reader').style.display = 'block';
+  $('hint').style.display = 'block';
+  html5Qr = new Html5Qrcode('reader');
+  const config = { fps:10, qrbox:{width:260,height:140},
+    formatsToSupport: [
+      Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39,
+      Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E,
+      Html5QrcodeSupportedFormats.ITF, Html5QrcodeSupportedFormats.QR_CODE
+    ] };
+  try{
+    await html5Qr.start({ facingMode:'environment' }, config, onScan, ()=>{});
+    scanning = true;
+    $('btnCam').textContent = '✕ Cerrar cámara';
+    $('btnCam').classList.add('on');
+  }catch(e){
+    toast('No se pudo abrir la cámara', 'warn');
+    $('reader').style.display='none'; $('hint').style.display='none';
+  }
+};
+function stopCam(){
+  if(html5Qr){ html5Qr.stop().then(()=>html5Qr.clear()).catch(()=>{}); }
+  scanning = false;
+  $('reader').style.display='none'; $('hint').style.display='none';
+  $('btnCam').textContent = '📷 Escanear número de serie';
+  $('btnCam').classList.remove('on');
+}
+
+/* ---------- Exportar CSV ---------- */
+$('btnCsv').onclick = () => {
+  if(!items.length){ toast('No hay nada que exportar', 'warn'); return; }
+  const cols = ['Fecha','Hora','Numero de serie','SKU','Descripcion','Precio','Vendedor'];
+  const q = s => '"' + String(s||'').replace(/"/g,'""') + '"';
+  const rows = items.slice().reverse().map(i =>
+    [i.fecha,i.hora,i.serie,i.sku,i.desc,i.precio,i.vend].map(q).join(','));
+  // BOM para que Excel respete acentos
+  const csv = '﻿' + cols.map(q).join(',') + '\n' + rows.join('\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const fecha = new Date().toISOString().slice(0,10);
+  const a = document.createElement('a');
+  a.href = url; a.download = `series_HES1217_${fecha}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  toast('Descargando… ✓', 'ok');
+};
+
+// Enter en serie = agregar rápido
+$('serie').addEventListener('keydown', e => { if(e.key==='Enter') $('btnAdd').click(); });
+
+render();
+</script>
+</body>
+</html>
