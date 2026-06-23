@@ -8,6 +8,13 @@
 <link rel="apple-touch-icon" href="logo_odemas.png">
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script type="module">
+  // Decodificador potente (ZXing-WASM) que localiza el código en fotos reales, también en iPhone
+  try {
+    const mod = await import('https://esm.sh/barcode-detector@2/pure');
+    window.ZXingBD = mod.BarcodeDetector;
+  } catch (e) { /* si no carga, se usa el respaldo */ }
+</script>
 <style>
   * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
   :root{ --rojo:#D12026; --naranja:#F37021; --azul:#336BB4; --verde:#1a8c4e;
@@ -98,7 +105,7 @@
 <main>
   <input type="file" id="fileCam" accept="image/*" capture="environment" hidden>
   <button class="btn btn-cam" id="btnPhoto">📸 Tomar foto del código</button>
-  <p class="scan-hint" id="hint">Encuadra la etiqueta con buena luz · la app lee la serie y el producto</p>
+  <p class="scan-hint" id="hint">Acerca el teléfono al código de barras (que llene la foto) · con buena luz</p>
   <div id="reader-file" style="position:absolute;width:0;height:0;overflow:hidden;"></div>
 
   <div class="card">
@@ -238,27 +245,44 @@ function routeCode(text, fmt){
 }
 
 /* ---------- Tomar foto y procesar ---------- */
+async function tryDetector(Detector, file){
+  let det;
+  try{
+    const sop = Detector.getSupportedFormats ? await Detector.getSupportedFormats() : null;
+    const fmts = sop ? FORMATOS.filter(f => sop.includes(f)) : FORMATOS;
+    det = new Detector({ formats: fmts });
+  }catch(_){ det = new Detector(); }
+  const bmp = await createImageBitmap(file);
+  const codes = await det.detect(bmp);
+  if(bmp.close) bmp.close();
+  return codes || [];
+}
+
 async function processImage(file){
   toast('Procesando foto…');
-  // 1) Lector nativo del teléfono: puede leer VARIOS códigos en una sola foto
-  if('BarcodeDetector' in window){
+  let total = 0;
+  // 1) Decodificador potente ZXing-WASM (mejor para Código 128 en fotos, también iPhone)
+  //    y como respaldo el lector nativo del teléfono. Combinamos lo que cada uno encuentre.
+  const detectores = [ window.ZXingBD, (('BarcodeDetector' in window) ? window.BarcodeDetector : null) ].filter(Boolean);
+  const vistos = new Set();
+  for(const D of detectores){
     try{
-      const sop = await BarcodeDetector.getSupportedFormats();
-      const det = new BarcodeDetector({ formats: FORMATOS.filter(f => sop.includes(f)) });
-      const bmp = await createImageBitmap(file);
-      const codes = await det.detect(bmp);
-      if(bmp.close) bmp.close();
-      if(codes && codes.length){
-        // ordena: primero el de serie (alfanumérico) para no perderlo
-        codes.sort((a,b)=> (/ean|upc/i.test(a.format)?1:0) - (/ean|upc/i.test(b.format)?1:0));
-        codes.forEach(c => routeCode(c.rawValue, c.format));
-        beep(); if('vibrate' in navigator) navigator.vibrate(60);
-        toast(codes.length + ' código(s) leído(s) ✓', 'ok');
-        return;
-      }
-    }catch(e){ /* pasa al método de respaldo */ }
+      const codes = await tryDetector(D, file);
+      // ordena: primero la serie (alfanumérico) para no perderla
+      codes.sort((a,b)=> (/ean|upc/i.test(a.format)?1:0) - (/ean|upc/i.test(b.format)?1:0));
+      codes.forEach(c => {
+        const v = (c.rawValue||'').trim();
+        if(v && !vistos.has(v)){ vistos.add(v); if(routeCode(v, c.format)) total++; }
+      });
+      if(total) break;   // si ya leyó algo, no probamos el otro
+    }catch(e){ /* siguiente detector */ }
   }
-  // 2) Respaldo: decodificador de la librería (un código por foto)
+  if(total){
+    beep(); if('vibrate' in navigator) navigator.vibrate(60);
+    toast(total + ' código(s) leído(s) ✓', 'ok');
+    return;
+  }
+  // 2) Último respaldo: decodificador de la librería (un código por foto)
   try{
     const tmp = new Html5Qrcode('reader-file', { formatsToSupport: [
       Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39,
@@ -268,10 +292,8 @@ async function processImage(file){
     const text = await tmp.scanFile(file, false);
     try{ tmp.clear(); }catch(e){}
     if(text && routeCode(text, '')){ beep(); if('vibrate' in navigator) navigator.vibrate(60); return; }
-    toast('No se detectó ningún código en la foto', 'warn');
-  }catch(e){
-    toast('No se detectó ningún código · intenta con más luz', 'warn');
-  }
+  }catch(e){ /* nada */ }
+  toast('No se detectó ningún código · acerca más el código y con buena luz', 'warn');
 }
 
 /* ---------- Botón "Tomar foto y procesar" ---------- */
