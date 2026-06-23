@@ -175,7 +175,7 @@ function eolResolved(){
     const estado = (stock===0 && exhibe>0) ? 'listo' : (stock>0 ? 'pendiente' : 'agotado');
     return { sku:e.sku, producto:e.producto||inv.producto||('SKU '+e.sku),
       precio:e.precio, precio50:e.precio?Math.round(e.precio/2):null, stock, exhibe, estado };
-  });
+  }).filter(e=>e.exhibe>0); // solo SKUs con pieza en exhibición
 }
 const EOL = eolResolved();
 const eolMap = {}; EOL.forEach(e=>{ eolMap[e.sku]=e.estado; });
