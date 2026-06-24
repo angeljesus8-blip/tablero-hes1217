@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#D12026">
+<title>Actualizar datos de tienda · HES 1217</title>
+<link rel="apple-touch-icon" href="logo_odemas.png">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  *{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  :root{ --rojo:#D12026; --naranja:#F37021; --azul:#336BB4; --verde:#1a8c4e; --gris:#777; --linea:#ececec; --bg:#f6f6f7; }
+  body{ font-family:'Montserrat',sans-serif; background:var(--bg); color:#1a1a1a; }
+  header{ background:#fff; border-bottom:3px solid var(--rojo); padding:12px 16px; display:flex; align-items:center; gap:12px; }
+  header img{ height:32px; }
+  .h-txt h1{ font-size:15px; font-weight:800; }
+  .h-txt p{ font-size:11px; color:var(--gris); margin-top:1px; }
+  main{ max-width:520px; margin:0 auto; padding:18px 16px 40px; }
+
+  .card{ background:#fff; border:1px solid var(--linea); border-radius:14px; padding:18px; margin-bottom:14px; }
+  .card h2{ font-size:14px; font-weight:800; margin-bottom:6px; }
+  .card p{ font-size:13px; color:#555; line-height:1.5; }
+  .steps{ font-size:13px; color:#555; line-height:1.6; margin:8px 0 0 18px; }
+  .steps b{ color:#1a1a1a; }
+
+  .btn{ width:100%; border:none; font-family:inherit; font-weight:700; font-size:15px; padding:15px;
+    border-radius:12px; cursor:pointer; transition:.12s; display:flex; align-items:center; justify-content:center; gap:8px; }
+  .btn:active{ transform:scale(.99); }
+  .btn-main{ background:var(--rojo); color:#fff; }
+  .btn-go{ background:var(--verde); color:#fff; }
+  .btn[disabled]{ opacity:.5; pointer-events:none; }
+
+  .filebox{ border:2px dashed var(--linea); border-radius:12px; padding:20px; text-align:center; cursor:pointer; }
+  .filebox.ok{ border-color:var(--verde); background:#f7fdfa; }
+  .filebox .fn{ font-size:13px; font-weight:700; color:var(--verde); margin-top:6px; word-break:break-all; }
+  .filebox .ph{ font-size:13px; color:var(--gris); }
+
+  .result{ font-size:13.5px; line-height:1.5; border-radius:10px; padding:12px 14px; margin-top:12px; display:none; }
+  .result.show{ display:block; }
+  .result.ok{ background:#eafaf1; color:#13703c; border:1.5px solid #bfe7cd; }
+  .result.bad{ background:#fdeaea; color:#b3261e; border:1.5px solid #f3c3c0; }
+  .result b{ font-weight:800; }
+
+  /* Pantalla de inicio */
+  #gate{ position:fixed; inset:0; z-index:50; background:#fff; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; padding:24px; text-align:center; }
+  #gate.hide{ display:none; }
+  #gate img{ height:46px; margin-bottom:16px; }
+  #gate h1{ font-size:22px; font-weight:800; }
+  #gate .sub{ font-size:12px; color:var(--gris); font-weight:600; margin-top:4px; letter-spacing:.5px; }
+  #gate .q{ font-size:14px; font-weight:700; color:#444; margin:26px 0 14px; }
+  .names{ width:100%; max-width:340px; display:flex; flex-direction:column; gap:10px; }
+  .name{ font-family:inherit; font-size:17px; font-weight:700; background:#fff; border:1.5px solid var(--linea);
+    border-radius:13px; padding:15px; cursor:pointer; }
+  .name:active{ transform:scale(.99); }
+  .who{ font-size:12px; color:var(--gris); }
+  .who b{ color:#1a1a1a; }
+  .spin{ display:inline-block; width:15px; height:15px; border:2px solid #fff; border-top-color:transparent;
+    border-radius:50%; animation:r .7s linear infinite; }
+  @keyframes r{ to{ transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div id="gate">
+  <img src="logo_odemas.png" alt="Odemás">
+  <h1>Actualizar datos</h1>
+  <div class="sub">HES 1217 · Catálogo e inventario</div>
+  <div class="q">¿Quién actualiza?</div>
+  <div class="names" id="gateNames"></div>
+</div>
+
+<header>
+  <img src="logo_odemas.png" alt="Odemás">
+  <div class="h-txt"><h1>Actualizar datos de tienda</h1><p>HES 1217 · Angelópolis</p></div>
+</header>
+
+<main>
+  <div class="card">
+    <h2>📦 Catálogo e inventario</h2>
+    <p>Sube el <b>“Informe de Artículos Totales en Tienda”</b> (.xlsx). Actualiza el catálogo (UPC → SKU + descripción) y el inventario (ON HAND) para todos.</p>
+    <ol class="steps">
+      <li>Descarga el informe de tu sistema.</li>
+      <li>Elige el archivo aquí abajo.</li>
+      <li>Toca <b>Subir y actualizar</b>.</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <input type="file" id="file" accept=".xlsx,.xls" hidden>
+    <div class="filebox" id="filebox">
+      <div class="ph" id="fileph">📄 Toca para elegir el archivo (.xlsx)</div>
+    </div>
+    <div style="font-size:12px;color:#999;margin:8px 2px 0">Actualiza: <b id="whoLabel">—</b></div>
+    <button class="btn btn-go" id="btnGo" style="margin-top:14px" disabled>Subir y actualizar</button>
+    <div class="result" id="result"></div>
+  </div>
+</main>
+
+<script>
+const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbwbZFsiDqZrNitPKNLqr4r6xOFu3VKprtXJacScftIJmcQdAl_yytjxK8BymWvy8I1gjA/exec';
+const AUTORIZADOS = ['Ángel Perea', 'Miguel Ángel García'];
+const $ = id => document.getElementById(id);
+let quien = '', parsed = null;
+
+/* Pantalla de inicio */
+$('gateNames').innerHTML = AUTORIZADOS.map(n => `<button class="name" data-n="${n}">${n}</button>`).join('');
+[...$('gateNames').children].forEach(b => b.onclick = () => { quien = b.dataset.n; $('whoLabel').textContent = quien; $('gate').classList.add('hide'); });
+
+/* Elegir archivo */
+$('filebox').onclick = () => $('file').click();
+$('file').onchange = async e => {
+  const f = e.target.files && e.target.files[0];
+  if(!f) return;
+  $('result').className = 'result';
+  try{
+    parsed = await parseInforme(f);
+    $('fileph').style.display = 'none';
+    $('filebox').classList.add('ok');
+    $('filebox').insertAdjacentHTML('beforeend', `<div class="fn">✓ ${f.name}</div><div class="ph" style="margin-top:4px">${parsed.length} productos detectados</div>`);
+    $('btnGo').disabled = parsed.length === 0;
+  }catch(err){
+    parsed = null; $('btnGo').disabled = true;
+    showResult(false, 'No pude leer el archivo: ' + err.message + '. Verifica que sea el Informe de Artículos (.xlsx) con columnas SKU y UPC.');
+  }
+};
+
+/* Lee el Informe: busca la fila de encabezado con SKU y UPC */
+async function parseInforme(file){
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type:'array' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const aoa = XLSX.utils.sheet_to_json(ws, { header:1, raw:false, defval:'' });
+  let h = -1;
+  for(let i=0;i<aoa.length;i++){
+    const up = aoa[i].map(c => String(c||'').trim().toUpperCase());
+    if(up.includes('SKU') && up.includes('UPC')){ h = i; break; }
+  }
+  if(h < 0) throw new Error('no encontré los encabezados SKU/UPC');
+  const H = aoa[h].map(c => String(c||'').trim().toUpperCase());
+  const iSku = H.indexOf('SKU'), iUpc = H.indexOf('UPC');
+  const iDesc = H.findIndex(x => x.includes('DESCRIP'));
+  const iOn = H.findIndex(x => x.includes('ON HAND') || x === 'ONHAND' || x.includes('EXIST'));
+  const iPre = H.findIndex(x => x.includes('PRECIO'));
+  const seen = {}; const rows = [];
+  for(let r=h+1; r<aoa.length; r++){
+    const row = aoa[r];
+    let upc = String(row[iUpc]||'').trim();
+    const sku = String(row[iSku]||'').trim();
+    if(!upc || !sku) continue;
+    if(/e\+/i.test(upc)) continue;               // notación científica = inservible
+    upc = upc.replace(/\.0$/,'');
+    if(seen[upc]) continue; seen[upc] = 1;
+    rows.push({ upc, sku, desc:String(row[iDesc]||'').trim(),
+      onhand: iOn>=0 ? String(row[iOn]||'').trim() : '',
+      precio: iPre>=0 ? String(row[iPre]||'').trim() : '' });
+  }
+  return rows;
+}
+
+/* Subir */
+$('btnGo').onclick = async () => {
+  if(!parsed || !parsed.length) return;
+  $('btnGo').disabled = true;
+  const prev = $('btnGo').textContent;
+  $('btnGo').innerHTML = '<span class="spin"></span> Subiendo…';
+  $('result').className = 'result';
+  try{
+    await fetch(CLOUD_URL, { method:'POST', mode:'no-cors',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({ tipo:'catalogo', by: quien, rows: parsed }) });
+    // confirma leyendo el estado del catálogo
+    await new Promise(r => setTimeout(r, 2500));
+    let estado = null;
+    try{ estado = await jsonp(CLOUD_URL + '?modo=estado'); }catch(e){}
+    if(estado && Number(estado.catCount) > 0){
+      showResult(true, `✅ Catálogo e inventario actualizados: <b>${estado.catCount}</b> productos.<br>Por ${estado.catBy||quien}. Los teléfonos tomarán el catálogo nuevo al abrir la app.`);
+    } else {
+      showResult(true, `Enviado (${parsed.length} productos). Si no ves el conteo, revisa la hoja en unos segundos.`);
+    }
+  }catch(err){
+    showResult(false, 'No se pudo subir: ' + err.message + '. Revisa tu conexión e inténtalo de nuevo.');
+  }
+  $('btnGo').textContent = prev; $('btnGo').disabled = false;
+};
+
+function showResult(ok, html){ const r=$('result'); r.innerHTML=html; r.className='result show '+(ok?'ok':'bad'); }
+function jsonp(url){
+  return new Promise((res, rej) => {
+    const cb = 'cb_' + Date.now();
+    const s = document.createElement('script');
+    const t = setTimeout(() => { cleanup(); rej(new Error('timeout')); }, 15000);
+    function cleanup(){ clearTimeout(t); delete window[cb]; s.remove(); }
+    window[cb] = d => { cleanup(); res(d); };
+    s.onerror = () => { cleanup(); rej(new Error('error')); };
+    s.src = url + (url.includes('?')?'&':'?') + 'callback=' + cb;
+    document.head.appendChild(s);
+  });
+}
+</script>
+</body>
+</html>
