@@ -209,31 +209,75 @@ async function parsePromosPDF(file){
   if(typeof pdfjsLib==='undefined') throw new Error('no cargó el lector de PDF');
   const buf = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
-  let text = '';
+
+  // Extrae items con posición para agrupar por fila real
+  const allItems = [];
+  let flatText = '';
   for(let p=1; p<=pdf.numPages; p++){
     const page = await pdf.getPage(p);
+    const vp = page.getViewport({scale:1});
     const tc = await page.getTextContent();
-    text += tc.items.map(i=>i.str).join(' ') + '\n';
+    tc.items.forEach(i=>{
+      allItems.push({ str:i.str, x:i.transform[4], y:vp.height - i.transform[5], page:p });
+    });
+    flatText += tc.items.map(i=>i.str).join(' ') + '\n';
   }
-  // Vigencia general (pdf.js a veces separa dígitos: "0 3" -> "03")
-  const ds = s => s.replace(/\s/g,'');   // quita espacios entre dígitos
+
+  const ds = s => s.replace(/\s/g,'');
   let d1='', d2='', vig='';
-  const vm = text.match(/Vigencia\D{0,8}(\d\s*\d?)\s*al\s*(\d\s*\d?)\s*de\s+([A-Za-zÁÉÍÓÚáéíóú]+)\s+de\s+(\d{4})/i);
+  const vm = flatText.match(/Vigencia\D{0,8}(\d\s*\d?)\s*al\s*(\d\s*\d?)\s*de\s+([A-Za-zÁÉÍÓÚáéíóú]+)\s+de\s+(\d{4})/i);
   if(vm){ const dia1=ds(vm[1]), dia2=ds(vm[2]), mes=MESES[vm[3].toLowerCase()]||1, y=+vm[4];
     d1=iso(y,mes,+dia1); d2=iso(y,mes,+dia2); vig=dia1+' al '+dia2+' de '+vm[3]+' '+vm[4]; }
-  // EOL inicia (suele ser unos días después)
   let eolD1 = d1;
-  const em = text.match(/EOL[^.]{0,60}?a partir del\s+(\d\s*\d?)\s+de\s+([A-Za-zÁÉÍÓÚáéíóú]+)/i);
+  const em = flatText.match(/EOL[^.]{0,60}?a partir del\s+(\d\s*\d?)\s+de\s+([A-Za-zÁÉÍÓÚáéíóú]+)/i);
   if(em && vm){ eolD1 = iso(+vm[4], MESES[em[2].toLowerCase()]||MESES[vm[3].toLowerCase()], +ds(em[1])); }
-  // Filas: SKU(9) Descripción $precio $promo Estatus
-  const re = /(\d{9})\s+(.+?)\s+\$([\d.,]+)\s+\$([\d.,]+)\s+(Activo|EOL)/gi;
-  const seen={}, rows=[]; let m;
-  while((m = re.exec(text))){
-    const sku=m[1]; if(seen[sku]) continue; seen[sku]=1;
-    const est = m[5].toUpperCase()==='EOL' ? 'EOL' : 'Activo';
+
+  // Agrupa por renglón usando coordenada Y (tolerancia 4px)
+  const byRow = {};
+  allItems.forEach(it=>{
+    if(!it.str.trim()) return;
+    const k = it.page + '_' + Math.round(it.y / 4);
+    (byRow[k] || (byRow[k]=[])).push(it);
+  });
+  const lines = Object.values(byRow)
+    .map(r => r.sort((a,b)=>a.x-b.x).map(i=>i.str).join(' ').trim())
+    .filter(l=>l.length>0);
+
+  const seen={}, rows=[];
+
+  // Intenta extraer una promo de una línea
+  function parseLine(line){
+    const sku9 = line.match(/^(\d{9})\b/);
+    if(!sku9) return;
+    const sku = sku9[1];
+    if(seen[sku]) return;
+    // Con o sin signo $; captura los 2 últimos números antes de Activo/EOL
+    const m = line.match(/(\d{9})\s+(.+?)\s+\$?([\d,]+(?:\.\d{1,2})?)\s+\$?([\d,]+(?:\.\d{1,2})?)\s+(Activo|EOL)/i);
+    if(!m) return;
+    const pr = parseFloat(m[3].replace(/,/g,'')), pp = parseFloat(m[4].replace(/,/g,''));
+    if(isNaN(pr)||isNaN(pp)) return;
+    seen[sku]=1;
+    const est = m[5].toUpperCase()==='EOL'?'EOL':'Activo';
     rows.push({ sku, desc:m[2].trim().replace(/\s+/g,' '), pr:m[3], pp:m[4], est, msi:'',
-      d1: est==='EOL' ? eolD1 : d1, d2 });
+      d1: est==='EOL'?eolD1:d1, d2 });
   }
+  lines.forEach(parseLine);
+
+  // Fallback: texto plano sin signo $
+  if(rows.length < 10){
+    const re = /(\d{9})\s+(.+?)\s+\$?([\d,]+(?:\.\d{1,2})?)\s+\$?([\d,]+(?:\.\d{1,2})?)\s+(Activo|EOL)/gi;
+    let m2;
+    while((m2 = re.exec(flatText))){
+      const sku=m2[1]; if(seen[sku]) continue;
+      const pr=parseFloat(m2[3].replace(/,/g,'')), pp=parseFloat(m2[4].replace(/,/g,''));
+      if(isNaN(pr)||isNaN(pp)) continue;
+      seen[sku]=1;
+      const est=m2[5].toUpperCase()==='EOL'?'EOL':'Activo';
+      rows.push({sku,desc:m2[2].trim().replace(/\s+/g,' '),pr:m2[3],pp:m2[4],est,msi:'',
+        d1:est==='EOL'?eolD1:d1,d2});
+    }
+  }
+
   return { rows, vig };
 }
 
