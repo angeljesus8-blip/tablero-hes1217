@@ -356,7 +356,27 @@ function render(){
 }
 function esc(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
-window.del = i => { items.splice(i,1); save(); render(); };
+function eliminarDeNube(id){
+  // Si aún no subió a la hoja, solo la sacamos de la cola pendiente
+  const estabaPendiente = pending.some(p => p.id === id);
+  pending = pending.filter(p => p.id !== id);
+  savePending();
+  if(estabaPendiente) return;
+  // Ya estaba en la hoja → pide al Apps Script que borre la fila
+  fetch(CLOUD_URL, {
+    method:'POST', mode:'no-cors',
+    headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body: JSON.stringify({tipo:'eliminar', id})
+  }).catch(()=>{});
+}
+
+window.del = i => {
+  const item = items[i];
+  if(!confirm(`¿Eliminar la captura de serie "${item.serie}"?`)) return;
+  items.splice(i, 1); save(); render();
+  if(item && item.id) eliminarDeNube(item.id);
+  toast('Captura eliminada', 'warn');
+};
 
 $('btnAdd').onclick = () => {
   const serie = $('serie').value.trim();
