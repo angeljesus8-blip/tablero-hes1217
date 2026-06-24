@@ -223,6 +223,10 @@ async function parsePromosPDF(file){
     flatText += tc.items.map(i=>i.str).join(' ') + '\n';
   }
 
+  // Une grupos de dígitos separados por espacio que juntos formen 9 dígitos (SKUs partidos por pdf.js)
+  function fixSkus(t){ return t.replace(/(\d{1,8}) (\d{1,8})/g, (m,a,b)=>(a+b).length===9?a+b:m); }
+  flatText = fixSkus(flatText);
+
   const ds = s => s.replace(/\s/g,'');
   let d1='', d2='', vig='';
   const vm = flatText.match(/Vigencia\D{0,8}(\d\s*\d?)\s*al\s*(\d\s*\d?)\s*de\s+([A-Za-zÁÉÍÓÚáéíóú]+)\s+de\s+(\d{4})/i);
@@ -240,7 +244,7 @@ async function parsePromosPDF(file){
     (byRow[k] || (byRow[k]=[])).push(it);
   });
   const lines = Object.values(byRow)
-    .map(r => r.sort((a,b)=>a.x-b.x).map(i=>i.str).join(' ').trim())
+    .map(r => fixSkus(r.sort((a,b)=>a.x-b.x).map(i=>i.str).join(' ').trim()))
     .filter(l=>l.length>0);
 
   const seen={}, rows=[];
