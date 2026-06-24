@@ -8,7 +8,6 @@
 <link rel="apple-touch-icon" href="logo_odemas.png">
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script type="module">
   // Decodificador potente (ZXing-WASM) que localiza el código en fotos reales, también en iPhone
   try {
@@ -199,8 +198,8 @@
 </main>
 
 <div class="footbar">
-  <button class="btn btn-csv" id="btnCsv">⬇️ Descargar Excel (1 hoja por día)</button>
-  <div class="lock-msg" id="lockMsg">🔒 Solo <b>Laura</b> puede descargar el Excel</div>
+  <button class="btn btn-csv" id="btnCsv">📊 Abrir hoja de ventas</button>
+  <div class="lock-msg" id="lockMsg">🔒 Solo <b>Laura</b> abre la hoja de ventas</div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -214,6 +213,8 @@ let items = JSON.parse(localStorage.getItem(KEY) || '[]');
 /* ====== NUBE: concentrado de ventas de todos (Hoja de Google) ====== */
 // Pega aquí la URL del Web App de Google Apps Script (termina en /exec):
 const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbwbZFsiDqZrNitPKNLqr4r6xOFu3VKprtXJacScftIJmcQdAl_yytjxK8BymWvy8I1gjA/exec';
+// Link de la Hoja de Google (concentrado de ventas) que abre Laura:
+const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1rcHq6XdJ8K2fSDQkVQf5agbCLG4zD3c4b58mF90oBq0/edit';
 const PKEY = 'hes1217_pending';
 let pending = JSON.parse(localStorage.getItem(PKEY) || '[]');
 function savePending(){ localStorage.setItem(PKEY, JSON.stringify(pending)); }
@@ -252,19 +253,6 @@ async function flushCloud(){
   finally{ flushing = false; }
 }
 window.addEventListener('online', flushCloud);
-// Lee TODO el concentrado vía JSONP (evita problemas de CORS con Apps Script)
-function cloudGetAll(){
-  return new Promise((resolve, reject)=>{
-    const cb = 'cb_' + Date.now();
-    const s = document.createElement('script');
-    const t = setTimeout(()=>{ cleanup(); reject(new Error('timeout')); }, 15000);
-    function cleanup(){ clearTimeout(t); delete window[cb]; s.remove(); }
-    window[cb] = d => { cleanup(); resolve(d || []); };
-    s.onerror = () => { cleanup(); reject(new Error('error')); };
-    s.src = CLOUD_URL + (CLOUD_URL.includes('?')?'&':'?') + 'callback=' + cb;
-    document.head.appendChild(s);
-  });
-}
 
 const $ = id => document.getElementById(id);
 const fields = ['serie','sku','precio','desc','vend'];
@@ -493,51 +481,12 @@ $('fileCam').onchange = e => {
   e.target.value = '';   // permite volver a tomar otra foto del mismo producto
 };
 
-/* ---------- Exportar Excel (.xlsx) con una hoja por día ---------- */
-function fechaSheetKey(f){ // "23/6/2026" -> Date para ordenar
-  const [d,m,y] = String(f||'').split('/').map(Number);
-  return new Date(y||1970, (m||1)-1, d||1).getTime();
-}
-// Arma el .xlsx con una hoja por día a partir de filas {fecha,hora,serie,sku,desc,precio,vend}
-function buildXlsxFromRows(rows){
-  const cols = ['Fecha','Hora','Numero de serie','SKU','Descripcion','Precio','Vendedor','Foto'];
-  const porDia = {};
-  rows.forEach(i => { (porDia[i.fecha] = porDia[i.fecha] || []).push(i); });
-  const dias = Object.keys(porDia).sort((a,b) => fechaSheetKey(a) - fechaSheetKey(b));
-  const wb = XLSX.utils.book_new();
-  const usados = {};
-  dias.forEach(dia => {
-    const filas = porDia[dia].map(i => [i.fecha, i.hora, i.serie, i.sku, i.desc, i.precio, i.vend, i.foto || '']);
-    const ws = XLSX.utils.aoa_to_sheet([cols, ...filas]);
-    // Convierte la columna Foto (H) en hipervínculo clicable
-    porDia[dia].forEach((i, idx) => {
-      if(i.foto){ const c = XLSX.utils.encode_cell({r:idx+1, c:7}); ws[c] = { t:'s', v:'Ver foto', l:{ Target:i.foto } }; }
-    });
-    ws['!cols'] = [{wch:11},{wch:7},{wch:20},{wch:12},{wch:34},{wch:9},{wch:18},{wch:12}];
-    let nombre = dia.replace(/[\\\/?*\[\]:]/g, '-').slice(0,31);
-    if(usados[nombre]) nombre = (nombre.slice(0,28) + '_' + (++usados[nombre])).slice(0,31);
-    else usados[nombre] = 1;
-    XLSX.utils.book_append_sheet(wb, ws, nombre);
-  });
-  const hoy = new Date().toISOString().slice(0,10);
-  XLSX.writeFile(wb, `series_HES1217_${hoy}.xlsx`);
-  return dias.length;
-}
+/* ---------- Abrir la hoja de ventas (Google Sheets) ---------- */
 $('btnCsv').onclick = async () => {
-  if(currentVend !== DESCARGA_AUTORIZADA){ toast('Solo Laura puede descargar el Excel', 'warn'); return; }
-  if(typeof XLSX === 'undefined'){ toast('Cargando Excel… intenta de nuevo', 'warn'); return; }
-  let rows;
-  if(CLOUD_URL){
-    toast('Trayendo ventas de todos…');
-    await flushCloud();                       // primero sube lo que falte de este teléfono
-    try{ rows = await cloudGetAll(); }
-    catch(e){ toast('Sin conexión · uso solo este teléfono', 'warn'); rows = items.slice().reverse(); }
-  } else {
-    rows = items.slice().reverse();           // sin nube: solo lo de este teléfono
-  }
-  if(!rows || !rows.length){ toast('No hay nada que exportar', 'warn'); return; }
-  const n = buildXlsxFromRows(rows);
-  toast(`Excel con ${n} día(s) · ${rows.length} ventas ✓`, 'ok');
+  if(currentVend !== DESCARGA_AUTORIZADA){ toast('Solo Laura puede abrir la hoja', 'warn'); return; }
+  await flushCloud();   // primero sube lo que falte de este teléfono
+  window.open(SHEET_URL, '_blank');
+  toast('Abriendo hoja de ventas…', 'ok');
 };
 
 // Enter en serie = agregar rápido
