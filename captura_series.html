@@ -90,6 +90,9 @@
     max-width:560px; margin:0 auto; box-shadow:0 -4px 18px rgba(0,0,0,.06); }
   .footbar .btn{ font-size:14px; padding:13px; }
   .btn-csv{ background:var(--azul); color:#fff; flex:1; }
+  .lock-msg{ flex:1; text-align:center; font-size:12.5px; color:var(--gris); font-weight:600;
+    padding:13px; background:#f6f6f7; border-radius:12px; }
+  .lock-msg b{ color:var(--rojo); }
 
   .toast{ position:fixed; bottom:90px; left:50%; transform:translateX(-50%) translateY(20px);
     background:#222; color:#fff; font-size:13px; font-weight:600; padding:11px 18px; border-radius:24px;
@@ -191,6 +194,7 @@
 
 <div class="footbar">
   <button class="btn btn-csv" id="btnCsv">⬇️ Descargar Excel (1 hoja por día)</button>
+  <div class="lock-msg" id="lockMsg">🔒 Solo <b>Laura</b> puede descargar el Excel</div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -415,6 +419,7 @@ function fechaSheetKey(f){ // "23/6/2026" -> Date para ordenar
   return new Date(y||1970, (m||1)-1, d||1).getTime();
 }
 $('btnCsv').onclick = () => {
+  if(currentVend !== DESCARGA_AUTORIZADA){ toast('Solo Laura puede descargar el Excel', 'warn'); return; }
   if(!items.length){ toast('No hay nada que exportar', 'warn'); return; }
   if(typeof XLSX === 'undefined'){ toast('Cargando Excel… intenta de nuevo', 'warn'); return; }
   const cols = ['Fecha','Hora','Numero de serie','SKU','Descripcion','Precio','Vendedor'];
@@ -448,9 +453,15 @@ $('serie').addEventListener('keydown', e => { if(e.key==='Enter') $('btnAdd').cl
 // Para editar el equipo, cambia esta lista:
 const VENDEDORES = ['Arnulfo González','Arturo Aguilar','Laura Bonilla','Miguel Ángel García','Ángel Perea'];
 const VKEY = 'hes1217_vend';
+const DESCARGA_AUTORIZADA = 'Laura Bonilla';   // solo esta persona descarga el Excel
 let currentVend = '';
 
-function setVend(n){ currentVend = n || ''; $('vendLabel').textContent = currentVend || '—'; }
+function updateDownloadAccess(){
+  const ok = currentVend === DESCARGA_AUTORIZADA;
+  $('btnCsv').style.display = ok ? '' : 'none';
+  $('lockMsg').style.display = ok ? 'none' : '';
+}
+function setVend(n){ currentVend = n || ''; $('vendLabel').textContent = currentVend || '—'; updateDownloadAccess(); }
 function hideGate(){ $('gate').classList.add('hide'); }
 function buildGate(){
   const cur = currentVend || localStorage.getItem(VKEY) || '';
@@ -465,6 +476,7 @@ function showGate(){ buildGate(); $('gate').classList.remove('hide'); }
 (function initGate(){
   const saved = localStorage.getItem(VKEY) || '';
   if(saved && VENDEDORES.includes(saved)) setVend(saved);
+  updateDownloadAccess();   // estado inicial del botón de descarga
   showGate();   // siempre se muestra al cargar la página
 })();
 
