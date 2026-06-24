@@ -1,7 +1,12 @@
-const CACHE = 'hes1217-v1';
+const CACHE = 'hes1217-v3';
 const ARCHIVOS = [
+  './index.html',
+  './tablero.html',
   './captura_series.html',
+  './datos.js',
   './logo_odemas.png',
+  './icon-192.png',
+  './icon-512.png',
 ];
 
 self.addEventListener('install', e => {
@@ -18,7 +23,7 @@ self.addEventListener('activate', e => {
   self.clients.claim();
 });
 
-// Cache-first para recursos propios; CDNs van por red normal
+// Cache-first para recursos propios; red externa (nube, Google Fonts) va normal
 self.addEventListener('fetch', e => {
   if(new URL(e.request.url).origin !== location.origin) return;
   e.respondWith(

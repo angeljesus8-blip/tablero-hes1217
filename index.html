@@ -5,12 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <meta name="theme-color" content="#D12026">
 <title>HES 1217 · Menú del equipo</title>
-<link rel="apple-touch-icon" href="logo_odemas.png">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="HES 1217">
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
   :root { --rojo:#D12026; --naranja:#F37021; --azul:#336BB4; --verde:#1a8c4e; --bg:#f6f6f7; }
-  body { font-family:'Montserrat',sans-serif; background:var(--bg); color:#1a1a1a; min-height:100vh; }
+  body { font-family:'Montserrat',sans-serif; background:var(--bg); color:#1a1a1a; min-height:100vh;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom); }
 
   header {
     background:#fff; border-bottom:3px solid var(--rojo);
@@ -44,6 +50,12 @@
   .c3 { border-left-color:var(--naranja); }    .c3 .ic { background:#fff5ee; }
 
   footer { text-align:center; font-size:10px; color:#ccc; margin-top:18px; }
+  @media (max-width:400px){
+    .card { padding:15px 14px; gap:12px; }
+    .card .ic { width:44px; height:44px; font-size:22px; }
+    .card h2 { font-size:14px; }
+    .card p { font-size:12px; }
+  }
 </style>
 </head>
 <body>
@@ -89,5 +101,10 @@
   <footer>Odemás · Grupo Gigante — uso interno HES 1217</footer>
 </main>
 
+<script>
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('./sw.js').catch(()=>{});
+}
+</script>
 </body>
 </html>
