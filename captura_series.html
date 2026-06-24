@@ -205,6 +205,41 @@ const CATALOGO = {"6941487240579":{"s":"100074509","d":"HUAWEI WATCH WATCH KID R
 const KEY = 'hes1217_series_v1';
 let items = JSON.parse(localStorage.getItem(KEY) || '[]');
 
+/* ====== NUBE: concentrado de ventas de todos (Hoja de Google) ====== */
+// Pega aquí la URL del Web App de Google Apps Script (termina en /exec):
+const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbwbZFsiDqZrNitPKNLqr4r6xOFu3VKprtXJacScftIJmcQdAl_yytjxK8BymWvy8I1gjA/exec';
+const PKEY = 'hes1217_pending';
+let pending = JSON.parse(localStorage.getItem(PKEY) || '[]');
+function savePending(){ localStorage.setItem(PKEY, JSON.stringify(pending)); }
+let flushing = false;
+// Envía al concentrado las capturas pendientes (reintenta si no hay señal)
+async function flushCloud(){
+  if(!CLOUD_URL || flushing || !pending.length) return;
+  flushing = true;
+  try{
+    while(pending.length){
+      await fetch(CLOUD_URL, { method:'POST', mode:'no-cors',
+        headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify(pending[0]) });
+      pending.shift(); savePending();   // la red aceptó el envío
+    }
+  }catch(e){ /* sin conexión: se reintenta luego */ }
+  finally{ flushing = false; }
+}
+window.addEventListener('online', flushCloud);
+// Lee TODO el concentrado vía JSONP (evita problemas de CORS con Apps Script)
+function cloudGetAll(){
+  return new Promise((resolve, reject)=>{
+    const cb = 'cb_' + Date.now();
+    const s = document.createElement('script');
+    const t = setTimeout(()=>{ cleanup(); reject(new Error('timeout')); }, 15000);
+    function cleanup(){ clearTimeout(t); delete window[cb]; s.remove(); }
+    window[cb] = d => { cleanup(); resolve(d || []); };
+    s.onerror = () => { cleanup(); reject(new Error('error')); };
+    s.src = CLOUD_URL + (CLOUD_URL.includes('?')?'&':'?') + 'callback=' + cb;
+    document.head.appendChild(s);
+  });
+}
+
 const $ = id => document.getElementById(id);
 const fields = ['serie','sku','precio','desc','vend'];
 
@@ -259,7 +294,8 @@ $('btnAdd').onclick = () => {
   if(!serie){ toast('Falta el número de serie', 'warn'); $('serie').focus(); return; }
   if(!currentVend){ toast('Selecciona tu nombre', 'warn'); showGate(); return; }
   const d = new Date();
-  items.unshift({
+  const item = {
+    id: 'i' + d.getTime() + Math.random().toString(36).slice(2,6),
     serie,
     sku: $('sku').value.trim(),
     precio: $('precio').value.trim(),
@@ -267,8 +303,13 @@ $('btnAdd').onclick = () => {
     vend: currentVend,
     fecha: d.toLocaleDateString('es-MX'),
     hora: d.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})
-  });
-  save(); render();
+  };
+  items.unshift(item); save();
+  // Cola para el concentrado en la nube
+  pending.push({ id:item.id, fecha:item.fecha, hora:item.hora, serie:item.serie,
+    sku:item.sku, desc:item.desc, precio:item.precio, vend:item.vend });
+  savePending(); flushCloud();
+  render();
   // limpia serie/sku/precio/desc; conserva vendedor
   ['serie','sku','precio','desc'].forEach(f=> $(f).value='');
   toast('Agregada ✓', 'ok'); $('serie').focus();
@@ -418,24 +459,18 @@ function fechaSheetKey(f){ // "23/6/2026" -> Date para ordenar
   const [d,m,y] = String(f||'').split('/').map(Number);
   return new Date(y||1970, (m||1)-1, d||1).getTime();
 }
-$('btnCsv').onclick = () => {
-  if(currentVend !== DESCARGA_AUTORIZADA){ toast('Solo Laura puede descargar el Excel', 'warn'); return; }
-  if(!items.length){ toast('No hay nada que exportar', 'warn'); return; }
-  if(typeof XLSX === 'undefined'){ toast('Cargando Excel… intenta de nuevo', 'warn'); return; }
+// Arma el .xlsx con una hoja por día a partir de filas {fecha,hora,serie,sku,desc,precio,vend}
+function buildXlsxFromRows(rows){
   const cols = ['Fecha','Hora','Numero de serie','SKU','Descripcion','Precio','Vendedor'];
-  // Agrupa por fecha
   const porDia = {};
-  items.forEach(i => { (porDia[i.fecha] = porDia[i.fecha] || []).push(i); });
-  // Ordena los días (más antiguo primero)
+  rows.forEach(i => { (porDia[i.fecha] = porDia[i.fecha] || []).push(i); });
   const dias = Object.keys(porDia).sort((a,b) => fechaSheetKey(a) - fechaSheetKey(b));
   const wb = XLSX.utils.book_new();
   const usados = {};
   dias.forEach(dia => {
-    const filas = porDia[dia].slice().reverse().map(i =>
-      [i.fecha, i.hora, i.serie, i.sku, i.desc, i.precio, i.vend]);
+    const filas = porDia[dia].map(i => [i.fecha, i.hora, i.serie, i.sku, i.desc, i.precio, i.vend]);
     const ws = XLSX.utils.aoa_to_sheet([cols, ...filas]);
     ws['!cols'] = [{wch:11},{wch:7},{wch:20},{wch:12},{wch:34},{wch:9},{wch:18}];
-    // Nombre de hoja válido (sin / \ ? * [ ] :), máx 31 chars y único
     let nombre = dia.replace(/[\\\/?*\[\]:]/g, '-').slice(0,31);
     if(usados[nombre]) nombre = (nombre.slice(0,28) + '_' + (++usados[nombre])).slice(0,31);
     else usados[nombre] = 1;
@@ -443,7 +478,23 @@ $('btnCsv').onclick = () => {
   });
   const hoy = new Date().toISOString().slice(0,10);
   XLSX.writeFile(wb, `series_HES1217_${hoy}.xlsx`);
-  toast(`Excel con ${dias.length} día(s) ✓`, 'ok');
+  return dias.length;
+}
+$('btnCsv').onclick = async () => {
+  if(currentVend !== DESCARGA_AUTORIZADA){ toast('Solo Laura puede descargar el Excel', 'warn'); return; }
+  if(typeof XLSX === 'undefined'){ toast('Cargando Excel… intenta de nuevo', 'warn'); return; }
+  let rows;
+  if(CLOUD_URL){
+    toast('Trayendo ventas de todos…');
+    await flushCloud();                       // primero sube lo que falte de este teléfono
+    try{ rows = await cloudGetAll(); }
+    catch(e){ toast('Sin conexión · uso solo este teléfono', 'warn'); rows = items.slice().reverse(); }
+  } else {
+    rows = items.slice().reverse();           // sin nube: solo lo de este teléfono
+  }
+  if(!rows || !rows.length){ toast('No hay nada que exportar', 'warn'); return; }
+  const n = buildXlsxFromRows(rows);
+  toast(`Excel con ${n} día(s) · ${rows.length} ventas ✓`, 'ok');
 };
 
 // Enter en serie = agregar rápido
@@ -483,6 +534,7 @@ function showGate(){ buildGate(); $('gate').classList.remove('hide'); }
 $('btnChange').onclick = showGate;
 
 render();
+flushCloud();   // sube al concentrado lo que haya quedado pendiente
 </script>
 </body>
 </html>
