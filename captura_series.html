@@ -81,6 +81,11 @@
   .dup-tag{ font-size:9px; font-weight:800; color:var(--naranja); background:#fff5ee;
     padding:2px 6px; border-radius:5px; margin-left:6px; }
 
+  .recon-warn{ display:none; background:#fff5ee; color:#a8480f; border:1.5px solid #f7c9a6;
+    border-radius:10px; padding:9px 12px; font-size:12.5px; font-weight:600; margin:2px 0 10px; line-height:1.4; }
+  .recon-warn.show{ display:block; }
+  .field.bad input{ border-color:var(--naranja); background:#fff8f3; }
+
   .empty{ text-align:center; color:#bbb; font-size:13px; padding:30px 20px; }
   .hist-note{ text-align:center; font-size:11px; color:#aaa; margin:10px 4px 0; line-height:1.5; }
   .hist-note b{ color:var(--azul); }
@@ -179,6 +184,7 @@
       <label>Descripción</label>
       <input type="text" id="desc" placeholder="Descripción del artículo" autocomplete="off">
     </div>
+    <div class="recon-warn" id="reconWarn">⚠ Producto NO reconocido — pudo ser mala lectura. Revisa o re-toma la foto.</div>
     <button class="btn btn-add" id="btnAdd" style="margin-top:6px;">＋ Agregar al reporte</button>
   </div>
 
@@ -312,6 +318,7 @@ $('btnAdd').onclick = () => {
   render();
   // limpia serie/sku/precio/desc; conserva vendedor
   ['serie','sku','precio','desc'].forEach(f=> $(f).value='');
+  setRecon(true);
   toast('Agregada ✓', 'ok'); $('serie').focus();
 };
 
@@ -325,6 +332,12 @@ $('btnClear').onclick = () => {
 };
 
 /* ---------- Enrutado de códigos ---------- */
+// Marca/limpia el aviso "producto no reconocido"
+function setRecon(ok){
+  $('reconWarn').classList.toggle('show', !ok);
+  const f = $('sku').closest('.field');
+  if(f) f.classList.toggle('bad', !ok);
+}
 // Solo códigos de barras 1D: producto (EAN/UPC) y serie (Code 128/39). NADA de QR/2D.
 const FORMATOS = ['code_128','code_39','ean_13','ean_8','upc_a','upc_e'];
 function routeCode(text, fmt){
@@ -338,10 +351,12 @@ function routeCode(text, fmt){
     if(hit){
       $('sku').value = hit.s || '';
       $('desc').value = hit.d || '';
+      setRecon(true);
       toast('Producto reconocido ✓ ' + (hit.s||''), 'ok');
     } else {
       $('sku').value = val;   // deja el EAN como referencia
-      toast('Código leído (no está en catálogo)', 'warn');
+      setRecon(false);        // marca "no reconocido" (posible mala lectura)
+      toast('⚠ Producto NO reconocido · revisa o re-toma la foto', 'warn');
     }
   } else {
     $('serie').value = val;
@@ -401,6 +416,7 @@ async function ocrSerial(file){
 
 async function processImage(file){
   toast('Procesando foto…');
+  setRecon(true);   // limpia aviso de la foto anterior
   const vistos = new Set();
   // 1) Códigos de barras: producto (EAN/UPC) y la serie si su código se puede leer
   const detectores = [ window.ZXingBD, (('BarcodeDetector' in window) ? window.BarcodeDetector : null) ].filter(Boolean);
