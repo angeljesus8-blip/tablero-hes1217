@@ -218,14 +218,34 @@ const PKEY = 'hes1217_pending';
 let pending = JSON.parse(localStorage.getItem(PKEY) || '[]');
 function savePending(){ localStorage.setItem(PKEY, JSON.stringify(pending)); }
 let flushing = false;
+
+/* Fotos: se comprimen y se mandan a Drive (vía Apps Script). Se guardan en memoria
+   (no en localStorage) por id; se suben con la captura y se borran al subir. */
+let lastPhoto = null;          // dataURL de la última foto procesada
+const photoMap = {};           // id -> dataURL pendiente de subir
+async function compressImage(file, maxDim=1280, quality=0.6){
+  const bmp = await createImageBitmap(file);
+  let w = bmp.width, h = bmp.height;
+  const s = Math.min(1, maxDim / Math.max(w, h));
+  w = Math.round(w*s); h = Math.round(h*s);
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  cv.getContext('2d').drawImage(bmp, 0, 0, w, h);
+  if(bmp.close) bmp.close();
+  return cv.toDataURL('image/jpeg', quality);
+}
+
 // Envía al concentrado las capturas pendientes (reintenta si no hay señal)
 async function flushCloud(){
   if(!CLOUD_URL || flushing || !pending.length) return;
   flushing = true;
   try{
     while(pending.length){
+      const row = pending[0];
+      const body = Object.assign({}, row);
+      if(row.foto && photoMap[row.id]) body.img = photoMap[row.id];   // adjunta la foto
       await fetch(CLOUD_URL, { method:'POST', mode:'no-cors',
-        headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify(pending[0]) });
+        headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify(body) });
+      if(row.foto) delete photoMap[row.id];
       pending.shift(); savePending();   // la red aceptó el envío
     }
   }catch(e){ /* sin conexión: se reintenta luego */ }
@@ -311,9 +331,11 @@ $('btnAdd').onclick = () => {
     hora: d.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})
   };
   items.unshift(item); save();
-  // Cola para el concentrado en la nube
-  pending.push({ id:item.id, fecha:item.fecha, hora:item.hora, serie:item.serie,
-    sku:item.sku, desc:item.desc, precio:item.precio, vend:item.vend });
+  // Cola para el concentrado en la nube (+ foto si hubo)
+  const pend = { id:item.id, fecha:item.fecha, hora:item.hora, serie:item.serie,
+    sku:item.sku, desc:item.desc, precio:item.precio, vend:item.vend };
+  if(lastPhoto){ photoMap[item.id] = lastPhoto; pend.foto = true; lastPhoto = null; }
+  pending.push(pend);
   savePending(); flushCloud();
   render();
   // limpia serie/sku/precio/desc; conserva vendedor
@@ -417,6 +439,7 @@ async function ocrSerial(file){
 async function processImage(file){
   toast('Procesando foto…');
   setRecon(true);   // limpia aviso de la foto anterior
+  try{ lastPhoto = await compressImage(file); }catch(e){ lastPhoto = null; }   // guarda la foto para subirla
   const vistos = new Set();
   // 1) Códigos de barras: producto (EAN/UPC) y la serie si su código se puede leer
   const detectores = [ window.ZXingBD, (('BarcodeDetector' in window) ? window.BarcodeDetector : null) ].filter(Boolean);
@@ -477,16 +500,20 @@ function fechaSheetKey(f){ // "23/6/2026" -> Date para ordenar
 }
 // Arma el .xlsx con una hoja por día a partir de filas {fecha,hora,serie,sku,desc,precio,vend}
 function buildXlsxFromRows(rows){
-  const cols = ['Fecha','Hora','Numero de serie','SKU','Descripcion','Precio','Vendedor'];
+  const cols = ['Fecha','Hora','Numero de serie','SKU','Descripcion','Precio','Vendedor','Foto'];
   const porDia = {};
   rows.forEach(i => { (porDia[i.fecha] = porDia[i.fecha] || []).push(i); });
   const dias = Object.keys(porDia).sort((a,b) => fechaSheetKey(a) - fechaSheetKey(b));
   const wb = XLSX.utils.book_new();
   const usados = {};
   dias.forEach(dia => {
-    const filas = porDia[dia].map(i => [i.fecha, i.hora, i.serie, i.sku, i.desc, i.precio, i.vend]);
+    const filas = porDia[dia].map(i => [i.fecha, i.hora, i.serie, i.sku, i.desc, i.precio, i.vend, i.foto || '']);
     const ws = XLSX.utils.aoa_to_sheet([cols, ...filas]);
-    ws['!cols'] = [{wch:11},{wch:7},{wch:20},{wch:12},{wch:34},{wch:9},{wch:18}];
+    // Convierte la columna Foto (H) en hipervínculo clicable
+    porDia[dia].forEach((i, idx) => {
+      if(i.foto){ const c = XLSX.utils.encode_cell({r:idx+1, c:7}); ws[c] = { t:'s', v:'Ver foto', l:{ Target:i.foto } }; }
+    });
+    ws['!cols'] = [{wch:11},{wch:7},{wch:20},{wch:12},{wch:34},{wch:9},{wch:18},{wch:12}];
     let nombre = dia.replace(/[\\\/?*\[\]:]/g, '-').slice(0,31);
     if(usados[nombre]) nombre = (nombre.slice(0,28) + '_' + (++usados[nombre])).slice(0,31);
     else usados[nombre] = 1;
