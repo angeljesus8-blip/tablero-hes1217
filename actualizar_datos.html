@@ -232,11 +232,11 @@ async function parsePromosPDF(file){
   const em = flatText.match(/EOL[^.]{0,60}?a partir del\s+(\d\s*\d?)\s+de\s+([A-Za-zÁÉÍÓÚáéíóú]+)/i);
   if(em && vm){ eolD1 = iso(+vm[4], MESES[em[2].toLowerCase()]||MESES[vm[3].toLowerCase()], +ds(em[1])); }
 
-  // Agrupa por renglón usando coordenada Y (tolerancia 4px)
+  // Agrupa por renglón usando coordenada Y (tolerancia 6px para robustez)
   const byRow = {};
   allItems.forEach(it=>{
     if(!it.str.trim()) return;
-    const k = it.page + '_' + Math.round(it.y / 4);
+    const k = it.page + '_' + Math.round(it.y / 6);
     (byRow[k] || (byRow[k]=[])).push(it);
   });
   const lines = Object.values(byRow)
@@ -245,14 +245,21 @@ async function parsePromosPDF(file){
 
   const seen={}, rows=[];
 
+  // precio: número con coma de miles y hasta 3 decimales; $ opcional
+  const PRECIO = '\\$?([\\d,]+(?:\\.\\d{1,3})?)';
+  // columna extra opcional (MSI: "6", "12", "18", "Sin", "N/A", etc.)
+  const EXTRA  = '(?:\\S+\\s+)?';
+
   // Intenta extraer una promo de una línea
   function parseLine(line){
     const sku9 = line.match(/^(\d{9})\b/);
     if(!sku9) return;
     const sku = sku9[1];
     if(seen[sku]) return;
-    // Con o sin signo $; captura los 2 últimos números antes de Activo/EOL
-    const m = line.match(/(\d{9})\s+(.+?)\s+\$?([\d,]+(?:\.\d{1,2})?)\s+\$?([\d,]+(?:\.\d{1,2})?)\s+(Activo|EOL)/i);
+    const re = new RegExp(
+      '(\\d{9})\\s+(.+?)\\s+' + PRECIO + '\\s+' + PRECIO + '\\s+' + EXTRA + '(Activo|EOL)', 'i'
+    );
+    const m = line.match(re);
     if(!m) return;
     const pr = parseFloat(m[3].replace(/,/g,'')), pp = parseFloat(m[4].replace(/,/g,''));
     if(isNaN(pr)||isNaN(pp)) return;
@@ -263,9 +270,11 @@ async function parsePromosPDF(file){
   }
   lines.forEach(parseLine);
 
-  // Fallback: texto plano sin signo $ (solo si la extracción por posición no encontró nada)
+  // Fallback: texto plano (solo si la extracción por posición no encontró nada)
   if(rows.length === 0){
-    const re = /(\d{9})\s+(.+?)\s+\$?([\d,]+(?:\.\d{1,2})?)\s+\$?([\d,]+(?:\.\d{1,2})?)\s+(Activo|EOL)/gi;
+    const re = new RegExp(
+      '(\\d{9})\\s+(.+?)\\s+' + PRECIO + '\\s+' + PRECIO + '\\s+' + EXTRA + '(Activo|EOL)', 'gi'
+    );
     let m2;
     while((m2 = re.exec(flatText))){
       const sku=m2[1]; if(seen[sku]) continue;
