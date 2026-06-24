@@ -1,8 +1,8 @@
 {
-  "name": "HES 1217 · Captura de Series",
+  "name": "HES 1217 · Equipo",
   "short_name": "HES 1217",
-  "description": "Captura de números de serie — Odemás Angelópolis",
-  "start_url": "./captura_series.html",
+  "description": "Tablero, inventario, captura de series y horarios — Odemás Angelópolis 1217",
+  "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "background_color": "#ffffff",
