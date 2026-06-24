@@ -263,8 +263,8 @@ async function parsePromosPDF(file){
   }
   lines.forEach(parseLine);
 
-  // Fallback: texto plano sin signo $
-  if(rows.length < 10){
+  // Fallback: texto plano sin signo $ (solo si la extracción por posición no encontró nada)
+  if(rows.length === 0){
     const re = /(\d{9})\s+(.+?)\s+\$?([\d,]+(?:\.\d{1,2})?)\s+\$?([\d,]+(?:\.\d{1,2})?)\s+(Activo|EOL)/gi;
     let m2;
     while((m2 = re.exec(flatText))){
