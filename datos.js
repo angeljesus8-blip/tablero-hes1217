@@ -10,7 +10,8 @@ window.DATOS = {
   // Se muestra como "Actualizado: ..." en la app
   actualizado: "2026-06-23 12:45",
 
-  // 🔥 PROMOCIONES VIGENTES  (en espera del primer comunicado real)
+  // 🔥 PROMOCIONES — se manejan en la app Captura de Series, NO aquí.
+  //   (La pestaña Promos se quitó del tablero para no duplicar.)
   promos: [],
 
   // 🏷️ EOL — productos en fin de vida (desde los comunicados de la carpeta eol/).
