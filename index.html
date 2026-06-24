@@ -136,9 +136,10 @@
 <script src="datos.js"></script>
 <script>
 const D = window.DATOS || {};
+const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbwbZFsiDqZrNitPKNLqr4r6xOFu3VKprtXJacScftIJmcQdAl_yytjxK8BymWvy8I1gjA/exec';
 document.getElementById('updated').textContent = D.actualizado || '';
 
-const HOY = new Date('2026-06-22T00:00:00'); // referencia para "días restantes"
+const HOY = new Date();
 
 const FILTROS = [
   { id:'inv',   label:'📊 Inventario' },
@@ -168,29 +169,29 @@ function coincide(...campos){
   return campos.join(' ').toLowerCase().includes(busqueda);
 }
 
-// ---- EOL: cruza la lista de productos en fin de vida con el inventario ----
-// Regla: el 50% (pieza de exhibición) SOLO se activa cuando el stock cerrado = 0.
 const invBySku = {};
 (D.inventario||[]).forEach(x=>{ invBySku[x.sku]=x; });
 const money = n => '$'+Number(n||0).toLocaleString('es-MX');
 const money2 = n => '$'+Number(n||0).toLocaleString('es-MX',{minimumFractionDigits:2, maximumFractionDigits:2});
-function eolResolved(){
-  return (D.eol||[]).map(e=>{
+const eolSkuSet = new Set((D.eol||[]).map(e=>e.sku));
+
+// Variables recalculables cuando llegan datos de la nube
+let EOL = [], eolMap = {}, transitoMap = {}, RESURTIR = [];
+
+function calcDerivados(){
+  EOL = (D.eol||[]).map(e=>{
     const inv = invBySku[e.sku] || {};
     const stock = inv.stock||0, exhibe = inv.exhibe||0;
     const estado = (stock===0 && exhibe>0) ? 'listo' : (stock>0 ? 'pendiente' : 'agotado');
     return { sku:e.sku, producto:e.producto||inv.producto||('SKU '+e.sku),
       precio:e.precio, precio50:e.precio?e.precio/2:null, stock, exhibe, estado };
-  }).filter(e=>e.exhibe>0); // solo SKUs con pieza en exhibición
+  }).filter(e=>e.exhibe>0);
+  eolMap = {}; EOL.forEach(e=>{ eolMap[e.sku]=e.estado; });
+  transitoMap = {}; (D.transito||[]).forEach(x=>{ transitoMap[x.sku]=(transitoMap[x.sku]||0)+x.cantidad; });
+  RESURTIR = (D.inventario||[]).filter(x=>x.stock===0 && x.exhibe>0 && !eolSkuSet.has(x.sku))
+              .sort((a,b)=> a.producto.localeCompare(b.producto));
 }
-const EOL = eolResolved();
-const eolMap = {}; EOL.forEach(e=>{ eolMap[e.sku]=e.estado; });
-const transitoMap = {}; (D.transito||[]).forEach(x=>{ transitoMap[x.sku]=(transitoMap[x.sku]||0)+x.cantidad; });
-// 🔄 Resurtir: 0 piezas para vender (la de exhibición NO cuenta, no se vende),
-//   tiene pieza en exhibición y NO es EOL (la mercancía EOL ya no se puede pedir).
-const eolSkuSet = new Set((D.eol||[]).map(e=>e.sku));
-const RESURTIR = (D.inventario||[]).filter(x=>x.stock===0 && x.exhibe>0 && !eolSkuSet.has(x.sku))
-                  .sort((a,b)=> a.producto.localeCompare(b.producto));
+calcDerivados();
 
 function cuenta(id){
   if(id==='promo') return (D.promos||[]).filter(x=>coincide(x.titulo,x.detalle)).length;
@@ -295,10 +296,11 @@ function rowInv(x){
   const exh = x.exhibe ? `<span class="exh">👁 ${x.exhibe} exhib.</span>` : '';
   const tr = transitoMap[x.sku];
   const trB = tr ? `<span class="exh trans-b">🚚 ${tr}</span>` : '';
+  const vB = (D._invCloud && x._vendido) ? `<span class="exh" style="background:#f0f0f0;color:#999">−${x._vendido} vend.</span>` : '';
   return `<div class="inv-row">
     <div class="dot ${cls}"></div>
     <div class="inv-info"><h4>${x.producto}</h4><span>SKU ${x.sku||'—'}</span></div>
-    ${eolB}${exh}${trB}
+    ${eolB}${exh}${trB}${vB}
     <div class="stock ${cls}"><div class="num">${x.stock}</div><div class="lbl lbl2">para vender</div></div>
   </div>`;
 }
@@ -347,7 +349,37 @@ document.getElementById('q').addEventListener('input', e=>{
   render();
 });
 
+function cargarInventarioNube(){
+  const cb = '_cbInv' + Date.now();
+  window[cb] = function(data){
+    delete window[cb];
+    const sc = document.getElementById('_inv_sc');
+    if(sc) sc.remove();
+    // Actualiza stock en cada producto del inventario local
+    (D.inventario||[]).forEach(function(item){
+      const cl = data[item.sku];
+      if(cl && typeof cl.o === 'number'){
+        item._onhand  = cl.o;
+        item._vendido = cl.v || 0;
+        item.stock    = Math.max(0, cl.o - (cl.v || 0));
+      }
+    });
+    D._invCloud = true;
+    const t = new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
+    const el = document.getElementById('updated');
+    if(el) el.innerHTML = 'Live ' + t + '<b style="color:var(--verde);display:block;font-size:11px">● en vivo</b>';
+    calcDerivados();
+    render();
+  };
+  const sc = document.createElement('script');
+  sc.id = '_inv_sc';
+  sc.src = CLOUD_URL + '?modo=inventario&callback=' + cb;
+  sc.onerror = function(){ delete window[cb]; sc.remove(); };
+  document.head.appendChild(sc);
+}
+
 render();
+cargarInventarioNube();
 </script>
 </body>
 </html>
