@@ -270,21 +270,19 @@ async function parsePromosPDF(file){
   }
   lines.forEach(parseLine);
 
-  // Fallback: texto plano (solo si la extracción por posición no encontró nada)
-  if(rows.length === 0){
-    const re = new RegExp(
-      '(\\d{9})\\s+(.+?)\\s+' + PRECIO + '\\s+' + PRECIO + '\\s+' + EXTRA + '(Activo|EOL|Lanzamiento)', 'gi'
-    );
-    let m2;
-    while((m2 = re.exec(flatText))){
-      const sku=m2[1]; if(seen[sku]) continue;
-      const pr=parseFloat(m2[3].replace(/,/g,'')), pp=parseFloat(m2[4].replace(/,/g,''));
-      if(isNaN(pr)||isNaN(pp)) continue;
-      seen[sku]=1;
-      const est=m2[5].toUpperCase()==='EOL'?'EOL':'Activo';
-      rows.push({sku,desc:m2[2].trim().replace(/\s+/g,' '),pr:m2[3],pp:m2[4],est,msi:'',
-        d1:est==='EOL'?eolD1:d1,d2});
-    }
+  // Texto plano: siempre corre como complemento para capturar lo que Y no encontró
+  const rePlano = new RegExp(
+    '(\\d{9})\\s+(.+?)\\s+' + PRECIO + '\\s+' + PRECIO + '\\s+' + EXTRA + '(Activo|EOL|Lanzamiento)', 'gi'
+  );
+  let m2;
+  while((m2 = rePlano.exec(flatText))){
+    const sku=m2[1]; if(seen[sku]) continue; // ya capturado por Y, saltar
+    const pr=parseFloat(m2[3].replace(/,/g,'')), pp=parseFloat(m2[4].replace(/,/g,''));
+    if(isNaN(pr)||isNaN(pp)) continue;
+    seen[sku]=1;
+    const est=m2[5].toUpperCase()==='EOL'?'EOL':'Activo';
+    rows.push({sku,desc:m2[2].trim().replace(/\s+/g,' '),pr:m2[3],pp:m2[4],est,msi:'',
+      d1:est==='EOL'?eolD1:d1,d2});
   }
 
   return { rows, vig };
