@@ -391,6 +391,7 @@ function routeCode(text, fmt){
     if(hit){
       $('sku').value = hit.s || '';
       $('desc').value = hit.d || '';
+      if(hit.p) $('precio').value = String(hit.p).replace(/[^0-9.]/g,'');   // autollena precio (editable)
       setRecon(true);
       toast('Producto reconocido ✓ ' + (hit.s||''), 'ok');
     } else {
