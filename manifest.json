@@ -1,0 +1,16 @@
+{
+  "name": "HES 1217 · Captura de Series",
+  "short_name": "HES 1217",
+  "description": "Captura de números de serie — Odemás Angelópolis",
+  "start_url": "./captura_series.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#D12026",
+  "orientation": "portrait-primary",
+  "lang": "es-MX",
+  "icons": [
+    { "src": "logo_odemas.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "logo_odemas.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
