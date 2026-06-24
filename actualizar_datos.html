@@ -8,6 +8,8 @@
 <link rel="apple-touch-icon" href="logo_odemas.png">
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.min.js"></script>
+<script>if(window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.worker.min.js';</script>
 <style>
   *{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
   :root{ --rojo:#D12026; --naranja:#F37021; --azul:#336BB4; --verde:#1a8c4e; --gris:#777; --linea:#ececec; --bg:#f6f6f7; }
@@ -95,6 +97,17 @@
     <div style="font-size:12px;color:#999;margin:8px 2px 0">Actualiza: <b id="whoLabel">—</b></div>
     <button class="btn btn-go" id="btnGo" style="margin-top:14px" disabled>Subir y actualizar</button>
     <div class="result" id="result"></div>
+  </div>
+
+  <div class="card">
+    <h2>🏷️ Promociones (CEA)</h2>
+    <p>Sube el <b>PDF del CEA de promociones</b>. La app saca solas las promos (SKU → precio promo + vigencia) y, en la captura, aplica el precio promo cuando esté vigente.</p>
+    <input type="file" id="filePromo" accept="application/pdf,.pdf" hidden>
+    <div class="filebox" id="fileboxPromo" style="margin-top:12px">
+      <div class="ph" id="filephPromo">📄 Toca para elegir el PDF de promociones</div>
+    </div>
+    <button class="btn btn-go" id="btnPromo" style="margin-top:14px" disabled>Subir promociones</button>
+    <div class="result" id="resultPromo"></div>
   </div>
 </main>
 
@@ -186,6 +199,79 @@ $('btnGo').onclick = async () => {
 };
 
 function showResult(ok, html){ const r=$('result'); r.innerHTML=html; r.className='result show '+(ok?'ok':'bad'); }
+
+/* ===== PROMOCIONES (PDF) ===== */
+let parsedPromo = null;
+const MESES = {enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12};
+function iso(y,m,d){ return y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0'); }
+
+async function parsePromosPDF(file){
+  if(typeof pdfjsLib==='undefined') throw new Error('no cargó el lector de PDF');
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  let text = '';
+  for(let p=1; p<=pdf.numPages; p++){
+    const page = await pdf.getPage(p);
+    const tc = await page.getTextContent();
+    text += tc.items.map(i=>i.str).join(' ') + '\n';
+  }
+  // Vigencia general (pdf.js a veces separa dígitos: "0 3" -> "03")
+  const ds = s => s.replace(/\s/g,'');   // quita espacios entre dígitos
+  let d1='', d2='', vig='';
+  const vm = text.match(/Vigencia\D{0,8}(\d\s*\d?)\s*al\s*(\d\s*\d?)\s*de\s+([A-Za-zÁÉÍÓÚáéíóú]+)\s+de\s+(\d{4})/i);
+  if(vm){ const dia1=ds(vm[1]), dia2=ds(vm[2]), mes=MESES[vm[3].toLowerCase()]||1, y=+vm[4];
+    d1=iso(y,mes,+dia1); d2=iso(y,mes,+dia2); vig=dia1+' al '+dia2+' de '+vm[3]+' '+vm[4]; }
+  // EOL inicia (suele ser unos días después)
+  let eolD1 = d1;
+  const em = text.match(/EOL[^.]{0,60}?a partir del\s+(\d\s*\d?)\s+de\s+([A-Za-zÁÉÍÓÚáéíóú]+)/i);
+  if(em && vm){ eolD1 = iso(+vm[4], MESES[em[2].toLowerCase()]||MESES[vm[3].toLowerCase()], +ds(em[1])); }
+  // Filas: SKU(9) Descripción $precio $promo Estatus
+  const re = /(\d{9})\s+(.+?)\s+\$([\d.,]+)\s+\$([\d.,]+)\s+(Activo|EOL)/gi;
+  const seen={}, rows=[]; let m;
+  while((m = re.exec(text))){
+    const sku=m[1]; if(seen[sku]) continue; seen[sku]=1;
+    const est = m[5].toUpperCase()==='EOL' ? 'EOL' : 'Activo';
+    rows.push({ sku, desc:m[2].trim().replace(/\s+/g,' '), pr:m[3], pp:m[4], est, msi:'',
+      d1: est==='EOL' ? eolD1 : d1, d2 });
+  }
+  return { rows, vig };
+}
+
+$('fileboxPromo').onclick = () => $('filePromo').click();
+$('filePromo').onchange = async e => {
+  const f = e.target.files && e.target.files[0]; if(!f) return;
+  $('resultPromo').className='result';
+  $('filephPromo').textContent='Leyendo PDF…';
+  try{
+    parsedPromo = await parsePromosPDF(f);
+    if(!parsedPromo.rows.length) throw new Error('no encontré filas de promo (SKU $precio $promo)');
+    $('fileboxPromo').classList.add('ok');
+    $('filephPromo').innerHTML = `✓ ${f.name}<br>${parsedPromo.rows.length} promos · vigencia ${parsedPromo.vig||'(no detectada)'}`;
+    $('btnPromo').disabled = false;
+  }catch(err){
+    parsedPromo=null; $('btnPromo').disabled=true; $('filephPromo').textContent='📄 Toca para elegir el PDF de promociones';
+    showResultP(false, 'No pude leer el PDF: ' + err.message + '. ¿Es el PDF del CEA con la tabla de promos?');
+  }
+};
+
+$('btnPromo').onclick = async () => {
+  if(!parsedPromo || !parsedPromo.rows.length) return;
+  $('btnPromo').disabled=true; const prev=$('btnPromo').textContent;
+  $('btnPromo').innerHTML='<span class="spin"></span> Subiendo…'; $('resultPromo').className='result';
+  try{
+    await fetch(CLOUD_URL, { method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({ tipo:'promos', by:quien, vig:parsedPromo.vig, rows:parsedPromo.rows }) });
+    await new Promise(r=>setTimeout(r,2500));
+    let est=null; try{ est=await jsonp(CLOUD_URL+'?modo=estado'); }catch(e){}
+    if(est && Number(est.promoCount)>0){
+      showResultP(true, `✅ Promociones actualizadas: <b>${est.promoCount}</b> · vigencia ${est.promoVig||parsedPromo.vig}.<br>Por ${est.promoBy||quien}. La captura aplicará el precio promo vigente.`);
+    } else {
+      showResultP(true, `Enviado (${parsedPromo.rows.length} promos). Revisa la pestaña "Promos" en unos segundos.`);
+    }
+  }catch(err){ showResultP(false, 'No se pudo subir: ' + err.message); }
+  $('btnPromo').textContent=prev; $('btnPromo').disabled=false;
+};
+function showResultP(ok, html){ const r=$('resultPromo'); r.innerHTML=html; r.className='result show '+(ok?'ok':'bad'); }
 function jsonp(url){
   return new Promise((res, rej) => {
     const cb = 'cb_' + Date.now();
