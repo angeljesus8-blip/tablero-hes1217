@@ -146,6 +146,7 @@ const HOY = new Date();
 
 const FILTROS = [
   { id:'inv',   label:'📊 Inventario' },
+  { id:'promo', label:'🔥 Promos' },
   { id:'eol',   label:'🏷️ Vender 50%' },
   { id:'resurtir', label:'🔄 Resurtir' },
   { id:'agotados', label:'📭 Agotados' },
@@ -179,6 +180,7 @@ const eolSkuSet = new Set((D.eol||[]).map(e=>e.sku));
 
 // Variables recalculables cuando llegan datos de la nube
 let EOL = [], eolMap = {}, transitoMap = {}, RESURTIR = [];
+let PROMOS = [];   // promociones vigentes (se cargan de la nube, igual que en Captura de Series)
 
 function calcDerivados(){
   EOL = (D.eol||[]).map(e=>{
@@ -196,7 +198,7 @@ function calcDerivados(){
 calcDerivados();
 
 function cuenta(id){
-  if(id==='promo') return (D.promos||[]).filter(x=>coincide(x.titulo,x.detalle)).length;
+  if(id==='promo') return PROMOS.filter(x=>coincide(x.producto,x.sku)).length;
   if(id==='eol')   return EOL.filter(e=>coincide(e.producto,e.sku) && e.estado==='listo').length;
   if(id==='nov')   return (D.novedades||[]).filter(x=>coincide(x.titulo,x.detalle)).length;
   if(id==='inv')   return (D.inventario||[]).filter(x=>coincide(x.producto,x.sku)).length;
@@ -209,7 +211,7 @@ function cuenta(id){
 
 // ¿la sección tiene algún dato? (ignora el buscador, para que las pestañas no salten al escribir)
 function seccionTieneItems(id){
-  if(id==='promo')    return (D.promos||[]).length>0;
+  if(id==='promo')    return PROMOS.length>0;
   if(id==='eol')      return EOL.length>0;
   if(id==='transito') return (D.transito||[]).length>0;
   if(id==='nov')      return (D.novedades||[]).length>0;
@@ -230,10 +232,13 @@ function renderChips(){
 }
 
 function cardPromo(x){
-  return `<div class="card t-promo ${x.prioridad==='alta'?'alta':''}">
-    <div class="top"><h3>${x.titulo}</h3><span class="tag promo">Promo</span></div>
-    <p class="det">${x.detalle||''}</p>
-    <div class="meta">${x.precio?`<span class="precio">${x.precio}</span>`:''}${x.vigencia?badgeVigencia(x.vigencia):''}</div>
+  const vig = x.d2 ? badgeVigencia(x.d2) : '';
+  return `<div class="card t-promo">
+    <div class="top"><h3>${x.producto}</h3><span class="tag promo">🔥 PROMO</span></div>
+    <div class="meta">
+      <span class="precio">${x.pr!=null?`<span class="antes">${money(x.pr)}</span>`:''}${x.pp!=null?money(x.pp):''}</span>
+      <span class="badge">SKU ${x.sku}</span>${vig}
+    </div>
   </div>`;
 }
 function cardEol(e){
@@ -317,7 +322,7 @@ function render(){
   const f = filtroActivo;
   let html = '';
 
-  const promos = (D.promos||[]).filter(x=>coincide(x.titulo,x.detalle));
+  const promos = PROMOS.filter(x=>coincide(x.producto,x.sku));
   const eolAll = EOL.filter(e=>coincide(e.producto,e.sku));
   const eolListo = eolAll.filter(e=>e.estado==='listo');
   const eolPend  = eolAll.filter(e=>e.estado==='pendiente');
@@ -380,8 +385,34 @@ function cargarInventarioNube(){
   document.head.appendChild(sc);
 }
 
+function cargarPromosNube(){
+  const cb = '_cbPromo' + Date.now();
+  window[cb] = function(data){
+    delete window[cb];
+    const sc = document.getElementById('_promo_sc'); if(sc) sc.remove();
+    if(data && typeof data === 'object' && !Array.isArray(data)){
+      const hoy = new Date().toISOString().slice(0,10);
+      PROMOS = Object.keys(data).map(function(sku){
+        const p = data[sku] || {};
+        if(p.d1 && hoy < p.d1) return null;   // aún no inicia
+        if(p.d2 && hoy > p.d2) return null;   // ya venció
+        const inv = invBySku[sku];
+        return { sku:sku, producto:(inv && inv.producto) || ('SKU ' + sku),
+          pr:(p.pr!=null?p.pr:null), pp:(p.pp!=null?p.pp:null), d1:p.d1, d2:p.d2 };
+      }).filter(Boolean).sort(function(a,b){ return a.producto.localeCompare(b.producto); });
+      render();
+    }
+  };
+  const sc = document.createElement('script');
+  sc.id = '_promo_sc';
+  sc.src = CLOUD_URL + '?modo=promos&callback=' + cb;
+  sc.onerror = function(){ delete window[cb]; sc.remove(); };
+  document.head.appendChild(sc);
+}
+
 render();
 cargarInventarioNube();
+cargarPromosNube();
 </script>
 </body>
 </html>
