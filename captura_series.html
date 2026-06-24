@@ -82,6 +82,8 @@
     padding:2px 6px; border-radius:5px; margin-left:6px; }
 
   .empty{ text-align:center; color:#bbb; font-size:13px; padding:30px 20px; }
+  .hist-note{ text-align:center; font-size:11px; color:#aaa; margin:10px 4px 0; line-height:1.5; }
+  .hist-note b{ color:var(--azul); }
 
   .footbar{ position:fixed; bottom:0; left:0; right:0; background:#fff; border-top:1px solid var(--linea);
     padding:10px 16px calc(10px + env(safe-area-inset-bottom)); display:flex; gap:10px;
@@ -179,9 +181,10 @@
 
   <div class="lista-head">
     <h2>Capturadas hoy</h2>
-    <button id="btnClear">Borrar todo</button>
+    <button id="btnClear">Borrar hoy</button>
   </div>
-  <div id="lista"><p class="empty">Aún no hay series capturadas.</p></div>
+  <div id="lista"><p class="empty">Aún no hay series capturadas hoy.</p></div>
+  <p class="hist-note" id="histNote"></p>
 
   <footer>Odemás · Grupo Gigante · HES Angelópolis 1217</footer>
 </main>
@@ -215,12 +218,22 @@ function beep(){
 }
 function save(){ localStorage.setItem(KEY, JSON.stringify(items)); }
 
+const hoyStr = () => new Date().toLocaleDateString('es-MX');
+
 function render(){
-  $('count').textContent = items.length;
+  const hoy = hoyStr();
+  const today = items.filter(i => i.fecha === hoy);   // la pantalla solo muestra HOY
+  $('count').textContent = today.length;
+  // Nota del histórico (todo lo que va en el Excel)
+  const dias = new Set(items.map(i => i.fecha)).size;
+  $('histNote').innerHTML = items.length
+    ? `Histórico: <b>${items.length}</b> capturas en <b>${dias}</b> día(s) · todas van en el Excel`
+    : '';
   const seen = {};
-  items.forEach(i => seen[i.serie] = (seen[i.serie]||0)+1);
-  if(!items.length){ $('lista').innerHTML = '<p class="empty">Aún no hay series capturadas.</p>'; return; }
-  $('lista').innerHTML = items.map((i,idx)=>{
+  today.forEach(i => seen[i.serie] = (seen[i.serie]||0)+1);
+  if(!today.length){ $('lista').innerHTML = '<p class="empty">Aún no hay series capturadas hoy.</p>'; return; }
+  $('lista').innerHTML = today.map((i)=>{
+    const idx = items.indexOf(i);   // índice real en el histórico
     const dup = seen[i.serie] > 1;
     const sub = [i.sku && ('SKU '+i.sku), i.desc, i.precio && ('$'+i.precio), i.vend]
                 .filter(Boolean).join(' · ');
@@ -258,9 +271,11 @@ $('btnAdd').onclick = () => {
 };
 
 $('btnClear').onclick = () => {
-  if(!items.length) return;
-  if(confirm('¿Borrar TODAS las series capturadas? Esto no se puede deshacer.')){
-    items = []; save(); render(); toast('Lista vacía');
+  const hoy = hoyStr();
+  const hayHoy = items.some(i => i.fecha === hoy);
+  if(!hayHoy){ toast('No hay capturas de hoy', 'warn'); return; }
+  if(confirm('¿Borrar las capturas de HOY? Los días anteriores se conservan en el Excel.')){
+    items = items.filter(i => i.fecha !== hoy); save(); render(); toast('Capturas de hoy borradas');
   }
 };
 
