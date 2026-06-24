@@ -285,7 +285,11 @@ async function parsePromosPDF(file){
       d1:est==='EOL'?eolD1:d1,d2});
   }
 
-  return { rows, vig };
+  // Detecta SKUs en el texto que no se capturaron (para diagnóstico)
+  const todosSkus = [...new Set([...flatText.matchAll(/\b(\d{9})\b/g)].map(m=>m[1]))];
+  const noCap = todosSkus.filter(s=>!seen[s]);
+
+  return { rows, vig, noCap };
 }
 
 $('fileboxPromo').onclick = () => $('filePromo').click();
@@ -297,7 +301,9 @@ $('filePromo').onchange = async e => {
     parsedPromo = await parsePromosPDF(f);
     if(!parsedPromo.rows.length) throw new Error('no encontré filas de promo (SKU $precio $promo)');
     $('fileboxPromo').classList.add('ok');
-    $('filephPromo').innerHTML = `✓ ${f.name}<br>${parsedPromo.rows.length} promos · vigencia ${parsedPromo.vig||'(no detectada)'}`;
+    const noCapTxt = parsedPromo.noCap && parsedPromo.noCap.length
+      ? `<br><span style="color:#b3261e">⚠ SKU no leído: ${parsedPromo.noCap.join(', ')}</span>` : '';
+    $('filephPromo').innerHTML = `✓ ${f.name}<br>${parsedPromo.rows.length} promos · vigencia ${parsedPromo.vig||'(no detectada)'}${noCapTxt}`;
     $('btnPromo').disabled = false;
   }catch(err){
     parsedPromo=null; $('btnPromo').disabled=true; $('filephPromo').textContent='📄 Toca para elegir el PDF de promociones';
