@@ -257,7 +257,7 @@ async function parsePromosPDF(file){
     const sku = sku9[1];
     if(seen[sku]) return;
     const re = new RegExp(
-      '(\\d{9})\\s+(.+?)\\s+' + PRECIO + '\\s+' + PRECIO + '\\s+' + EXTRA + '(Activo|EOL)', 'i'
+      '(\\d{9})\\s+(.+?)\\s+' + PRECIO + '\\s+' + PRECIO + '\\s+' + EXTRA + '(Activo|EOL|Lanzamiento)', 'i'
     );
     const m = line.match(re);
     if(!m) return;
@@ -273,7 +273,7 @@ async function parsePromosPDF(file){
   // Fallback: texto plano (solo si la extracción por posición no encontró nada)
   if(rows.length === 0){
     const re = new RegExp(
-      '(\\d{9})\\s+(.+?)\\s+' + PRECIO + '\\s+' + PRECIO + '\\s+' + EXTRA + '(Activo|EOL)', 'gi'
+      '(\\d{9})\\s+(.+?)\\s+' + PRECIO + '\\s+' + PRECIO + '\\s+' + EXTRA + '(Activo|EOL|Lanzamiento)', 'gi'
     );
     let m2;
     while((m2 = re.exec(flatText))){
