@@ -492,7 +492,7 @@ async function subirPromos(){
 }
 
 /* ================================================================
-   TAB BUNDLES — PDF parser
+   TAB BUNDLES — PDF parser (lee tablas por coordenadas Y, no por keyword)
    ================================================================ */
 async function parseBundlePDF(file){
   if(typeof pdfjsLib==='undefined') throw new Error('PDF.js no disponible');
@@ -504,85 +504,113 @@ async function parseBundlePDF(file){
     const vp=pg.getViewport({scale:1});
     const tc=await pg.getTextContent();
     tc.items.forEach(i=>{
-      allItems.push({str:i.str,x:i.transform[4],y:vp.height-i.transform[5],page:p});
+      if(i.str.trim()) allItems.push({str:i.str.trim(),x:i.transform[4],y:vp.height-i.transform[5],pg:p});
     });
   }
-  // Flat text with SKU fix
+
+  // Texto plano para vigencia
   let texto=allItems.map(i=>i.str).join(' ');
   texto=texto.replace(/(\d{1,8})\s+(\d{1,8})/g,(m,a,b)=>(a+b).length===9?a+b:m);
 
   // Vigencia
   const MESES={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12};
   let d1='',d2='',vigTxt='';
-  for(const vp2 of [
+  for(const pat of [
     /del\s+(\d{1,2})\s+al\s+(\d{1,2})\s+de\s+([A-Za-záéíóúÁÉÍÓÚ]+)\s+de\s+(\d{4})/i,
     /(\d{1,2})\s+al\s+(\d{1,2})\s+de\s+([A-Za-záéíóúÁÉÍÓÚ]+)\s+(?:de\s+)?(\d{4})/i,
   ]){
-    const vm=texto.match(vp2);
+    const vm=texto.match(pat);
     if(vm){ const mes=MESES[vm[3].toLowerCase()]||1,y=+vm[4];
       d1=`${y}-${String(mes).padStart(2,'0')}-${String(+vm[1]).padStart(2,'0')}`;
       d2=`${y}-${String(mes).padStart(2,'0')}-${String(+vm[2]).padStart(2,'0')}`;
       vigTxt=`${vm[1]} al ${vm[2]} de ${vm[3]} ${vm[4]}`; break; }
   }
 
-  // Extract description text that follows a given SKU in the flat text
-  function descFromSku(sku, text){
-    const m=text.match(new RegExp('\\b'+sku+'\\b\\s+([A-Za-záéíóúÁÉÍÓÚ].{5,80}?)(?=\\s*\\d{9}|\\s*\\$|\\s{3,}|$)'));
-    return m ? m[1].replace(/\s+/g,' ').trim() : '';
-  }
-  // Clean description → product name (handle Huawei catalog abbreviations)
+  // Limpiar nombre de producto (abreviaturas Huawei del catálogo)
   const COLOR_RE=/\s*\b(negro|negra|blanco|blanca|plata|plateado|dorado|azul|verde|rojo|gris|midnight|silver|gold|black|white|morado|beige|naranja|titanio|grafito)\b.*/i;
   function productName(desc){
-    let n = desc
-      .replace(/^(AUDÍF|AUDIF)\s+(IN\s+EAR|OVER\s+EAR|TRUE\s+WRL|WT)\s+HW\s*/i,'')
+    let n=desc
+      .replace(/^(AUDÍF|AUDIF)\s+(IN\s+EAR|OVER\s+EAR|OPEN\s+EAR|TRUE\s+WRL|WT)\s+HW\s*/i,'')
       .replace(/^(WATCH|RELOJ)\s+HW\s*/i,'')
       .replace(/^HW\s+/i,'').replace(/^HUAWEI\s+/i,'')
-      .replace(/\bF\s*-?\s*BUDS\b/i,'FreeBuds').replace(/\bFREECLIP\b/i,'FreeClip')
-      .replace(/\bFREEBUDS\b/i,'FreeBuds').replace(/\bEARBUDS\b/i,'Earbuds')
       .replace(COLOR_RE,'')
       .replace(/\s*\b(AN|BN|NG|VD|RS|BL|GR|VT|NR|AZ|PL|DO)\b\s*$/i,'')
-      .replace(/\s*\d+\.\d+"\s*(VID|AMOLED|LCD)?.*/i,'')
+      .replace(/\s*\d+[.,]\d+"\s*(VID|AMOLED|LCD)?.*/i,'')
       .replace(/\s*\$[\d,].*/,'')
       .replace(/\s+/g,' ').trim().slice(0,40);
-    return n.split(' ').map(w=>w.length>1?w[0].toUpperCase()+w.slice(1).toLowerCase():w).join(' ');
+    // Title case
+    n=n.split(' ').map(w=>w.length>1?w[0].toUpperCase()+w.slice(1).toLowerCase():w).join(' ');
+    // Restaurar marcas con CamelCase
+    n=n.replace(/\bF[-\s]?buds\b/i,'FreeBuds').replace(/\bFreebuds\b/,'FreeBuds')
+       .replace(/\bFreeclip\b/,'FreeClip').replace(/\bEarbuds\b/,'Earbuds');
+    return n;
   }
 
-  const PRICEPP=[
-    /promoci[oó]n(?:al)?[\s\S]{0,10}?\$\s*([\d,]+)/i,
-    /precio\s+especial\s+(?:de\s+)?\$?\s*([\d,]+)/i,
-    /precio[:\s]+\$?\s*([\d,]+)/i,
-    /\$\s*([\d,]{4,})/,
-  ];
+  // ── Agrupar ítems en renglones visuales (misma Y ±4 px, misma página) ──
+  const renglones=[];
+  for(const item of allItems){
+    let row=renglones.find(r=>r.pg===item.pg&&Math.abs(r.y-item.y)<4);
+    if(!row){ row={y:item.y,pg:item.pg,items:[]}; renglones.push(row); }
+    row.items.push(item);
+  }
+  renglones.sort((a,b)=>a.pg!==b.pg?a.pg-b.pg:a.y-b.y);
+  for(const row of renglones){
+    row.items.sort((a,b)=>a.x-b.x);
+    row.text=row.items.map(i=>i.str).join(' ')
+      .replace(/(\d{1,8})\s+(\d{1,8})/g,(m,a,b)=>(a+b).length===9?a+b:m);
+  }
 
+  // ── Renglones con exactamente UN SKU de 9 dígitos ──
+  const skuRows=[];
+  for(const row of renglones){
+    const ms=[...row.text.matchAll(/\b(\d{9})\b/g)];
+    if(ms.length!==1) continue;
+    const sku=ms[0][1];
+    // Descripción: texto del renglón sin el SKU ni precios
+    const desc=row.text
+      .replace(/\b\d{9}\b/,'').replace(/\$[\d,.]+/g,'')
+      .replace(/\s+/g,' ').trim();
+    skuRows.push({y:row.y,pg:row.pg,sku,desc,rowRef:row});
+  }
+
+  // ── Agrupar renglones de SKU consecutivos y cercanos (<50 px) ──
+  // Cada grupo con ≥2 SKUs = un bundle
   const bundles=[], seen={};
+  let i=0;
+  while(i<skuRows.length){
+    const cluster=[skuRows[i]];
+    let j=i+1;
+    while(j<skuRows.length){
+      const prev=skuRows[j-1],curr=skuRows[j];
+      if(prev.pg===curr.pg && curr.y-prev.y<50){ cluster.push(curr); j++; }
+      else break;
+    }
+    i=j;
+    if(cluster.length<2) continue; // SKU solitario = no es bundle
 
-  // Split by BUNDLE keyword — name comes from SKU descriptions inside the chunk
-  const parts=texto.split(/(?<![A-Za-z])BUNDLE(?![A-Za-z])/i);
-  for(let i=1;i<parts.length;i++){
-    const chunk=parts[i];
-    const skus=[...new Set([...chunk.matchAll(/\b(\d{9})\b/g)].map(m=>m[1]))];
-    if(!skus.length) continue;
-    const key=skus.slice().sort().join(',');
+    const skus=[...new Set(cluster.map(r=>r.sku))];
+    if(skus.length<2) continue;
+    const key=[...skus].sort().join(',');
     if(seen[key]) continue; seen[key]=1;
 
-    // Price
+    // Precio: buscar en renglones cercanos al cluster (±80 px)
+    const pg=cluster[0].pg;
+    const minY=cluster[0].y-80, maxY=cluster[cluster.length-1].y+80;
     let precio='';
-    for(const pp of PRICEPP){ const pm=chunk.match(pp); if(pm){ precio=pm[1].replace(/,/g,''); break; } }
-
-    // Name: try description from first SKU that has one
-    let rawDesc='';
-    for(const sku of skus){ rawDesc=descFromSku(sku,chunk); if(rawDesc) break; }
-    // Fallback: last meaningful text in previous chunk (product heading before BUNDLE)
-    if(!rawDesc){
-      const prevTail=parts[i-1].replace(/\s+/g,' ').slice(-120).trim();
-      const tm=prevTail.match(/([A-Za-záéíóúÁÉÍÓÚ][A-Za-záéíóúÁÉÍÓÚ\d\s]{5,60})$/);
-      if(tm&&!/BLOQUE|SEMANA|CEA|VIGENCIA/i.test(tm[1])) rawDesc=tm[1].trim();
+    for(const row of renglones){
+      if(row.pg!==pg||row.y<minY||row.y>maxY) continue;
+      // Tomar el mayor precio que aparezca cerca (el precio bundle, no el individual)
+      const pm=[...row.text.matchAll(/\$\s*([\d,]{4,})/g)];
+      if(pm.length) precio=pm[pm.length-1][1].replace(/,/g,'');
     }
-    const nombre = rawDesc ? 'Bundle '+productName(rawDesc) : 'Bundle '+(bundles.length+1);
-    bundles.push({nombre, skus:skus.join(','), precio, d1, d2});
+
+    // Nombre: descripción del primer renglón (producto principal)
+    const mainDesc=cluster[0].desc||cluster[1].desc||'';
+    const nombre=mainDesc?'Bundle '+productName(mainDesc):'Bundle '+(bundles.length+1);
+    bundles.push({nombre,skus:skus.join(','),precio,d1,d2});
   }
 
-  return {bundles, vig:vigTxt, debugText:texto.slice(0,800)};
+  return {bundles,vig:vigTxt,debugText:texto.slice(0,800)};
 }
 
 document.getElementById('filePdfBundle').onchange=async function(e){
