@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -492,7 +492,7 @@ async function subirPromos(){
 }
 
 /* ================================================================
-   TAB BUNDLES — PDF parser (lee tablas por coordenadas Y, no por keyword)
+   TAB BUNDLES — PDF parser dual (texto descriptivo + tablas SKU)
    ================================================================ */
 async function parseBundlePDF(file){
   if(typeof pdfjsLib==='undefined') throw new Error('PDF.js no disponible');
@@ -508,7 +508,7 @@ async function parseBundlePDF(file){
     });
   }
 
-  // Texto plano para vigencia
+  // Texto plano (une todo, fusiona digitos separados por espacio)
   let texto=allItems.map(i=>i.str).join(' ');
   texto=texto.replace(/(\d{1,8})\s+(\d{1,8})/g,(m,a,b)=>(a+b).length===9?a+b:m);
 
@@ -526,7 +526,7 @@ async function parseBundlePDF(file){
       vigTxt=`${vm[1]} al ${vm[2]} de ${vm[3]} ${vm[4]}`; break; }
   }
 
-  // Limpiar nombre de producto (abreviaturas Huawei del catálogo)
+  // Limpiar nombre de producto (abreviaturas Huawei del catalogo)
   const COLOR_RE=/\s*\b(negro|negra|blanco|blanca|plata|plateado|dorado|azul|verde|rojo|gris|midnight|silver|gold|black|white|morado|beige|naranja|titanio|grafito)\b.*/i;
   function productName(desc){
     let n=desc
@@ -536,103 +536,93 @@ async function parseBundlePDF(file){
       .replace(COLOR_RE,'')
       .replace(/\s*\b(AN|BN|NG|VD|RS|BL|GR|VT|NR|AZ|PL|DO)\b\s*$/i,'')
       .replace(/\s*\d+[.,]\d+"\s*(VID|AMOLED|LCD)?.*/i,'')
-      .replace(/\s*\$[\d,].*/,'')
-      .replace(/\s+/g,' ').trim().slice(0,40);
-    // Title case
+      .replace(/\s*\$[\d,].*/,'').replace(/\s+/g,' ').trim().slice(0,40);
     n=n.split(' ').map(w=>w.length>1?w[0].toUpperCase()+w.slice(1).toLowerCase():w).join(' ');
-    // Restaurar marcas con CamelCase
     n=n.replace(/\bF[-\s]?buds\b/i,'FreeBuds').replace(/\bFreebuds\b/,'FreeBuds')
        .replace(/\bFreeclip\b/,'FreeClip').replace(/\bEarbuds\b/,'Earbuds');
     return n;
   }
 
-  // ── Agrupar ítems en renglones visuales (misma Y ±4 px, misma página) ──
-  const renglones=[];
-  for(const item of allItems){
-    let row=renglones.find(r=>r.pg===item.pg&&Math.abs(r.y-item.y)<4);
-    if(!row){ row={y:item.y,pg:item.pg,items:[]}; renglones.push(row); }
-    row.items.push(item);
-  }
-  renglones.sort((a,b)=>a.pg!==b.pg?a.pg-b.pg:a.y-b.y);
-  for(const row of renglones){
-    row.items.sort((a,b)=>a.x-b.x);
-    row.text=row.items.map(i=>i.str).join(' ')
-      .replace(/(\d{1,8})\s+(\d{1,8})/g,(m,a,b)=>(a+b).length===9?a+b:m);
-  }
-
-  // ── Renglones con exactamente UN SKU de 9 dígitos ──
-  const skuRows=[];
-  for(const row of renglones){
-    const ms=[...row.text.matchAll(/\b(\d{9})\b/g)];
-    if(ms.length!==1) continue;
-    const sku=ms[0][1];
-    // Descripción: texto del renglón sin el SKU ni precios
-    const desc=row.text
-      .replace(/\b\d{9}\b/,'').replace(/\$[\d,.]+/g,'')
-      .replace(/\s+/g,' ').trim();
-    skuRows.push({y:row.y,pg:row.pg,sku,desc,rowRef:row});
-  }
-
-  // ── Buscar PARES de renglones SKU a ≤28 px (= misma fila de tabla) ──
-  // Cada par = un bundle. Entre bundles distintos hay >28px de separación.
   const bundles=[], seen={};
-  let i=0;
-  while(i<skuRows.length){
-    // Buscar el inicio del siguiente par
-    if(i+1>=skuRows.length){ i++; continue; }
-    const r0=skuRows[i], r1=skuRows[i+1];
-    if(r0.pg!==r1.pg || r1.y-r0.y>28){ i++; continue; }
 
-    // Encontramos un par; ver si hay un 3er renglón también cercano
-    const par=[r0,r1];
-    if(i+2<skuRows.length){
-      const r2=skuRows[i+2];
-      if(r2.pg===r1.pg && r2.y-r1.y<=28) { par.push(r2); }
+  /* MODO A: PDF descriptivo — busca "BUNDLE NOMBRE:" en texto plano */
+  const HDR_RE=/BUNDLE\s+([A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑ0-9\s\-']{1,50}?)\s*[:/]/g;
+  const hdrMatches=[...texto.matchAll(HDR_RE)].filter(m=>{
+    const nm=m[1].trim().toUpperCase();
+    return !/^(ENERO|FEBRERO|MARZO|ABRIL|MAYO|JUNIO|JULIO|AGOSTO|SEPTIEMBRE|OCTUBRE|NOVIEMBRE|DICIEMBRE|SEMANA|WEEK|BLOQUE|CEA\s|HUAWEI\s+\d|\d)/.test(nm);
+  });
+
+  if(hdrMatches.length>=1){
+    for(let m=0;m<hdrMatches.length;m++){
+      const match=hdrMatches[m];
+      const rawName=match[1].trim().replace(/\s+[A-Z]\s*$/,'').trim();
+      const secStart=match.index+match[0].length;
+      const secEnd=m+1<hdrMatches.length
+        ?hdrMatches[m+1].index
+        :Math.min(texto.length,secStart+700);
+      const sec=texto.slice(secStart,secEnd);
+      const pm=sec.match(/\$\s*([\d,]{4,})/);
+      if(!pm) continue;
+      const precio=pm[1].replace(/,/g,'');
+      const secSkus=[...new Set([...sec.matchAll(/\b(\d{9})\b/g)].map(x=>x[1]))];
+      const key=rawName.toUpperCase().replace(/\s+/g,'_');
+      if(seen[key]) continue; seen[key]=1;
+      const nombre='Bundle '+productName(rawName);
+      bundles.push({nombre,skus:secSkus.join('|'),precio,d1,d2});
     }
-    i+=par.length; // avanzar más allá del par/trío
+  }
 
-    const skus=[...new Set(par.map(r=>r.sku))];
-    if(skus.length<2) continue;
-    const key=[...skus].sort().join(',');
-    if(seen[key]) continue; seen[key]=1;
-
-    // Precio: el precio bundle viene en renglón SEPARADO (después de los SKUs)
-    const pg=r0.pg;
-    const maxSkuY=Math.max(...par.map(r=>r.y));
-    const minSkuY=Math.min(...par.map(r=>r.y));
-    const isSkuRow=row=>par.some(c=>Math.abs(c.y-row.y)<5);
-    let precio='';
-    // P1: renglón con keyword bundle/precio debajo del par
+  /* MODO B: PDF de tabla — pares de renglones SKU proximos en Y */
+  if(bundles.length===0){
+    const renglones=[];
+    for(const item of allItems){
+      let row=renglones.find(r=>r.pg===item.pg&&Math.abs(r.y-item.y)<4);
+      if(!row){ row={y:item.y,pg:item.pg,items:[]}; renglones.push(row); }
+      row.items.push(item);
+    }
+    renglones.sort((a,b)=>a.pg!==b.pg?a.pg-b.pg:a.y-b.y);
     for(const row of renglones){
-      if(row.pg!==pg||row.y<=maxSkuY||row.y>maxSkuY+160) continue;
-      if(isSkuRow(row)) continue;
-      if(!/bundle|paquete|precio\s*esp|promo/i.test(row.text)) continue;
-      const pm=[...row.text.matchAll(/\$\s*([\d,]{4,})/g)];
-      if(pm.length){ precio=pm[pm.length-1][1].replace(/,/g,''); break; }
+      row.items.sort((a,b)=>a.x-b.x);
+      row.text=row.items.map(i=>i.str).join(' ')
+        .replace(/(\d{1,8})\s+(\d{1,8})/g,(m,a,b)=>(a+b).length===9?a+b:m);
     }
-    // P2: primer renglón con $ debajo del par (sin SKU)
-    if(!precio){
+    const skuRows=[];
+    for(const row of renglones){
+      const ms=[...row.text.matchAll(/\b(\d{9})\b/g)];
+      if(ms.length!==1) continue;
+      const sku=ms[0][1];
+      const desc=row.text.replace(/\b\d{9}\b/,'').replace(/\$[\d,.]+/g,'').replace(/\s+/g,' ').trim();
+      skuRows.push({y:row.y,pg:row.pg,sku,desc});
+    }
+    let i=0;
+    while(i<skuRows.length){
+      if(i+1>=skuRows.length){i++;continue;}
+      const r0=skuRows[i],r1=skuRows[i+1];
+      if(r0.pg!==r1.pg||r1.y-r0.y>45){i++;continue;}
+      const par=[r0,r1];
+      if(i+2<skuRows.length&&skuRows[i+2].pg===r1.pg&&skuRows[i+2].y-r1.y<=45) par.push(skuRows[i+2]);
+      i+=par.length;
+      const skus=[...new Set(par.map(r=>r.sku))];
+      if(skus.length<2) continue;
+      const key=skus.slice().sort().join(',');
+      if(seen[key]) continue; seen[key]=1;
+      const pg=r0.pg,maxSkuY=Math.max(...par.map(r=>r.y)),minSkuY=Math.min(...par.map(r=>r.y));
+      const isSkuRow=row=>par.some(c=>Math.abs(c.y-row.y)<5);
+      let precio='';
       for(const row of renglones){
-        if(row.pg!==pg||row.y<=maxSkuY||row.y>maxSkuY+160) continue;
-        if(isSkuRow(row)) continue;
+        if(row.pg!==pg||row.y<=maxSkuY||row.y>maxSkuY+160||isSkuRow(row)) continue;
         const pm=[...row.text.matchAll(/\$\s*([\d,]{4,})/g)];
-        if(pm.length){ precio=pm[pm.length-1][1].replace(/,/g,''); break; }
+        if(pm.length){precio=pm[pm.length-1][1].replace(/,/g,'');break;}
       }
-    }
-    // P3: cualquier renglón sin SKU en el área (±120px)
-    if(!precio){
-      for(const row of renglones){
-        if(row.pg!==pg||row.y<minSkuY-120||row.y>maxSkuY+160) continue;
-        if(isSkuRow(row)) continue;
+      if(!precio){for(const row of renglones){
+        if(row.pg!==pg||row.y<minSkuY-120||row.y>maxSkuY+160||isSkuRow(row)) continue;
         const pm=[...row.text.matchAll(/\$\s*([\d,]{4,})/g)];
         if(pm.length) precio=pm[pm.length-1][1].replace(/,/g,'');
-      }
+      }}
+      const mainDesc=par[0].desc||par[1].desc||'';
+      const nombre=mainDesc?'Bundle '+productName(mainDesc):'Bundle '+(bundles.length+1);
+      bundles.push({nombre,skus:skus.join('|'),precio,d1,d2});
     }
-
-    // Nombre: descripción del primer renglón del par (producto principal)
-    const mainDesc=par[0].desc||par[1].desc||'';
-    const nombre=mainDesc?'Bundle '+productName(mainDesc):'Bundle '+(bundles.length+1);
-    bundles.push({nombre,skus:skus.join(','),precio,d1,d2});
   }
 
   return {bundles,vig:vigTxt,debugText:texto.slice(0,800)};
