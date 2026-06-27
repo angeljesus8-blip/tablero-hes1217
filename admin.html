@@ -160,6 +160,24 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
 
   <!-- EOL -->
   <div class="pane" id="pane-eol">
+
+    <!-- PDF UPLOAD -->
+    <div class="card">
+      <h2>📎 Desde CEA de Promos (PDF)</h2>
+      <p class="note">Sube el PDF del CEA normal. La app extrae automáticamente los productos con estatus EOL.</p>
+      <input type="file" id="filePdfEol" accept="application/pdf,.pdf" hidden>
+      <div class="filebox" id="fboxEol" onclick="document.getElementById('filePdfEol').click()">
+        <div class="ph" id="fphEol">📄 Toca para elegir el PDF del CEA</div>
+      </div>
+      <div id="previewEol" style="display:none">
+        <div class="prev-hdr" id="prevHdrEol"></div>
+        <div id="prevListEol"></div>
+        <button class="btn-pri" id="btnSaveEol" onclick="saveEolFromPdf()">💾 Guardar todos en la nube</button>
+      </div>
+    </div>
+
+    <div class="divider">o agregar manualmente</div>
+
     <div class="card">
       <h2>Nuevo EOL</h2>
       <p class="note">Agrega los SKUs del comunicado de Huawei. Los que ya están en el sistema siguen vigentes.</p>
@@ -345,6 +363,136 @@ async function saveBundlesFromPdf(){
   btn.textContent='💾 Guardar todos en la nube';
   btn.disabled=false;
   if(ok) loadBundles();
+}
+
+/* ==================== EOL PDF PARSER ==================== */
+async function parseEolPDF(file){
+  if(typeof pdfjsLib==='undefined') throw new Error('PDF.js no disponible — recarga la página');
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({data:buf}).promise;
+
+  const allItems=[];
+  let flatText='';
+  for(let p=1; p<=pdf.numPages; p++){
+    const page = await pdf.getPage(p);
+    const vp = page.getViewport({scale:1});
+    const tc = await page.getTextContent();
+    tc.items.forEach(i=>{
+      allItems.push({str:i.str, x:i.transform[4], y:vp.height-i.transform[5], page:p});
+    });
+    flatText += tc.items.map(i=>i.str).join(' ')+'\n';
+  }
+
+  // Pega dígitos partidos que forman SKUs de 9 dígitos
+  const fixSkus=t=>t.replace(/(\d{1,8}) (\d{1,8})/g,(m,a,b)=>(a+b).length===9?a+b:m);
+  flatText=fixSkus(flatText);
+
+  // Vigencia y fecha inicio EOL
+  const MESES={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12};
+  const ds=s=>s.replace(/\s/g,'');
+  let d1='',d2='',vig='';
+  const vm=flatText.match(/Vigencia\D{0,8}(\d\s*\d?)\s*al\s*(\d\s*\d?)\s*de\s+([A-Za-záéíóúÁÉÍÓÚ]+)\s+de\s+(\d{4})/i);
+  if(vm){
+    const mes=MESES[vm[3].toLowerCase()]||1, y=+vm[4];
+    d1=`${y}-${String(mes).padStart(2,'0')}-${String(+ds(vm[1])).padStart(2,'0')}`;
+    d2=`${y}-${String(mes).padStart(2,'0')}-${String(+ds(vm[2])).padStart(2,'0')}`;
+    vig=`${ds(vm[1])} al ${ds(vm[2])} de ${vm[3]} ${vm[4]}`;
+  }
+  // Fecha "EOL a partir del X de mes"
+  let eolD1=d1;
+  const em=flatText.match(/EOL[^.]{0,60}?a partir del\s+(\d\s*\d?)\s+de\s+([A-Za-záéíóúÁÉÍÓÚ]+)/i);
+  if(em&&vm){
+    const mes2=MESES[em[2].toLowerCase()]||MESES[vm[3].toLowerCase()]||1;
+    eolD1=`${+vm[4]}-${String(mes2).padStart(2,'0')}-${String(+ds(em[1])).padStart(2,'0')}`;
+  }
+
+  // Agrupa por renglón (coordenada Y, tolerancia 6px)
+  const byRow={};
+  allItems.forEach(it=>{
+    if(!it.str.trim()) return;
+    const k=it.page+'_'+Math.round(it.y/6);
+    (byRow[k]||(byRow[k]=[])).push(it);
+  });
+  const lines=Object.values(byRow)
+    .map(r=>fixSkus(r.sort((a,b)=>a.x-b.x).map(i=>i.str).join(' ').trim()))
+    .filter(l=>l.length>0);
+
+  const seen={}, rows=[];
+  const PRECIO='\\$?([\\d,]+(?:\\.\\d{1,3})?)';
+  const EXTRA='(?:\\S+\\s+)?';
+
+  // Extrae solo filas con estatus EOL
+  const reEol=new RegExp('(\\d{9})\\s+(.+?)\\s+'+PRECIO+'\\s+'+PRECIO+'\\s+'+EXTRA+'(EOL)','i');
+  lines.forEach(line=>{
+    const m=line.match(reEol);
+    if(!m) return;
+    const sku=m[1]; if(seen[sku]) return;
+    const pr=parseFloat(m[3].replace(/,/g,'')), pp=parseFloat(m[4].replace(/,/g,''));
+    if(isNaN(pr)||isNaN(pp)) return;
+    seen[sku]=1;
+    rows.push({sku, desc:m[2].trim().replace(/\s+/g,' '), pr:m[3], pp:m[4], d1:eolD1, d2});
+  });
+
+  // Complemento: texto plano para capturar lo que Y no alcanzó
+  const rePlano=new RegExp('(\\d{9})\\s+(.+?)\\s+'+PRECIO+'\\s+'+PRECIO+'\\s+'+EXTRA+'(EOL)','gi');
+  let m2;
+  while((m2=rePlano.exec(flatText))){
+    const sku=m2[1]; if(seen[sku]) continue;
+    const pr=parseFloat(m2[3].replace(/,/g,'')), pp=parseFloat(m2[4].replace(/,/g,''));
+    if(isNaN(pr)||isNaN(pp)) continue;
+    seen[sku]=1;
+    rows.push({sku, desc:m2[2].trim().replace(/\s+/g,' '), pr:m2[3], pp:m2[4], d1:eolD1, d2});
+  }
+
+  return {rows, vig};
+}
+
+/* Cuando el usuario elige un PDF de EOL */
+document.getElementById('filePdfEol').onchange = async function(e){
+  const f=e.target.files&&e.target.files[0]; if(!f) return;
+  const ph=document.getElementById('fphEol');
+  const fbox=document.getElementById('fboxEol');
+  fbox.classList.remove('ok');
+  ph.innerHTML='<em>Leyendo PDF…</em>';
+  document.getElementById('previewEol').style.display='none';
+  try{
+    const result=await parseEolPDF(f);
+    if(!result.rows.length) throw new Error('No encontré productos EOL — ¿es el CEA con la tabla de promos?');
+    fbox.classList.add('ok');
+    ph.innerHTML=`✓ ${f.name}<br>${result.rows.length} SKU(s) EOL · vigencia ${result.vig||'no detectada'}`;
+    document.getElementById('prevHdrEol').textContent=result.rows.length+' productos EOL encontrados:';
+    document.getElementById('prevListEol').innerHTML=result.rows.map(r=>`
+      <div class="prev-item">
+        <strong>SKU ${r.sku}</strong>
+        <span>${r.desc} · precio regular $${r.pr}</span>
+        ${r.d1?`<span>📅 EOL desde ${r.d1}</span>`:''}
+      </div>`).join('');
+    document.getElementById('btnSaveEol')._rows=result.rows;
+    document.getElementById('previewEol').style.display='block';
+  }catch(err){
+    fbox.classList.remove('ok');
+    ph.textContent='📄 Toca para elegir el PDF del CEA';
+    toast(err.message,false);
+  }
+};
+
+/* Guardar todos los EOL extraídos */
+async function saveEolFromPdf(){
+  const btn=document.getElementById('btnSaveEol');
+  const rows=btn._rows||[];
+  if(!rows.length) return;
+  btn.disabled=true; btn.textContent='Guardando…';
+  let ok=0,skip=0,err=0;
+  for(const r of rows){
+    try{
+      const res=await jsonp(apiUrl('eol_add',{sku:r.sku, precio:r.pr}));
+      res&&res.existe ? skip++ : ok++;
+    }catch(e){ err++; }
+  }
+  toast(`${ok} agregados${skip?' · '+skip+' ya existían':''}${err?' · '+err+' error':''}`, err===0);
+  btn.textContent='💾 Guardar todos en la nube';
+  btn.disabled=false;
+  if(ok) loadEol();
 }
 
 /* ----- BUNDLES (lista) ----- */
