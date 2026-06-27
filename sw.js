@@ -1,4 +1,4 @@
-const CACHE = 'hes1217-v11';
+const CACHE = 'hes1217-v12';
 const ARCHIVOS = [
   './index.html',
   './tablero.html',
