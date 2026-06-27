@@ -573,33 +573,36 @@ async function parseBundlePDF(file){
     skuRows.push({y:row.y,pg:row.pg,sku,desc,rowRef:row});
   }
 
-  // ── Agrupar renglones de SKU consecutivos y cercanos (<50 px) ──
-  // Cada grupo con ≥2 SKUs = un bundle
+  // ── Buscar PARES de renglones SKU a ≤28 px (= misma fila de tabla) ──
+  // Cada par = un bundle. Entre bundles distintos hay >28px de separación.
   const bundles=[], seen={};
   let i=0;
   while(i<skuRows.length){
-    const cluster=[skuRows[i]];
-    let j=i+1;
-    while(j<skuRows.length){
-      const prev=skuRows[j-1],curr=skuRows[j];
-      if(prev.pg===curr.pg && curr.y-prev.y<50){ cluster.push(curr); j++; }
-      else break;
-    }
-    i=j;
-    if(cluster.length<2) continue; // SKU solitario = no es bundle
+    // Buscar el inicio del siguiente par
+    if(i+1>=skuRows.length){ i++; continue; }
+    const r0=skuRows[i], r1=skuRows[i+1];
+    if(r0.pg!==r1.pg || r1.y-r0.y>28){ i++; continue; }
 
-    const skus=[...new Set(cluster.map(r=>r.sku))];
+    // Encontramos un par; ver si hay un 3er renglón también cercano
+    const par=[r0,r1];
+    if(i+2<skuRows.length){
+      const r2=skuRows[i+2];
+      if(r2.pg===r1.pg && r2.y-r1.y<=28) { par.push(r2); }
+    }
+    i+=par.length; // avanzar más allá del par/trío
+
+    const skus=[...new Set(par.map(r=>r.sku))];
     if(skus.length<2) continue;
     const key=[...skus].sort().join(',');
     if(seen[key]) continue; seen[key]=1;
 
-    // Precio: el precio bundle viene en un renglón SEPARADO de los SKUs
-    const pg=cluster[0].pg;
-    const maxSkuY=Math.max(...cluster.map(r=>r.y));
-    const minSkuY=Math.min(...cluster.map(r=>r.y));
-    const isSkuRow=row=>cluster.some(c=>Math.abs(c.y-row.y)<5);
+    // Precio: el precio bundle viene en renglón SEPARADO (después de los SKUs)
+    const pg=r0.pg;
+    const maxSkuY=Math.max(...par.map(r=>r.y));
+    const minSkuY=Math.min(...par.map(r=>r.y));
+    const isSkuRow=row=>par.some(c=>Math.abs(c.y-row.y)<5);
     let precio='';
-    // P1: renglón con palabra clave bundle/precio debajo del cluster
+    // P1: renglón con keyword bundle/precio debajo del par
     for(const row of renglones){
       if(row.pg!==pg||row.y<=maxSkuY||row.y>maxSkuY+160) continue;
       if(isSkuRow(row)) continue;
@@ -607,7 +610,7 @@ async function parseBundlePDF(file){
       const pm=[...row.text.matchAll(/\$\s*([\d,]{4,})/g)];
       if(pm.length){ precio=pm[pm.length-1][1].replace(/,/g,''); break; }
     }
-    // P2: primer renglón con precio debajo del cluster (sin SKU)
+    // P2: primer renglón con $ debajo del par (sin SKU)
     if(!precio){
       for(const row of renglones){
         if(row.pg!==pg||row.y<=maxSkuY||row.y>maxSkuY+160) continue;
@@ -616,7 +619,7 @@ async function parseBundlePDF(file){
         if(pm.length){ precio=pm[pm.length-1][1].replace(/,/g,''); break; }
       }
     }
-    // P3: cualquier renglón sin SKU en ±120px (incluso arriba, como header del bundle)
+    // P3: cualquier renglón sin SKU en el área (±120px)
     if(!precio){
       for(const row of renglones){
         if(row.pg!==pg||row.y<minSkuY-120||row.y>maxSkuY+160) continue;
@@ -626,8 +629,8 @@ async function parseBundlePDF(file){
       }
     }
 
-    // Nombre: descripción del primer renglón (producto principal)
-    const mainDesc=cluster[0].desc||cluster[1].desc||'';
+    // Nombre: descripción del primer renglón del par (producto principal)
+    const mainDesc=par[0].desc||par[1].desc||'';
     const nombre=mainDesc?'Bundle '+productName(mainDesc):'Bundle '+(bundles.length+1);
     bundles.push({nombre,skus:skus.join(','),precio,d1,d2});
   }
