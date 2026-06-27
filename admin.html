@@ -607,12 +607,11 @@ document.getElementById('filePdfBundle').onchange=async function(e){
     const result=await parseBundlePDF(f);
     if(!result.bundles.length){
       fbox.classList.remove('ok');
-      ph.textContent='📄 Toca para elegir el PDF del CEA Bundle';
-      // Show raw extracted text so we can see the actual PDF format
-      document.getElementById('previewBundles').style.display='block';
-      document.getElementById('prevHdr').textContent='⚠️ No se encontraron bundles — texto extraído del PDF:';
-      document.getElementById('prevList').innerHTML=`<div class="prev-item" style="border-color:#f3c3c0;background:#fdeaea"><strong style="color:#b3261e">Comparte este texto para diagnosticar:</strong><span style="font-family:monospace;font-size:11px;white-space:pre-wrap;word-break:break-all">${(result.debugText||'(vacío)').replace(/</g,'&lt;')}</span></div>`;
-      document.getElementById('btnSaveAll').style.display='none';
+      const dt=result.debugText||'';
+      ph.innerHTML=dt
+        ? `⚠️ Sin bundles · mándame captura de esto:<br><span style="font-family:monospace;font-size:10px;white-space:pre-wrap;word-break:break-all;color:#555">${dt.replace(/</g,'&lt;').slice(0,400)}</span>`
+        : '⚠️ El PDF no tiene texto — puede ser imagen escaneada';
+      document.getElementById('previewBundles').style.display='none';
       return;
     }
     document.getElementById('btnSaveAll').style.display='';
