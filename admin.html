@@ -190,7 +190,10 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
       </div>
       <button class="btn-pri" id="btnB" onclick="addBundle()">Agregar bundle</button>
     </div>
-    <div class="list-hdr">Bundles activos</div>
+    <div class="list-hdr" style="display:flex;align-items:center;justify-content:space-between">
+      <span>Bundles activos</span>
+      <button onclick="clearBundles()" style="font-size:11px;padding:4px 10px;border:1.5px solid #ffd5d5;background:#fff5f5;color:var(--rojo);border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700">🗑️ Limpiar todos</button>
+    </div>
     <div id="listB"></div>
   </div>
 
@@ -527,10 +530,21 @@ async function parseBundlePDF(file){
     const m=text.match(new RegExp('\\b'+sku+'\\b\\s+([A-Za-záéíóúÁÉÍÓÚ].{5,80}?)(?=\\s*\\d{9}|\\s*\\$|\\s{3,}|$)'));
     return m ? m[1].replace(/\s+/g,' ').trim() : '';
   }
-  // Clean description → product name (remove brand, color suffix)
+  // Clean description → product name (handle Huawei catalog abbreviations)
   const COLOR_RE=/\s*\b(negro|negra|blanco|blanca|plata|plateado|dorado|azul|verde|rojo|gris|midnight|silver|gold|black|white|morado|beige|naranja|titanio|grafito)\b.*/i;
   function productName(desc){
-    return desc.replace(/^HUAWEI\s+/i,'').replace(COLOR_RE,'').replace(/\s*\$[\d,].*/,'').trim().slice(0,45);
+    let n = desc
+      .replace(/^(AUDÍF|AUDIF)\s+(IN\s+EAR|OVER\s+EAR|TRUE\s+WRL|WT)\s+HW\s*/i,'')
+      .replace(/^(WATCH|RELOJ)\s+HW\s*/i,'')
+      .replace(/^HW\s+/i,'').replace(/^HUAWEI\s+/i,'')
+      .replace(/\bF\s*-?\s*BUDS\b/i,'FreeBuds').replace(/\bFREECLIP\b/i,'FreeClip')
+      .replace(/\bFREEBUDS\b/i,'FreeBuds').replace(/\bEARBUDS\b/i,'Earbuds')
+      .replace(COLOR_RE,'')
+      .replace(/\s*\b(AN|BN|NG|VD|RS|BL|GR|VT|NR|AZ|PL|DO)\b\s*$/i,'')
+      .replace(/\s*\d+\.\d+"\s*(VID|AMOLED|LCD)?.*/i,'')
+      .replace(/\s*\$[\d,].*/,'')
+      .replace(/\s+/g,' ').trim().slice(0,40);
+    return n.split(' ').map(w=>w.length>1?w[0].toUpperCase()+w.slice(1).toLowerCase():w).join(' ');
   }
 
   const PRICEPP=[
@@ -618,7 +632,7 @@ async function saveBundlesFromPdf(){
   let ok=0,err=0;
   for(const b of bundles){
     try{
-      await jsonp(apiUrl('bundle_add',{nombre:encodeURIComponent(b.nombre),skus:encodeURIComponent(b.skus),precio:b.precio,d1:b.d1,d2:b.d2}));
+      await jsonp(apiUrl('bundle_add',{nombre:encodeURIComponent(b.nombre),skus:b.skus.replace(/,/g,'|'),precio:b.precio,d1:b.d1,d2:b.d2}));
       ok++;
     }catch(e){ err++; }
   }
@@ -658,7 +672,7 @@ async function addBundle(){
   if(!skus.length){ toast('Ingresa al menos un SKU válido',false); return; }
   const btn=document.getElementById('btnB'); btn.disabled=true; btn.textContent='Guardando…';
   try{
-    await jsonp(apiUrl('bundle_add',{nombre:encodeURIComponent(nom),skus:encodeURIComponent(skus.join(',')),precio:px,d1,d2}));
+    await jsonp(apiUrl('bundle_add',{nombre:encodeURIComponent(nom),skus:skus.join('|'),precio:px,d1,d2}));
     toast('Bundle agregado ✓');
     ['bNom','bPx','bD1','bD2'].forEach(id=>document.getElementById(id).value='');
     document.getElementById('bSkus').value='';
@@ -670,6 +684,13 @@ async function delBundle(id){
   if(!confirm('¿Eliminar este bundle?')) return;
   try{ await jsonp(apiUrl('bundle_del',{id})); toast('Eliminado'); loadBundles(); }
   catch{ toast('Error',false); }
+}
+async function clearBundles(){
+  if(!confirm('¿Eliminar TODOS los bundles? Tendrás que volverlos a subir del PDF.')) return;
+  try{
+    await jsonp(apiUrl('bundle_clear',{}));
+    toast('Todos los bundles eliminados'); loadBundles();
+  }catch{ toast('Error',false); }
 }
 
 /* ================================================================
