@@ -7,6 +7,8 @@
 <title>Admin · HES 1217</title>
 <link rel="apple-touch-icon" href="logo_odemas.png">
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.min.js"></script>
+<script>if(window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.worker.min.js';</script>
 <style>
 * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
 :root { --rojo:#D12026; --naranja:#F37021; --azul:#336BB4; --verde:#1a8c4e; --bg:#f6f6f7; }
@@ -41,17 +43,33 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
 .pane { padding:16px;max-width:540px;margin:0 auto;display:none; }
 .pane.on { display:block; }
 
-/* FORM */
+/* CARDS */
 .card { background:#fff;border-radius:14px;padding:16px;margin-bottom:16px;border:1px solid #ececec; }
-.card h2 { font-size:14px;font-weight:800;margin-bottom:12px; }
+.card h2 { font-size:14px;font-weight:800;margin-bottom:10px; }
 .card .note { font-size:12px;color:#aaa;margin-bottom:12px;line-height:1.45; }
+
+/* FORM */
 .field { margin-bottom:10px; }
 .field label { font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px; }
-.field input { width:100%;border:1.5px solid #e0e0e0;border-radius:10px;padding:10px 12px;font-family:'Montserrat',sans-serif;font-size:14px;font-weight:600;outline:none;background:#fafafa; }
-.field input:focus { border-color:var(--rojo);background:#fff; }
+.field input, .field textarea { width:100%;border:1.5px solid #e0e0e0;border-radius:10px;padding:10px 12px;font-family:'Montserrat',sans-serif;font-size:14px;font-weight:600;outline:none;background:#fafafa;color:#1a1a1a; }
+.field input:focus, .field textarea:focus { border-color:var(--rojo);background:#fff; }
+.field textarea { resize:vertical;min-height:80px; }
 .g2 { display:grid;grid-template-columns:1fr 1fr;gap:10px; }
 .btn-pri { width:100%;padding:13px;background:var(--rojo);color:#fff;border:none;border-radius:12px;font-family:'Montserrat',sans-serif;font-size:14px;font-weight:800;cursor:pointer;margin-top:4px; }
 .btn-pri:disabled { background:#ccc; }
+.divider { display:flex;align-items:center;gap:10px;margin:16px 0 12px;color:#ccc;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px; }
+.divider::before,.divider::after { content:'';flex:1;height:1px;background:#eee; }
+
+/* FILE UPLOAD */
+.filebox { border:2px dashed #e0e0e0;border-radius:12px;padding:18px;text-align:center;cursor:pointer;transition:.15s; }
+.filebox.ok { border-color:var(--verde);background:#f7fdfa; }
+.filebox .ph { font-size:13px;color:#999;line-height:1.4; }
+
+/* PREVIEW */
+.prev-hdr { font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;margin:14px 0 8px; }
+.prev-item { background:#f7fdfa;border:1.5px solid #bfe7cd;border-radius:10px;padding:10px 12px;margin-bottom:8px; }
+.prev-item strong { display:block;font-size:13px;font-weight:700;color:#13703c;margin-bottom:3px; }
+.prev-item span { display:block;font-size:12px;color:#555;margin-top:1px; }
 
 /* LIST */
 .list-hdr { font-size:12px;font-weight:700;color:#bbb;text-transform:uppercase;letter-spacing:.5px;margin:4px 4px 10px; }
@@ -102,20 +120,40 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
 
   <!-- BUNDLES -->
   <div class="pane on" id="pane-bundles">
+
+    <!-- PDF UPLOAD -->
+    <div class="card">
+      <h2>📎 Desde CEA Bundle (PDF)</h2>
+      <p class="note">Sube el PDF del comunicado y la app extrae los bundles automáticamente — nombre, SKUs, precio y vigencia.</p>
+      <input type="file" id="filePdfBundle" accept="application/pdf,.pdf" hidden>
+      <div class="filebox" id="fboxBundle" onclick="document.getElementById('filePdfBundle').click()">
+        <div class="ph" id="fphBundle">📄 Toca para elegir el PDF del CEA Bundle</div>
+      </div>
+      <div id="previewBundles" style="display:none">
+        <div class="prev-hdr" id="prevHdr"></div>
+        <div id="prevList"></div>
+        <button class="btn-pri" id="btnSaveAll" onclick="saveBundlesFromPdf()">💾 Guardar todos en la nube</button>
+      </div>
+    </div>
+
+    <div class="divider">o agregar manualmente</div>
+
+    <!-- MANUAL FORM -->
     <div class="card">
       <h2>Nuevo bundle</h2>
-      <div class="field"><label>Nombre del paquete</label><input id="bNom" placeholder="Ej: Bundle Watch + FreeBuds"></div>
-      <div class="g2">
-        <div class="field"><label>SKU 1</label><input id="bS1" placeholder="100229363" inputmode="numeric"></div>
-        <div class="field"><label>SKU 2</label><input id="bS2" placeholder="100245646" inputmode="numeric"></div>
+      <div class="field"><label>Nombre del bundle</label><input id="bNom" placeholder="Ej: Bundle FreeBuds Pro 5"></div>
+      <div class="field">
+        <label>SKUs participantes (uno por línea o separados por coma)</label>
+        <textarea id="bSkus" placeholder="100285218&#10;100285200&#10;100285197"></textarea>
       </div>
-      <div class="field"><label>Precio del bundle</label><input id="bPx" type="number" placeholder="8999" inputmode="numeric"></div>
+      <div class="field"><label>Precio total del bundle</label><input id="bPx" type="number" placeholder="5999" inputmode="numeric"></div>
       <div class="g2">
         <div class="field"><label>Desde</label><input id="bD1" type="date"></div>
         <div class="field"><label>Hasta</label><input id="bD2" type="date"></div>
       </div>
       <button class="btn-pri" id="btnB" onclick="addBundle()">Agregar bundle</button>
     </div>
+
     <div class="list-hdr">Bundles activos</div>
     <div id="listB"></div>
   </div>
@@ -140,7 +178,7 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
 
 <script>
 const API = 'https://script.google.com/macros/s/AKfycbwbZFsiDqZrNitPKNLqr4r6xOFu3VKprtXJacScftIJmcQdAl_yytjxK8BymWvy8I1gjA/exec';
-const PIN_OK = '1217'; // igual que ADMIN_PIN en el Apps Script
+const PIN_OK = '1217';
 
 /* ----- PIN ----- */
 let pin = '';
@@ -198,10 +236,118 @@ const money=n=>'$'+Number(n||0).toLocaleString('es-MX');
 function toast(msg,ok){
   const el=document.getElementById('toast');
   el.textContent=msg; el.style.background=ok===false?'#D12026':'#1a8c4e';
-  el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),2500);
+  el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),2800);
 }
 
-/* ----- BUNDLES ----- */
+/* ==================== PDF PARSER ==================== */
+async function parseBundlePDF(file){
+  if(typeof pdfjsLib==='undefined') throw new Error('PDF.js no disponible — recarga la página');
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({data:buf}).promise;
+  let texto = '';
+  for(let p=1; p<=pdf.numPages; p++){
+    const pg = await pdf.getPage(p);
+    const tc = await pg.getTextContent();
+    texto += tc.items.map(i=>i.str).join(' ') + ' ';
+  }
+  // Pega dígitos partidos por pdfjs que forman SKUs de 9 dígitos
+  texto = texto.replace(/(\d{1,8}) (\d{1,8})/g,(m,a,b)=>(a+b).length===9?a+b:m);
+
+  // Vigencia global: "del 27 al 29 de junio de 2026"
+  const MESES={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12};
+  let d1='',d2='',vigTxt='';
+  const vm=texto.match(/del\s+(\d{1,2})\s+al\s+(\d{1,2})\s+de\s+([A-Za-záéíóúÁÉÍÓÚ]+)\s+de\s+(\d{4})/i);
+  if(vm){
+    const mes=MESES[vm[3].toLowerCase()]||1,y=+vm[4];
+    d1=`${y}-${String(mes).padStart(2,'0')}-${String(+vm[1]).padStart(2,'0')}`;
+    d2=`${y}-${String(mes).padStart(2,'0')}-${String(+vm[2]).padStart(2,'0')}`;
+    vigTxt=`${vm[1]} al ${vm[2]} de ${vm[3]} ${vm[4]}`;
+  }
+
+  // Separa secciones por cada aparición de "BUNDLE "
+  const parts = texto.split(/\bBUNDLE\s+/i);
+  const bundles = [];
+
+  for(let i=1; i<parts.length; i++){
+    const chunk = parts[i];
+    // Nombre: todo en mayúsculas hasta que aparece minúscula o ":"
+    const nameM = chunk.match(/^([A-Z0-9ÁÉÍÓÚ ]+?)(?:\s*:|\s+[a-záéíóú])/);
+    if(!nameM) continue;
+    const nombreRaw = nameM[1].trim();
+    // Descarta encabezados del CEA (contienen año o palabras de bloque)
+    if(/\d{4}|BLOQUE|SEMANA|WEEK|CEA/i.test(nombreRaw)) continue;
+    const nombre = 'Bundle ' + nombreRaw.split(/\s+/).map(w=>w[0]+w.slice(1).toLowerCase()).join(' ');
+
+    // Precio: "precio especial de $5,999.00"
+    const pm = chunk.match(/precio\s+especial\s+de\s+\$?([\d,]+(?:\.\d{1,2})?)/i);
+    if(!pm) continue;
+    const precio = pm[1].replace(/,/g,'').replace(/\.\d+$/,'');
+
+    // SKUs: todos los números de exactamente 9 dígitos en el bloque
+    const skus = [...new Set([...chunk.matchAll(/\b(\d{9})\b/g)].map(m=>m[1]))];
+    if(!skus.length) continue;
+
+    bundles.push({nombre, skus:skus.join(','), precio, d1, d2});
+  }
+  return {bundles, vig:vigTxt};
+}
+
+/* Cuando el usuario elige un PDF */
+document.getElementById('filePdfBundle').onchange = async function(e){
+  const f=e.target.files&&e.target.files[0]; if(!f) return;
+  const ph=document.getElementById('fphBundle');
+  const fbox=document.getElementById('fboxBundle');
+  fbox.classList.remove('ok');
+  ph.innerHTML='<em>Leyendo PDF…</em>';
+  document.getElementById('previewBundles').style.display='none';
+  try{
+    const result = await parseBundlePDF(f);
+    if(!result.bundles.length) throw new Error('No encontré bundles — ¿es el CEA Bundle con la tabla de SKUs?');
+    fbox.classList.add('ok');
+    ph.innerHTML=`✓ ${f.name}<br>${result.bundles.length} bundle(s) · vigencia ${result.vig||'no detectada'}`;
+    // Muestra preview
+    document.getElementById('prevHdr').textContent=result.bundles.length+' bundles encontrados:';
+    document.getElementById('prevList').innerHTML=result.bundles.map(b=>{
+      const n=b.skus.split(',').length;
+      return `<div class="prev-item">
+        <strong>${b.nombre}</strong>
+        <span>${n} variante${n!==1?'s':''} (cualquier combinación de 2) · ${money(+b.precio)}</span>
+        ${b.d1?`<span>📅 ${b.d1} al ${b.d2}</span>`:''}
+      </div>`;
+    }).join('');
+    document.getElementById('btnSaveAll')._bundles=result.bundles;
+    document.getElementById('previewBundles').style.display='block';
+  }catch(err){
+    fbox.classList.remove('ok');
+    ph.textContent='📄 Toca para elegir el PDF del CEA Bundle';
+    toast(err.message,false);
+  }
+};
+
+/* Guardar todos los bundles extraídos */
+async function saveBundlesFromPdf(){
+  const btn=document.getElementById('btnSaveAll');
+  const bundles=btn._bundles||[];
+  if(!bundles.length) return;
+  btn.disabled=true; btn.textContent='Guardando…';
+  let ok=0,err=0;
+  for(const b of bundles){
+    try{
+      await jsonp(apiUrl('bundle_add',{
+        nombre:encodeURIComponent(b.nombre),
+        skus:encodeURIComponent(b.skus),
+        precio:b.precio, d1:b.d1, d2:b.d2
+      }));
+      ok++;
+    }catch(e){ err++; }
+  }
+  toast(ok+' bundle'+(ok!==1?'s':'')+' guardado'+(ok!==1?'s':'')+(err?' · '+err+' error':'')+'  ✓', err===0);
+  btn.textContent='💾 Guardar todos en la nube';
+  btn.disabled=false;
+  if(ok) loadBundles();
+}
+
+/* ----- BUNDLES (lista) ----- */
 async function loadBundles(){
   document.getElementById('listB').innerHTML='<div class="empty">Cargando…</div>';
   try{ renderBundles(await jsonp(API+'?modo=bundles')||[]); }
@@ -211,28 +357,32 @@ function renderBundles(list){
   if(!Array.isArray(list)) list=[];
   const el=document.getElementById('listB');
   if(!list.length){ el.innerHTML='<div class="empty">No hay bundles activos</div>'; return; }
-  el.innerHTML=list.map(b=>`
-    <div class="item">
+  el.innerHTML=list.map(b=>{
+    const skus=(b.skus||'').split(',').filter(Boolean);
+    return `<div class="item">
       <div class="item-info">
         <strong>${b.nombre||'Bundle'}</strong>
-        <span>SKU ${b.sku1} + SKU ${b.sku2}<br>${money(b.precio)}${b.d2?' · hasta '+b.d2:''}</span>
+        <span>${skus.length} variante${skus.length!==1?'s':''} · ${money(b.precio)}${b.d2?' · hasta '+b.d2:''}</span>
       </div>
       <button class="btn-del" onclick="delBundle('${b.id}')">🗑️</button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 async function addBundle(){
   const nom=document.getElementById('bNom').value.trim();
-  const s1=document.getElementById('bS1').value.trim();
-  const s2=document.getElementById('bS2').value.trim();
+  const skusRaw=document.getElementById('bSkus').value.trim();
   const px=document.getElementById('bPx').value.trim();
   const d1=document.getElementById('bD1').value;
   const d2=document.getElementById('bD2').value;
-  if(!nom||!s1||!s2||!px){ toast('Completa nombre, SKUs y precio',false); return; }
+  if(!nom||!skusRaw||!px){ toast('Completa nombre, SKUs y precio',false); return; }
+  const skus=skusRaw.split(/[\n,]+/).map(s=>s.trim()).filter(s=>/^\d+$/.test(s));
+  if(!skus.length){ toast('Ingresa al menos un SKU válido',false); return; }
   const btn=document.getElementById('btnB'); btn.disabled=true; btn.textContent='Guardando…';
   try{
-    await jsonp(apiUrl('bundle_add',{nombre:encodeURIComponent(nom),sku1:s1,sku2:s2,precio:px,d1,d2}));
+    await jsonp(apiUrl('bundle_add',{nombre:encodeURIComponent(nom),skus:encodeURIComponent(skus.join(',')),precio:px,d1,d2}));
     toast('Bundle agregado ✓');
-    ['bNom','bS1','bS2','bPx','bD1','bD2'].forEach(id=>document.getElementById(id).value='');
+    ['bNom','bPx','bD1','bD2'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('bSkus').value='';
     loadBundles();
   } catch{ toast('Error al guardar',false); }
   btn.disabled=false; btn.textContent='Agregar bundle';

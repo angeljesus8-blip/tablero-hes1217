@@ -271,12 +271,12 @@ function renderChips(){
 }
 
 function cardBundle(x){
-  const p1 = invBySku[x.sku1] ? invBySku[x.sku1].producto : ('SKU '+x.sku1);
-  const p2 = invBySku[x.sku2] ? invBySku[x.sku2].producto : ('SKU '+x.sku2);
+  const skuArr=(x.skus||'').split(',').map(s=>s.trim()).filter(Boolean);
+  const prods=skuArr.map(s=>invBySku[s]?invBySku[s].producto:'SKU '+s);
   const vig = x.d2 ? badgeVigencia(x.d2) : '';
   return `<div class="card t-bundle">
-    <div class="top"><h3>${x.nombre||'Bundle'}</h3><span class="tag bundle">🎁 Paquete</span></div>
-    <p class="det">· ${p1}<br>· ${p2}</p>
+    <div class="top"><h3>${x.nombre||'Bundle'}</h3><span class="tag bundle">🎁 ×2</span></div>
+    <p class="det">${prods.slice(0,4).map(p=>'· '+p).join('<br>')}${prods.length>4?`<br>· <em>+${prods.length-4} más</em>`:''}</p>
     <div class="meta">
       ${x.precio?`<span class="precio">${money(Number(x.precio))}</span>`:''}
       ${vig}
