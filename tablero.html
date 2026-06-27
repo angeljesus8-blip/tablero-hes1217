@@ -113,6 +113,13 @@
 
   .empty { text-align:center; color:#bbb; font-size:13px; padding:40px 20px; }
   footer { text-align:center; font-size:10px; color:#ccc; margin-top:24px; padding:0 16px; }
+  .promo-toolbar { display:flex; align-items:center; justify-content:space-between; padding:8px 16px 4px; }
+  .promo-toolbar span { font-size:12px; color:#aaa; font-weight:600; }
+  .promo-toolbar button { font-family:'Montserrat',sans-serif; font-size:12px; font-weight:700;
+    background:var(--rojo); color:#fff; border:none; border-radius:8px; padding:6px 13px; cursor:pointer; }
+  .promo-toolbar button:disabled { background:#ccc; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .promo-toolbar button.girando { animation:spin .7s linear infinite; }
 </style>
 </head>
 <body>
@@ -184,7 +191,19 @@ const eolSkuSet = new Set((D.eol||[]).map(e=>e.sku));
 
 // Variables recalculables cuando llegan datos de la nube
 let EOL = [], eolMap = {}, transitoMap = {}, RESURTIR = [];
-let PROMOS = [];   // promociones vigentes (se cargan de la nube, igual que en Captura de Series)
+const PROMOS_KEY = 'hes1217_promos_cache';
+let PROMOS = [];   // promociones vigentes — se cargan de la nube y se cachean en localStorage
+
+// Carga cache guardado para mostrar promos al instante aunque no haya red
+(function(){
+  try{
+    const c = JSON.parse(localStorage.getItem(PROMOS_KEY)||'null');
+    if(Array.isArray(c) && c.length){
+      const hoy = new Date().toISOString().slice(0,10);
+      PROMOS = c.filter(x=> (!x.d1||hoy>=x.d1) && (!x.d2||hoy<=x.d2));
+    }
+  }catch(e){}
+})();
 
 function calcDerivados(){
   EOL = (D.eol||[]).map(e=>{
@@ -344,7 +363,10 @@ function render(){
     html += seccion('⏳ EOL próximos · agotar stock cerrado', eolPend, cardEol);
     html += seccion('Agotados', eolAgot, cardEol);
   }
-  if(f==='promo') html += seccion('🔥 Promociones vigentes', promos, cardPromo);
+  if(f==='promo'){
+    html += `<div class="promo-toolbar"><span>${promos.length} promo${promos.length!==1?'s':''} vigente${promos.length!==1?'s':''}</span><button id="btnRefreshPromos" onclick="cargarPromosNube(true)">↻ Actualizar</button></div>`;
+    html += seccion('🔥 Promociones vigentes', promos, cardPromo);
+  }
   if(f==='nov')   html += seccion('📦 Mercancía nueva', nov, cardNov);
   if(f==='resurtir') html += seccion('🔄 Resurtir · 0 para vender, solo queda exhibición (no EOL)', resurtir, rowInv);
   if(f==='agotados') html += seccion('📭 Agotados · se agotaron (no EOL) — pedir resurtido', agotados, rowAgotado);
@@ -389,28 +411,39 @@ function cargarInventarioNube(){
   document.head.appendChild(sc);
 }
 
-function cargarPromosNube(){
+let _promosCargando = false;
+function cargarPromosNube(manual){
+  if(_promosCargando) return;
+  _promosCargando = true;
+  const btnR = document.getElementById('btnRefreshPromos');
+  if(btnR){ btnR.textContent='↻'; btnR.disabled=true; btnR.classList.add('girando'); }
   const cb = '_cbPromo' + Date.now();
   window[cb] = function(data){
     delete window[cb];
+    _promosCargando = false;
     const sc = document.getElementById('_promo_sc'); if(sc) sc.remove();
+    if(btnR){ btnR.textContent='↻ Actualizar'; btnR.disabled=false; btnR.classList.remove('girando'); }
     if(data && typeof data === 'object' && !Array.isArray(data)){
       const hoy = new Date().toISOString().slice(0,10);
-      PROMOS = Object.keys(data).map(function(sku){
+      const todas = Object.keys(data).map(function(sku){
         const p = data[sku] || {};
-        if(p.d1 && hoy < p.d1) return null;   // aún no inicia
-        if(p.d2 && hoy > p.d2) return null;   // ya venció
         const inv = invBySku[sku];
-        return { sku:sku, producto:(inv && inv.producto) || ('SKU ' + sku),
-          pr:(p.pr!=null?p.pr:null), pp:(p.pp!=null?p.pp:null), d1:p.d1, d2:p.d2 };
-      }).filter(Boolean).sort(function(a,b){ return a.producto.localeCompare(b.producto); });
+        return { sku:sku, producto:(inv && inv.producto)||('SKU '+sku),
+          pr:(p.pr!=null?p.pr:null), pp:(p.pp!=null?p.pp:null), d1:p.d1||null, d2:p.d2||null };
+      });
+      try{ localStorage.setItem(PROMOS_KEY, JSON.stringify(todas)); }catch(e){}
+      PROMOS = todas.filter(x=> (!x.d1||hoy>=x.d1) && (!x.d2||hoy<=x.d2))
+                    .sort(function(a,b){ return a.producto.localeCompare(b.producto); });
       render();
     }
   };
   const sc = document.createElement('script');
   sc.id = '_promo_sc';
   sc.src = CLOUD_URL + '?modo=promos&callback=' + cb;
-  sc.onerror = function(){ delete window[cb]; sc.remove(); };
+  sc.onerror = function(){
+    delete window[cb]; _promosCargando=false; sc.remove();
+    if(btnR){ btnR.textContent='↻ Actualizar'; btnR.disabled=false; btnR.classList.remove('girando'); }
+  };
   document.head.appendChild(sc);
 }
 
