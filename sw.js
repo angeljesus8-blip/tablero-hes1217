@@ -1,8 +1,9 @@
-const CACHE = 'hes1217-v4';
+const CACHE = 'hes1217-v5';
 const ARCHIVOS = [
   './index.html',
   './tablero.html',
   './captura_series.html',
+  './admin.html',
   './datos.js',
   './logo_odemas.png',
   './icon-192.png',
