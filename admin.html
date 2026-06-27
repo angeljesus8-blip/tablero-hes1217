@@ -593,15 +593,37 @@ async function parseBundlePDF(file){
     const key=[...skus].sort().join(',');
     if(seen[key]) continue; seen[key]=1;
 
-    // Precio: buscar en renglones cercanos al cluster (±80 px)
+    // Precio: el precio bundle viene en un renglón SEPARADO de los SKUs
     const pg=cluster[0].pg;
-    const minY=cluster[0].y-80, maxY=cluster[cluster.length-1].y+80;
+    const maxSkuY=Math.max(...cluster.map(r=>r.y));
+    const minSkuY=Math.min(...cluster.map(r=>r.y));
+    const isSkuRow=row=>cluster.some(c=>Math.abs(c.y-row.y)<5);
     let precio='';
+    // P1: renglón con palabra clave bundle/precio debajo del cluster
     for(const row of renglones){
-      if(row.pg!==pg||row.y<minY||row.y>maxY) continue;
-      // Tomar el mayor precio que aparezca cerca (el precio bundle, no el individual)
+      if(row.pg!==pg||row.y<=maxSkuY||row.y>maxSkuY+160) continue;
+      if(isSkuRow(row)) continue;
+      if(!/bundle|paquete|precio\s*esp|promo/i.test(row.text)) continue;
       const pm=[...row.text.matchAll(/\$\s*([\d,]{4,})/g)];
-      if(pm.length) precio=pm[pm.length-1][1].replace(/,/g,'');
+      if(pm.length){ precio=pm[pm.length-1][1].replace(/,/g,''); break; }
+    }
+    // P2: primer renglón con precio debajo del cluster (sin SKU)
+    if(!precio){
+      for(const row of renglones){
+        if(row.pg!==pg||row.y<=maxSkuY||row.y>maxSkuY+160) continue;
+        if(isSkuRow(row)) continue;
+        const pm=[...row.text.matchAll(/\$\s*([\d,]{4,})/g)];
+        if(pm.length){ precio=pm[pm.length-1][1].replace(/,/g,''); break; }
+      }
+    }
+    // P3: cualquier renglón sin SKU en ±120px (incluso arriba, como header del bundle)
+    if(!precio){
+      for(const row of renglones){
+        if(row.pg!==pg||row.y<minSkuY-120||row.y>maxSkuY+160) continue;
+        if(isSkuRow(row)) continue;
+        const pm=[...row.text.matchAll(/\$\s*([\d,]{4,})/g)];
+        if(pm.length) precio=pm[pm.length-1][1].replace(/,/g,'');
+      }
     }
 
     // Nombre: descripción del primer renglón (producto principal)
@@ -715,10 +737,26 @@ async function delBundle(id){
 }
 async function clearBundles(){
   if(!confirm('¿Eliminar TODOS los bundles? Tendrás que volverlos a subir del PDF.')) return;
+  const btn=document.querySelector('[onclick="clearBundles()"]');
+  if(btn){ btn.disabled=true; btn.textContent='Limpiando…'; }
   try{
-    await jsonp(apiUrl('bundle_clear',{}));
-    toast('Todos los bundles eliminados'); loadBundles();
-  }catch{ toast('Error',false); }
+    // Intentar endpoint directo (Apps Script actualizado)
+    const r=await jsonp(apiUrl('bundle_clear',{})).catch(()=>null);
+    if(r&&r.ok){
+      toast('Todos los bundles eliminados ✓');
+    } else {
+      // Fallback: cargar lista y borrar uno por uno con bundle_del
+      const lista=await jsonp(API+'?modo=bundles')||[];
+      let n=0;
+      for(const b of lista){
+        await jsonp(apiUrl('bundle_del',{id:b.id})).catch(()=>{});
+        n++;
+      }
+      toast(n+' bundle'+(n!==1?'s':'')+' eliminados ✓');
+    }
+    loadBundles();
+  }catch(e){ toast('Error: '+e.message,false); }
+  finally{ if(btn){ btn.disabled=false; btn.textContent='🗑️ Limpiar todos'; } }
 }
 
 /* ================================================================
