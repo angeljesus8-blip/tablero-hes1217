@@ -495,41 +495,105 @@ async function parseBundlePDF(file){
   if(typeof pdfjsLib==='undefined') throw new Error('PDF.js no disponible');
   const buf=await file.arrayBuffer();
   const pdf=await pdfjsLib.getDocument({data:buf}).promise;
-  let texto='';
+  // Collect items with position for line-grouping approach
+  const allItems=[];
   for(let p=1;p<=pdf.numPages;p++){
     const pg=await pdf.getPage(p);
+    const vp=pg.getViewport({scale:1});
     const tc=await pg.getTextContent();
-    texto+=tc.items.map(i=>i.str).join(' ')+' ';
+    tc.items.forEach(i=>{
+      allItems.push({str:i.str,x:i.transform[4],y:vp.height-i.transform[5],page:p});
+    });
   }
-  texto=texto.replace(/(\d{1,8}) (\d{1,8})/g,(m,a,b)=>(a+b).length===9?a+b:m);
+  // Build flat text joining all tokens (fix split 9-digit SKUs)
+  let texto=allItems.map(i=>i.str).join(' ');
+  texto=texto.replace(/(\d{1,8})\s+(\d{1,8})/g,(m,a,b)=>(a+b).length===9?a+b:m);
+
+  // Also build line-grouped version (y tolerance 5pt)
+  const byRow={};
+  allItems.forEach(it=>{
+    if(!it.str.trim()) return;
+    const k=it.page+'_'+Math.round(it.y/5);
+    (byRow[k]||(byRow[k]=[])).push(it);
+  });
+  const lines=Object.values(byRow)
+    .sort((a,b)=>a[0].page-b[0].page||a[0].y-b[0].y)
+    .map(r=>r.sort((a,b)=>a.x-b.x).map(i=>i.str).join(' ').trim())
+    .filter(l=>l.length>1);
+  // Fix split SKUs in lines too
+  const fixedLines=lines.map(l=>l.replace(/(\d{1,8})\s+(\d{1,8})/g,(m,a,b)=>(a+b).length===9?a+b:m));
 
   const MESES={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12};
   let d1='',d2='',vigTxt='';
-  const vm=texto.match(/del\s+(\d{1,2})\s+al\s+(\d{1,2})\s+de\s+([A-Za-záéíóúÁÉÍÓÚ]+)\s+de\s+(\d{4})/i);
-  if(vm){
-    const mes=MESES[vm[3].toLowerCase()]||1,y=+vm[4];
-    d1=`${y}-${String(mes).padStart(2,'0')}-${String(+vm[1]).padStart(2,'0')}`;
-    d2=`${y}-${String(mes).padStart(2,'0')}-${String(+vm[2]).padStart(2,'0')}`;
-    vigTxt=`${vm[1]} al ${vm[2]} de ${vm[3]} ${vm[4]}`;
+  const vigPatterns=[
+    /del\s+(\d{1,2})\s+al\s+(\d{1,2})\s+de\s+([A-Za-záéíóúÁÉÍÓÚ]+)\s+de\s+(\d{4})/i,
+    /(\d{1,2})\s+al\s+(\d{1,2})\s+de\s+([A-Za-záéíóúÁÉÍÓÚ]+)\s+(?:de\s+)?(\d{4})/i,
+    /vigencia[:\s]+(\d{1,2})[\s\/\-]+(\d{1,2})\s+de\s+([A-Za-záéíóúÁÉÍÓÚ]+)\s+(\d{4})/i,
+  ];
+  for(const vp2 of vigPatterns){
+    const vm=texto.match(vp2);
+    if(vm){ const mes=MESES[vm[3].toLowerCase()]||1,y=+vm[4];
+      d1=`${y}-${String(mes).padStart(2,'0')}-${String(+vm[1]).padStart(2,'0')}`;
+      d2=`${y}-${String(mes).padStart(2,'0')}-${String(+vm[2]).padStart(2,'0')}`;
+      vigTxt=`${vm[1]} al ${vm[2]} de ${vm[3]} ${vm[4]}`; break; }
   }
 
-  const parts=texto.split(/\bBUNDLE\s+/i);
   const bundles=[];
+  const seen={};
+
+  // Strategy 1: Split by BUNDLE keyword
+  const parts=texto.split(/(?<!\w)BUNDLE\s+/i);
   for(let i=1;i<parts.length;i++){
     const chunk=parts[i];
-    const nameM=chunk.match(/^([A-Z0-9ÁÉÍÓÚ ]+?)(?:\s*:|\s+[a-záéíóú])/);
+    // Name: grab everything up to a price or newline-like gap
+    const nameM=chunk.match(/^(.{3,60?}?)(?=\s*\$[\d,]|\s{3,}|\bprecio\b|\bsku\b|\b\d{9}\b)/i);
     if(!nameM) continue;
-    const nombreRaw=nameM[1].trim();
-    if(/\d{4}|BLOQUE|SEMANA|WEEK|CEA/i.test(nombreRaw)) continue;
-    const nombre='Bundle '+nombreRaw.split(/\s+/).map(w=>w[0]+w.slice(1).toLowerCase()).join(' ');
-    const pm=chunk.match(/precio\s+especial\s+de\s+\$?([\d,]+(?:\.\d{1,2})?)/i);
-    if(!pm) continue;
-    const precio=pm[1].replace(/,/g,'').replace(/\.\d+$/,'');
+    const nombreRaw=nameM[1].replace(/\s+/g,' ').trim();
+    if(/^\d{4}|BLOQUE|SEMANA|WEEK/i.test(nombreRaw)) continue;
+    if(nombreRaw.length<3) continue;
+    const nombre='Bundle '+nombreRaw.split(/\s+/).map(w=>w.length>1?w[0].toUpperCase()+w.slice(1).toLowerCase():w).join(' ');
+    // Price: multiple patterns
+    const pricePatterns=[
+      /precio\s+especial\s+(?:de\s+)?\$?\s*([\d,]+)/i,
+      /precio[:\s]+\$?\s*([\d,]+)/i,
+      /por\s+solo\s+\$?\s*([\d,]+)/i,
+      /\$\s*([\d,]{4,})/,
+    ];
+    let precio='';
+    for(const pp of pricePatterns){ const pm=chunk.match(pp); if(pm){ precio=pm[1].replace(/,/g,''); break; } }
     const skus=[...new Set([...chunk.matchAll(/\b(\d{9})\b/g)].map(m=>m[1]))];
     if(!skus.length) continue;
+    const key=skus.slice().sort().join(',');
+    if(seen[key]) continue; seen[key]=1;
     bundles.push({nombre,skus:skus.join(','),precio,d1,d2});
   }
-  return {bundles,vig:vigTxt};
+
+  // Strategy 2: line-by-line scan — look for lines containing "BUNDLE" as a label
+  if(!bundles.length){
+    for(let i=0;i<fixedLines.length;i++){
+      const line=fixedLines[i];
+      if(!/\bBUNDLE\b/i.test(line)) continue;
+      // Grab name from same line or next line
+      const nameRaw=(line.replace(/\bBUNDLE\b/i,'').trim()||fixedLines[i+1]||'').trim();
+      if(!nameRaw||nameRaw.length<3) continue;
+      if(/BLOQUE|SEMANA|WEEK|\bCEA\b/i.test(nameRaw)) continue;
+      // Look for price and SKUs in surrounding 10 lines
+      const window10=fixedLines.slice(Math.max(0,i-1),i+10).join(' ');
+      let precio='';
+      for(const pp of [/precio\s+especial\s+(?:de\s+)?\$?\s*([\d,]+)/i,/precio[:\s]+\$?\s*([\d,]+)/i,/\$\s*([\d,]{4,})/]){
+        const pm=window10.match(pp); if(pm){ precio=pm[1].replace(/,/g,''); break; }
+      }
+      const skus=[...new Set([...window10.matchAll(/\b(\d{9})\b/g)].map(m=>m[1]))];
+      if(!skus.length) continue;
+      const key=skus.slice().sort().join(',');
+      if(seen[key]) continue; seen[key]=1;
+      const nombre='Bundle '+nameRaw.split(/\s+/).map(w=>w.length>1?w[0].toUpperCase()+w.slice(1).toLowerCase():w).join(' ');
+      bundles.push({nombre,skus:skus.join(','),precio,d1,d2});
+    }
+  }
+
+  // If still nothing, return raw text for debugging
+  return {bundles,vig:vigTxt,debugText:texto.slice(0,800)};
 }
 
 document.getElementById('filePdfBundle').onchange=async function(e){
@@ -541,7 +605,17 @@ document.getElementById('filePdfBundle').onchange=async function(e){
   document.getElementById('previewBundles').style.display='none';
   try{
     const result=await parseBundlePDF(f);
-    if(!result.bundles.length) throw new Error('No encontré bundles — ¿es el CEA Bundle con la tabla de SKUs?');
+    if(!result.bundles.length){
+      fbox.classList.remove('ok');
+      ph.textContent='📄 Toca para elegir el PDF del CEA Bundle';
+      // Show raw extracted text so we can see the actual PDF format
+      document.getElementById('previewBundles').style.display='block';
+      document.getElementById('prevHdr').textContent='⚠️ No se encontraron bundles — texto extraído del PDF:';
+      document.getElementById('prevList').innerHTML=`<div class="prev-item" style="border-color:#f3c3c0;background:#fdeaea"><strong style="color:#b3261e">Comparte este texto para diagnosticar:</strong><span style="font-family:monospace;font-size:11px;white-space:pre-wrap;word-break:break-all">${(result.debugText||'(vacío)').replace(/</g,'&lt;')}</span></div>`;
+      document.getElementById('btnSaveAll').style.display='none';
+      return;
+    }
+    document.getElementById('btnSaveAll').style.display='';
     fbox.classList.add('ok');
     ph.innerHTML=`✓ ${f.name}<br>${result.bundles.length} bundle(s) · vigencia ${result.vig||'no detectada'}`;
     document.getElementById('prevHdr').textContent=result.bundles.length+' bundles encontrados:';
