@@ -7,6 +7,7 @@
 <title>Admin · HES 1217</title>
 <link rel="apple-touch-icon" href="logo_odemas.png">
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.min.js"></script>
 <script>if(window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.worker.min.js';</script>
 <style>
@@ -35,8 +36,9 @@ header img { height:30px; }
 header h1 { font-size:15px;font-weight:800;margin-left:2px; }
 
 /* TABS */
-.tab-bar { display:flex;background:#fff;border-bottom:2px solid #eee;padding:0 12px; }
-.tab-bar button { flex:1;padding:12px 4px;border:none;background:none;font-family:'Montserrat',sans-serif;font-size:13px;font-weight:700;color:#bbb;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px; }
+.tab-bar { display:flex;background:#fff;border-bottom:2px solid #eee;padding:0 8px;overflow-x:auto; }
+.tab-bar::-webkit-scrollbar { display:none; }
+.tab-bar button { flex-shrink:0;padding:12px 10px;border:none;background:none;font-family:'Montserrat',sans-serif;font-size:12px;font-weight:700;color:#bbb;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;white-space:nowrap; }
 .tab-bar button.on { color:var(--rojo);border-bottom-color:var(--rojo); }
 
 /* PANES */
@@ -65,6 +67,12 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
 .filebox.ok { border-color:var(--verde);background:#f7fdfa; }
 .filebox .ph { font-size:13px;color:#999;line-height:1.4; }
 
+/* RESULT */
+.result { font-size:13px;line-height:1.5;border-radius:10px;padding:12px 14px;margin-top:12px;display:none; }
+.result.show { display:block; }
+.result.ok { background:#eafaf1;color:#13703c;border:1.5px solid #bfe7cd; }
+.result.bad { background:#fdeaea;color:#b3261e;border:1.5px solid #f3c3c0; }
+
 /* PREVIEW */
 .prev-hdr { font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;margin:14px 0 8px; }
 .prev-item { background:#f7fdfa;border:1.5px solid #bfe7cd;border-radius:10px;padding:10px 12px;margin-bottom:8px; }
@@ -79,6 +87,10 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
 .item-info span { font-size:11.5px;color:#888;margin-top:2px;display:block;line-height:1.4; }
 .btn-del { background:#fff5f5;border:1.5px solid #ffd5d5;color:var(--rojo);border-radius:8px;padding:7px 10px;font-size:14px;cursor:pointer;flex-shrink:0; }
 .empty { text-align:center;color:#ccc;font-size:13px;padding:24px; }
+
+/* SPIN */
+.spin { display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite;vertical-align:middle;margin-right:6px; }
+@keyframes sp{ to{ transform:rotate(360deg); } }
 
 /* TOAST */
 #toast { position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:10px 22px;border-radius:20px;font-size:13px;font-weight:700;color:#fff;opacity:0;transition:opacity .25s;pointer-events:none;z-index:999;white-space:nowrap; }
@@ -114,14 +126,42 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
   </header>
 
   <div class="tab-bar">
-    <button class="on" onclick="tab('bundles',this)">🎁 Bundles</button>
+    <button class="on" onclick="tab('cat',this)">📦 Catálogo</button>
+    <button onclick="tab('promos',this)">🔥 Promos</button>
+    <button onclick="tab('bundles',this)">🎁 Bundles</button>
     <button onclick="tab('eol',this)">🏷️ EOL</button>
   </div>
 
-  <!-- BUNDLES -->
-  <div class="pane on" id="pane-bundles">
+  <!-- CATÁLOGO -->
+  <div class="pane on" id="pane-cat">
+    <div class="card">
+      <h2>📦 Catálogo e inventario</h2>
+      <p class="note">Sube el <b>"Informe de Artículos Totales en Tienda"</b> (.xlsx). Actualiza el catálogo (UPC → SKU + descripción) y el stock (ON HAND) para todos los teléfonos.</p>
+      <input type="file" id="fileCat" accept=".xlsx,.xls" hidden>
+      <div class="filebox" id="fboxCat" onclick="document.getElementById('fileCat').click()">
+        <div class="ph" id="fphCat">📄 Toca para elegir el archivo (.xlsx)</div>
+      </div>
+      <button class="btn-pri" id="btnCat" onclick="subirCatalogo()" disabled style="margin-top:14px">Subir y actualizar</button>
+      <div class="result" id="resCat"></div>
+    </div>
+  </div>
 
-    <!-- PDF UPLOAD -->
+  <!-- PROMOS CEA -->
+  <div class="pane" id="pane-promos">
+    <div class="card">
+      <h2>🔥 Promociones CEA</h2>
+      <p class="note">Sube el PDF del CEA de promociones. La app extrae promos y productos EOL — ambos se guardan automáticamente.</p>
+      <input type="file" id="filePromos" accept="application/pdf,.pdf" hidden>
+      <div class="filebox" id="fboxPromos" onclick="document.getElementById('filePromos').click()">
+        <div class="ph" id="fphPromos">📄 Toca para elegir el PDF del CEA</div>
+      </div>
+      <button class="btn-pri" id="btnPromos" onclick="subirPromos()" disabled style="margin-top:14px">Subir promociones</button>
+      <div class="result" id="resPromos"></div>
+    </div>
+  </div>
+
+  <!-- BUNDLES -->
+  <div class="pane" id="pane-bundles">
     <div class="card">
       <h2>📎 Desde CEA Bundle (PDF)</h2>
       <p class="note">Sube el PDF del comunicado y la app extrae los bundles automáticamente — nombre, SKUs, precio y vigencia.</p>
@@ -135,10 +175,7 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
         <button class="btn-pri" id="btnSaveAll" onclick="saveBundlesFromPdf()">💾 Guardar todos en la nube</button>
       </div>
     </div>
-
     <div class="divider">o agregar manualmente</div>
-
-    <!-- MANUAL FORM -->
     <div class="card">
       <h2>Nuevo bundle</h2>
       <div class="field"><label>Nombre del bundle</label><input id="bNom" placeholder="Ej: Bundle FreeBuds Pro 5"></div>
@@ -153,15 +190,12 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
       </div>
       <button class="btn-pri" id="btnB" onclick="addBundle()">Agregar bundle</button>
     </div>
-
     <div class="list-hdr">Bundles activos</div>
     <div id="listB"></div>
   </div>
 
   <!-- EOL -->
   <div class="pane" id="pane-eol">
-
-    <!-- PDF UPLOAD -->
     <div class="card">
       <h2>📎 Desde CEA de Promos (PDF)</h2>
       <p class="note">Sube el PDF del CEA normal. La app extrae automáticamente los productos con estatus EOL.</p>
@@ -175,9 +209,7 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
         <button class="btn-pri" id="btnSaveEol" onclick="saveEolFromPdf()">💾 Guardar todos en la nube</button>
       </div>
     </div>
-
     <div class="divider">o agregar manualmente</div>
-
     <div class="card">
       <h2>Nuevo EOL</h2>
       <p class="note">Agrega los SKUs del comunicado de Huawei. Los que ya están en el sistema siguen vigentes.</p>
@@ -195,11 +227,11 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
 <div id="toast"></div>
 
 <script>
-const API = 'https://script.google.com/macros/s/AKfycbwbZFsiDqZrNitPKNLqr4r6xOFu3VKprtXJacScftIJmcQdAl_yytjxK8BymWvy8I1gjA/exec';
+const API    = 'https://script.google.com/macros/s/AKfycbwbZFsiDqZrNitPKNLqr4r6xOFu3VKprtXJacScftIJmcQdAl_yytjxK8BymWvy8I1gjA/exec';
 const PIN_OK = '1217';
 
-/* ----- PIN ----- */
-let pin = '';
+/* ===== PIN ===== */
+let pin='';
 function key(d){
   if(pin.length>=4) return;
   pin+=d;
@@ -224,7 +256,7 @@ function checkPin(){
   }
 }
 
-/* ----- TABS ----- */
+/* ===== TABS ===== */
 function tab(id,btn){
   document.querySelectorAll('.pane').forEach(e=>e.classList.remove('on'));
   document.querySelectorAll('.tab-bar button').forEach(e=>e.classList.remove('on'));
@@ -232,7 +264,7 @@ function tab(id,btn){
   btn.classList.add('on');
 }
 
-/* ----- JSONP ----- */
+/* ===== HELPERS ===== */
 function jsonp(url){
   return new Promise((res,rej)=>{
     const cb='_a'+Date.now(); const s=document.createElement('script');
@@ -245,33 +277,232 @@ function jsonp(url){
   });
 }
 function apiUrl(modo,extra){
-  const p=new URLSearchParams({modo,pin:PIN_OK,...extra});
-  return API+'?'+p.toString();
+  return API+'?'+new URLSearchParams({modo,pin:PIN_OK,...extra}).toString();
 }
 const money=n=>'$'+Number(n||0).toLocaleString('es-MX');
-
-/* ----- TOAST ----- */
 function toast(msg,ok){
   const el=document.getElementById('toast');
   el.textContent=msg; el.style.background=ok===false?'#D12026':'#1a8c4e';
   el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),2800);
 }
+function showResult(id,ok,html){
+  const r=document.getElementById(id);
+  r.innerHTML=html; r.className='result show '+(ok?'ok':'bad');
+}
 
-/* ==================== PDF PARSER ==================== */
-async function parseBundlePDF(file){
-  if(typeof pdfjsLib==='undefined') throw new Error('PDF.js no disponible — recarga la página');
-  const buf = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({data:buf}).promise;
-  let texto = '';
-  for(let p=1; p<=pdf.numPages; p++){
-    const pg = await pdf.getPage(p);
-    const tc = await pg.getTextContent();
-    texto += tc.items.map(i=>i.str).join(' ') + ' ';
+/* ================================================================
+   TAB CATÁLOGO — Excel parser
+   ================================================================ */
+let parsedCat=null;
+
+async function parseInforme(file){
+  const buf=await file.arrayBuffer();
+  const wb=XLSX.read(buf,{type:'array'});
+  const ws=wb.Sheets[wb.SheetNames[0]];
+  const aoa=XLSX.utils.sheet_to_json(ws,{header:1,raw:false,defval:''});
+  let h=-1;
+  for(let i=0;i<aoa.length;i++){
+    const up=aoa[i].map(c=>String(c||'').trim().toUpperCase());
+    if(up.includes('SKU')&&up.includes('UPC')){ h=i; break; }
   }
-  // Pega dígitos partidos por pdfjs que forman SKUs de 9 dígitos
-  texto = texto.replace(/(\d{1,8}) (\d{1,8})/g,(m,a,b)=>(a+b).length===9?a+b:m);
+  if(h<0) throw new Error('No encontré encabezados SKU/UPC en el archivo');
+  const H=aoa[h].map(c=>String(c||'').trim().toUpperCase());
+  const iSku=H.indexOf('SKU'),iUpc=H.indexOf('UPC');
+  const iDesc=H.findIndex(x=>x.includes('DESCRIP'));
+  const iOn=H.findIndex(x=>x.includes('ON HAND')||x==='ONHAND'||x.includes('EXIST'));
+  const iPre=H.findIndex(x=>x.includes('PRECIO'));
+  const seen={},rows=[];
+  for(let r=h+1;r<aoa.length;r++){
+    const row=aoa[r];
+    let upc=String(row[iUpc]||'').trim();
+    const sku=String(row[iSku]||'').trim();
+    if(!upc||!sku) continue;
+    if(/e\+/i.test(upc)) continue;
+    upc=upc.replace(/\.0$/,'');
+    if(seen[upc]) continue; seen[upc]=1;
+    rows.push({upc,sku,desc:String(row[iDesc]||'').trim(),
+      onhand:iOn>=0?String(row[iOn]||'').trim():'',
+      precio:iPre>=0?String(row[iPre]||'').trim():''});
+  }
+  return rows;
+}
 
-  // Vigencia global: "del 27 al 29 de junio de 2026"
+document.getElementById('fileCat').onchange=async function(e){
+  const f=e.target.files&&e.target.files[0]; if(!f) return;
+  document.getElementById('resCat').className='result';
+  document.getElementById('fphCat').textContent='Leyendo archivo…';
+  document.getElementById('fboxCat').classList.remove('ok');
+  try{
+    parsedCat=await parseInforme(f);
+    document.getElementById('fboxCat').classList.add('ok');
+    document.getElementById('fphCat').innerHTML=`✓ ${f.name}<br>${parsedCat.length} productos detectados`;
+    document.getElementById('btnCat').disabled=parsedCat.length===0;
+  }catch(err){
+    parsedCat=null; document.getElementById('btnCat').disabled=true;
+    document.getElementById('fphCat').textContent='📄 Toca para elegir el archivo (.xlsx)';
+    showResult('resCat',false,'No pude leer el archivo: '+err.message);
+  }
+};
+
+async function subirCatalogo(){
+  if(!parsedCat||!parsedCat.length) return;
+  const btn=document.getElementById('btnCat');
+  btn.disabled=true; btn.innerHTML='<span class="spin"></span>Subiendo…';
+  document.getElementById('resCat').className='result';
+  try{
+    await fetch(API,{method:'POST',mode:'no-cors',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({tipo:'catalogo',by:'Admin 1217',rows:parsedCat})});
+    await new Promise(r=>setTimeout(r,2500));
+    let est=null; try{ est=await jsonp(API+'?modo=estado'); }catch(e){}
+    if(est&&Number(est.catCount)>0){
+      showResult('resCat',true,`✅ Catálogo actualizado: <b>${est.catCount}</b> productos. Los teléfonos tomarán el catálogo nuevo al abrir la app.`);
+    } else {
+      showResult('resCat',true,`Enviado (${parsedCat.length} productos). Revisa en unos segundos.`);
+    }
+  }catch(err){ showResult('resCat',false,'Error al subir: '+err.message); }
+  btn.textContent='Subir y actualizar'; btn.disabled=false;
+}
+
+/* ================================================================
+   TAB PROMOS — CEA PDF parser completo
+   ================================================================ */
+let parsedPromos=null;
+const MESES_P={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12};
+function isoP(y,m,d){ return y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0'); }
+
+async function parsePromosPDF(file){
+  if(typeof pdfjsLib==='undefined') throw new Error('PDF.js no disponible — recarga la página');
+  const buf=await file.arrayBuffer();
+  const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+  const allItems=[]; let flatText='';
+  for(let p=1;p<=pdf.numPages;p++){
+    const page=await pdf.getPage(p);
+    const vp=page.getViewport({scale:1});
+    const tc=await page.getTextContent();
+    tc.items.forEach(i=>{
+      allItems.push({str:i.str,x:i.transform[4],y:vp.height-i.transform[5],page:p});
+    });
+    flatText+=tc.items.map(i=>i.str).join(' ')+'\n';
+  }
+  const fixSkus=t=>t.replace(/(\d{1,8}) (\d{1,8})/g,(m,a,b)=>(a+b).length===9?a+b:m);
+  flatText=fixSkus(flatText);
+
+  const ds=s=>s.replace(/\s/g,'');
+  let d1='',d2='',vig='';
+  const vm=flatText.match(/Vigencia\D{0,8}(\d\s*\d?)\s*al\s*(\d\s*\d?)\s*de\s+([A-Za-záéíóúÁÉÍÓÚ]+)\s+de\s+(\d{4})/i);
+  if(vm){
+    const mes=MESES_P[vm[3].toLowerCase()]||1,y=+vm[4];
+    d1=isoP(y,mes,+ds(vm[1])); d2=isoP(y,mes,+ds(vm[2]));
+    vig=ds(vm[1])+' al '+ds(vm[2])+' de '+vm[3]+' '+vm[4];
+  }
+  let eolD1=d1;
+  const em=flatText.match(/EOL[^.]{0,60}?a partir del\s+(\d\s*\d?)\s+de\s+([A-Za-záéíóúÁÉÍÓÚ]+)/i);
+  if(em&&vm){
+    const mes2=MESES_P[em[2].toLowerCase()]||MESES_P[vm[3].toLowerCase()]||1;
+    eolD1=isoP(+vm[4],mes2,+ds(em[1]));
+  }
+
+  const byRow={};
+  allItems.forEach(it=>{
+    if(!it.str.trim()) return;
+    const k=it.page+'_'+Math.round(it.y/6);
+    (byRow[k]||(byRow[k]=[])).push(it);
+  });
+  const lines=Object.values(byRow)
+    .map(r=>fixSkus(r.sort((a,b)=>a.x-b.x).map(i=>i.str).join(' ').trim()))
+    .filter(l=>l.length>0);
+
+  const seen={},rows=[];
+  const PRECIO='\\$?([\\d,]+(?:\\.\\d{1,3})?)';
+  const EXTRA='(?:\\S+\\s+)?';
+
+  function parseLine(line){
+    const sku9=line.match(/^(\d{9})\b/); if(!sku9) return;
+    const sku=sku9[1]; if(seen[sku]) return;
+    const re=new RegExp('(\\d{9})\\s+(.+?)\\s+'+PRECIO+'\\s+'+PRECIO+'\\s+'+EXTRA+'(Activo|EOL|Lanzamiento)','i');
+    const m=line.match(re); if(!m) return;
+    const pr=parseFloat(m[3].replace(/,/g,'')),pp=parseFloat(m[4].replace(/,/g,''));
+    if(isNaN(pr)||isNaN(pp)) return;
+    seen[sku]=1;
+    const est=m[5].toUpperCase()==='EOL'?'EOL':'Activo';
+    rows.push({sku,desc:m[2].trim().replace(/\s+/g,' '),pr:m[3],pp:m[4],est,msi:'',
+      d1:est==='EOL'?eolD1:d1,d2});
+  }
+  lines.forEach(parseLine);
+
+  const rePlano=new RegExp('(\\d{9})\\s+(.+?)\\s+'+PRECIO+'\\s+'+PRECIO+'\\s+'+EXTRA+'(Activo|EOL|Lanzamiento)','gi');
+  let m2;
+  while((m2=rePlano.exec(flatText))){
+    const sku=m2[1]; if(seen[sku]) continue;
+    const pr=parseFloat(m2[3].replace(/,/g,'')),pp=parseFloat(m2[4].replace(/,/g,''));
+    if(isNaN(pr)||isNaN(pp)) continue;
+    seen[sku]=1;
+    const est=m2[5].toUpperCase()==='EOL'?'EOL':'Activo';
+    rows.push({sku,desc:m2[2].trim().replace(/\s+/g,' '),pr:m2[3],pp:m2[4],est,msi:'',
+      d1:est==='EOL'?eolD1:d1,d2});
+  }
+  return {rows,vig};
+}
+
+document.getElementById('filePromos').onchange=async function(e){
+  const f=e.target.files&&e.target.files[0]; if(!f) return;
+  document.getElementById('resPromos').className='result';
+  document.getElementById('fphPromos').textContent='Leyendo PDF…';
+  document.getElementById('fboxPromos').classList.remove('ok');
+  try{
+    parsedPromos=await parsePromosPDF(f);
+    if(!parsedPromos.rows.length) throw new Error('No encontré filas de promo — ¿es el CEA con la tabla de SKUs?');
+    const eolCount=parsedPromos.rows.filter(r=>r.est==='EOL').length;
+    document.getElementById('fboxPromos').classList.add('ok');
+    document.getElementById('fphPromos').innerHTML=
+      `✓ ${f.name}<br>${parsedPromos.rows.length} promos · ${eolCount} EOL · vigencia ${parsedPromos.vig||'no detectada'}`;
+    document.getElementById('btnPromos').disabled=false;
+  }catch(err){
+    parsedPromos=null; document.getElementById('btnPromos').disabled=true;
+    document.getElementById('fphPromos').textContent='📄 Toca para elegir el PDF del CEA';
+    showResult('resPromos',false,'No pude leer el PDF: '+err.message);
+  }
+};
+
+async function subirPromos(){
+  if(!parsedPromos||!parsedPromos.rows.length) return;
+  const btn=document.getElementById('btnPromos');
+  btn.disabled=true; btn.innerHTML='<span class="spin"></span>Subiendo…';
+  document.getElementById('resPromos').className='result';
+  try{
+    await fetch(API,{method:'POST',mode:'no-cors',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({tipo:'promos',by:'Admin 1217',vig:parsedPromos.vig,rows:parsedPromos.rows})});
+    await new Promise(r=>setTimeout(r,2500));
+    let est=null; try{ est=await jsonp(API+'?modo=estado'); }catch(e){}
+    const eolCount=parsedPromos.rows.filter(r=>r.est==='EOL').length;
+    if(est&&Number(est.promoCount)>0){
+      showResult('resPromos',true,
+        `✅ <b>${est.promoCount}</b> promos actualizadas · vigencia ${est.promoVig||parsedPromos.vig}.<br>`+
+        `${eolCount} productos EOL guardados en la nube automáticamente.`);
+    } else {
+      showResult('resPromos',true,`Enviado (${parsedPromos.rows.length} promos, ${eolCount} EOL). Revisa en unos segundos.`);
+    }
+  }catch(err){ showResult('resPromos',false,'Error al subir: '+err.message); }
+  btn.textContent='Subir promociones'; btn.disabled=false;
+}
+
+/* ================================================================
+   TAB BUNDLES — PDF parser
+   ================================================================ */
+async function parseBundlePDF(file){
+  if(typeof pdfjsLib==='undefined') throw new Error('PDF.js no disponible');
+  const buf=await file.arrayBuffer();
+  const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+  let texto='';
+  for(let p=1;p<=pdf.numPages;p++){
+    const pg=await pdf.getPage(p);
+    const tc=await pg.getTextContent();
+    texto+=tc.items.map(i=>i.str).join(' ')+' ';
+  }
+  texto=texto.replace(/(\d{1,8}) (\d{1,8})/g,(m,a,b)=>(a+b).length===9?a+b:m);
+
   const MESES={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12};
   let d1='',d2='',vigTxt='';
   const vm=texto.match(/del\s+(\d{1,2})\s+al\s+(\d{1,2})\s+de\s+([A-Za-záéíóúÁÉÍÓÚ]+)\s+de\s+(\d{4})/i);
@@ -282,36 +513,26 @@ async function parseBundlePDF(file){
     vigTxt=`${vm[1]} al ${vm[2]} de ${vm[3]} ${vm[4]}`;
   }
 
-  // Separa secciones por cada aparición de "BUNDLE "
-  const parts = texto.split(/\bBUNDLE\s+/i);
-  const bundles = [];
-
-  for(let i=1; i<parts.length; i++){
-    const chunk = parts[i];
-    // Nombre: todo en mayúsculas hasta que aparece minúscula o ":"
-    const nameM = chunk.match(/^([A-Z0-9ÁÉÍÓÚ ]+?)(?:\s*:|\s+[a-záéíóú])/);
+  const parts=texto.split(/\bBUNDLE\s+/i);
+  const bundles=[];
+  for(let i=1;i<parts.length;i++){
+    const chunk=parts[i];
+    const nameM=chunk.match(/^([A-Z0-9ÁÉÍÓÚ ]+?)(?:\s*:|\s+[a-záéíóú])/);
     if(!nameM) continue;
-    const nombreRaw = nameM[1].trim();
-    // Descarta encabezados del CEA (contienen año o palabras de bloque)
+    const nombreRaw=nameM[1].trim();
     if(/\d{4}|BLOQUE|SEMANA|WEEK|CEA/i.test(nombreRaw)) continue;
-    const nombre = 'Bundle ' + nombreRaw.split(/\s+/).map(w=>w[0]+w.slice(1).toLowerCase()).join(' ');
-
-    // Precio: "precio especial de $5,999.00"
-    const pm = chunk.match(/precio\s+especial\s+de\s+\$?([\d,]+(?:\.\d{1,2})?)/i);
+    const nombre='Bundle '+nombreRaw.split(/\s+/).map(w=>w[0]+w.slice(1).toLowerCase()).join(' ');
+    const pm=chunk.match(/precio\s+especial\s+de\s+\$?([\d,]+(?:\.\d{1,2})?)/i);
     if(!pm) continue;
-    const precio = pm[1].replace(/,/g,'').replace(/\.\d+$/,'');
-
-    // SKUs: todos los números de exactamente 9 dígitos en el bloque
-    const skus = [...new Set([...chunk.matchAll(/\b(\d{9})\b/g)].map(m=>m[1]))];
+    const precio=pm[1].replace(/,/g,'').replace(/\.\d+$/,'');
+    const skus=[...new Set([...chunk.matchAll(/\b(\d{9})\b/g)].map(m=>m[1]))];
     if(!skus.length) continue;
-
-    bundles.push({nombre, skus:skus.join(','), precio, d1, d2});
+    bundles.push({nombre,skus:skus.join(','),precio,d1,d2});
   }
-  return {bundles, vig:vigTxt};
+  return {bundles,vig:vigTxt};
 }
 
-/* Cuando el usuario elige un PDF */
-document.getElementById('filePdfBundle').onchange = async function(e){
+document.getElementById('filePdfBundle').onchange=async function(e){
   const f=e.target.files&&e.target.files[0]; if(!f) return;
   const ph=document.getElementById('fphBundle');
   const fbox=document.getElementById('fboxBundle');
@@ -319,11 +540,10 @@ document.getElementById('filePdfBundle').onchange = async function(e){
   ph.innerHTML='<em>Leyendo PDF…</em>';
   document.getElementById('previewBundles').style.display='none';
   try{
-    const result = await parseBundlePDF(f);
+    const result=await parseBundlePDF(f);
     if(!result.bundles.length) throw new Error('No encontré bundles — ¿es el CEA Bundle con la tabla de SKUs?');
     fbox.classList.add('ok');
     ph.innerHTML=`✓ ${f.name}<br>${result.bundles.length} bundle(s) · vigencia ${result.vig||'no detectada'}`;
-    // Muestra preview
     document.getElementById('prevHdr').textContent=result.bundles.length+' bundles encontrados:';
     document.getElementById('prevList').innerHTML=result.bundles.map(b=>{
       const n=b.skus.split(',').length;
@@ -342,7 +562,6 @@ document.getElementById('filePdfBundle').onchange = async function(e){
   }
 };
 
-/* Guardar todos los bundles extraídos */
 async function saveBundlesFromPdf(){
   const btn=document.getElementById('btnSaveAll');
   const bundles=btn._bundles||[];
@@ -351,151 +570,15 @@ async function saveBundlesFromPdf(){
   let ok=0,err=0;
   for(const b of bundles){
     try{
-      await jsonp(apiUrl('bundle_add',{
-        nombre:encodeURIComponent(b.nombre),
-        skus:encodeURIComponent(b.skus),
-        precio:b.precio, d1:b.d1, d2:b.d2
-      }));
+      await jsonp(apiUrl('bundle_add',{nombre:encodeURIComponent(b.nombre),skus:encodeURIComponent(b.skus),precio:b.precio,d1:b.d1,d2:b.d2}));
       ok++;
     }catch(e){ err++; }
   }
-  toast(ok+' bundle'+(ok!==1?'s':'')+' guardado'+(ok!==1?'s':'')+(err?' · '+err+' error':'')+'  ✓', err===0);
-  btn.textContent='💾 Guardar todos en la nube';
-  btn.disabled=false;
+  toast(ok+' bundle'+(ok!==1?'s':'')+' guardado'+(ok!==1?'s':'')+(err?' · '+err+' error':'')+'  ✓',err===0);
+  btn.textContent='💾 Guardar todos en la nube'; btn.disabled=false;
   if(ok) loadBundles();
 }
 
-/* ==================== EOL PDF PARSER ==================== */
-async function parseEolPDF(file){
-  if(typeof pdfjsLib==='undefined') throw new Error('PDF.js no disponible — recarga la página');
-  const buf = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({data:buf}).promise;
-
-  const allItems=[];
-  let flatText='';
-  for(let p=1; p<=pdf.numPages; p++){
-    const page = await pdf.getPage(p);
-    const vp = page.getViewport({scale:1});
-    const tc = await page.getTextContent();
-    tc.items.forEach(i=>{
-      allItems.push({str:i.str, x:i.transform[4], y:vp.height-i.transform[5], page:p});
-    });
-    flatText += tc.items.map(i=>i.str).join(' ')+'\n';
-  }
-
-  // Pega dígitos partidos que forman SKUs de 9 dígitos
-  const fixSkus=t=>t.replace(/(\d{1,8}) (\d{1,8})/g,(m,a,b)=>(a+b).length===9?a+b:m);
-  flatText=fixSkus(flatText);
-
-  // Vigencia y fecha inicio EOL
-  const MESES={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12};
-  const ds=s=>s.replace(/\s/g,'');
-  let d1='',d2='',vig='';
-  const vm=flatText.match(/Vigencia\D{0,8}(\d\s*\d?)\s*al\s*(\d\s*\d?)\s*de\s+([A-Za-záéíóúÁÉÍÓÚ]+)\s+de\s+(\d{4})/i);
-  if(vm){
-    const mes=MESES[vm[3].toLowerCase()]||1, y=+vm[4];
-    d1=`${y}-${String(mes).padStart(2,'0')}-${String(+ds(vm[1])).padStart(2,'0')}`;
-    d2=`${y}-${String(mes).padStart(2,'0')}-${String(+ds(vm[2])).padStart(2,'0')}`;
-    vig=`${ds(vm[1])} al ${ds(vm[2])} de ${vm[3]} ${vm[4]}`;
-  }
-  // Fecha "EOL a partir del X de mes"
-  let eolD1=d1;
-  const em=flatText.match(/EOL[^.]{0,60}?a partir del\s+(\d\s*\d?)\s+de\s+([A-Za-záéíóúÁÉÍÓÚ]+)/i);
-  if(em&&vm){
-    const mes2=MESES[em[2].toLowerCase()]||MESES[vm[3].toLowerCase()]||1;
-    eolD1=`${+vm[4]}-${String(mes2).padStart(2,'0')}-${String(+ds(em[1])).padStart(2,'0')}`;
-  }
-
-  // Agrupa por renglón (coordenada Y, tolerancia 6px)
-  const byRow={};
-  allItems.forEach(it=>{
-    if(!it.str.trim()) return;
-    const k=it.page+'_'+Math.round(it.y/6);
-    (byRow[k]||(byRow[k]=[])).push(it);
-  });
-  const lines=Object.values(byRow)
-    .map(r=>fixSkus(r.sort((a,b)=>a.x-b.x).map(i=>i.str).join(' ').trim()))
-    .filter(l=>l.length>0);
-
-  const seen={}, rows=[];
-  const PRECIO='\\$?([\\d,]+(?:\\.\\d{1,3})?)';
-  const EXTRA='(?:\\S+\\s+)?';
-
-  // Extrae solo filas con estatus EOL
-  const reEol=new RegExp('(\\d{9})\\s+(.+?)\\s+'+PRECIO+'\\s+'+PRECIO+'\\s+'+EXTRA+'(EOL)','i');
-  lines.forEach(line=>{
-    const m=line.match(reEol);
-    if(!m) return;
-    const sku=m[1]; if(seen[sku]) return;
-    const pr=parseFloat(m[3].replace(/,/g,'')), pp=parseFloat(m[4].replace(/,/g,''));
-    if(isNaN(pr)||isNaN(pp)) return;
-    seen[sku]=1;
-    rows.push({sku, desc:m[2].trim().replace(/\s+/g,' '), pr:m[3], pp:m[4], d1:eolD1, d2});
-  });
-
-  // Complemento: texto plano para capturar lo que Y no alcanzó
-  const rePlano=new RegExp('(\\d{9})\\s+(.+?)\\s+'+PRECIO+'\\s+'+PRECIO+'\\s+'+EXTRA+'(EOL)','gi');
-  let m2;
-  while((m2=rePlano.exec(flatText))){
-    const sku=m2[1]; if(seen[sku]) continue;
-    const pr=parseFloat(m2[3].replace(/,/g,'')), pp=parseFloat(m2[4].replace(/,/g,''));
-    if(isNaN(pr)||isNaN(pp)) continue;
-    seen[sku]=1;
-    rows.push({sku, desc:m2[2].trim().replace(/\s+/g,' '), pr:m2[3], pp:m2[4], d1:eolD1, d2});
-  }
-
-  return {rows, vig};
-}
-
-/* Cuando el usuario elige un PDF de EOL */
-document.getElementById('filePdfEol').onchange = async function(e){
-  const f=e.target.files&&e.target.files[0]; if(!f) return;
-  const ph=document.getElementById('fphEol');
-  const fbox=document.getElementById('fboxEol');
-  fbox.classList.remove('ok');
-  ph.innerHTML='<em>Leyendo PDF…</em>';
-  document.getElementById('previewEol').style.display='none';
-  try{
-    const result=await parseEolPDF(f);
-    if(!result.rows.length) throw new Error('No encontré productos EOL — ¿es el CEA con la tabla de promos?');
-    fbox.classList.add('ok');
-    ph.innerHTML=`✓ ${f.name}<br>${result.rows.length} SKU(s) EOL · vigencia ${result.vig||'no detectada'}`;
-    document.getElementById('prevHdrEol').textContent=result.rows.length+' productos EOL encontrados:';
-    document.getElementById('prevListEol').innerHTML=result.rows.map(r=>`
-      <div class="prev-item">
-        <strong>SKU ${r.sku}</strong>
-        <span>${r.desc} · precio regular $${r.pr}</span>
-        ${r.d1?`<span>📅 EOL desde ${r.d1}</span>`:''}
-      </div>`).join('');
-    document.getElementById('btnSaveEol')._rows=result.rows;
-    document.getElementById('previewEol').style.display='block';
-  }catch(err){
-    fbox.classList.remove('ok');
-    ph.textContent='📄 Toca para elegir el PDF del CEA';
-    toast(err.message,false);
-  }
-};
-
-/* Guardar todos los EOL extraídos */
-async function saveEolFromPdf(){
-  const btn=document.getElementById('btnSaveEol');
-  const rows=btn._rows||[];
-  if(!rows.length) return;
-  btn.disabled=true; btn.textContent='Guardando…';
-  let ok=0,skip=0,err=0;
-  for(const r of rows){
-    try{
-      const res=await jsonp(apiUrl('eol_add',{sku:r.sku, precio:r.pr}));
-      res&&res.existe ? skip++ : ok++;
-    }catch(e){ err++; }
-  }
-  toast(`${ok} agregados${skip?' · '+skip+' ya existían':''}${err?' · '+err+' error':''}`, err===0);
-  btn.textContent='💾 Guardar todos en la nube';
-  btn.disabled=false;
-  if(ok) loadEol();
-}
-
-/* ----- BUNDLES (lista) ----- */
 async function loadBundles(){
   document.getElementById('listB').innerHTML='<div class="empty">Cargando…</div>';
   try{ renderBundles(await jsonp(API+'?modo=bundles')||[]); }
@@ -532,7 +615,7 @@ async function addBundle(){
     ['bNom','bPx','bD1','bD2'].forEach(id=>document.getElementById(id).value='');
     document.getElementById('bSkus').value='';
     loadBundles();
-  } catch{ toast('Error al guardar',false); }
+  }catch{ toast('Error al guardar',false); }
   btn.disabled=false; btn.textContent='Agregar bundle';
 }
 async function delBundle(id){
@@ -541,7 +624,122 @@ async function delBundle(id){
   catch{ toast('Error',false); }
 }
 
-/* ----- EOL ----- */
+/* ================================================================
+   TAB EOL — PDF parser (solo filas EOL del CEA)
+   ================================================================ */
+async function parseEolPDF(file){
+  if(typeof pdfjsLib==='undefined') throw new Error('PDF.js no disponible');
+  const buf=await file.arrayBuffer();
+  const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+  const allItems=[]; let flatText='';
+  for(let p=1;p<=pdf.numPages;p++){
+    const page=await pdf.getPage(p);
+    const vp=page.getViewport({scale:1});
+    const tc=await page.getTextContent();
+    tc.items.forEach(i=>{
+      allItems.push({str:i.str,x:i.transform[4],y:vp.height-i.transform[5],page:p});
+    });
+    flatText+=tc.items.map(i=>i.str).join(' ')+'\n';
+  }
+  const fixSkus=t=>t.replace(/(\d{1,8}) (\d{1,8})/g,(m,a,b)=>(a+b).length===9?a+b:m);
+  flatText=fixSkus(flatText);
+
+  const MESES={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12};
+  const ds=s=>s.replace(/\s/g,'');
+  let d1='',d2='',vig='';
+  const vm=flatText.match(/Vigencia\D{0,8}(\d\s*\d?)\s*al\s*(\d\s*\d?)\s*de\s+([A-Za-záéíóúÁÉÍÓÚ]+)\s+de\s+(\d{4})/i);
+  if(vm){
+    const mes=MESES[vm[3].toLowerCase()]||1,y=+vm[4];
+    d1=isoP(y,mes,+ds(vm[1])); d2=isoP(y,mes,+ds(vm[2]));
+    vig=ds(vm[1])+' al '+ds(vm[2])+' de '+vm[3]+' '+vm[4];
+  }
+  let eolD1=d1;
+  const em=flatText.match(/EOL[^.]{0,60}?a partir del\s+(\d\s*\d?)\s+de\s+([A-Za-záéíóúÁÉÍÓÚ]+)/i);
+  if(em&&vm){
+    const mes2=MESES[em[2].toLowerCase()]||MESES[vm[3].toLowerCase()]||1;
+    eolD1=isoP(+vm[4],mes2,+ds(em[1]));
+  }
+
+  const byRow={};
+  allItems.forEach(it=>{
+    if(!it.str.trim()) return;
+    const k=it.page+'_'+Math.round(it.y/6);
+    (byRow[k]||(byRow[k]=[])).push(it);
+  });
+  const lines=Object.values(byRow)
+    .map(r=>fixSkus(r.sort((a,b)=>a.x-b.x).map(i=>i.str).join(' ').trim()))
+    .filter(l=>l.length>0);
+
+  const seen={},rows=[];
+  const PRECIO='\\$?([\\d,]+(?:\\.\\d{1,3})?)';
+  const EXTRA='(?:\\S+\\s+)?';
+
+  lines.forEach(line=>{
+    const m=line.match(new RegExp('(\\d{9})\\s+(.+?)\\s+'+PRECIO+'\\s+'+PRECIO+'\\s+'+EXTRA+'(EOL)','i'));
+    if(!m) return;
+    const sku=m[1]; if(seen[sku]) return;
+    const pr=parseFloat(m[3].replace(/,/g,'')),pp=parseFloat(m[4].replace(/,/g,''));
+    if(isNaN(pr)||isNaN(pp)) return;
+    seen[sku]=1;
+    rows.push({sku,desc:m[2].trim().replace(/\s+/g,' '),pr:m[3],pp:m[4],d1:eolD1,d2});
+  });
+
+  const rePlano=new RegExp('(\\d{9})\\s+(.+?)\\s+'+PRECIO+'\\s+'+PRECIO+'\\s+'+EXTRA+'(EOL)','gi');
+  let m2;
+  while((m2=rePlano.exec(flatText))){
+    const sku=m2[1]; if(seen[sku]) continue;
+    const pr=parseFloat(m2[3].replace(/,/g,'')),pp=parseFloat(m2[4].replace(/,/g,''));
+    if(isNaN(pr)||isNaN(pp)) continue;
+    seen[sku]=1;
+    rows.push({sku,desc:m2[2].trim().replace(/\s+/g,' '),pr:m2[3],pp:m2[4],d1:eolD1,d2});
+  }
+  return {rows,vig};
+}
+
+document.getElementById('filePdfEol').onchange=async function(e){
+  const f=e.target.files&&e.target.files[0]; if(!f) return;
+  const ph=document.getElementById('fphEol');
+  const fbox=document.getElementById('fboxEol');
+  fbox.classList.remove('ok'); ph.innerHTML='<em>Leyendo PDF…</em>';
+  document.getElementById('previewEol').style.display='none';
+  try{
+    const result=await parseEolPDF(f);
+    if(!result.rows.length) throw new Error('No encontré productos EOL — ¿es el CEA con la tabla de promos?');
+    fbox.classList.add('ok');
+    ph.innerHTML=`✓ ${f.name}<br>${result.rows.length} SKU(s) EOL · vigencia ${result.vig||'no detectada'}`;
+    document.getElementById('prevHdrEol').textContent=result.rows.length+' productos EOL encontrados:';
+    document.getElementById('prevListEol').innerHTML=result.rows.map(r=>`
+      <div class="prev-item">
+        <strong>SKU ${r.sku}</strong>
+        <span>${r.desc} · precio regular $${r.pr}</span>
+        ${r.d1?`<span>📅 EOL desde ${r.d1}</span>`:''}
+      </div>`).join('');
+    document.getElementById('btnSaveEol')._rows=result.rows;
+    document.getElementById('previewEol').style.display='block';
+  }catch(err){
+    fbox.classList.remove('ok');
+    ph.textContent='📄 Toca para elegir el PDF del CEA';
+    toast(err.message,false);
+  }
+};
+
+async function saveEolFromPdf(){
+  const btn=document.getElementById('btnSaveEol');
+  const rows=btn._rows||[];
+  if(!rows.length) return;
+  btn.disabled=true; btn.textContent='Guardando…';
+  let ok=0,skip=0,err=0;
+  for(const r of rows){
+    try{
+      const res=await jsonp(apiUrl('eol_add',{sku:r.sku,precio:r.pr}));
+      res&&res.existe?skip++:ok++;
+    }catch(e){ err++; }
+  }
+  toast(`${ok} agregados${skip?' · '+skip+' ya existían':''}${err?' · '+err+' error':''}`,err===0);
+  btn.textContent='💾 Guardar todos en la nube'; btn.disabled=false;
+  if(ok) loadEol();
+}
+
 async function loadEol(){
   document.getElementById('listE').innerHTML='<div class="empty">Cargando…</div>';
   try{ renderEol(await jsonp(API+'?modo=eol_cloud')||[]); }
@@ -570,7 +768,7 @@ async function addEol(){
     toast(r&&r.existe?'Ya existe este SKU':'EOL agregado ✓',!(r&&r.existe));
     document.getElementById('eSku').value=''; document.getElementById('ePx').value='';
     loadEol();
-  } catch{ toast('Error al guardar',false); }
+  }catch{ toast('Error al guardar',false); }
   btn.disabled=false; btn.textContent='Agregar EOL';
 }
 async function delEol(sku){
