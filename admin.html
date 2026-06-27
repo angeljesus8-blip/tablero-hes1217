@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#D12026">
+<title>Admin · HES 1217</title>
+<link rel="apple-touch-icon" href="logo_odemas.png">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+* { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+:root { --rojo:#D12026; --naranja:#F37021; --azul:#336BB4; --verde:#1a8c4e; --bg:#f6f6f7; }
+body { font-family:'Montserrat',sans-serif; background:var(--bg); color:#1a1a1a; min-height:100vh; }
+
+/* PIN */
+#pinWrap { position:fixed;inset:0;background:#fff;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:32px; }
+#pinWrap img { height:44px; }
+#pinWrap h1 { font-size:18px;font-weight:800; }
+#pinWrap p { font-size:13px;color:#888; }
+.pin-row { display:flex;gap:14px; }
+.pin-dot { width:14px;height:14px;border-radius:50%;border:2px solid #ddd;transition:.15s; }
+.pin-dot.on { background:var(--rojo);border-color:var(--rojo); }
+.pin-err { font-size:12px;color:var(--rojo);font-weight:700;min-height:16px;text-align:center; }
+.numpad { display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:240px; }
+.numpad button { height:56px;border-radius:14px;border:1.5px solid #e5e5e5;background:#fff;font-family:'Montserrat',sans-serif;font-size:20px;font-weight:700;cursor:pointer;color:#1a1a1a; }
+.numpad button:active { background:#f5f5f5; }
+.num-del { font-size:16px;color:#888; }
+
+/* HEADER */
+header { background:#fff;border-bottom:3px solid var(--rojo);padding:14px 16px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:10; }
+.back { text-decoration:none;color:var(--rojo);font-size:30px;font-weight:700;line-height:1;padding:0 4px 4px 0; }
+header img { height:30px; }
+header h1 { font-size:15px;font-weight:800;margin-left:2px; }
+
+/* TABS */
+.tab-bar { display:flex;background:#fff;border-bottom:2px solid #eee;padding:0 12px; }
+.tab-bar button { flex:1;padding:12px 4px;border:none;background:none;font-family:'Montserrat',sans-serif;font-size:13px;font-weight:700;color:#bbb;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px; }
+.tab-bar button.on { color:var(--rojo);border-bottom-color:var(--rojo); }
+
+/* PANES */
+.pane { padding:16px;max-width:540px;margin:0 auto;display:none; }
+.pane.on { display:block; }
+
+/* FORM */
+.card { background:#fff;border-radius:14px;padding:16px;margin-bottom:16px;border:1px solid #ececec; }
+.card h2 { font-size:14px;font-weight:800;margin-bottom:12px; }
+.card .note { font-size:12px;color:#aaa;margin-bottom:12px;line-height:1.45; }
+.field { margin-bottom:10px; }
+.field label { font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px; }
+.field input { width:100%;border:1.5px solid #e0e0e0;border-radius:10px;padding:10px 12px;font-family:'Montserrat',sans-serif;font-size:14px;font-weight:600;outline:none;background:#fafafa; }
+.field input:focus { border-color:var(--rojo);background:#fff; }
+.g2 { display:grid;grid-template-columns:1fr 1fr;gap:10px; }
+.btn-pri { width:100%;padding:13px;background:var(--rojo);color:#fff;border:none;border-radius:12px;font-family:'Montserrat',sans-serif;font-size:14px;font-weight:800;cursor:pointer;margin-top:4px; }
+.btn-pri:disabled { background:#ccc; }
+
+/* LIST */
+.list-hdr { font-size:12px;font-weight:700;color:#bbb;text-transform:uppercase;letter-spacing:.5px;margin:4px 4px 10px; }
+.item { background:#fff;border:1px solid #ececec;border-left:4px solid var(--naranja);border-radius:12px;padding:12px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px; }
+.item-info { flex:1;min-width:0; }
+.item-info strong { font-size:13px;font-weight:700;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.item-info span { font-size:11.5px;color:#888;margin-top:2px;display:block;line-height:1.4; }
+.btn-del { background:#fff5f5;border:1.5px solid #ffd5d5;color:var(--rojo);border-radius:8px;padding:7px 10px;font-size:14px;cursor:pointer;flex-shrink:0; }
+.empty { text-align:center;color:#ccc;font-size:13px;padding:24px; }
+
+/* TOAST */
+#toast { position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:10px 22px;border-radius:20px;font-size:13px;font-weight:700;color:#fff;opacity:0;transition:opacity .25s;pointer-events:none;z-index:999;white-space:nowrap; }
+#toast.show { opacity:1; }
+</style>
+</head>
+<body>
+
+<!-- PIN -->
+<div id="pinWrap">
+  <img src="logo_odemas.png" alt="Odemás">
+  <h1>Admin · HES 1217</h1>
+  <p>Ingresa tu PIN de 4 dígitos</p>
+  <div class="pin-row">
+    <div class="pin-dot" id="pd0"></div><div class="pin-dot" id="pd1"></div>
+    <div class="pin-dot" id="pd2"></div><div class="pin-dot" id="pd3"></div>
+  </div>
+  <div class="pin-err" id="pinErr"></div>
+  <div class="numpad">
+    <button onclick="key('1')">1</button><button onclick="key('2')">2</button><button onclick="key('3')">3</button>
+    <button onclick="key('4')">4</button><button onclick="key('5')">5</button><button onclick="key('6')">6</button>
+    <button onclick="key('7')">7</button><button onclick="key('8')">8</button><button onclick="key('9')">9</button>
+    <button></button><button onclick="key('0')">0</button><button class="num-del" onclick="del()">⌫</button>
+  </div>
+</div>
+
+<!-- ADMIN -->
+<div id="app" style="display:none">
+  <header>
+    <a href="index.html" class="back">‹</a>
+    <img src="logo_odemas.png" alt="Odemás">
+    <h1>Admin · HES 1217</h1>
+  </header>
+
+  <div class="tab-bar">
+    <button class="on" onclick="tab('bundles',this)">🎁 Bundles</button>
+    <button onclick="tab('eol',this)">🏷️ EOL</button>
+  </div>
+
+  <!-- BUNDLES -->
+  <div class="pane on" id="pane-bundles">
+    <div class="card">
+      <h2>Nuevo bundle</h2>
+      <div class="field"><label>Nombre del paquete</label><input id="bNom" placeholder="Ej: Bundle Watch + FreeBuds"></div>
+      <div class="g2">
+        <div class="field"><label>SKU 1</label><input id="bS1" placeholder="100229363" inputmode="numeric"></div>
+        <div class="field"><label>SKU 2</label><input id="bS2" placeholder="100245646" inputmode="numeric"></div>
+      </div>
+      <div class="field"><label>Precio del bundle</label><input id="bPx" type="number" placeholder="8999" inputmode="numeric"></div>
+      <div class="g2">
+        <div class="field"><label>Desde</label><input id="bD1" type="date"></div>
+        <div class="field"><label>Hasta</label><input id="bD2" type="date"></div>
+      </div>
+      <button class="btn-pri" id="btnB" onclick="addBundle()">Agregar bundle</button>
+    </div>
+    <div class="list-hdr">Bundles activos</div>
+    <div id="listB"></div>
+  </div>
+
+  <!-- EOL -->
+  <div class="pane" id="pane-eol">
+    <div class="card">
+      <h2>Nuevo EOL</h2>
+      <p class="note">Agrega los SKUs del comunicado de Huawei. Los que ya están en el sistema siguen vigentes.</p>
+      <div class="g2">
+        <div class="field"><label>SKU</label><input id="eSku" placeholder="100261822" inputmode="numeric"></div>
+        <div class="field"><label>Precio regular</label><input id="ePx" type="number" placeholder="2998" inputmode="numeric"></div>
+      </div>
+      <button class="btn-pri" id="btnE" onclick="addEol()">Agregar EOL</button>
+    </div>
+    <div class="list-hdr">EOL en la nube</div>
+    <div id="listE"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const API = 'https://script.google.com/macros/s/AKfycbwbZFsiDqZrNitPKNLqr4r6xOFu3VKprtXJacScftIJmcQdAl_yytjxK8BymWvy8I1gjA/exec';
+const PIN_OK = '1217'; // igual que ADMIN_PIN en el Apps Script
+
+/* ----- PIN ----- */
+let pin = '';
+function key(d){
+  if(pin.length>=4) return;
+  pin+=d;
+  document.getElementById('pd'+(pin.length-1)).classList.add('on');
+  document.getElementById('pinErr').textContent='';
+  if(pin.length===4) checkPin();
+}
+function del(){
+  if(!pin.length) return;
+  pin=pin.slice(0,-1);
+  document.getElementById('pd'+pin.length).classList.remove('on');
+}
+function checkPin(){
+  if(pin===PIN_OK){
+    document.getElementById('pinWrap').style.display='none';
+    document.getElementById('app').style.display='block';
+    loadBundles(); loadEol();
+  } else {
+    document.getElementById('pinErr').textContent='PIN incorrecto, intenta de nuevo';
+    pin='';
+    for(var i=0;i<4;i++) document.getElementById('pd'+i).classList.remove('on');
+  }
+}
+
+/* ----- TABS ----- */
+function tab(id,btn){
+  document.querySelectorAll('.pane').forEach(e=>e.classList.remove('on'));
+  document.querySelectorAll('.tab-bar button').forEach(e=>e.classList.remove('on'));
+  document.getElementById('pane-'+id).classList.add('on');
+  btn.classList.add('on');
+}
+
+/* ----- JSONP ----- */
+function jsonp(url){
+  return new Promise((res,rej)=>{
+    const cb='_a'+Date.now(); const s=document.createElement('script');
+    const t=setTimeout(()=>{ cleanup(); rej(); },15000);
+    function cleanup(){ clearTimeout(t); delete window[cb]; s.remove(); }
+    window[cb]=d=>{ cleanup(); res(d); };
+    s.onerror=()=>{ cleanup(); rej(); };
+    s.src=url+(url.includes('?')?'&':'?')+'callback='+cb;
+    document.head.appendChild(s);
+  });
+}
+function apiUrl(modo,extra){
+  const p=new URLSearchParams({modo,pin:PIN_OK,...extra});
+  return API+'?'+p.toString();
+}
+const money=n=>'$'+Number(n||0).toLocaleString('es-MX');
+
+/* ----- TOAST ----- */
+function toast(msg,ok){
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.style.background=ok===false?'#D12026':'#1a8c4e';
+  el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),2500);
+}
+
+/* ----- BUNDLES ----- */
+async function loadBundles(){
+  document.getElementById('listB').innerHTML='<div class="empty">Cargando…</div>';
+  try{ renderBundles(await jsonp(API+'?modo=bundles')||[]); }
+  catch{ document.getElementById('listB').innerHTML='<div class="empty">Error al cargar</div>'; }
+}
+function renderBundles(list){
+  if(!Array.isArray(list)) list=[];
+  const el=document.getElementById('listB');
+  if(!list.length){ el.innerHTML='<div class="empty">No hay bundles activos</div>'; return; }
+  el.innerHTML=list.map(b=>`
+    <div class="item">
+      <div class="item-info">
+        <strong>${b.nombre||'Bundle'}</strong>
+        <span>SKU ${b.sku1} + SKU ${b.sku2}<br>${money(b.precio)}${b.d2?' · hasta '+b.d2:''}</span>
+      </div>
+      <button class="btn-del" onclick="delBundle('${b.id}')">🗑️</button>
+    </div>`).join('');
+}
+async function addBundle(){
+  const nom=document.getElementById('bNom').value.trim();
+  const s1=document.getElementById('bS1').value.trim();
+  const s2=document.getElementById('bS2').value.trim();
+  const px=document.getElementById('bPx').value.trim();
+  const d1=document.getElementById('bD1').value;
+  const d2=document.getElementById('bD2').value;
+  if(!nom||!s1||!s2||!px){ toast('Completa nombre, SKUs y precio',false); return; }
+  const btn=document.getElementById('btnB'); btn.disabled=true; btn.textContent='Guardando…';
+  try{
+    await jsonp(apiUrl('bundle_add',{nombre:encodeURIComponent(nom),sku1:s1,sku2:s2,precio:px,d1,d2}));
+    toast('Bundle agregado ✓');
+    ['bNom','bS1','bS2','bPx','bD1','bD2'].forEach(id=>document.getElementById(id).value='');
+    loadBundles();
+  } catch{ toast('Error al guardar',false); }
+  btn.disabled=false; btn.textContent='Agregar bundle';
+}
+async function delBundle(id){
+  if(!confirm('¿Eliminar este bundle?')) return;
+  try{ await jsonp(apiUrl('bundle_del',{id})); toast('Eliminado'); loadBundles(); }
+  catch{ toast('Error',false); }
+}
+
+/* ----- EOL ----- */
+async function loadEol(){
+  document.getElementById('listE').innerHTML='<div class="empty">Cargando…</div>';
+  try{ renderEol(await jsonp(API+'?modo=eol_cloud')||[]); }
+  catch{ document.getElementById('listE').innerHTML='<div class="empty">Error al cargar</div>'; }
+}
+function renderEol(list){
+  if(!Array.isArray(list)) list=[];
+  const el=document.getElementById('listE');
+  if(!list.length){ el.innerHTML='<div class="empty">Sin entradas en la nube (los de datos.js siguen activos)</div>'; return; }
+  el.innerHTML=list.map(x=>`
+    <div class="item">
+      <div class="item-info">
+        <strong>SKU ${x.sku}</strong>
+        <span>Precio: ${x.precio?money(x.precio):'—'}</span>
+      </div>
+      <button class="btn-del" onclick="delEol('${x.sku}')">🗑️</button>
+    </div>`).join('');
+}
+async function addEol(){
+  const sku=document.getElementById('eSku').value.trim();
+  const px=document.getElementById('ePx').value.trim();
+  if(!sku){ toast('Ingresa el SKU',false); return; }
+  const btn=document.getElementById('btnE'); btn.disabled=true; btn.textContent='Guardando…';
+  try{
+    const r=await jsonp(apiUrl('eol_add',{sku,precio:px}));
+    toast(r&&r.existe?'Ya existe este SKU':'EOL agregado ✓',!(r&&r.existe));
+    document.getElementById('eSku').value=''; document.getElementById('ePx').value='';
+    loadEol();
+  } catch{ toast('Error al guardar',false); }
+  btn.disabled=false; btn.textContent='Agregar EOL';
+}
+async function delEol(sku){
+  if(!confirm('¿Eliminar SKU '+sku+' de EOL?')) return;
+  try{ await jsonp(apiUrl('eol_del',{sku})); toast('Eliminado'); loadEol(); }
+  catch{ toast('Error',false); }
+}
+</script>
+</body>
+</html>
