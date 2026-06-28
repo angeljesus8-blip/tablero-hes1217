@@ -1,4 +1,5 @@
-const CACHE = 'hes1217-v17';
+importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
+const CACHE = 'hes1217-v18';
 const ARCHIVOS = [
   './index.html',
   './tablero.html',
