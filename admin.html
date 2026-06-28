@@ -546,7 +546,7 @@ async function parseBundlePDF(file){
   const bundles=[], seen={};
 
   /* MODO A: PDF descriptivo — busca "BUNDLE NOMBRE:" en texto plano */
-  const HDR_RE=/BUNDLE\s+([A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑ0-9\s\-']{1,50}?)\s*[:/]/g;
+  const HDR_RE=/BUNDLE\s+([A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑ0-9\s\-']{1,50}?)\s*(?:[:/,]|\bo\b)/g;
   const hdrMatches=[...texto.matchAll(HDR_RE)].filter(m=>{
     const nm=m[1].trim().toUpperCase();
     return !/^(ENERO|FEBRERO|MARZO|ABRIL|MAYO|JUNIO|JULIO|AGOSTO|SEPTIEMBRE|OCTUBRE|NOVIEMBRE|DICIEMBRE|SEMANA|WEEK|BLOQUE|CEA\s|HUAWEI\s+\d|\d)/.test(nm);
@@ -650,7 +650,8 @@ document.getElementById('filePdfBundle').onchange=async function(e){
     }
     document.getElementById('btnSaveAll').style.display='';
     fbox.classList.add('ok');
-    ph.innerHTML=`✓ ${f.name}<br>${result.bundles.length} bundle(s) · vigencia ${result.vig||'no detectada'}`;
+    const dbgLine=result.debugText.split('\n')[0]||'';
+    ph.innerHTML=`✓ ${f.name}<br>${result.bundles.length} bundle(s) · vigencia ${result.vig||'no detectada'}<br><span style="font-size:10px;color:#aaa">${dbgLine.replace(/</g,'&lt;')}</span>`;
     document.getElementById('prevHdr').textContent=result.bundles.length+' bundles encontrados:';
     document.getElementById('prevList').innerHTML=result.bundles.map(b=>{
       const n=b.skus.split(',').length;
