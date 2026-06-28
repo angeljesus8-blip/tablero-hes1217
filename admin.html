@@ -674,15 +674,23 @@ async function saveBundlesFromPdf(){
   const btn=document.getElementById('btnSaveAll');
   const bundles=btn._bundles||[];
   if(!bundles.length) return;
-  btn.disabled=true; btn.textContent='Guardando…';
-  let ok=0,err=0;
-  for(const b of bundles){
+  btn.disabled=true;
+  const failed=[];
+  for(let i=0;i<bundles.length;i++){
+    const b=bundles[i];
+    btn.textContent=`Guardando ${i+1}/${bundles.length}…`;
     try{
-      await jsonp(apiUrl('bundle_add',{nombre:encodeURIComponent(b.nombre),skus:b.skus.replace(/,/g,'|'),precio:b.precio,d1:b.d1,d2:b.d2}));
-      ok++;
-    }catch(e){ err++; }
+      const r=await jsonp(apiUrl('bundle_add',{nombre:encodeURIComponent(b.nombre),skus:b.skus.replace(/,/g,'|'),precio:b.precio,d1:b.d1,d2:b.d2}));
+      if(!r||!r.ok) failed.push(b.nombre);
+    }catch(e){ failed.push(b.nombre); }
+    if(i<bundles.length-1) await new Promise(r=>setTimeout(r,500));
   }
-  toast(ok+' bundle'+(ok!==1?'s':'')+' guardado'+(ok!==1?'s':'')+(err?' · '+err+' error':'')+'  ✓',err===0);
+  const ok=bundles.length-failed.length;
+  if(failed.length){
+    toast(`${ok}/${bundles.length} guardados ⚠️  Falló: ${failed.join(' | ')}`,false);
+  } else {
+    toast(`${bundles.length} bundle${bundles.length!==1?'s':''} guardados ✓`);
+  }
   btn.textContent='💾 Guardar todos en la nube'; btn.disabled=false;
   if(ok) loadBundles();
 }
