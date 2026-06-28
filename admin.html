@@ -555,7 +555,7 @@ async function parseBundlePDF(file){
   if(hdrMatches.length>=1){
     for(let m=0;m<hdrMatches.length;m++){
       const match=hdrMatches[m];
-      const rawName=match[1].trim().replace(/\s+[A-Z]\s*$/,'').trim();
+      const rawName=match[1].trim();
       const secStart=match.index+match[0].length;
       const secEnd=m+1<hdrMatches.length
         ?hdrMatches[m+1].index
@@ -625,7 +625,9 @@ async function parseBundlePDF(file){
     }
   }
 
-  return {bundles,vig:vigTxt,debugText:texto.slice(0,800)};
+  const modoUsado=hdrMatches.length>=1?'A':'B';
+  const hdrInfo='[Modo '+modoUsado+'] Headers: '+hdrMatches.length+' -> '+hdrMatches.map(function(m){return m[1].trim();}).join(' | ')+'\n\n';
+  return {bundles,vig:vigTxt,debugText:hdrInfo+texto.slice(0,600)};
 }
 
 document.getElementById('filePdfBundle').onchange=async function(e){
