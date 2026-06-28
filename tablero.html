@@ -11,6 +11,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="HES 1217">
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   :root {
@@ -134,6 +135,7 @@
     <p>HES 1217 · Angelópolis</p>
   </div>
   <div class="updated">Actualizado<b id="updated">—</b></div>
+  <button id="btnBell" onclick="activarNotifs()" title="Activar avisos push" style="background:none;border:none;cursor:pointer;padding:4px 4px;font-size:22px;line-height:1;color:#ddd;margin-left:2px;flex-shrink:0" aria-label="Notificaciones">🔔</button>
 </header>
 
 <div class="search-wrap">
@@ -501,6 +503,46 @@ render();
 cargarInventarioNube();
 cargarPromosNube();
 cargarBundlesNube();
+
+// ── Push notifications (OneSignal) ──────────────────────────────
+const ONE_APP_ID = 'TU_APP_ID_AQUI'; // ← reemplazar con el App ID de OneSignal
+
+function actualizarCampana(){
+  const btn=document.getElementById('btnBell');
+  if(!btn) return;
+  const p=('Notification' in window)?Notification.permission:'default';
+  btn.style.color = p==='granted'?'var(--rojo)':'#ddd';
+  btn.title = p==='granted'?'Avisos push activados':'Activar avisos push';
+}
+
+async function activarNotifs(){
+  if(ONE_APP_ID==='TU_APP_ID_AQUI'){
+    alert('⚠️ El admin aún no configuró las notificaciones push.'); return;
+  }
+  if(!('Notification' in window)){ alert('Tu navegador no soporta notificaciones.'); return; }
+  if(Notification.permission==='granted'){
+    alert('Ya tienes las notificaciones activadas ✓'); return;
+  }
+  if(typeof OneSignal==='undefined'){ alert('Cargando SDK… intenta de nuevo.'); return; }
+  try{
+    await OneSignal.Notifications.requestPermission();
+    actualizarCampana();
+  }catch(e){ console.warn('Push error',e); }
+}
+
+window.OneSignalDeferred = window.OneSignalDeferred || [];
+OneSignalDeferred.push(async function(OneSignal){
+  if(ONE_APP_ID==='TU_APP_ID_AQUI') return;
+  await OneSignal.init({
+    appId: ONE_APP_ID,
+    serviceWorkerPath: 'sw.js',
+    serviceWorkerParam: { scope: '/' },
+    notifyButton: { enable: false }
+  });
+  actualizarCampana();
+});
+
+actualizarCampana();
 </script>
 </body>
 </html>

@@ -662,6 +662,7 @@ document.getElementById('filePdfBundle').onchange=async function(e){
       </div>`;
     }).join('');
     document.getElementById('btnSaveAll')._bundles=result.bundles;
+    document.getElementById('btnSaveAll')._vig=result.vig||'';
     document.getElementById('previewBundles').style.display='block';
   }catch(err){
     fbox.classList.remove('ok');
@@ -690,9 +691,16 @@ async function saveBundlesFromPdf(){
     toast(`${ok}/${bundles.length} guardados ⚠️  Falló: ${failed.join(' | ')}`,false);
   } else {
     toast(`${bundles.length} bundle${bundles.length!==1?'s':''} guardados ✓`);
+    const vig=btn._vig||'';
+    notificarEquipo(`🎁 ${bundles.length} bundle${bundles.length!==1?'s':''} nuevos en el tablero${vig?' · vigencia '+vig:''}`);
   }
   btn.textContent='💾 Guardar todos en la nube'; btn.disabled=false;
   if(ok) loadBundles();
+}
+
+async function notificarEquipo(msg){
+  try{ await jsonp(apiUrl('notificar',{msg:encodeURIComponent(msg)})); }
+  catch(e){ console.warn('Push falló:',e); }
 }
 
 async function loadBundles(){
