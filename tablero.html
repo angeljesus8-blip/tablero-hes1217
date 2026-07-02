@@ -284,7 +284,7 @@ function desgloseHtml(p0, total, segCosto) {
 }
 function segSelector(sku, precioBase, precioVenta) {
   const s = seguroPara(precioBase);
-  const p0 = precioVenta;
+  const p0 = parseFloat(String(precioVenta||0).replace(/[^0-9.]/g,'')) || 0;
   const p1 = s ? p0 + s.p1 : null;
   const p2 = s ? p0 + s.p2 : null;
   const i1 = s ? s.p1 : 0;
