@@ -232,8 +232,9 @@ function calcDerivados(){
     const inv = invBySku[e.sku] || {};
     const stock = inv.stock||0, exhibe = inv.exhibe||0;
     const estado = (stock===0 && exhibe>0) ? 'listo' : (stock>0 ? 'pendiente' : 'agotado');
+    const precio = e.precio || inv.precio || 0;
     return { sku:e.sku, producto:e.producto||inv.producto||('SKU '+e.sku),
-      precio:e.precio, precio50:e.precio?e.precio/2:null, stock, exhibe, estado };
+      precio:precio, precio50:precio?precio/2:null, stock, exhibe, estado };
   }).filter(e=>e.exhibe>0);
   eolMap = {}; EOL.forEach(e=>{ eolMap[e.sku]=e.estado; });
   transitoMap = {}; (D.transito||[]).forEach(x=>{ transitoMap[x.sku]=(transitoMap[x.sku]||0)+x.cantidad; });
@@ -438,6 +439,7 @@ function cargarInventarioNube(){
         item._vendido = cl.v || 0;
         item.stock    = Math.max(0, cl.o - (cl.v || 0));
         if(typeof cl.e === 'number') item.exhibe = cl.e;
+        if(cl.p && !item.precio) item.precio = parseFloat(String(cl.p).replace(/[^0-9.]/g,''))||0;
       }
     });
     // Actualiza invBySku para SKUs EOL que no están en D.inventario
@@ -447,9 +449,10 @@ function cargarInventarioNube(){
       const cl = data[e.sku];
       if(!cl) return;
       invBySku[e.sku] = {
-        sku: e.sku, producto: '',
+        sku: e.sku, producto: cl.d||'',
         stock: Math.max(0,(cl.o||0)-(cl.v||0)),
-        exhibe: cl.e||0
+        exhibe: cl.e||0,
+        precio: parseFloat(String(cl.p||'').replace(/[^0-9.]/g,''))||0
       };
     });
     D._invCloud = true;
