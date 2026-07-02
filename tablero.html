@@ -437,6 +437,7 @@ function cargarInventarioNube(){
         item._onhand  = cl.o;
         item._vendido = cl.v || 0;
         item.stock    = Math.max(0, cl.o - (cl.v || 0));
+        if(typeof cl.e === 'number') item.exhibe = cl.e;
       }
     });
     D._invCloud = true;
