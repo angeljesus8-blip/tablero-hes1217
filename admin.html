@@ -1076,6 +1076,7 @@ async function parseEolPDF(file){
   const PRECIO='\\$?([\\d,]+(?:\\.\\d{1,3})?)';
   const EXTRA='(?:\\S+\\s+)?';
 
+  // Formato 1: CEA promos con precios (SKU desc precioReg precioPromo EOL)
   lines.forEach(line=>{
     const m=line.match(new RegExp('(\\d{9})\\s+(.+?)\\s+'+PRECIO+'\\s+'+PRECIO+'\\s+'+EXTRA+'(EOL)','i'));
     if(!m) return;
@@ -1085,7 +1086,6 @@ async function parseEolPDF(file){
     seen[sku]=1;
     rows.push({sku,desc:m[2].trim().replace(/\s+/g,' '),pr:m[3],pp:m[4],d1:eolD1,d2});
   });
-
   const rePlano=new RegExp('(\\d{9})\\s+(.+?)\\s+'+PRECIO+'\\s+'+PRECIO+'\\s+'+EXTRA+'(EOL)','gi');
   let m2;
   while((m2=rePlano.exec(flatText))){
@@ -1095,6 +1095,24 @@ async function parseEolPDF(file){
     seen[sku]=1;
     rows.push({sku,desc:m2[2].trim().replace(/\s+/g,' '),pr:m2[3],pp:m2[4],d1:eolD1,d2});
   }
+
+  // Formato 2: ADENDUM EOL sin precios (SKU desc EOL)
+  lines.forEach(line=>{
+    const m=line.match(/^(\d{9})\s+(.*?)\s*EOL\s*$/i);
+    if(!m) return;
+    const sku=m[1]; if(seen[sku]) return;
+    seen[sku]=1;
+    rows.push({sku,desc:m[2].trim().replace(/\s+/g,' '),pr:'',pp:'',d1:eolD1,d2});
+  });
+  // también buscar en texto plano (por si las palabras quedaron en distintas líneas de PDF)
+  const reSinPx=/(\d{9})\s+((?:(?!\d{9}).){3,80}?)\s+EOL\b/gi;
+  let m3;
+  while((m3=reSinPx.exec(flatText))){
+    const sku=m3[1]; if(seen[sku]) continue;
+    seen[sku]=1;
+    rows.push({sku,desc:m3[2].trim().replace(/\s+/g,' '),pr:'',pp:'',d1:eolD1,d2});
+  }
+
   return {rows,vig};
 }
 
