@@ -273,10 +273,11 @@ function seguroPara(precio) {
   return SEGUROS.find(r => n >= r.d && n <= r.h) || null;
 }
 function msiInfo(total) {
-  if (total >= 20000) return `<span class="msi-badge msi-18">18 MSI · ${money(Math.ceil(total/18))}/mes — solo Citibanamex y Amex</span> <span class="msi-badge msi-12">12 MSI · ${money(Math.ceil(total/12))}/mes — todas las tarjetas</span>`;
-  if (total >= 10000) return `<span class="msi-badge msi-12">12 MSI · ${money(Math.ceil(total/12))}/mes — todas las tarjetas</span>`;
-  if (total >= 1500)  return `<span class="msi-badge msi-6">6 MSI · ${money(Math.ceil(total/6))}/mes — todas las tarjetas</span>`;
-  return '';
+  let out = '';
+  if (total >= 1500)  out += `<span class="msi-badge msi-6">6 MSI · ${money(Math.ceil(total/6))}/mes — todas las tarjetas</span> `;
+  if (total >= 10000) out += `<span class="msi-badge msi-12">12 MSI · ${money(Math.ceil(total/12))}/mes — todas las tarjetas</span> `;
+  if (total >= 20000) out += `<span class="msi-badge msi-18">18 MSI · ${money(Math.ceil(total/18))}/mes — solo Citibanamex y Amex</span>`;
+  return out;
 }
 function desgloseHtml(p0, total, segCosto) {
   if (!segCosto) return `<span class="seg-precio-total">${money(total)}</span>`;
