@@ -247,7 +247,7 @@ function cuenta(id){
   if(id==='promo') return PROMOS.filter(x=>coincide(x.producto,x.sku) && tieneExistencia_(x.sku)).length;
   if(id==='eol')   return EOL.filter(e=>coincide(e.producto,e.sku) && e.estado==='listo').length;
   if(id==='nov')   return (D.novedades||[]).filter(x=>coincide(x.titulo,x.detalle)).length;
-  if(id==='inv')   return (D.inventario||[]).filter(x=>coincide(x.producto,x.sku)).length;
+  if(id==='inv')   return (D.inventario||[]).filter(x=>coincide(x.producto,x.sku)&&((x.stock||0)>0||(x.exhibe||0)>0)).length;
   if(id==='resurtir') return RESURTIR.filter(x=>coincide(x.producto,x.sku)).length;
   if(id==='agotados') return (D.agotados||[]).filter(x=>coincide(x.producto,x.sku)).length;
   if(id==='transito') return (D.transito||[]).filter(x=>coincide(x.producto,x.sku)).length;
@@ -391,7 +391,7 @@ function render(){
   const eolPend  = eolAll.filter(e=>e.estado==='pendiente');
   const eolAgot  = eolAll.filter(e=>e.estado==='agotado');
   const nov    = (D.novedades||[]).filter(x=>coincide(x.titulo,x.detalle));
-  const inv    = (D.inventario||[]).filter(x=>coincide(x.producto,x.sku));
+  const inv    = (D.inventario||[]).filter(x=>coincide(x.producto,x.sku)&&((x.stock||0)>0||(x.exhibe||0)>0));
   const resurtir = RESURTIR.filter(x=>coincide(x.producto,x.sku));
   const agotados = (D.agotados||[]).filter(x=>coincide(x.producto,x.sku));
   const transito = (D.transito||[]).filter(x=>coincide(x.producto,x.sku));
