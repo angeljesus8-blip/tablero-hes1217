@@ -144,6 +144,17 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
       <button class="btn-pri" id="btnCat" onclick="subirCatalogo()" disabled style="margin-top:14px">Subir y actualizar</button>
       <div class="result" id="resCat"></div>
     </div>
+
+    <div class="card" style="margin-top:14px">
+      <h2>📋 Catálogo de referencia</h2>
+      <p class="note">Excel con <b>todos los productos que maneja la tienda</b> (SKU · descripción · EAN/UPC). Sin existencias ni precios — complementa el informe de artículos.</p>
+      <input type="file" id="fileCatRef" accept=".xlsx,.xls" hidden>
+      <div class="filebox" id="fboxCatRef" onclick="document.getElementById('fileCatRef').click()">
+        <div class="ph" id="fphCatRef">📄 Toca para elegir el Excel de catálogo</div>
+      </div>
+      <button class="btn-pri" id="btnCatRef" onclick="subirCatalogoRef()" disabled style="margin-top:14px">Subir catálogo de referencia</button>
+      <div class="result" id="resCatRef"></div>
+    </div>
   </div>
 
   <!-- PROMOS CEA -->
@@ -294,7 +305,81 @@ function showResult(id,ok,html){
 }
 
 /* ================================================================
-   TAB CATÁLOGO — Excel parser
+   TAB CATÁLOGO — Catálogo de referencia (SKU + desc + EAN/UPC)
+   ================================================================ */
+let parsedCatRef=null;
+
+async function parseCatalogoRef(file){
+  const buf=await file.arrayBuffer();
+  const wb=XLSX.read(buf,{type:'array'});
+  const ws=wb.Sheets[wb.SheetNames[0]];
+  const aoa=XLSX.utils.sheet_to_json(ws,{header:1,raw:false,defval:''});
+
+  // Encuentra fila de encabezados
+  let h=-1;
+  for(let i=0;i<Math.min(aoa.length,25);i++){
+    const up=aoa[i].map(c=>String(c||'').trim().toUpperCase());
+    if(up.some(c=>c==='SKU'||c==='CÓDIGO'||c==='CODIGO'||c==='EAN'||c==='UPC')){h=i;break;}
+  }
+  if(h<0) throw new Error('No encontré columnas SKU/EAN/UPC en el archivo');
+
+  const H=aoa[h].map(c=>String(c||'').trim().toUpperCase());
+  const fi=test=>H.findIndex(c=>test(c));
+
+  const iSku  = fi(c=>c==='SKU'||c==='CÓDIGO'||c==='CODIGO'||c.includes('SKU'));
+  const iDesc = fi(c=>c.includes('DESCRI')||c.includes('PRODUC')||c.includes('NOMBRE')||c.includes('ARTÍC')||c.includes('ARTIC'));
+  const iUpc  = fi(c=>c==='EAN'||c==='UPC'||c==='CÓDIGO DE BARRAS'||c==='COD_BARRAS'||c.includes('EAN')||c.includes('UPC')||c.includes('BARRAS'));
+
+  if(iSku<0) throw new Error('No encontré columna SKU');
+
+  const seen={},rows=[];
+  for(let r=h+1;r<aoa.length;r++){
+    const row=aoa[r];
+    const sku=String(row[iSku]||'').trim().replace(/\.0+$/,'');
+    if(!sku) continue;
+    if(seen[sku]) continue; seen[sku]=1;
+    const upc=iUpc>=0?String(row[iUpc]||'').trim().replace(/\.0+$/,''):'';
+    const desc=iDesc>=0?String(row[iDesc]||'').trim():'';
+    rows.push({sku, desc, upc});
+  }
+  return rows;
+}
+
+document.getElementById('fileCatRef').onchange=async function(e){
+  const f=e.target.files&&e.target.files[0]; if(!f) return;
+  document.getElementById('resCatRef').className='result';
+  document.getElementById('fphCatRef').textContent='Leyendo archivo…';
+  document.getElementById('fboxCatRef').classList.remove('ok');
+  try{
+    parsedCatRef=await parseCatalogoRef(f);
+    if(!parsedCatRef.length) throw new Error('No encontré productos en el archivo');
+    document.getElementById('fboxCatRef').classList.add('ok');
+    document.getElementById('fphCatRef').innerHTML=`✓ ${f.name}<br>${parsedCatRef.length} productos detectados`;
+    document.getElementById('btnCatRef').disabled=false;
+  }catch(err){
+    parsedCatRef=null; document.getElementById('btnCatRef').disabled=true;
+    document.getElementById('fphCatRef').textContent='📄 Toca para elegir el Excel de catálogo';
+    showResult('resCatRef',false,'No pude leer el archivo: '+err.message);
+  }
+};
+
+async function subirCatalogoRef(){
+  if(!parsedCatRef||!parsedCatRef.length) return;
+  const btn=document.getElementById('btnCatRef');
+  btn.disabled=true; btn.innerHTML='<span class="spin"></span>Subiendo…';
+  document.getElementById('resCatRef').className='result';
+  try{
+    await fetch(API,{method:'POST',mode:'no-cors',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({tipo:'catalogo_ref',by:'Admin 1217',rows:parsedCatRef})});
+    await new Promise(r=>setTimeout(r,2000));
+    showResult('resCatRef',true,`✅ ${parsedCatRef.length} productos guardados en catálogo de referencia.`);
+  }catch(err){ showResult('resCatRef',false,'Error al subir: '+err.message); }
+  btn.textContent='Subir catálogo de referencia'; btn.disabled=false;
+}
+
+/* ================================================================
+   TAB CATÁLOGO — Excel parser (Informe de artículos)
    ================================================================ */
 let parsedCat=null;
 
