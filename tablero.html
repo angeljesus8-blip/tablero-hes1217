@@ -120,7 +120,10 @@
     font-family:inherit; font-size:12px; font-weight:700; padding:6px 13px;
     border-radius:20px; cursor:pointer; transition:.12s; }
   .seg-chip.active { background:var(--azul); color:#fff; border-color:var(--azul); }
-  .seg-precio-total { font-size:22px; font-weight:800; color:var(--rojo); display:block; line-height:1.2; }
+  .seg-desglose { display:flex; align-items:baseline; flex-wrap:wrap; gap:4px; margin-bottom:4px; }
+  .seg-precio-total { font-size:22px; font-weight:800; color:var(--rojo); line-height:1.2; }
+  .seg-prod { font-size:16px; font-weight:700; color:#999; }
+  .seg-op { font-size:13px; color:#aaa; font-weight:600; white-space:nowrap; }
   .seg-msi { margin-top:5px; }
   .msi-badge { display:inline-block; font-size:11px; font-weight:700;
     padding:4px 9px; border-radius:7px; }
@@ -275,29 +278,36 @@ function msiInfo(total) {
   if (total >= 1500)  return `<span class="msi-badge msi-6">6 MSI · ${money(Math.ceil(total/6))}/mes — todas las tarjetas</span>`;
   return '';
 }
+function desgloseHtml(p0, total, segCosto) {
+  if (!segCosto) return `<span class="seg-precio-total">${money(total)}</span>`;
+  return `<span class="seg-prod">${money(p0)}</span><span class="seg-op"> + ${money(segCosto)} seguro = </span><span class="seg-precio-total">${money(total)}</span>`;
+}
 function segSelector(sku, precioBase, precioVenta) {
   const s = seguroPara(precioBase);
   const p0 = precioVenta;
   const p1 = s ? p0 + s.p1 : null;
   const p2 = s ? p0 + s.p2 : null;
+  const i1 = s ? s.p1 : 0;
+  const i2 = s ? s.p2 : 0;
   const id = 'sg_' + String(sku).replace(/\D/g,'');
-  const chip1 = s ? `<button class="seg-chip" onclick="selSeg('${id}',1,${p0},${p1},${p2})">+ 1 año</button>` : '';
-  const chip2 = s ? `<button class="seg-chip" onclick="selSeg('${id}',2,${p0},${p1},${p2})">+ 2 años</button>` : '';
+  const chip1 = s ? `<button class="seg-chip" onclick="selSeg('${id}',1,${p0},${p1},${p2},${i1},${i2})">+ 1 año</button>` : '';
+  const chip2 = s ? `<button class="seg-chip" onclick="selSeg('${id}',2,${p0},${p1},${p2},${i1},${i2})">+ 2 años</button>` : '';
   return `<div class="seg-sel" id="${id}">
     <div class="seg-chips">
-      <button class="seg-chip active" onclick="selSeg('${id}',0,${p0},${p1||p0},${p2||p0})">Sin seguro</button>
+      <button class="seg-chip active" onclick="selSeg('${id}',0,${p0},${p1||p0},${p2||p0},${i1},${i2})">Sin seguro</button>
       ${chip1}${chip2}
     </div>
-    <span class="seg-precio-total">${money(p0)}</span>
+    <div class="seg-desglose">${desgloseHtml(p0, p0, 0)}</div>
     <div class="seg-msi">${msiInfo(p0)}</div>
   </div>`;
 }
-function selSeg(id, idx, p0, p1, p2) {
+function selSeg(id, idx, p0, p1, p2, i1, i2) {
   const wrap = document.getElementById(id);
   if (!wrap) return;
   wrap.querySelectorAll('.seg-chip').forEach((c,i) => c.classList.toggle('active', i===idx));
   const total = idx===0 ? p0 : idx===1 ? p1 : p2;
-  wrap.querySelector('.seg-precio-total').textContent = money(total);
+  const segCosto = idx===1 ? i1 : idx===2 ? i2 : 0;
+  wrap.querySelector('.seg-desglose').innerHTML = desgloseHtml(p0, total, segCosto);
   wrap.querySelector('.seg-msi').innerHTML = msiInfo(total);
 }
 
