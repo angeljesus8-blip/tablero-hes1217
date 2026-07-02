@@ -146,6 +146,17 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
     </div>
 
     <div class="card" style="margin-top:14px">
+      <h2>🖥️ Piezas de exhibición</h2>
+      <p class="note">Excel con columnas <b>SKU</b> y <b>EXHIBICION</b> (también acepta DISPLAY o MUESTRA). Reemplaza el conteo de piezas en piso para todos los SKUs.</p>
+      <input type="file" id="fileExhib" accept=".xlsx,.xls" hidden>
+      <div class="filebox" id="fboxExhib" onclick="document.getElementById('fileExhib').click()">
+        <div class="ph" id="fphExhib">📄 Toca para elegir el Excel de exhibición</div>
+      </div>
+      <button class="btn-pri" id="btnExhib" onclick="subirExhibicion()" disabled style="margin-top:14px">Actualizar exhibición</button>
+      <div class="result" id="resExhib"></div>
+    </div>
+
+    <div class="card" style="margin-top:14px">
       <h2>📋 Catálogo de referencia</h2>
       <p class="note">Excel con <b>todos los productos que maneja la tienda</b> (SKU · descripción · EAN/UPC). Sin existencias ni precios — complementa el informe de artículos.</p>
       <input type="file" id="fileCatRef" accept=".xlsx,.xls" hidden>
@@ -302,6 +313,75 @@ function toast(msg,ok){
 function showResult(id,ok,html){
   const r=document.getElementById(id);
   r.innerHTML=html; r.className='result show '+(ok?'ok':'bad');
+}
+
+/* ================================================================
+   TAB CATÁLOGO — Piezas de exhibición
+   ================================================================ */
+let parsedExhib = null;
+
+async function parseExhibicion(file){
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, {type:'array'});
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const aoa = XLSX.utils.sheet_to_json(ws, {header:1, raw:false, defval:''});
+  let h = -1;
+  for(let i=0; i<Math.min(aoa.length,25); i++){
+    const up = aoa[i].map(c=>String(c||'').trim().toUpperCase());
+    if(up.some(c=>c==='SKU'||c==='CÓDIGO'||c==='CODIGO')) { h=i; break; }
+  }
+  if(h<0) throw new Error('No encontré columna SKU');
+  const H = aoa[h].map(c=>String(c||'').trim().toUpperCase());
+  const fi = test => H.findIndex(c=>test(c));
+  const iSku = fi(c=>c==='SKU'||c==='CÓDIGO'||c==='CODIGO'||c.includes('SKU'));
+  const iExh = fi(c=>c.includes('EXHIB')||c.includes('DISPLAY')||c.includes('MUESTRA')||c.includes('DEMO')||c==='EXH');
+  if(iSku<0) throw new Error('No encontré columna SKU');
+  if(iExh<0) throw new Error('No encontré columna de exhibición — nómbrala EXHIBICION, DISPLAY o MUESTRA');
+  const seen={}, rows=[];
+  for(let r=h+1; r<aoa.length; r++){
+    const row = aoa[r];
+    const sku = String(row[iSku]||'').trim().replace(/\.0+$/,'');
+    if(!sku) continue;
+    if(seen[sku]) continue; seen[sku]=1;
+    const exh = parseInt(String(row[iExh]||'').trim()) || 0;
+    rows.push({sku, exhibe: exh});
+  }
+  return rows;
+}
+
+document.getElementById('fileExhib').onchange = async function(e){
+  const f = e.target.files&&e.target.files[0]; if(!f) return;
+  document.getElementById('resExhib').className='result';
+  document.getElementById('fphExhib').textContent='Leyendo archivo…';
+  document.getElementById('fboxExhib').classList.remove('ok');
+  try{
+    parsedExhib = await parseExhibicion(f);
+    if(!parsedExhib.length) throw new Error('No encontré SKUs en el archivo');
+    const conExhib = parsedExhib.filter(x=>x.exhibe>0).length;
+    document.getElementById('fboxExhib').classList.add('ok');
+    document.getElementById('fphExhib').innerHTML=`✓ ${f.name}<br>${parsedExhib.length} SKUs · ${conExhib} con exhibición > 0`;
+    document.getElementById('btnExhib').disabled=false;
+  }catch(err){
+    parsedExhib=null; document.getElementById('btnExhib').disabled=true;
+    document.getElementById('fphExhib').textContent='📄 Toca para elegir el Excel de exhibición';
+    showResult('resExhib',false,'No pude leer el archivo: '+err.message);
+  }
+};
+
+async function subirExhibicion(){
+  if(!parsedExhib||!parsedExhib.length) return;
+  const btn=document.getElementById('btnExhib');
+  btn.disabled=true; btn.innerHTML='<span class="spin"></span>Subiendo…';
+  document.getElementById('resExhib').className='result';
+  try{
+    await fetch(API,{method:'POST',mode:'no-cors',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({tipo:'exhibicion',by:'Admin 1217',rows:parsedExhib})});
+    await new Promise(r=>setTimeout(r,2000));
+    const conExhib = parsedExhib.filter(x=>x.exhibe>0).length;
+    showResult('resExhib',true,`✅ ${parsedExhib.length} SKUs actualizados · ${conExhib} con piezas en exhibición.`);
+  }catch(err){ showResult('resExhib',false,'Error al subir: '+err.message); }
+  btn.textContent='Actualizar exhibición'; btn.disabled=false;
 }
 
 /* ================================================================
