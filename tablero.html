@@ -440,6 +440,18 @@ function cargarInventarioNube(){
         if(typeof cl.e === 'number') item.exhibe = cl.e;
       }
     });
+    // Actualiza invBySku para SKUs EOL que no están en D.inventario
+    // (ej: artículos removidos del catálogo pero que aún tienen pieza de exhibición)
+    (D.eol||[]).forEach(function(e){
+      if(invBySku[e.sku]) return;
+      const cl = data[e.sku];
+      if(!cl) return;
+      invBySku[e.sku] = {
+        sku: e.sku, producto: '',
+        stock: Math.max(0,(cl.o||0)-(cl.v||0)),
+        exhibe: cl.e||0
+      };
+    });
     D._invCloud = true;
     const t = new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
     const el = document.getElementById('updated');
@@ -450,6 +462,29 @@ function cargarInventarioNube(){
   const sc = document.createElement('script');
   sc.id = '_inv_sc';
   sc.src = CLOUD_URL + '?modo=inventario&callback=' + cb;
+  sc.onerror = function(){ delete window[cb]; sc.remove(); };
+  document.head.appendChild(sc);
+}
+
+function cargarEolNube(){
+  const cb = '_cbEol' + Date.now();
+  window[cb] = function(data){
+    delete window[cb];
+    const sc = document.getElementById('_eol_sc'); if(sc) sc.remove();
+    if(!Array.isArray(data)) return;
+    const skusLocales = new Set((D.eol||[]).map(function(e){ return e.sku; }));
+    data.forEach(function(e){
+      if(skusLocales.has(e.sku)) return;
+      // SKU subido via admin (ADENDUM PDF) que no estaba en datos.js
+      (D.eol = D.eol||[]).push({ sku: e.sku, precio: parseFloat(e.precio)||0 });
+      eolSkuSet.add(e.sku);
+    });
+    calcDerivados();
+    render();
+  };
+  const sc = document.createElement('script');
+  sc.id = '_eol_sc';
+  sc.src = CLOUD_URL + '?modo=eol_cloud&callback=' + cb;
   sc.onerror = function(){ delete window[cb]; sc.remove(); };
   document.head.appendChild(sc);
 }
@@ -511,6 +546,7 @@ function cargarBundlesNube(){
 
 render();
 cargarInventarioNube();
+cargarEolNube();
 cargarPromosNube();
 cargarBundlesNube();
 
