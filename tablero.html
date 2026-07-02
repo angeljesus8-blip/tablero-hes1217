@@ -113,6 +113,8 @@
   .eol-status.agot { background:#f2f2f2; color:#888; }
   .dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
   .dot.ok{background:var(--verde);} .dot.bajo{background:var(--naranja);} .dot.cero{background:var(--rojo);}
+  .seg { display:inline-block; font-size:10px; font-weight:700; color:var(--azul);
+    background:#eef3fb; padding:3px 8px; border-radius:7px; margin-top:4px; white-space:nowrap; }
 
   .empty { text-align:center; color:#bbb; font-size:13px; padding:40px 20px; }
   footer { text-align:center; font-size:10px; color:#ccc; margin-top:24px; padding:0 16px; }
@@ -221,6 +223,46 @@ let BUNDLES = [];
   }catch(e){}
 })();
 
+// Tabla Assurant "Lista de precios EC total 2025" — Reemplazo (<$5k) y Reparación ($5k+)
+const SEGUROS = [
+  { d:250,   h:499.99,  p1:109,  p2:149,  s1:'100183730', s2:'100184003' },
+  { d:500,   h:749.99,  p1:159,  p2:229,  s1:'100183748', s2:'100184011' },
+  { d:750,   h:999.99,  p1:229,  p2:309,  s1:'100183756', s2:'100184020' },
+  { d:1000,  h:1249.99, p1:259,  p2:389,  s1:'100183764', s2:'100184038' },
+  { d:1250,  h:1499.99, p1:319,  p2:459,  s1:'100183772', s2:'100184046' },
+  { d:1500,  h:1749.99, p1:369,  p2:529,  s1:'100183781', s2:'100184054' },
+  { d:1750,  h:1999.99, p1:429,  p2:609,  s1:'100183799', s2:'100184062' },
+  { d:2000,  h:2249.99, p1:559,  p2:679,  s1:'100183801', s2:'100184071' },
+  { d:2250,  h:2499.99, p1:629,  p2:919,  s1:'100183810', s2:'100184089' },
+  { d:2500,  h:2999.99, p1:709,  p2:1059, s1:'100183828', s2:'100184097' },
+  { d:3000,  h:3499.99, p1:809,  p2:1249, s1:'100183836', s2:'100184100' },
+  { d:3500,  h:3999.99, p1:999,  p2:1469, s1:'100183844', s2:'100184118' },
+  { d:4000,  h:4499.99, p1:1249, p2:1539, s1:'100183852', s2:'100184126' },
+  { d:4500,  h:4999.99, p1:1549, p2:1679, s1:'100183861', s2:'100184134' },
+  { d:5000,  h:5999.99,  p1:1349, p2:1769, s1:'100183879', s2:'100184142' },
+  { d:6000,  h:6999.99,  p1:1519, p2:1909, s1:'100183887', s2:'100184151' },
+  { d:7000,  h:7999.99,  p1:1609, p2:1929, s1:'100183895', s2:'100184169' },
+  { d:8000,  h:9999.99,  p1:1679, p2:2159, s1:'100183908', s2:'100184177' },
+  { d:10000, h:11999.99, p1:1839, p2:2199, s1:'100183916', s2:'100184185' },
+  { d:12000, h:14999.99, p1:2079, p2:2469, s1:'100183924', s2:'100184193' },
+  { d:15000, h:16999.99, p1:2169, p2:2839, s1:'100183932', s2:'100184206' },
+  { d:17000, h:22999.99, p1:3289, p2:3879, s1:'100183941', s2:'100184214' },
+  { d:23000, h:34499.99, p1:3469, p2:4199, s1:'100183959', s2:'100184222' },
+  { d:34500, h:45999.99, p1:3609, p2:4899, s1:'100183967', s2:'100184231' },
+  { d:46000, h:57499.99, p1:4089, p2:5379, s1:'100183975', s2:'100184249' },
+  { d:57500, h:74999.99, p1:4489, p2:6619, s1:'100183983', s2:'100184257' },
+  { d:75000, h:99999.99, p1:5129, p2:7769, s1:'100183991', s2:'100184265' },
+];
+function seguroPara(precio) {
+  const n = parseFloat(String(precio||0).replace(/[^0-9.]/g,''));
+  return SEGUROS.find(r => n >= r.d && n <= r.h) || null;
+}
+function badgeSeg(precio) {
+  const s = seguroPara(precio);
+  if (!s) return '';
+  return `<span class="seg">🛡️ 1a: ${money(s.p1)} &nbsp;·&nbsp; 2a: ${money(s.p2)}</span>`;
+}
+
 function tieneExistencia_(sku){
   const inv = invBySku[sku];
   if(!inv) return false;
@@ -294,12 +336,14 @@ function cardBundle(x){
 }
 function cardPromo(x){
   const vig = x.d2 ? badgeVigencia(x.d2) : '';
+  const segB = badgeSeg(x.pr || x.pp);
   return `<div class="card t-promo">
     <div class="top"><h3>${x.producto}</h3><span class="tag promo">🔥 PROMO</span></div>
     <div class="meta">
       <span class="precio">${x.pr!=null?`<span class="antes">${money(x.pr)}</span>`:''}${x.pp!=null?money(x.pp):''}</span>
       <span class="badge">SKU ${x.sku}</span>${vig}
     </div>
+    ${segB}
   </div>`;
 }
 function cardEol(e){
@@ -315,10 +359,12 @@ function cardEol(e){
     </div>`;
   }
   if(e.estado==='pendiente'){
+    const segBP = badgeSeg(e.precio);
     return `<div class="card t-eol">
       <div class="top"><h3>${e.producto}</h3><span class="eol-status pend">EOL</span></div>
       <p class="det">Primero agotar <b>${e.stock}</b> pza(s) de stock cerrado a precio normal${e.precio?' ('+money(e.precio)+')':''}. El <b>50%</b> se activa cuando llegue a 0.</p>
       <div class="meta"><span class="badge">SKU ${e.sku}</span>${e.exhibe?`<span class="exh">👁 ${e.exhibe} exhib.</span>`:''}</div>
+      ${segBP}
     </div>`;
   }
   return `<div class="card t-eol">
@@ -365,9 +411,10 @@ function rowInv(x){
   const tr = transitoMap[x.sku];
   const trB = tr ? `<span class="exh trans-b">🚚 ${tr}</span>` : '';
   const vB = (D._invCloud && x._vendido) ? `<span class="exh" style="background:#f0f0f0;color:#999">−${x._vendido} vend.</span>` : '';
+  const segB = x.precio ? badgeSeg(x.precio) : '';
   return `<div class="inv-row">
     <div class="dot ${cls}"></div>
-    <div class="inv-info"><h4>${x.producto}</h4><span>SKU ${x.sku||'—'}</span></div>
+    <div class="inv-info"><h4>${x.producto}</h4><span>SKU ${x.sku||'—'}</span>${segB}</div>
     ${eolB}${exh}${trB}${vB}
     <div class="stock ${cls}"><div class="num">${x.stock}</div><div class="lbl lbl2">para vender</div></div>
   </div>`;
