@@ -325,6 +325,7 @@ async function parseExhibicion(file){
   const wb = XLSX.read(buf, {type:'array'});
   const ws = wb.Sheets[wb.SheetNames[0]];
   const aoa = XLSX.utils.sheet_to_json(ws, {header:1, raw:false, defval:''});
+  // Busca la fila de encabezados (busca hasta fila 25)
   let h = -1;
   for(let i=0; i<Math.min(aoa.length,25); i++){
     const up = aoa[i].map(c=>String(c||'').trim().toUpperCase());
@@ -334,14 +335,18 @@ async function parseExhibicion(file){
   const H = aoa[h].map(c=>String(c||'').trim().toUpperCase());
   const fi = test => H.findIndex(c=>test(c));
   const iSku = fi(c=>c==='SKU'||c==='CÓDIGO'||c==='CODIGO'||c.includes('SKU'));
-  const iExh = fi(c=>c.includes('EXHIB')||c.includes('DISPLAY')||c.includes('MUESTRA')||c.includes('DEMO')||c==='EXH');
+  // "Cantidad No Disponible" (Inventario No Disponible de RadioShack) o columnas genéricas
+  const iExh = fi(c=>c.includes('NO DISP')||c.includes('NO DISPONIBLE')||
+                     c.includes('EXHIB')||c.includes('DISPLAY')||
+                     c.includes('MUESTRA')||c.includes('DEMO')||c==='EXH');
   if(iSku<0) throw new Error('No encontré columna SKU');
-  if(iExh<0) throw new Error('No encontré columna de exhibición — nómbrala EXHIBICION, DISPLAY o MUESTRA');
+  if(iExh<0) throw new Error('No encontré columna de exhibición.\nColumnas detectadas: '+H.filter(Boolean).join(', '));
   const seen={}, rows=[];
   for(let r=h+1; r<aoa.length; r++){
     const row = aoa[r];
     const sku = String(row[iSku]||'').trim().replace(/\.0+$/,'');
-    if(!sku) continue;
+    // Salta filas vacías, totales o pie de página
+    if(!sku || !/^\d{6,12}$/.test(sku)) continue;
     if(seen[sku]) continue; seen[sku]=1;
     const exh = parseInt(String(row[iExh]||'').trim()) || 0;
     rows.push({sku, exhibe: exh});
