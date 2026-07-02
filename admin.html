@@ -151,9 +151,9 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
     <div class="card">
       <h2>🔥 Promociones CEA</h2>
       <p class="note">Sube el PDF del CEA de promociones. La app extrae promos y productos EOL — ambos se guardan automáticamente.</p>
-      <input type="file" id="filePromos" accept="application/pdf,.pdf" hidden>
+      <input type="file" id="filePromos" accept="application/pdf,.pdf,.xlsx,.xls" hidden>
       <div class="filebox" id="fboxPromos" onclick="document.getElementById('filePromos').click()">
-        <div class="ph" id="fphPromos">📄 Toca para elegir el PDF del CEA</div>
+        <div class="ph" id="fphPromos">📄 Toca para elegir el PDF o Excel del CEA</div>
       </div>
       <button class="btn-pri" id="btnPromos" onclick="subirPromos()" disabled style="margin-top:14px">Subir promociones</button>
       <div class="result" id="resPromos"></div>
@@ -448,14 +448,99 @@ async function parsePromosPDF(file){
   return {rows,vig};
 }
 
+/* ── Excel parser para promos ── */
+function _fmtDateXlsx(val){
+  if(!val) return '';
+  const s=String(val).trim();
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if(m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  // número serial de Excel
+  if(/^\d+(\.\d+)?$/.test(s)){
+    const d=new Date(Math.round((+s-25569)*86400*1000));
+    if(!isNaN(d)) return d.toISOString().slice(0,10);
+  }
+  return '';
+}
+function _limpiarPxXlsx(val){
+  return String(val||'').trim().replace(/[$,\s]/g,'').replace(/\.0+$/,'');
+}
+
+async function parsePromosXLSX(file){
+  const buf=await file.arrayBuffer();
+  const wb=XLSX.read(buf,{type:'array',cellDates:false});
+  const ws=wb.Sheets[wb.SheetNames[0]];
+  const aoa=XLSX.utils.sheet_to_json(ws,{header:1,raw:false,defval:''});
+
+  // Busca fila de encabezados (debe tener SKU)
+  let h=-1;
+  for(let i=0;i<Math.min(aoa.length,25);i++){
+    const up=aoa[i].map(c=>String(c||'').trim().toUpperCase());
+    if(up.some(c=>c==='SKU'||c==='CÓDIGO'||c==='CODIGO')) { h=i; break; }
+  }
+  if(h<0) throw new Error('No encontré columna SKU en el Excel');
+
+  const H=aoa[h].map(c=>String(c||'').trim().toUpperCase());
+  const fi=(test)=>H.findIndex(c=>test(c));
+
+  const iSku  = fi(c=>c==='SKU'||c.includes('CÓDIGO')||c==='CODIGO');
+  const iDesc = fi(c=>c.includes('DESCRI')||c.includes('PRODUC')||c.includes('ARTÍC')||c.includes('ARTIC')||c.includes('NOMBRE'));
+  const iPr   = fi(c=>c.includes('REGULAR')||(c.includes('PRECIO')&&!c.includes('PROMO')&&!c.includes('ESPEC')));
+  const iPp   = fi(c=>c.includes('PROMO')||c.includes('OFERTA')||c.includes('ESPEC'));
+  const iEst  = fi(c=>c==='ESTATUS'||c==='STATUS'||c.includes('ESTATUS'));
+  const iMsi  = fi(c=>c.includes('MSI')||c.includes('MESES'));
+  const iD1   = fi(c=>c.includes('INICIO')||c.includes('DESDE')||c==='D1'||c==='VIGENCIA_INICIO');
+  const iD2   = fi(c=>c.includes('FIN')||c.includes('HASTA')||c==='D2'||c==='VIGENCIA_FIN');
+
+  if(iSku<0) throw new Error('No encontré columna SKU');
+
+  const seen={},rows=[];
+  let d1G='',d2G='';
+
+  for(let r=h+1;r<aoa.length;r++){
+    const row=aoa[r];
+    const sku=String(row[iSku]||'').trim().replace(/\.0+$/,'');
+    if(!sku||!/^\d{6,12}$/.test(sku)) continue;
+    if(seen[sku]) continue; seen[sku]=1;
+
+    const d1=iD1>=0?_fmtDateXlsx(row[iD1]):d1G;
+    const d2=iD2>=0?_fmtDateXlsx(row[iD2]):d2G;
+    if(!d1G&&d1) d1G=d1;
+    if(!d2G&&d2) d2G=d2;
+
+    const estRaw=iEst>=0?String(row[iEst]||'').trim().toUpperCase():'';
+    const est=estRaw.includes('EOL')?'EOL':'Activo';
+
+    rows.push({
+      sku,
+      desc: iDesc>=0?String(row[iDesc]||'').trim():'',
+      pr:   iPr>=0?_limpiarPxXlsx(row[iPr]):'',
+      pp:   iPp>=0?_limpiarPxXlsx(row[iPp]):'',
+      est, msi: iMsi>=0?String(row[iMsi]||'').trim():'',
+      d1:   d1||d1G, d2: d2||d2G
+    });
+  }
+
+  // Vigencia para mostrar
+  const mesesN=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  let vig='';
+  if(d1G&&d2G){
+    const [,m1,day1]=d1G.split('-');
+    const [,, day2]=d2G.split('-');
+    vig=`${+day1} al ${+day2} de ${mesesN[+m1-1]}`;
+  }
+  return {rows,vig};
+}
+
 document.getElementById('filePromos').onchange=async function(e){
   const f=e.target.files&&e.target.files[0]; if(!f) return;
   document.getElementById('resPromos').className='result';
-  document.getElementById('fphPromos').textContent='Leyendo PDF…';
+  document.getElementById('fphPromos').textContent='Leyendo archivo…';
   document.getElementById('fboxPromos').classList.remove('ok');
   try{
-    parsedPromos=await parsePromosPDF(f);
-    if(!parsedPromos.rows.length) throw new Error('No encontré filas de promo — ¿es el CEA con la tabla de SKUs?');
+    const isXlsx=/\.(xlsx|xls)$/i.test(f.name);
+    parsedPromos=isXlsx ? await parsePromosXLSX(f) : await parsePromosPDF(f);
+    if(!parsedPromos.rows.length) throw new Error('No encontré filas de promo — revisa el archivo');
     const eolCount=parsedPromos.rows.filter(r=>r.est==='EOL').length;
     document.getElementById('fboxPromos').classList.add('ok');
     document.getElementById('fphPromos').innerHTML=
@@ -463,8 +548,8 @@ document.getElementById('filePromos').onchange=async function(e){
     document.getElementById('btnPromos').disabled=false;
   }catch(err){
     parsedPromos=null; document.getElementById('btnPromos').disabled=true;
-    document.getElementById('fphPromos').textContent='📄 Toca para elegir el PDF del CEA';
-    showResult('resPromos',false,'No pude leer el PDF: '+err.message);
+    document.getElementById('fphPromos').textContent='📄 Toca para elegir el PDF o Excel del CEA';
+    showResult('resPromos',false,'No pude leer el archivo: '+err.message);
   }
 };
 
