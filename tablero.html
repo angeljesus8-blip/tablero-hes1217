@@ -113,8 +113,20 @@
   .eol-status.agot { background:#f2f2f2; color:#888; }
   .dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
   .dot.ok{background:var(--verde);} .dot.bajo{background:var(--naranja);} .dot.cero{background:var(--rojo);}
-  .seg { display:inline-block; font-size:10px; font-weight:700; color:var(--azul);
-    background:#eef3fb; padding:3px 8px; border-radius:7px; margin-top:4px; white-space:nowrap; }
+  /* ---- Selector seguro + MSI ---- */
+  .seg-sel { margin-top:10px; }
+  .seg-chips { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px; }
+  .seg-chip { border:1.5px solid var(--linea); background:#fff; color:#555;
+    font-family:inherit; font-size:12px; font-weight:700; padding:6px 13px;
+    border-radius:20px; cursor:pointer; transition:.12s; }
+  .seg-chip.active { background:var(--azul); color:#fff; border-color:var(--azul); }
+  .seg-precio-total { font-size:22px; font-weight:800; color:var(--rojo); display:block; line-height:1.2; }
+  .seg-msi { margin-top:5px; }
+  .msi-badge { display:inline-block; font-size:11px; font-weight:700;
+    padding:4px 9px; border-radius:7px; }
+  .msi-6  { background:#eafaf1; color:var(--verde); }
+  .msi-12 { background:#eef3fb; color:var(--azul); }
+  .msi-18 { background:#fff5ee; color:var(--naranja); }
 
   .empty { text-align:center; color:#bbb; font-size:13px; padding:40px 20px; }
   footer { text-align:center; font-size:10px; color:#ccc; margin-top:24px; padding:0 16px; }
@@ -257,10 +269,36 @@ function seguroPara(precio) {
   const n = parseFloat(String(precio||0).replace(/[^0-9.]/g,''));
   return SEGUROS.find(r => n >= r.d && n <= r.h) || null;
 }
-function badgeSeg(precio) {
-  const s = seguroPara(precio);
-  if (!s) return '';
-  return `<span class="seg">🛡️ 1a: ${money(s.p1)} &nbsp;·&nbsp; 2a: ${money(s.p2)}</span>`;
+function msiInfo(total) {
+  if (total >= 20000) return `<span class="msi-badge msi-18">18 MSI · ${money(Math.ceil(total/18))}/mes — solo Citibanamex y Amex</span>`;
+  if (total >= 10000) return `<span class="msi-badge msi-12">12 MSI · ${money(Math.ceil(total/12))}/mes — todas las tarjetas</span>`;
+  if (total >= 1500)  return `<span class="msi-badge msi-6">6 MSI · ${money(Math.ceil(total/6))}/mes — todas las tarjetas</span>`;
+  return '';
+}
+function segSelector(sku, precioBase, precioVenta) {
+  const s = seguroPara(precioBase);
+  const p0 = precioVenta;
+  const p1 = s ? p0 + s.p1 : null;
+  const p2 = s ? p0 + s.p2 : null;
+  const id = 'sg_' + String(sku).replace(/\D/g,'');
+  const chip1 = s ? `<button class="seg-chip" onclick="selSeg('${id}',1,${p0},${p1},${p2})">+ 1 año</button>` : '';
+  const chip2 = s ? `<button class="seg-chip" onclick="selSeg('${id}',2,${p0},${p1},${p2})">+ 2 años</button>` : '';
+  return `<div class="seg-sel" id="${id}">
+    <div class="seg-chips">
+      <button class="seg-chip active" onclick="selSeg('${id}',0,${p0},${p1||p0},${p2||p0})">Sin seguro</button>
+      ${chip1}${chip2}
+    </div>
+    <span class="seg-precio-total">${money(p0)}</span>
+    <div class="seg-msi">${msiInfo(p0)}</div>
+  </div>`;
+}
+function selSeg(id, idx, p0, p1, p2) {
+  const wrap = document.getElementById(id);
+  if (!wrap) return;
+  wrap.querySelectorAll('.seg-chip').forEach((c,i) => c.classList.toggle('active', i===idx));
+  const total = idx===0 ? p0 : idx===1 ? p1 : p2;
+  wrap.querySelector('.seg-precio-total').textContent = money(total);
+  wrap.querySelector('.seg-msi').innerHTML = msiInfo(total);
 }
 
 function tieneExistencia_(sku){
@@ -336,14 +374,16 @@ function cardBundle(x){
 }
 function cardPromo(x){
   const vig = x.d2 ? badgeVigencia(x.d2) : '';
-  const segB = badgeSeg(x.pr || x.pp);
+  const precioBase = x.pr || x.pp;
+  const precioVenta = x.pp || x.pr;
+  const sel = (precioBase && precioVenta) ? segSelector(x.sku, precioBase, precioVenta) : '';
   return `<div class="card t-promo">
     <div class="top"><h3>${x.producto}</h3><span class="tag promo">🔥 PROMO</span></div>
     <div class="meta">
-      <span class="precio">${x.pr!=null?`<span class="antes">${money(x.pr)}</span>`:''}${x.pp!=null?money(x.pp):''}</span>
+      ${x.pr!=null?`<span class="badge" style="text-decoration:line-through;color:#bbb">Reg ${money(x.pr)}</span>`:''}
       <span class="badge">SKU ${x.sku}</span>${vig}
     </div>
-    ${segB}
+    ${sel}
   </div>`;
 }
 function cardEol(e){
@@ -359,12 +399,12 @@ function cardEol(e){
     </div>`;
   }
   if(e.estado==='pendiente'){
-    const segBP = badgeSeg(e.precio);
+    const sel = e.precio ? segSelector(e.sku, e.precio, e.precio) : '';
     return `<div class="card t-eol">
       <div class="top"><h3>${e.producto}</h3><span class="eol-status pend">EOL</span></div>
-      <p class="det">Primero agotar <b>${e.stock}</b> pza(s) de stock cerrado a precio normal${e.precio?' ('+money(e.precio)+')':''}. El <b>50%</b> se activa cuando llegue a 0.</p>
+      <p class="det">Primero agotar <b>${e.stock}</b> pza(s) de stock cerrado a precio normal. El <b>50%</b> se activa cuando llegue a 0.</p>
       <div class="meta"><span class="badge">SKU ${e.sku}</span>${e.exhibe?`<span class="exh">👁 ${e.exhibe} exhib.</span>`:''}</div>
-      ${segBP}
+      ${sel}
     </div>`;
   }
   return `<div class="card t-eol">
@@ -411,12 +451,13 @@ function rowInv(x){
   const tr = transitoMap[x.sku];
   const trB = tr ? `<span class="exh trans-b">🚚 ${tr}</span>` : '';
   const vB = (D._invCloud && x._vendido) ? `<span class="exh" style="background:#f0f0f0;color:#999">−${x._vendido} vend.</span>` : '';
-  const segB = x.precio ? badgeSeg(x.precio) : '';
-  return `<div class="inv-row">
+  const segSel = x.precio ? segSelector(x.sku, x.precio, x.precio) : '';
+  return `<div class="inv-row" style="flex-wrap:wrap">
     <div class="dot ${cls}"></div>
-    <div class="inv-info"><h4>${x.producto}</h4><span>SKU ${x.sku||'—'}</span>${segB}</div>
+    <div class="inv-info" style="flex:1;min-width:0"><h4>${x.producto}</h4><span>SKU ${x.sku||'—'}</span></div>
     ${eolB}${exh}${trB}${vB}
     <div class="stock ${cls}"><div class="num">${x.stock}</div><div class="lbl lbl2">para vender</div></div>
+    ${segSel ? `<div style="width:100%;padding-top:4px">${segSel}</div>` : ''}
   </div>`;
 }
 
