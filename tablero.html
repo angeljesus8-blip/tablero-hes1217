@@ -140,6 +140,16 @@
   .promo-toolbar button:disabled { background:#ccc; }
   @keyframes spin { to { transform:rotate(360deg); } }
   .promo-toolbar button.girando { animation:spin .7s linear infinite; }
+  /* ---- Slider promos ---- */
+  .promo-tabs { display:flex; gap:8px; padding:8px 16px 4px; }
+  .promo-tab { flex:1; padding:9px 10px; border:1.5px solid var(--linea); background:#fff;
+    border-radius:20px; font-family:'Montserrat',sans-serif; font-size:12px; font-weight:700;
+    cursor:pointer; color:#555; transition:.15s; }
+  .promo-tab.active { background:var(--azul); color:#fff; border-color:var(--azul); }
+  .promo-slider { display:flex; overflow-x:auto; scroll-snap-type:x mandatory;
+    -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+  .promo-slider::-webkit-scrollbar { display:none; }
+  .promo-slide { min-width:100%; scroll-snap-align:start; box-sizing:border-box; }
 </style>
 </head>
 <body>
@@ -309,6 +319,16 @@ function selSeg(id, idx, p0, p1, p2, i1, i2) {
   const segCosto = idx===1 ? i1 : idx===2 ? i2 : 0;
   wrap.querySelector('.seg-desglose').innerHTML = desgloseHtml(p0, total, segCosto);
   wrap.querySelector('.seg-msi').innerHTML = msiInfo(total);
+}
+function slidePromo(idx) {
+  const slider = document.getElementById('promoSlider');
+  if (!slider) return;
+  slider.scrollTo({ left: idx * slider.offsetWidth, behavior: 'smooth' });
+  document.querySelectorAll('.promo-tab').forEach((t,i) => t.classList.toggle('active', i===idx));
+}
+function onPromoSliderScroll(el) {
+  const idx = Math.round(el.scrollLeft / el.offsetWidth);
+  document.querySelectorAll('.promo-tab').forEach((t,i) => t.classList.toggle('active', i===idx));
 }
 
 function tieneExistencia_(sku){
@@ -510,8 +530,6 @@ function render(){
   if(f==='bundle') html += seccion('🎁 Paquetes vigentes', bundles, cardBundle);
   if(f==='promo'){
     const ocultasTxt = promosSinStock>0 ? ` · ${promosSinStock} sin existencia ocultas` : '';
-    html += `<div class="promo-toolbar"><span>${promos.length} promo${promos.length!==1?'s':''} con existencia${ocultasTxt}</span><button id="btnRefreshPromos" onclick="cargarPromosNube(true)">↻ Actualizar</button></div>`;
-    html += seccion('🔥 Promociones vigentes', promos, cardPromo);
     const promoSkus = new Set(PROMOS.map(p => p.sku));
     const sinPromo = (D.inventario||[]).filter(x =>
       coincide(x.producto, x.sku) &&
@@ -519,7 +537,19 @@ function render(){
       !promoSkus.has(x.sku) &&
       !eolSkuSet.has(x.sku)
     );
-    html += seccion('💰 Precio regular', sinPromo, cardPrecioReg);
+    html += `<div class="promo-toolbar"><span>${promos.length} promo${promos.length!==1?'s':''} con existencia${ocultasTxt}</span><button id="btnRefreshPromos" onclick="cargarPromosNube(true)">↻ Actualizar</button></div>`;
+    html += `<div class="promo-tabs">
+      <button class="promo-tab active" onclick="slidePromo(0)">🔥 Promos (${promos.length})</button>
+      <button class="promo-tab" onclick="slidePromo(1)">💰 Precio regular (${sinPromo.length})</button>
+    </div>
+    <div class="promo-slider" id="promoSlider" onscroll="onPromoSliderScroll(this)">
+      <div class="promo-slide">
+        ${promos.length ? promos.map(cardPromo).join('') : '<div class="empty">Sin promos vigentes con existencia.</div>'}
+      </div>
+      <div class="promo-slide">
+        ${sinPromo.length ? sinPromo.map(cardPrecioReg).join('') : '<div class="empty">Sin resultados.</div>'}
+      </div>
+    </div>`;
   }
   if(f==='nov')   html += seccion('📦 Mercancía nueva', nov, cardNov);
   if(f==='resurtir') html += seccion('🔄 Resurtir · 0 para vender, solo queda exhibición (no EOL)', resurtir, rowInv);
