@@ -139,6 +139,26 @@
   .vendbar b{ color:#1a1a1a; font-weight:700; }
   .vendbar button{ background:#fdeaea; color:var(--rojo); border:none; font-family:inherit; font-size:12px;
     font-weight:700; padding:6px 12px; border-radius:8px; cursor:pointer; }
+
+  /* ---------- Assurant ---------- */
+  .seg-wrap{ display:none; background:#eef3fb; border:1.5px solid #bcd4ee; border-radius:11px;
+    padding:12px 13px; margin:0 0 11px; }
+  .seg-wrap.show{ display:block; }
+  .seg-title{ font-size:11px; font-weight:800; color:var(--azul); text-transform:uppercase;
+    letter-spacing:.5px; margin-bottom:8px; }
+  .seg-chips{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+  .seg-chip{ border:1.5px solid #bcd4ee; background:#fff; color:#555; font-family:inherit;
+    font-size:12px; font-weight:700; padding:7px 12px; border-radius:20px; cursor:pointer; transition:.1s; }
+  .seg-chip.active{ background:var(--azul); color:#fff; border-color:var(--azul); }
+  .seg-total{ font-size:22px; font-weight:800; color:var(--rojo); line-height:1.2; }
+  .seg-detalle{ font-size:12px; color:#777; font-weight:600; margin:3px 0 6px; }
+  .seg-sku{ font-size:11px; color:var(--azul); font-weight:700; background:#daeaf7;
+    padding:3px 8px; border-radius:6px; display:inline-block; }
+  .msi-row{ margin-top:7px; display:flex; flex-wrap:wrap; gap:4px; }
+  .msi-badge{ display:inline-block; font-size:11px; font-weight:700; padding:4px 9px; border-radius:7px; }
+  .msi-6 { background:#eafaf1; color:var(--verde); }
+  .msi-12{ background:#eef3fb; color:var(--azul); }
+  .msi-18{ background:#fff5ee; color:var(--naranja); }
 </style>
 </head>
 <body>
@@ -189,6 +209,17 @@
       </div>
     </div>
     <div class="promo-badge" id="promoBadge"></div>
+
+    <!-- Assurant -->
+    <div class="seg-wrap" id="segWrap">
+      <div class="seg-title">🛡️ Assurant — elige garantía</div>
+      <div class="seg-chips" id="segChips"></div>
+      <div class="seg-total" id="segTotal"></div>
+      <div class="seg-detalle" id="segDetalle"></div>
+      <span class="seg-sku" id="segSku" style="display:none"></span>
+      <div id="segMsi"></div>
+    </div>
+
     <div class="field">
       <label>Descripción</label>
       <input type="text" id="desc" placeholder="Descripción del artículo" autocomplete="off">
@@ -388,6 +419,16 @@ $('btnAdd').onclick = () => {
   if(!serie){ toast('Falta el número de serie', 'warn'); $('serie').focus(); return; }
   if(!currentVend){ toast('Selecciona tu nombre', 'warn'); showGate(); return; }
   const d = new Date();
+  // Registrar attach rate Assurant (compartido con el Tablero via localStorage)
+  const segActivo = $('segWrap').classList.contains('show');
+  const attK = 'att_' + new Date().toISOString().slice(0,10);
+  if(segActivo){
+    const att = JSON.parse(localStorage.getItem(attK)||'{"c":0,"s":0}');
+    att[segIdx > 0 ? 'c' : 's']++;
+    localStorage.setItem(attK, JSON.stringify(att));
+  }
+  const planSeg = segActivo && segIdx > 0 ? (segIdx===1?'1yr':'2yr') : '';
+
   const item = {
     id: 'i' + d.getTime() + Math.random().toString(36).slice(2,6),
     serie,
@@ -395,21 +436,23 @@ $('btnAdd').onclick = () => {
     precio: $('precio').value.trim(),
     desc: $('desc').value.trim(),
     vend: currentVend,
+    seguro: planSeg,
     fecha: d.toLocaleDateString('es-MX'),
     hora: d.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})
   };
   items.unshift(item); save();
   // Cola para el concentrado en la nube (+ foto si hubo)
   const pend = { id:item.id, fecha:item.fecha, hora:item.hora, serie:item.serie,
-    sku:item.sku, desc:item.desc, precio:item.precio, vend:item.vend };
+    sku:item.sku, desc:item.desc, precio:item.precio, vend:item.vend, seguro:planSeg };
   if(lastPhoto){ photoMap[item.id] = lastPhoto; pend.foto = true; lastPhoto = null; }
   pending.push(pend);
   savePending(); flushCloud();
   render();
   // limpia serie/sku/precio/desc; conserva vendedor
   ['serie','sku','precio','desc'].forEach(f=> $(f).value='');
+  segIdx = 0; updateSeguro();
   setRecon(true); setPromo(false);
-  toast('Agregada ✓', 'ok'); $('serie').focus();
+  toast(planSeg ? 'Agregada ✓ · con seguro '+planSeg : 'Agregada ✓', 'ok'); $('serie').focus();
 };
 
 $('btnClear').onclick = () => {
@@ -437,6 +480,77 @@ function setPromo(on, promo){
     b.classList.add('show');
   } else { b.classList.remove('show'); }
 }
+// ── ASSURANT ────────────────────────────────────────────────────────────────
+const SEGUROS = [
+  { d:250,   h:499.99,  p1:109,  p2:149,  s1:'100183730', s2:'100184003' },
+  { d:500,   h:749.99,  p1:159,  p2:229,  s1:'100183748', s2:'100184011' },
+  { d:750,   h:999.99,  p1:229,  p2:309,  s1:'100183756', s2:'100184020' },
+  { d:1000,  h:1249.99, p1:259,  p2:389,  s1:'100183764', s2:'100184038' },
+  { d:1250,  h:1499.99, p1:319,  p2:459,  s1:'100183772', s2:'100184046' },
+  { d:1500,  h:1749.99, p1:369,  p2:529,  s1:'100183781', s2:'100184054' },
+  { d:1750,  h:1999.99, p1:429,  p2:609,  s1:'100183799', s2:'100184062' },
+  { d:2000,  h:2249.99, p1:559,  p2:679,  s1:'100183801', s2:'100184071' },
+  { d:2250,  h:2499.99, p1:629,  p2:919,  s1:'100183810', s2:'100184089' },
+  { d:2500,  h:2999.99, p1:709,  p2:1059, s1:'100183828', s2:'100184097' },
+  { d:3000,  h:3499.99, p1:809,  p2:1249, s1:'100183836', s2:'100184100' },
+  { d:3500,  h:3999.99, p1:999,  p2:1469, s1:'100183844', s2:'100184118' },
+  { d:4000,  h:4499.99, p1:1249, p2:1539, s1:'100183852', s2:'100184126' },
+  { d:4500,  h:4999.99, p1:1549, p2:1679, s1:'100183861', s2:'100184134' },
+  { d:5000,  h:5999.99, p1:1349, p2:1769, s1:'100183879', s2:'100184142' },
+  { d:6000,  h:6999.99, p1:1519, p2:1909, s1:'100183887', s2:'100184151' },
+  { d:7000,  h:7999.99, p1:1609, p2:1929, s1:'100183895', s2:'100184169' },
+  { d:8000,  h:9999.99, p1:1679, p2:2159, s1:'100183908', s2:'100184177' },
+  { d:10000, h:11999.99,p1:1839, p2:2199, s1:'100183916', s2:'100184185' },
+  { d:12000, h:14999.99,p1:2079, p2:2469, s1:'100183924', s2:'100184193' },
+  { d:15000, h:16999.99,p1:2169, p2:2839, s1:'100183932', s2:'100184206' },
+  { d:17000, h:22999.99,p1:3289, p2:3879, s1:'100183941', s2:'100184214' },
+  { d:23000, h:34499.99,p1:3469, p2:4199, s1:'100183959', s2:'100184222' },
+  { d:34500, h:45999.99,p1:3609, p2:4899, s1:'100183967', s2:'100184231' },
+  { d:46000, h:57499.99,p1:4089, p2:5379, s1:'100183975', s2:'100184249' },
+  { d:57500, h:74999.99,p1:4489, p2:6619, s1:'100183983', s2:'100184257' },
+  { d:75000, h:99999.99,p1:5129, p2:7769, s1:'100183991', s2:'100184265' },
+];
+let segIdx = 0; // 0=sin, 1=1año, 2=2años
+const money = n => '$' + Number(n||0).toLocaleString('es-MX');
+function segPara(precio){
+  const n = parseFloat(String(precio||0).replace(/[^0-9.]/g,''));
+  return SEGUROS.find(r => n >= r.d && n <= r.h) || null;
+}
+function msiHtml(total){
+  let h = '';
+  if(total >= 1500)  h += `<span class="msi-badge msi-6">6 MSI · ${money(Math.ceil(total/6))}/mes</span> `;
+  if(total >= 10000) h += `<span class="msi-badge msi-12">12 MSI · ${money(Math.ceil(total/12))}/mes</span> `;
+  if(total >= 20000) h += `<span class="msi-badge msi-18">18 MSI · ${money(Math.ceil(total/18))}/mes*</span>`;
+  return h ? `<div class="msi-row">${h}</div>` : '';
+}
+function updateSeguro(){
+  const wrap = $('segWrap');
+  const precio = parseFloat(($('precio').value||'').replace(/[^0-9.]/g,'')) || 0;
+  const seg = segPara(precio);
+  if(!seg){ wrap.classList.remove('show'); segIdx = 0; return; }
+  wrap.classList.add('show');
+  const totals = [precio, precio + seg.p1, precio + seg.p2];
+  const labels = ['Sin seguro', `+1 año — ${money(seg.p1)}`, `+2 años — ${money(seg.p2)}`];
+  const skus   = ['', seg.s1, seg.s2];
+  $('segChips').innerHTML = labels.map((l,i) =>
+    `<button class="seg-chip${i===segIdx?' active':''}" onclick="selectSeg(${i})">
+      ${i===0?'✗':i===1?'🛡️':'🛡️🛡️'} ${l}
+    </button>`).join('');
+  const total = totals[segIdx];
+  $('segTotal').textContent = money(total);
+  $('segDetalle').textContent = segIdx > 0
+    ? `${money(precio)} + ${money(segIdx===1?seg.p1:seg.p2)} seguro = ${money(total)}`
+    : 'Sin garantía extendida Assurant';
+  const skuSeg = skus[segIdx];
+  const skuEl = $('segSku');
+  if(skuSeg){ skuEl.style.display=''; skuEl.textContent = 'SKU seguro: '+skuSeg; }
+  else { skuEl.style.display = 'none'; }
+  $('segMsi').innerHTML = msiHtml(total);
+}
+window.selectSeg = function(i){ segIdx = i; updateSeguro(); };
+$('precio').addEventListener('input', () => { segIdx = 0; updateSeguro(); });
+// ── FIN ASSURANT ─────────────────────────────────────────────────────────────
+
 // Solo códigos de barras 1D: producto (EAN/UPC) y serie (Code 128/39). NADA de QR/2D.
 const FORMATOS = ['code_128','code_39','ean_13','ean_8','upc_a','upc_e'];
 function routeCode(text, fmt){
@@ -461,6 +575,7 @@ function routeCode(text, fmt){
         toast('Producto reconocido ✓ ' + (hit.s||''), 'ok');
       }
       setRecon(true);
+      segIdx = 0; updateSeguro();
     } else {
       $('sku').value = val;   // deja el EAN como referencia
       setRecon(false);        // marca "no reconocido" (posible mala lectura)
