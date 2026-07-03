@@ -409,12 +409,10 @@ function cardEol(e){
     </div>`;
   }
   if(e.estado==='pendiente'){
-    const sel = e.precio ? segSelector(e.sku, e.precio, e.precio) : '';
     return `<div class="card t-eol">
       <div class="top"><h3>${e.producto}</h3><span class="eol-status pend">EOL</span></div>
       <p class="det">Primero agotar <b>${e.stock}</b> pza(s) de stock cerrado a precio normal. El <b>50%</b> se activa cuando llegue a 0.</p>
       <div class="meta"><span class="badge">SKU ${e.sku}</span>${e.exhibe?`<span class="exh">👁 ${e.exhibe} exhib.</span>`:''}</div>
-      ${sel}
     </div>`;
   }
   return `<div class="card t-eol">
@@ -461,13 +459,11 @@ function rowInv(x){
   const tr = transitoMap[x.sku];
   const trB = tr ? `<span class="exh trans-b">🚚 ${tr}</span>` : '';
   const vB = (D._invCloud && x._vendido) ? `<span class="exh" style="background:#f0f0f0;color:#999">−${x._vendido} vend.</span>` : '';
-  const segSel = x.precio ? segSelector(x.sku, x.precio, x.precio) : '';
-  return `<div class="inv-row" style="flex-wrap:wrap">
+  return `<div class="inv-row">
     <div class="dot ${cls}"></div>
     <div class="inv-info" style="flex:1;min-width:0"><h4>${x.producto}</h4><span>SKU ${x.sku||'—'}</span></div>
     ${eolB}${exh}${trB}${vB}
     <div class="stock ${cls}"><div class="num">${x.stock}</div><div class="lbl lbl2">para vender</div></div>
-    ${segSel ? `<div style="width:100%;padding-top:4px">${segSel}</div>` : ''}
   </div>`;
 }
 
