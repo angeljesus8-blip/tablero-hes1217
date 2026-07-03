@@ -458,10 +458,12 @@ function cardNov(x){
   </div>`;
 }
 function cardAviso(x){
+  const vigTxt = x.d2 ? `<span class="badge">Vence ${x.d2}</span>` : '';
+  const tipoTxt = (x.tipo&&x.tipo!=='manual') ? `<span class="badge" style="background:#eef3fb;color:var(--azul)">${x.tipo.toUpperCase()}</span>` : '';
   return `<div class="card t-aviso ${x.prioridad==='alta'?'alta':''}">
     <div class="top"><h3>${x.titulo}</h3><span class="tag aviso">Aviso</span></div>
     <p class="det">${x.detalle||''}</p>
-    ${x.fecha?`<div class="meta"><span class="badge">📅 ${x.fecha}</span></div>`:''}
+    <div class="meta">${vigTxt}${tipoTxt}</div>
   </div>`;
 }
 function cardTransito(x){
@@ -519,7 +521,8 @@ function render(){
   const resurtir = RESURTIR.filter(x=>coincide(x.producto,x.sku));
   const agotados = (D.agotados||[]).filter(x=>coincide(x.producto,x.sku));
   const transito = (D.transito||[]).filter(x=>coincide(x.producto,x.sku));
-  const avisos = (D.avisos||[]).filter(x=>coincide(x.titulo,x.detalle));
+  const hoyStr = new Date().toISOString().slice(0,10);
+  const avisos = (D.avisos||[]).filter(x=>coincide(x.titulo,x.detalle) && (!x.d2||x.d2>=hoyStr));
 
   if(f==='aviso') html += seccion('📢 Avisos', avisos, cardAviso);
   if(f==='eol'){
@@ -688,11 +691,33 @@ function cargarBundlesNube(){
   document.head.appendChild(sc);
 }
 
+function cargarAvisosNube(){
+  const cb='_cbAv'+Date.now();
+  window[cb]=function(data){
+    delete window[cb];
+    const sc=document.getElementById('_av_sc'); if(sc) sc.remove();
+    if(!Array.isArray(data)) return;
+    const hoy=new Date().toISOString().slice(0,10);
+    const locales=new Set((D.avisos||[]).map(function(a){ return a.titulo; }));
+    data.forEach(function(a){
+      if(locales.has(a.titulo)) return;
+      (D.avisos=D.avisos||[]).unshift(a);
+    });
+    render();
+  };
+  const sc=document.createElement('script');
+  sc.id='_av_sc';
+  sc.src=CLOUD_URL+'?modo=avisos_cloud&callback='+cb;
+  sc.onerror=function(){ delete window[cb]; sc.remove(); };
+  document.head.appendChild(sc);
+}
+
 render();
 cargarInventarioNube();
 cargarEolNube();
 cargarPromosNube();
 cargarBundlesNube();
+cargarAvisosNube();
 
 // ── Push notifications (OneSignal) ──────────────────────────────
 const ONE_APP_ID = 'db32a1ef-d484-4be3-adfc-2a9e17f7e4f1';
