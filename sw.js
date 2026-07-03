@@ -1,5 +1,5 @@
 importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
-const CACHE = 'hes1217-v41';
+const CACHE = 'hes1217-v42';
 const ARCHIVOS = [
   './index.html',
   './tablero.html',
@@ -25,9 +25,22 @@ self.addEventListener('activate', e => {
   self.clients.claim();
 });
 
-// Cache-first para recursos propios; red externa (nube, Google Fonts) va normal
+// HTML: network-first (siempre la versión más reciente si hay red)
+// Otros assets: cache-first (imágenes, datos estáticos)
 self.addEventListener('fetch', e => {
   if(new URL(e.request.url).origin !== location.origin) return;
+  if(e.request.destination === 'document' || e.request.url.endsWith('.js') && !e.request.url.includes('cdn')) {
+    e.respondWith(
+      fetch(e.request)
+        .then(res => {
+          const clone = res.clone();
+          caches.open(CACHE).then(c => c.put(e.request, clone));
+          return res;
+        })
+        .catch(() => caches.match(e.request))
+    );
+    return;
+  }
   e.respondWith(
     caches.match(e.request).then(cached => cached || fetch(e.request))
   );
