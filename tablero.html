@@ -535,7 +535,7 @@ function render(){
       coincide(x.producto, x.sku) &&
       ((x.stock||0) > 0 || (x.exhibe||0) > 0) &&
       !promoSkus.has(x.sku) &&
-      !eolSkuSet.has(x.sku)
+      eolMap[x.sku] !== 'listo'
     );
     html += `<div class="promo-toolbar"><span>${promos.length} promo${promos.length!==1?'s':''} con existencia${ocultasTxt}</span><button id="btnRefreshPromos" onclick="cargarPromosNube(true)">↻ Actualizar</button></div>`;
     html += `<div class="promo-tabs">
