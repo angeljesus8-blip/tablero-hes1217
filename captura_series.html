@@ -132,6 +132,8 @@
   .gate-name:active{ transform:scale(.985); }
   .gate-name.saved{ border-color:var(--rojo); color:var(--rojo); box-shadow:0 2px 10px rgba(209,32,38,.08); }
   .gate-name .yo{ font-size:11px; font-weight:700; color:#aaa; margin-left:6px; }
+  .gate-att{ font-size:11px; font-weight:600; color:#aaa; margin-top:4px; display:block; }
+  .gate-name.saved .gate-att{ color:rgba(209,32,38,.65); }
 
   /* Barra de vendedor en la pantalla de captura */
   .vendbar{ position:sticky; top:64px; z-index:20; display:flex; align-items:center; justify-content:space-between;
@@ -423,9 +425,14 @@ $('btnAdd').onclick = () => {
   const segActivo = $('segWrap').classList.contains('show');
   const attK = 'att_' + new Date().toISOString().slice(0,10);
   if(segActivo){
+    const tipo = segIdx > 0 ? 'c' : 's';
+    // General (Tablero)
     const att = JSON.parse(localStorage.getItem(attK)||'{"c":0,"s":0}');
-    att[segIdx > 0 ? 'c' : 's']++;
-    localStorage.setItem(attK, JSON.stringify(att));
+    att[tipo]++; localStorage.setItem(attK, JSON.stringify(att));
+    // Por vendedor
+    const kv = attVendKey(currentVend);
+    const attV = JSON.parse(localStorage.getItem(kv)||'{"c":0,"s":0}');
+    attV[tipo]++; localStorage.setItem(kv, JSON.stringify(attV));
   }
   const planSeg = segActivo && segIdx > 0 ? (segIdx===1?'1yr':'2yr') : '';
 
@@ -719,10 +726,41 @@ function updateDownloadAccess(){
 }
 function setVend(n){ currentVend = n || ''; $('vendLabel').textContent = currentVend || '—'; updateDownloadAccess(); }
 function hideGate(){ $('gate').classList.add('hide'); }
+
+/* ── Attach rate por vendedor ── */
+function attVendKey(vend, fecha){ return 'attv_' + vend + '_' + (fecha || new Date().toISOString().slice(0,10)); }
+function attVendHoy(vend){ return JSON.parse(localStorage.getItem(attVendKey(vend)) || '{"c":0,"s":0}'); }
+function attVendMes(vend){
+  const mes = new Date().toISOString().slice(0,7);
+  let c = 0, s = 0;
+  for(let i = 0; i < localStorage.length; i++){
+    const k = localStorage.key(i);
+    if(k && k.startsWith('attv_' + vend + '_' + mes)){
+      const d = JSON.parse(localStorage.getItem(k) || '{"c":0,"s":0}');
+      c += d.c; s += d.s;
+    }
+  }
+  return {c, s};
+}
+function attPctStr(att){
+  const t = att.c + att.s;
+  if(!t) return '—';
+  const p = Math.round(att.c / t * 100);
+  const e = p >= 25 ? '✅' : p >= 15 ? '⚠️' : '🔴';
+  return p + '% ' + e + ' (' + att.c + '/' + t + ')';
+}
+function gateAttHtml(vend){
+  const h = attVendHoy(vend), m = attVendMes(vend);
+  return `<span class="gate-att">Hoy: ${attPctStr(h)} &nbsp;·&nbsp; Mes: ${attPctStr(m)}</span>`;
+}
+
 function buildGate(){
   const cur = currentVend || localStorage.getItem(VKEY) || '';
   $('gateNames').innerHTML = VENDEDORES.map(n =>
-    `<button class="gate-name${n===cur?' saved':''}" data-name="${esc(n)}">${esc(n)}${n===cur?'<span class="yo">tú</span>':''}</button>`).join('');
+    `<button class="gate-name${n===cur?' saved':''}" data-name="${esc(n)}">
+      ${esc(n)}${n===cur?'<span class="yo">tú</span>':''}
+      ${gateAttHtml(n)}
+    </button>`).join('');
   [...$('gateNames').children].forEach(b => {
     b.onclick = () => { const n = b.dataset.name; setVend(n); localStorage.setItem(VKEY, n); hideGate(); };
   });
