@@ -1360,7 +1360,7 @@ async function cargarListaAvisos(){
   const el=document.getElementById('ceaLista');
   el.innerHTML='<p style="text-align:center;color:#aaa;font-size:12px;padding:12px">Cargando…</p>';
   try{
-    const data=await jsonp(API+'?modo=avisos_cloud&callback=_cbAvL'+Date.now());
+    const data=await jsonp(API+'?modo=avisos_cloud');
     if(!Array.isArray(data)||data.length===0){
       el.innerHTML='<p style="text-align:center;color:#aaa;font-size:12px;padding:12px">Sin avisos en nube.</p>';
       return;
