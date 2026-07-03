@@ -158,7 +158,23 @@
   .att-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; font-size:13px; font-weight:700; color:#555; }
   .att-reset { background:none; border:1.5px solid var(--linea); border-radius:8px; padding:4px 10px; font-family:'Montserrat',sans-serif; font-size:11px; font-weight:700; color:#aaa; cursor:pointer; }
   .att-rate { font-size:54px; font-weight:800; line-height:1; margin-bottom:4px; }
-  .att-sub { font-size:12px; color:#888; font-weight:600; margin-bottom:14px; min-height:16px; }
+  .att-sub { font-size:12px; color:#888; font-weight:600; margin-bottom:10px; min-height:16px; }
+  /* ── Barra de meta ── */
+  .att-prog { margin:0 0 12px; }
+  .att-prog-track { position:relative; height:9px; background:#f0f0f0; border-radius:10px; overflow:hidden; }
+  .att-prog-fill { height:100%; border-radius:10px; transition:.4s; }
+  .att-prog-goal { position:absolute; top:0; bottom:0; left:25%; width:2.5px; background:var(--verde); opacity:.5; }
+  .att-prog-lbl { display:flex; justify-content:space-between; font-size:10px; color:#bbb; font-weight:600; margin-top:3px; }
+  .att-prog-lbl .meta { color:var(--verde); }
+  /* ── Leaderboard ── */
+  .lead-card { padding:14px 15px; }
+  .lead-head { font-size:11px; font-weight:800; color:#999; text-transform:uppercase; letter-spacing:1px; margin-bottom:10px; }
+  .lead-row { display:flex; align-items:center; gap:8px; padding:7px 0; border-bottom:1px solid var(--linea); }
+  .lead-row:last-of-type { border-bottom:none; }
+  .lead-name { flex:1; font-size:13px; font-weight:700; }
+  .lead-ventas { font-size:11px; color:#aaa; font-weight:700; white-space:nowrap; min-width:52px; text-align:center; }
+  .lead-att { font-size:12px; font-weight:800; white-space:nowrap; min-width:80px; text-align:right; }
+  /* ── Botones ── */
   .att-btns { display:flex; gap:10px; }
   .att-btn { flex:1; padding:12px; border:none; border-radius:12px; font-family:'Montserrat',sans-serif; font-size:13px; font-weight:800; cursor:pointer; }
   .att-si { background:#eafaf1; color:var(--verde); }
@@ -364,10 +380,67 @@ function attRefresh(att){
   const pct=total>0?Math.round(att.c/total*100):0;
   const col=pct>=25?'var(--verde)':pct>=15?'var(--naranja)':'var(--rojo)';
   const re=document.getElementById('attRate'); const su=document.getElementById('attSub');
+  const bf=document.getElementById('attBarFill');
   if(re){re.textContent=total>0?pct+'%':'—'; re.style.color=col;}
   if(su) su.textContent=att.c+' con seguro de '+total+' ventas hoy '+(pct>=25?'✅':pct>0?'⚠️':'');
+  if(bf){ bf.style.width=Math.min(pct,100)+'%'; bf.style.background=col; }
 }
 function attReset(){ localStorage.removeItem(attKey()); attRefresh({c:0,s:0}); }
+
+/* ---- Leaderboard & Resumen WA ---- */
+const VENDEDORES_TB = ['Arnulfo González','Arturo Aguilar','Laura Bonilla','Miguel Ángel García','Ángel Perea'];
+function attVendHoyTB(vend){
+  return JSON.parse(localStorage.getItem('attv_'+vend+'_'+new Date().toISOString().slice(0,10))||'{"c":0,"s":0}');
+}
+function ventasHoyVend(vend){
+  try{
+    const items=JSON.parse(localStorage.getItem('hes1217_series_v1')||'[]');
+    const hoy=new Date().toLocaleDateString('es-MX');
+    return items.filter(i=>i.fecha===hoy&&i.vend===vend).length;
+  }catch(e){ return 0; }
+}
+function nombreCorto(n){ const p=n.split(' '); return p[0]+(p[1]?' '+p[1][0]+'.':''); }
+function leaderboardHtml(){
+  const rows=VENDEDORES_TB.map(v=>{
+    const av=attVendHoyTB(v); const tv=av.c+av.s;
+    const pv=tv>0?Math.round(av.c/tv*100):null;
+    const ev=pv===null?'':pv>=25?'✅':pv>=15?'⚠️':'🔴';
+    const col=pv===null?'#aaa':pv>=25?'var(--verde)':pv>=15?'var(--naranja)':'var(--rojo)';
+    const vtas=ventasHoyVend(v);
+    return `<div class="lead-row">
+      <span class="lead-name">${nombreCorto(v)}</span>
+      <span class="lead-ventas">${vtas?vtas+' vta'+(vtas!==1?'s':''):'—'}</span>
+      <span class="lead-att" style="color:${col}">${pv!==null?pv+'% '+ev:'—'}</span>
+    </div>`;
+  }).join('');
+  return `<div class="card lead-card">
+    <div class="lead-head">👥 Equipo hoy — Assurant</div>
+    ${rows}
+    <button class="btn-wa" onclick="resumenWA()">📲 Compartir resumen por WhatsApp</button>
+  </div>`;
+}
+function resumenWA(){
+  const att=attLoad(); const total=att.c+att.s;
+  const pct=total>0?Math.round(att.c/total*100):0;
+  const emoji=pct>=25?'✅':pct>=15?'⚠️':'🔴';
+  const hoy=new Date().toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'});
+  const hoyStr2=new Date().toISOString().slice(0,10);
+  const promoAct=PROMOS.filter(x=>tieneExistencia_(x.sku)).length;
+  const eolList=EOL.filter(e=>e.estado==='listo').length;
+  const avisosAct=(D.avisos||[]).filter(a=>!a.d2||a.d2>=hoyStr2).length;
+  let msg=`📊 *Resumen HES 1217 · ${hoy}*\n\n`;
+  msg+=`🛡️ *Assurant: ${total>0?pct+'% '+emoji:'sin registros'}* (${att.c}/${total})\n`;
+  VENDEDORES_TB.forEach(v=>{
+    const av=attVendHoyTB(v); const tv=av.c+av.s; if(!tv) return;
+    const pv=Math.round(av.c/tv*100);
+    msg+=`  · ${nombreCorto(v)} → ${av.c}/${tv} = ${pv}% ${pv>=25?'✅':pv>=15?'⚠️':'🔴'}\n`;
+  });
+  if(promoAct) msg+=`\n🔥 Promos vigentes: ${promoAct}`;
+  if(eolList)  msg+=`\n🏷️ EOL al 50%: ${eolList}`;
+  if(avisosAct)msg+=`\n📢 Avisos activos: ${avisosAct}`;
+  msg+=`\n\n_HES Angelópolis · Odemás Grupo Gigante_`;
+  window.open('https://wa.me/?text='+encodeURIComponent(msg.trim()),'_blank');
+}
 /* ---- WhatsApp share ---- */
 function compartirWA(prodEnc,sku,pv,pb){
   const producto=decodeURIComponent(prodEnc);
@@ -595,10 +668,18 @@ function render(){
     const att=attLoad(); const total=att.c+att.s;
     const pct=total>0?Math.round(att.c/total*100):0;
     const col=pct>=25?'var(--verde)':pct>=15?'var(--naranja)':'var(--rojo)';
+    const barW=Math.min(pct,100);
     html += `<div class="card att-card">
       <div class="att-header"><span>🛡️ Assurant del día</span><button class="att-reset" onclick="attReset()">↺ Reiniciar</button></div>
       <div class="att-rate" id="attRate" style="color:${col}">${total>0?pct+'%':'—'}</div>
       <div class="att-sub" id="attSub">${att.c} con seguro de ${total} ventas hoy ${pct>=25?'✅':pct>0?'⚠️':''}</div>
+      <div class="att-prog">
+        <div class="att-prog-track">
+          <div class="att-prog-fill" id="attBarFill" style="width:${barW}%;background:${col}"></div>
+          <div class="att-prog-goal"></div>
+        </div>
+        <div class="att-prog-lbl"><span>0%</span><span class="meta">▲ meta 25%</span><span>100%</span></div>
+      </div>
       <div class="att-btns">
         <button class="att-btn att-si" onclick="attAdd('c')">✓ Con seguro</button>
         <button class="att-btn att-no" onclick="attAdd('s')">✗ Sin seguro</button>
@@ -617,7 +698,8 @@ function render(){
       <div class="dash-stat" onclick="filtroActivo='resurtir';render()">
         <div class="dash-n" style="color:${resurtirN>0?'var(--naranja)':'#1a1a1a'}">${resurtirN}</div><div class="dash-lbl">🔄 Resurtir</div>
       </div>
-    </div>`;
+    </div>
+    ${leaderboardHtml()}`;
   }
   if(f==='aviso') html += seccion('📢 Avisos', avisos, cardAviso);
   if(f==='eol'){
