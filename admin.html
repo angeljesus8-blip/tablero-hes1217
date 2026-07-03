@@ -1321,9 +1321,7 @@ async function guardarAviso(){
   const btn=document.getElementById('btnSaveAviso');
   btn.disabled=true; btn.textContent='⏳ Guardando…';
   try{
-    const r=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({tipo:'aviso_add',pin:PIN_OK,titulo,detalle,d2,prioridad,tipo_doc:'CEA/LEA'})});
-    const j=await r.json();
+    const j=await jsonp(apiUrl('aviso_add',{titulo,detalle:detalle.slice(0,800),d2,prioridad,tipo_doc:'CEA/LEA'}));
     if(j.ok){
       toast('Aviso guardado ✓',true);
       document.getElementById('ceaForm').style.display='none';
@@ -1332,7 +1330,7 @@ async function guardarAviso(){
       document.getElementById('ceaFile').value='';
       cargarListaAvisos();
     } else toast(j.error||'Error',false);
-  } catch(e){ toast('Error de red',false); }
+  } catch(e){ toast('Error al guardar',false); }
   finally{ btn.disabled=false; btn.textContent='💾 Guardar aviso'; }
 }
 
@@ -1343,9 +1341,7 @@ async function guardarAvisoManual(){
   const prioridad=document.getElementById('mP').value;
   if(!titulo){ toast('Falta el título',false); return; }
   try{
-    const r=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({tipo:'aviso_add',pin:PIN_OK,titulo,detalle,d2,prioridad,tipo_doc:'manual'})});
-    const j=await r.json();
+    const j=await jsonp(apiUrl('aviso_add',{titulo,detalle:detalle.slice(0,800),d2,prioridad,tipo_doc:'manual'}));
     if(j.ok){
       toast('Aviso guardado ✓',true);
       document.getElementById('mT').value='';
@@ -1353,7 +1349,7 @@ async function guardarAvisoManual(){
       document.getElementById('mD2').value='';
       cargarListaAvisos();
     } else toast(j.error||'Error',false);
-  } catch(e){ toast('Error de red',false); }
+  } catch(e){ toast('Error al guardar',false); }
 }
 
 async function cargarListaAvisos(){
@@ -1380,12 +1376,10 @@ async function cargarListaAvisos(){
 async function eliminarAviso(id){
   if(!confirm('¿Eliminar este aviso?')) return;
   try{
-    const r=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({tipo:'aviso_del',pin:PIN_OK,id})});
-    const j=await r.json();
+    const j=await jsonp(apiUrl('aviso_del',{id}));
     if(j.ok){ toast('Aviso eliminado',true); cargarListaAvisos(); }
     else toast(j.error||'Error',false);
-  } catch(e){ toast('Error de red',false); }
+  } catch(e){ toast('Error al eliminar',false); }
 }
 </script>
 </body>
