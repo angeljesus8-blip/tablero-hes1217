@@ -396,6 +396,15 @@ function cardPromo(x){
     ${sel}
   </div>`;
 }
+function cardPrecioReg(x){
+  const precio = x.precio || 0;
+  const sel = precio ? segSelector(x.sku, precio, precio) : `<span class="badge">Sin precio registrado</span>`;
+  return `<div class="card">
+    <div class="top"><h3>${x.producto}</h3></div>
+    <div class="meta"><span class="badge">SKU ${x.sku}</span></div>
+    ${sel}
+  </div>`;
+}
 function cardEol(e){
   if(e.estado==='listo'){
     return `<div class="card t-eol listo">
@@ -503,6 +512,14 @@ function render(){
     const ocultasTxt = promosSinStock>0 ? ` · ${promosSinStock} sin existencia ocultas` : '';
     html += `<div class="promo-toolbar"><span>${promos.length} promo${promos.length!==1?'s':''} con existencia${ocultasTxt}</span><button id="btnRefreshPromos" onclick="cargarPromosNube(true)">↻ Actualizar</button></div>`;
     html += seccion('🔥 Promociones vigentes', promos, cardPromo);
+    const promoSkus = new Set(PROMOS.map(p => p.sku));
+    const sinPromo = (D.inventario||[]).filter(x =>
+      coincide(x.producto, x.sku) &&
+      ((x.stock||0) > 0 || (x.exhibe||0) > 0) &&
+      !promoSkus.has(x.sku) &&
+      !eolSkuSet.has(x.sku)
+    );
+    html += seccion('💰 Precio regular', sinPromo, cardPrecioReg);
   }
   if(f==='nov')   html += seccion('📦 Mercancía nueva', nov, cardNov);
   if(f==='resurtir') html += seccion('🔄 Resurtir · 0 para vender, solo queda exhibición (no EOL)', resurtir, rowInv);
