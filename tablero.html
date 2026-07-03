@@ -150,6 +150,25 @@
     -webkit-overflow-scrolling:touch; scrollbar-width:none; }
   .promo-slider::-webkit-scrollbar { display:none; }
   .promo-slide { min-width:100%; scroll-snap-align:start; box-sizing:border-box; }
+  .promo-dots { display:flex; justify-content:center; gap:8px; padding:6px 0 2px; }
+  .promo-dot { width:8px; height:8px; border-radius:50%; background:#e0e0e0; transition:.15s; }
+  .promo-dot.active { background:var(--azul); }
+  /* ---- Dashboard ---- */
+  .att-card { padding:18px 18px 14px; }
+  .att-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; font-size:13px; font-weight:700; color:#555; }
+  .att-reset { background:none; border:1.5px solid var(--linea); border-radius:8px; padding:4px 10px; font-family:'Montserrat',sans-serif; font-size:11px; font-weight:700; color:#aaa; cursor:pointer; }
+  .att-rate { font-size:54px; font-weight:800; line-height:1; margin-bottom:4px; }
+  .att-sub { font-size:12px; color:#888; font-weight:600; margin-bottom:14px; min-height:16px; }
+  .att-btns { display:flex; gap:10px; }
+  .att-btn { flex:1; padding:12px; border:none; border-radius:12px; font-family:'Montserrat',sans-serif; font-size:13px; font-weight:800; cursor:pointer; }
+  .att-si { background:#eafaf1; color:var(--verde); }
+  .att-no { background:#fdeaea; color:var(--rojo); }
+  .dash-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:0 16px 16px; }
+  .dash-stat { background:#fff; border-radius:14px; padding:16px 12px; text-align:center; border:1px solid #ececec; cursor:pointer; active:opacity:.8; }
+  .dash-n { font-size:34px; font-weight:800; line-height:1; color:#1a1a1a; }
+  .dash-lbl { font-size:11px; color:#888; font-weight:700; margin-top:5px; }
+  /* ---- WhatsApp share ---- */
+  .btn-wa { display:flex; align-items:center; justify-content:center; gap:6px; background:#eafaf1; color:#128C7E; border:none; border-radius:10px; padding:9px 14px; font-family:'Montserrat',sans-serif; font-size:12px; font-weight:700; cursor:pointer; margin-top:10px; width:100%; }
 </style>
 </head>
 <body>
@@ -187,6 +206,7 @@ document.getElementById('updated').textContent = D.actualizado || '';
 const HOY = new Date();
 
 const FILTROS = [
+  { id:'inicio', label:'🏠 Inicio' },
   { id:'inv',    label:'📊 Inventario' },
   { id:'bundle', label:'🎁 Bundles' },
   { id:'promo',  label:'🔥 Promos' },
@@ -197,7 +217,7 @@ const FILTROS = [
   { id:'nov',   label:'📦 Novedades' },
   { id:'aviso', label:'📢 Avisos' },
 ];
-let filtroActivo = 'inv';
+let filtroActivo = 'inicio';
 let busqueda = '';
 
 function diasRestantes(fecha){
@@ -325,10 +345,42 @@ function slidePromo(idx) {
   if (!slider) return;
   slider.scrollTo({ left: idx * slider.offsetWidth, behavior: 'smooth' });
   document.querySelectorAll('.promo-tab').forEach((t,i) => t.classList.toggle('active', i===idx));
+  document.querySelectorAll('.promo-dot').forEach((d,i) => d.classList.toggle('active', i===idx));
 }
 function onPromoSliderScroll(el) {
   const idx = Math.round(el.scrollLeft / el.offsetWidth);
   document.querySelectorAll('.promo-tab').forEach((t,i) => t.classList.toggle('active', i===idx));
+  document.querySelectorAll('.promo-dot').forEach((d,i) => d.classList.toggle('active', i===idx));
+}
+/* ---- Assurant attach rate ---- */
+function attKey(){ return 'att_'+new Date().toISOString().slice(0,10); }
+function attLoad(){ return JSON.parse(localStorage.getItem(attKey())||'{"c":0,"s":0}'); }
+function attAdd(tipo){
+  const k=attKey(); const att=attLoad(); att[tipo]++;
+  localStorage.setItem(k,JSON.stringify(att)); attRefresh(att);
+}
+function attRefresh(att){
+  const total=att.c+att.s;
+  const pct=total>0?Math.round(att.c/total*100):0;
+  const col=pct>=25?'var(--verde)':pct>=15?'var(--naranja)':'var(--rojo)';
+  const re=document.getElementById('attRate'); const su=document.getElementById('attSub');
+  if(re){re.textContent=total>0?pct+'%':'—'; re.style.color=col;}
+  if(su) su.textContent=att.c+' con seguro de '+total+' ventas hoy '+(pct>=25?'✅':pct>0?'⚠️':'');
+}
+function attReset(){ localStorage.removeItem(attKey()); attRefresh({c:0,s:0}); }
+/* ---- WhatsApp share ---- */
+function compartirWA(prodEnc,sku,pv,pb){
+  const producto=decodeURIComponent(prodEnc);
+  const s=seguroPara(pb||pv);
+  let msg='*'+producto+'*\nSKU '+sku+'\n💰 '+money(pv);
+  if(s){ msg+='\n\n🛡️ Assurant:\n  +1 año: '+money(pv+s.p1)+'\n  +2 años: '+money(pv+s.p2); }
+  const msi=[];
+  if(pv>=1500) msi.push('6 MSI');
+  if(pv>=10000) msi.push('12 MSI');
+  if(pv>=20000) msi.push('18 MSI*');
+  if(msi.length) msg+='\n\n💳 '+msi.join(' · ')+' disponibles';
+  msg+='\n\n_HES Angelópolis Puebla_';
+  window.open('https://wa.me/?text='+encodeURIComponent(msg.trim()),'_blank');
 }
 
 function tieneExistencia_(sku){
@@ -354,6 +406,7 @@ function calcDerivados(){
 calcDerivados();
 
 function cuenta(id){
+  if(id==='inicio') return '';
   if(id==='bundle') return BUNDLES.filter(x=>coincide(x.nombre,x.sku1,x.sku2)).length;
   if(id==='promo') return PROMOS.filter(x=>coincide(x.producto,x.sku) && tieneExistencia_(x.sku)).length;
   if(id==='eol')   return EOL.filter(e=>coincide(e.producto,e.sku) && e.estado==='listo').length;
@@ -368,6 +421,7 @@ function cuenta(id){
 
 // ¿la sección tiene algún dato? (ignora el buscador, para que las pestañas no salten al escribir)
 function seccionTieneItems(id){
+  if(id==='inicio')   return true;
   if(id==='bundle')   return BUNDLES.length>0;
   if(id==='promo')    return PROMOS.length>0;
   if(id==='eol')      return EOL.length>0;
@@ -393,13 +447,18 @@ function cardBundle(x){
   const skuArr=(x.skus||'').split(',').map(s=>s.trim()).filter(Boolean);
   const prods=skuArr.map(s=>invBySku[s]?invBySku[s].producto:'SKU '+s);
   const vig = x.d2 ? badgeVigencia(x.d2) : '';
+  const precioNum = Number(x.precio)||0;
+  const bunId = 'bun_'+(x.nombre||'b').replace(/[^a-z0-9]/gi,'').slice(0,12);
+  const sel = precioNum ? segSelector(bunId, precioNum, precioNum) : '';
+  const waBtn = precioNum ? `<button class="btn-wa" onclick="compartirWA('${encodeURIComponent(x.nombre||'Bundle')}','${skuArr.join('+')}',${precioNum},${precioNum})">📲 Compartir por WhatsApp</button>` : '';
   return `<div class="card t-bundle">
     <div class="top"><h3>${x.nombre||'Bundle'}</h3><span class="tag bundle">🎁 ×2</span></div>
     <p class="det">${prods.slice(0,4).map(p=>'· '+p).join('<br>')}${prods.length>4?`<br>· <em>+${prods.length-4} más</em>`:''}</p>
     <div class="meta">
-      ${x.precio?`<span class="precio">${money(Number(x.precio))}</span>`:''}
+      ${precioNum?`<span class="precio">${money(precioNum)}</span>`:''}
       ${vig}
     </div>
+    ${sel}${waBtn}
   </div>`;
 }
 function cardPromo(x){
@@ -407,22 +466,26 @@ function cardPromo(x){
   const precioBase = x.pr || x.pp;
   const precioVenta = x.pp || x.pr;
   const sel = (precioBase && precioVenta) ? segSelector(x.sku, precioBase, precioVenta) : '';
+  const pv = parseFloat(String(precioVenta||0).replace(/[^0-9.]/g,''))||0;
+  const pb = parseFloat(String(precioBase||0).replace(/[^0-9.]/g,''))||0;
+  const waBtn = pv ? `<button class="btn-wa" onclick="compartirWA('${encodeURIComponent(x.producto)}','${x.sku}',${pv},${pb})">📲 Compartir por WhatsApp</button>` : '';
   return `<div class="card t-promo">
     <div class="top"><h3>${x.producto}</h3><span class="tag promo">🔥 PROMO</span></div>
     <div class="meta">
       ${x.pr!=null?`<span class="badge" style="text-decoration:line-through;color:#bbb">Reg ${money(x.pr)}</span>`:''}
       <span class="badge">SKU ${x.sku}</span>${vig}
     </div>
-    ${sel}
+    ${sel}${waBtn}
   </div>`;
 }
 function cardPrecioReg(x){
   const precio = x.precio || 0;
   const sel = precio ? segSelector(x.sku, precio, precio) : `<span class="badge">Sin precio registrado</span>`;
+  const waBtn = precio ? `<button class="btn-wa" onclick="compartirWA('${encodeURIComponent(x.producto)}','${x.sku}',${precio},${precio})">📲 Compartir por WhatsApp</button>` : '';
   return `<div class="card">
     <div class="top"><h3>${x.producto}</h3></div>
     <div class="meta"><span class="badge">SKU ${x.sku}</span></div>
-    ${sel}
+    ${sel}${waBtn}
   </div>`;
 }
 function cardEol(e){
@@ -524,6 +587,38 @@ function render(){
   const hoyStr = new Date().toISOString().slice(0,10);
   const avisos = (D.avisos||[]).filter(x=>coincide(x.titulo,x.detalle) && (!x.d2||x.d2>=hoyStr));
 
+  if(f==='inicio'){
+    const promoAct = PROMOS.filter(x=>tieneExistencia_(x.sku)).length;
+    const eolList  = EOL.filter(e=>e.estado==='listo').length;
+    const avisosAct= (D.avisos||[]).filter(a=>!a.d2||a.d2>=hoyStr).length;
+    const resurtirN= RESURTIR.length;
+    const att=attLoad(); const total=att.c+att.s;
+    const pct=total>0?Math.round(att.c/total*100):0;
+    const col=pct>=25?'var(--verde)':pct>=15?'var(--naranja)':'var(--rojo)';
+    html += `<div class="card att-card">
+      <div class="att-header"><span>🛡️ Assurant del día</span><button class="att-reset" onclick="attReset()">↺ Reiniciar</button></div>
+      <div class="att-rate" id="attRate" style="color:${col}">${total>0?pct+'%':'—'}</div>
+      <div class="att-sub" id="attSub">${att.c} con seguro de ${total} ventas hoy ${pct>=25?'✅':pct>0?'⚠️':''}</div>
+      <div class="att-btns">
+        <button class="att-btn att-si" onclick="attAdd('c')">✓ Con seguro</button>
+        <button class="att-btn att-no" onclick="attAdd('s')">✗ Sin seguro</button>
+      </div>
+    </div>
+    <div class="dash-grid">
+      <div class="dash-stat" onclick="filtroActivo='promo';render()">
+        <div class="dash-n">${promoAct}</div><div class="dash-lbl">🔥 Promos</div>
+      </div>
+      <div class="dash-stat" onclick="filtroActivo='eol';render()">
+        <div class="dash-n" style="color:${eolList>0?'var(--rojo)':'#1a1a1a'}">${eolList}</div><div class="dash-lbl">🏷️ EOL al 50%</div>
+      </div>
+      <div class="dash-stat" onclick="filtroActivo='aviso';render()">
+        <div class="dash-n">${avisosAct}</div><div class="dash-lbl">📢 Avisos</div>
+      </div>
+      <div class="dash-stat" onclick="filtroActivo='resurtir';render()">
+        <div class="dash-n" style="color:${resurtirN>0?'var(--naranja)':'#1a1a1a'}">${resurtirN}</div><div class="dash-lbl">🔄 Resurtir</div>
+      </div>
+    </div>`;
+  }
   if(f==='aviso') html += seccion('📢 Avisos', avisos, cardAviso);
   if(f==='eol'){
     html += seccion('🏷️ Vender al 50% · pieza de exhibición', eolListo, cardEol);
@@ -552,6 +647,10 @@ function render(){
       <div class="promo-slide">
         ${sinPromo.length ? sinPromo.map(cardPrecioReg).join('') : '<div class="empty">Sin resultados.</div>'}
       </div>
+    </div>
+    <div class="promo-dots">
+      <span class="promo-dot active"></span>
+      <span class="promo-dot"></span>
     </div>`;
   }
   if(f==='nov')   html += seccion('📦 Mercancía nueva', nov, cardNov);
