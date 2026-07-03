@@ -388,7 +388,7 @@ function attRefresh(att){
 function attReset(){ localStorage.removeItem(attKey()); attRefresh({c:0,s:0}); }
 
 /* ---- Leaderboard & Resumen WA ---- */
-const VENDEDORES_TB = ['Jorge Medina','María Fuentes','Elena Navarro','Luis Ortega','Ana Ramírez'];
+const VENDEDORES_TB = ['Jorge Medina','María Fuentes','Luis Ortega'];
 function attVendHoyTB(vend){
   return JSON.parse(localStorage.getItem('attv_'+vend+'_'+new Date().toISOString().slice(0,10))||'{"c":0,"s":0}');
 }
