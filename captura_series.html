@@ -115,6 +115,14 @@
 
   footer{ text-align:center; font-size:10px; color:#ccc; margin-top:20px; }
 
+  /* Seguro Assurant */
+  .seg-btns { display:flex; gap:8px; margin-top:2px; }
+  .seg-btn { flex:1; padding:11px; border-radius:10px; border:1.5px solid var(--linea);
+    background:#fff; font-family:inherit; font-size:14px; font-weight:700; cursor:pointer; color:#aaa; transition:.12s; }
+  .seg-btn:active { transform:scale(.98); }
+  .seg-si.active { background:#eafaf1; border-color:var(--verde); color:var(--verde); }
+  .seg-no.active { background:#fdeaea; border-color:var(--rojo); color:var(--rojo); }
+
   /* ---------- Pantalla de inicio (selección de vendedor) ---------- */
   #gate{ position:fixed; inset:0; z-index:100; background:#fff; display:flex; flex-direction:column;
     align-items:center; justify-content:center; padding:24px 22px calc(24px + env(safe-area-inset-bottom));
@@ -193,6 +201,13 @@
       <input type="text" id="desc" placeholder="Descripción del artículo" autocomplete="off">
     </div>
     <div class="recon-warn" id="reconWarn">⚠ Producto NO reconocido — pudo ser mala lectura. Revisa o re-toma la foto.</div>
+    <div class="field" style="margin-top:8px;">
+      <label>¿Con seguro Assurant?</label>
+      <div class="seg-btns">
+        <button type="button" class="seg-btn seg-si" id="segSi" onclick="setSeg('c')">✓ Con seguro</button>
+        <button type="button" class="seg-btn seg-no" id="segNo" onclick="setSeg('s')">✗ Sin seguro</button>
+      </div>
+    </div>
     <button class="btn btn-add" id="btnAdd" style="margin-top:6px;">＋ Agregar al reporte</button>
   </div>
 
@@ -319,6 +334,17 @@ function promoActiva(sku){
 const $ = id => document.getElementById(id);
 const fields = ['serie','sku','precio','desc','vend'];
 
+/* ── Seguro Assurant ── */
+let segVal = null;
+function setSeg(v){ segVal=(segVal===v)?null:v; $('segSi').classList.toggle('active',segVal==='c'); $('segNo').classList.toggle('active',segVal==='s'); }
+function clearSeg(){ segVal=null; $('segSi').classList.remove('active'); $('segNo').classList.remove('active'); }
+function localDate(){ const d=new Date(); return d.getFullYear()+'-'+(d.getMonth()+1).toString().padStart(2,'0')+'-'+d.getDate().toString().padStart(2,'0'); }
+function attUpdate(tipo,vend){
+  const dt=localDate();
+  const gk='att_'+dt; const ga=JSON.parse(localStorage.getItem(gk)||'{"c":0,"s":0}'); ga[tipo]++; localStorage.setItem(gk,JSON.stringify(ga));
+  if(vend){ const vk='attv_'+vend+'_'+dt; const va=JSON.parse(localStorage.getItem(vk)||'{"c":0,"s":0}'); va[tipo]++; localStorage.setItem(vk,JSON.stringify(va)); }
+}
+
 function toast(msg, type=''){
   const t = $('toast'); t.textContent = msg; t.className = 'toast show ' + type;
   clearTimeout(t._t); t._t = setTimeout(()=> t.className='toast', 1600);
@@ -408,6 +434,9 @@ $('btnAdd').onclick = () => {
   pending.push(pend);
   savePending(); flushCloud();
   render();
+  // registra seguro Assurant si fue seleccionado
+  if(segVal) attUpdate(segVal, currentVend);
+  clearSeg();
   // limpia serie/sku/precio/desc; conserva vendedor
   ['serie','sku','precio','desc'].forEach(f=> $(f).value='');
   setRecon(true); setPromo(false);
