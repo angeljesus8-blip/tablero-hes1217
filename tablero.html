@@ -194,7 +194,7 @@
   <img src="logo_odemas.png" alt="Odemás">
   <div class="h-txt">
     <h1>Tablero del Equipo</h1>
-    <p>HES 1217 · Angelópolis</p>
+    <p id="headerStoreSub">HES · ---</p>
   </div>
   <div class="updated">Actualizado<b id="updated">—</b></div>
   <button id="btnBell" onclick="activarNotifs()" title="Activar avisos push" style="background:none;border:none;cursor:pointer;padding:4px 4px;font-size:22px;line-height:1;color:#ddd;margin-left:2px;flex-shrink:0" aria-label="Notificaciones">🔔</button>
@@ -211,13 +211,20 @@
 
 <main id="app"></main>
 
-<footer>Odemás · Grupo Gigante — uso interno HES 1217</footer>
+<footer id="tbFooter">Odemás · Grupo Gigante — uso interno HES</footer>
 
 <script src="datos.js"></script>
 <script>
 const D = window.DATOS || {};
-const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbwbZFsiDqZrNitPKNLqr4r6xOFu3VKprtXJacScftIJmcQdAl_yytjxK8BymWvy8I1gjA/exec';
+const _cfg = (function(){ try{ return JSON.parse(localStorage.getItem('hes_store')||'null'); }catch(e){ return null; } })();
+const CLOUD_URL = (_cfg && _cfg.gas_url) ? _cfg.gas_url : 'https://script.google.com/macros/s/AKfycbwbZFsiDqZrNitPKNLqr4r6xOFu3VKprtXJacScftIJmcQdAl_yytjxK8BymWvy8I1gjA/exec';
+const TIENDA_ID     = (_cfg && _cfg.store_id) || '1217';
+const TIENDA_NOMBRE = (_cfg && _cfg.nombre)   || 'Angelópolis';
 document.getElementById('updated').textContent = D.actualizado || '';
+(function(){
+  const el=document.getElementById('headerStoreSub'); if(el) el.textContent='HES '+TIENDA_ID+' · '+TIENDA_NOMBRE;
+  const ft=document.getElementById('tbFooter'); if(ft) ft.textContent='Odemás · Grupo Gigante — uso interno HES '+TIENDA_ID;
+})();
 
 const HOY = new Date();
 
@@ -388,7 +395,9 @@ function attRefresh(att){
 function attReset(){ localStorage.removeItem(attKey()); attRefresh({c:0,s:0}); }
 
 /* ---- Leaderboard & Resumen WA ---- */
-const VENDEDORES_TB = ['Arnulfo González','Arturo Aguilar','Miguel Ángel García'];
+const VENDEDORES_TB = (_cfg && Array.isArray(_cfg.vendedores) && _cfg.vendedores.length)
+  ? _cfg.vendedores
+  : ['Arnulfo González','Arturo Aguilar','Miguel Ángel García'];
 function attVendHoyTB(vend){
   return JSON.parse(localStorage.getItem('attv_'+vend+'_'+new Date().toISOString().slice(0,10))||'{"c":0,"s":0}');
 }
@@ -428,7 +437,7 @@ function resumenWA(){
   const promoAct=PROMOS.filter(x=>tieneExistencia_(x.sku)).length;
   const eolList=EOL.filter(e=>e.estado==='listo').length;
   const avisosAct=(D.avisos||[]).filter(a=>!a.d2||a.d2>=hoyStr2).length;
-  let msg=`📊 *Resumen HES 1217 · ${hoy}*\n\n`;
+  let msg=`📊 *Resumen HES ${TIENDA_ID} · ${hoy}*\n\n`;
   msg+=`🛡️ *Assurant: ${total>0?pct+'% '+emoji:'sin registros'}* (${att.c}/${total})\n`;
   VENDEDORES_TB.forEach(v=>{
     const av=attVendHoyTB(v); const tv=av.c+av.s; if(!tv) return;
@@ -438,7 +447,7 @@ function resumenWA(){
   if(promoAct) msg+=`\n🔥 Promos vigentes: ${promoAct}`;
   if(eolList)  msg+=`\n🏷️ EOL al 50%: ${eolList}`;
   if(avisosAct)msg+=`\n📢 Avisos activos: ${avisosAct}`;
-  msg+=`\n\n_HES Angelópolis · Odemás Grupo Gigante_`;
+  msg+=`\n\n_HES ${TIENDA_NOMBRE} · Odemás Grupo Gigante_`;
   window.open('https://wa.me/?text='+encodeURIComponent(msg.trim()),'_blank');
 }
 /* ---- WhatsApp share ---- */
