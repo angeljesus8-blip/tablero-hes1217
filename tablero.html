@@ -376,7 +376,8 @@ function onPromoSliderScroll(el) {
   document.querySelectorAll('.promo-dot').forEach((d,i) => d.classList.toggle('active', i===idx));
 }
 /* ---- Assurant attach rate ---- */
-function attKey(){ return 'att_'+new Date().toISOString().slice(0,10); }
+function localDate(){ const d=new Date(); return d.getFullYear()+'-'+(d.getMonth()+1).toString().padStart(2,'0')+'-'+d.getDate().toString().padStart(2,'0'); }
+function attKey(){ return 'att_'+localDate(); }
 function attLoad(){ return JSON.parse(localStorage.getItem(attKey())||'{"c":0,"s":0}'); }
 function attAdd(tipo){
   const k=attKey(); const att=attLoad(); att[tipo]++;
@@ -399,7 +400,7 @@ const VENDEDORES_TB = (_cfg && Array.isArray(_cfg.vendedores) && _cfg.vendedores
   ? _cfg.vendedores
   : ['Arnulfo González','Arturo Aguilar','Miguel Ángel García'];
 function attVendHoyTB(vend){
-  return JSON.parse(localStorage.getItem('attv_'+vend+'_'+new Date().toISOString().slice(0,10))||'{"c":0,"s":0}');
+  return JSON.parse(localStorage.getItem('attv_'+vend+'_'+localDate())||'{"c":0,"s":0}');
 }
 function ventasHoyVend(vend){
   try{
