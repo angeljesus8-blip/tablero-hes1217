@@ -300,10 +300,23 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
 <div id="toast"></div>
 
 <script>
-const API    = 'https://script.google.com/macros/s/AKfycbwbZFsiDqZrNitPKNLqr4r6xOFu3VKprtXJacScftIJmcQdAl_yytjxK8BymWvy8I1gjA/exec';
-const PIN_OK = '1217';
+const _cfg  = (function(){ try{ return JSON.parse(localStorage.getItem('hes_store')||'null'); }catch(e){ return null; } })();
+const _role = localStorage.getItem('hes_role');
+const API   = (_cfg && _cfg.gas_url) ? _cfg.gas_url : 'https://script.google.com/macros/s/AKfycbwbZFsiDqZrNitPKNLqr4r6xOFu3VKprtXJacScftIJmcQdAl_yytjxK8BymWvy8I1gjA/exec';
 
-/* ===== PIN ===== */
+/* ===== ACCESO: solo gerente ===== */
+(function(){
+  if (_role === 'gerente') {
+    document.getElementById('pinWrap').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    loadBundles(); loadEol();
+  } else if (_role === 'asesor') {
+    window.location.replace('index.html');
+  }
+  // Si no hay rol, el PIN manual sigue funcionando como fallback
+})();
+
+const PIN_OK = (_cfg && _cfg.admin_pin) ? _cfg.admin_pin : '1217';
 let pin='';
 function key(d){
   if(pin.length>=4) return;
