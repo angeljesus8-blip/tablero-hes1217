@@ -11,7 +11,6 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="HES Red">
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
   * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
   :root { --rojo:#D12026; --naranja:#F37021; --azul:#336BB4; --verde:#1a8c4e; --bg:#f6f6f7; }
@@ -109,13 +108,13 @@
 <body>
 
 <!-- ── CARGANDO ── -->
-<div id="scLoad" class="sc">
+<div id="scLoad" class="sc hide">
   <img class="auth-logo" src="logo_odemas.png" alt="Odemás">
   <p class="auth-loading">Iniciando…</p>
 </div>
 
 <!-- ── ASESOR · PIN ── -->
-<div id="scPin" class="sc hide">
+<div id="scPin" class="sc">
   <img class="auth-logo" src="logo_odemas.png" alt="Odemás">
   <h1 class="auth-title">Bienvenido</h1>
   <p class="auth-sub">Ingresa el PIN de tu tienda</p>
@@ -202,9 +201,16 @@
 
 <script>
 const SB_URL = 'https://rjdrljtujbwooejrpyqv.supabase.co';
-const SB_KEY = 'sb_publishable_mELjDmCaFpNOxcwPi5MB2A_qSZ5ZA2z';
-const { createClient } = window.supabase;
-const sb = createClient(SB_URL, SB_KEY);
+const SB_KEY = 'ANON_KEY_PENDIENTE';
+let sb = null;
+function initSB() {
+  try {
+    if (!window.supabase) return false;
+    const { createClient } = window.supabase;
+    sb = createClient(SB_URL, SB_KEY);
+    return true;
+  } catch(e) { console.warn('Supabase init error:', e); return false; }
+}
 
 const CARDS = [
   { label:'Tablero / Inventario',       icon:'📊', href:'tablero.html',     cls:'c1', desc:'Existencias, EOL al 50%, resurtir, agotados y promos.' },
@@ -272,6 +278,7 @@ function pinDel() {
 async function pinCheck() {
   const pin = pinVal;
   document.getElementById('pinErr').textContent = '';
+  if (!sb) { document.getElementById('pinErr').textContent = 'Sin conexión. Intenta de nuevo.'; pinVal=''; for(let i=0;i<4;i++) document.getElementById('pd'+i).classList.remove('on'); return; }
   const { data, error } = await sb.from('tiendas').select('*').eq('store_id', pin).eq('activo', true).maybeSingle();
   if (!data) {
     document.getElementById('pinErr').textContent = 'PIN incorrecto, intenta de nuevo';
@@ -289,6 +296,7 @@ async function pinCheck() {
 /* ── Gerente login ── */
 async function doLogin() {
   hideErr('loginErr');
+  if (!sb) { showErr('loginErr', 'Sin conexión con el servidor. Intenta de nuevo.'); return; }
   const email = document.getElementById('loginEmail').value.trim();
   const pass  = document.getElementById('loginPass').value;
   if (!email || !pass) { showErr('loginErr', 'Llena correo y contraseña'); return; }
@@ -335,7 +343,7 @@ async function doRegister() {
 
 async function doLogout() {
   const role = localStorage.getItem('hes_role');
-  if (role === 'gerente') await sb.auth.signOut();
+  if (role === 'gerente' && sb) await sb.auth.signOut();
   localStorage.removeItem('hes_store');
   localStorage.removeItem('hes_role');
   pinVal = '';
@@ -344,14 +352,14 @@ async function doLogout() {
 }
 
 async function init() {
-  sc('load');
+  initSB();
   const cfg  = JSON.parse(localStorage.getItem('hes_store')||'null');
   const role = localStorage.getItem('hes_role');
   if (cfg && role) {
-    if (role === 'gerente') {
+    if (role === 'gerente' && sb) {
       try {
-        const { data:{ session } } = await sb.auth.getSession();
-        if (!session) { localStorage.removeItem('hes_store'); localStorage.removeItem('hes_role'); sc('pin'); return; }
+        const { data } = await sb.auth.getSession();
+        if (!data.session) { localStorage.removeItem('hes_store'); localStorage.removeItem('hes_role'); sc('pin'); return; }
       } catch(e) {}
     }
     applyStoreConfig(cfg, role);
@@ -361,9 +369,10 @@ async function init() {
   sc('pin');
 }
 
-init();
+window.addEventListener('load', init);
 </script>
 
+<script async src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 if('serviceWorker' in navigator){
   navigator.serviceWorker.register('./sw.js').catch(()=>{});
