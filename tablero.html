@@ -321,7 +321,13 @@ const SEGUROS = [
   { d:57500, h:74999.99, p1:4489, p2:6619, s1:'100183983', s2:'100184257' },
   { d:75000, h:99999.99, p1:5129, p2:7769, s1:'100183991', s2:'100184265' },
 ];
-function seguroPara(precio) {
+// Excepciones por SKU: productos cuyo precio en inventario no coincide con el rango Assurant real
+const SEGURO_POR_SKU = {
+  '100304263': { p1:1549, p2:1679, s1:'100183861', s2:'100184134' }, // WATCH KIDS X1 AZ
+  '100304271': { p1:1549, p2:1679, s1:'100183861', s2:'100184134' }, // WATCH KIDS X1 ROSA
+};
+function seguroPara(precio, sku) {
+  if (sku && SEGURO_POR_SKU[sku]) return SEGURO_POR_SKU[sku];
   const n = parseFloat(String(precio||0).replace(/[^0-9.]/g,''));
   return SEGUROS.find(r => n >= r.d && n <= r.h) || null;
 }
@@ -336,7 +342,7 @@ function desgloseHtml(p0, total, segCosto) {
   return `<span class="seg-prod">${money(p0)}</span><span class="seg-op"> + ${money(segCosto)} seguro = </span><span class="seg-precio-total">${money(total)}</span>`;
 }
 function segSelector(sku, precioBase, precioVenta) {
-  const s = seguroPara(precioBase);
+  const s = seguroPara(precioBase, sku);
   const p0 = parseFloat(String(precioVenta||0).replace(/[^0-9.]/g,'')) || 0;
   const p1 = s ? p0 + s.p1 : null;
   const p2 = s ? p0 + s.p2 : null;
