@@ -243,18 +243,12 @@ function applyStoreConfig(cfg, role) {
   renderMenuCards(role);
 }
 
-function showScreen(name) {
-  ['scLoad','scPin','scLogin','scRegister'].forEach(id =>
-    document.getElementById(id).classList.toggle('hide', id !== 'sc'+name.charAt(0).toUpperCase()+name.slice(1) && id !== 'sc'+name)
-  );
-  document.getElementById('mainMenu').style.display = name === 'menu' ? '' : 'none';
-}
 function sc(name) {
   document.getElementById('scLoad').classList.toggle('hide', name !== 'load');
   document.getElementById('scPin').classList.toggle('hide', name !== 'pin');
   document.getElementById('scLogin').classList.toggle('hide', name !== 'login');
   document.getElementById('scRegister').classList.toggle('hide', name !== 'register');
-  document.getElementById('mainMenu').style.display = name === 'menu' ? '' : 'none';
+  document.getElementById('mainMenu').style.display = name === 'menu' ? 'block' : 'none';
 }
 function showScreen(name){ sc(name); }
 
@@ -352,27 +346,30 @@ async function doLogout() {
 }
 
 async function init() {
-  initSB();
-  const cfg  = JSON.parse(localStorage.getItem('hes_store')||'null');
-  const role = localStorage.getItem('hes_role');
-  if (cfg && role) {
+  try {
+    initSB();
+    const stored = localStorage.getItem('hes_store');
+    const role   = localStorage.getItem('hes_role');
+    if (!stored || !role) { sc('pin'); return; }
+    let cfg;
+    try { cfg = JSON.parse(stored); } catch(e) { cfg = null; }
+    if (!cfg || !cfg.store_id) { localStorage.removeItem('hes_store'); localStorage.removeItem('hes_role'); sc('pin'); return; }
     if (role === 'gerente' && sb) {
-      try {
-        const { data } = await sb.auth.getSession();
-        if (!data.session) { localStorage.removeItem('hes_store'); localStorage.removeItem('hes_role'); sc('pin'); return; }
-      } catch(e) {}
+      const { data } = await sb.auth.getSession();
+      if (!data || !data.session) { localStorage.removeItem('hes_store'); localStorage.removeItem('hes_role'); sc('pin'); return; }
     }
     applyStoreConfig(cfg, role);
     sc('menu');
-    return;
+  } catch(e) {
+    console.error('init error:', e);
+    sc('pin');
   }
-  sc('pin');
 }
 
 window.addEventListener('load', init);
 </script>
 
-<script async src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 if('serviceWorker' in navigator){
   navigator.serviceWorker.register('./sw.js').catch(()=>{});
