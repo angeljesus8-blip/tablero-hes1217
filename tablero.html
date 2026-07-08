@@ -235,7 +235,6 @@ const FILTROS = [
   { id:'promo',  label:'🔥 Promos' },
   { id:'eol',   label:'🏷️ Vender 50%' },
   { id:'resurtir', label:'🔄 Resurtir' },
-  { id:'agotados', label:'📭 Agotados' },
   { id:'transito', label:'🚚 En tránsito' },
   { id:'nov',   label:'📦 Novedades' },
   { id:'aviso', label:'📢 Avisos' },
@@ -503,8 +502,7 @@ function cuenta(id){
   if(id==='eol')   return EOL.filter(e=>coincide(e.producto,e.sku) && e.estado==='listo').length;
   if(id==='nov')   return (D.novedades||[]).filter(x=>coincide(x.titulo,x.detalle)).length;
   if(id==='inv')   return (D.inventario||[]).filter(x=>coincide(x.producto,x.sku)&&((x.stock||0)>0||(x.exhibe||0)>0)).length;
-  if(id==='resurtir') return RESURTIR.filter(x=>coincide(x.producto,x.sku)).length;
-  if(id==='agotados') return AGOTADOS.filter(x=>coincide(x.producto,x.sku)).length;
+  if(id==='resurtir') return [...AGOTADOS,...RESURTIR].filter(x=>coincide(x.producto,x.sku)).length;
   if(id==='transito') return (D.transito||[]).filter(x=>coincide(x.producto,x.sku)).length;
   if(id==='aviso') return (D.avisos||[]).filter(x=>coincide(x.titulo,x.detalle)).length;
   return 0;
@@ -519,8 +517,7 @@ function seccionTieneItems(id){
   if(id==='transito') return (D.transito||[]).length>0;
   if(id==='nov')      return (D.novedades||[]).length>0;
   if(id==='inv')      return (D.inventario||[]).length>0;
-  if(id==='resurtir') return RESURTIR.length>0;
-  if(id==='agotados') return AGOTADOS.length>0;
+  if(id==='resurtir') return RESURTIR.length>0 || AGOTADOS.length>0;
   if(id==='aviso')    return (D.avisos||[]).length>0;
   return false;
 }
@@ -627,12 +624,16 @@ function cardTransito(x){
     <div class="meta"><span class="badge">SKU ${x.sku}</span></div>
   </div>`;
 }
-function rowAgotado(x){
+function rowResurtir(x){
+  const sinPiso = (x.exhibe||0) === 0;
+  const badge = sinPiso
+    ? `<span class="exh" style="background:#fdeaea;color:var(--rojo);font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;white-space:nowrap;">📭 sin piso</span>`
+    : `<span class="exh" style="background:#fff5ee;color:var(--naranja);font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;white-space:nowrap;">🪟 ${x.exhibe} piso</span>`;
   return `<div class="inv-row">
     <div class="dot cero"></div>
-    <div class="inv-info"><h4>${x.producto}</h4><span>SKU ${x.sku||'—'} · se agotó (0 piso · 0 exhib.)</span></div>
-    <span class="exh eol-pend">📥 pedir</span>
-    <div class="stock cero"><div class="num">0</div><div class="lbl lbl2">existencia</div></div>
+    <div class="inv-info"><h4>${x.producto}</h4><span>SKU ${x.sku||'—'}</span></div>
+    ${badge}
+    <div class="stock cero"><div class="num">0</div><div class="lbl lbl2">piezas</div></div>
   </div>`;
 }
 function rowInv(x){
@@ -674,6 +675,7 @@ function render(){
   const inv    = (D.inventario||[]).filter(x=>coincide(x.producto,x.sku)&&((x.stock||0)>0||(x.exhibe||0)>0));
   const resurtir = RESURTIR.filter(x=>coincide(x.producto,x.sku));
   const agotados = AGOTADOS.filter(x=>coincide(x.producto,x.sku));
+  const resurtirTodos = [...agotados, ...resurtir];
   const transito = (D.transito||[]).filter(x=>coincide(x.producto,x.sku));
   const hoyStr = new Date().toISOString().slice(0,10);
   const avisos = (D.avisos||[]).filter(x=>coincide(x.titulo,x.detalle) && (!x.d2||x.d2>=hoyStr));
@@ -682,7 +684,7 @@ function render(){
     const promoAct = PROMOS.filter(x=>tieneExistencia_(x.sku)).length;
     const eolList  = EOL.filter(e=>e.estado==='listo').length;
     const avisosAct= (D.avisos||[]).filter(a=>!a.d2||a.d2>=hoyStr).length;
-    const resurtirN= RESURTIR.length;
+    const resurtirN= RESURTIR.length + AGOTADOS.length;
     const att=attLoad(); const total=att.c+att.s;
     const pct=total>0?Math.round(att.c/total*100):0;
     const col=pct>=25?'var(--verde)':pct>=15?'var(--naranja)':'var(--rojo)';
@@ -754,8 +756,10 @@ function render(){
     </div>`;
   }
   if(f==='nov')   html += seccion('📦 Mercancía nueva', nov, cardNov);
-  if(f==='resurtir') html += seccion('🔄 Resurtir · 0 para vender, solo queda exhibición (no EOL)', resurtir, rowInv);
-  if(f==='agotados') html += seccion('📭 Agotados · se agotaron (no EOL) — pedir resurtido', agotados, rowAgotado);
+  if(f==='resurtir'){
+    if(agotados.length) html += seccion('📭 Sin existencia — pedir urgente', agotados, rowResurtir);
+    if(resurtir.length) html += seccion('🪟 Queda piso — pedir caja', resurtir, rowResurtir);
+  }
   if(f==='transito') html += seccion('🚚 En tránsito · venta a promesa de entrega', transito, cardTransito);
   if(f==='inv')   html += seccion('📊 Inventario · existencias', inv, rowInv);
 
