@@ -280,7 +280,7 @@ async function pinCheck() {
     for (let i=0;i<4;i++) document.getElementById('pd'+i).classList.remove('on');
     return;
   }
-  const cfg = { store_id:data.store_id, nombre:data.nombre, ciudad:data.ciudad||'', gas_url:data.gas_url||'', vendedores:Array.isArray(data.vendedores)?data.vendedores:[], admin_pin:data.admin_pin||data.store_id };
+  const cfg = { store_id:data.store_id, nombre:data.nombre, ciudad:data.ciudad||'', gas_url:data.gas_url||'', sheet_url:data.sheet_url||'', hoja_auth:data.hoja_auth||'', vendedores:Array.isArray(data.vendedores)?data.vendedores:[], admin_pin:data.admin_pin||data.store_id };
   localStorage.setItem('hes_store', JSON.stringify(cfg));
   localStorage.setItem('hes_role', 'asesor');
   applyStoreConfig(cfg, 'asesor');
@@ -301,7 +301,7 @@ async function doLogin() {
   if (error) { showErr('loginErr', error.message.includes('Invalid') ? 'Correo o contraseña incorrectos' : error.message); return; }
   const { data: tienda } = await sb.from('tiendas').select('*').eq('user_id', data.user.id).single();
   if (!tienda) { showErr('loginErr', 'Tu cuenta no tiene una tienda asignada. Regístrala primero.'); return; }
-  const cfg = { store_id:tienda.store_id, nombre:tienda.nombre, ciudad:tienda.ciudad||'', gas_url:tienda.gas_url||'', vendedores:Array.isArray(tienda.vendedores)?tienda.vendedores:[], admin_pin:tienda.admin_pin||tienda.store_id };
+  const cfg = { store_id:tienda.store_id, nombre:tienda.nombre, ciudad:tienda.ciudad||'', gas_url:tienda.gas_url||'', sheet_url:tienda.sheet_url||'', hoja_auth:tienda.hoja_auth||'', vendedores:Array.isArray(tienda.vendedores)?tienda.vendedores:[], admin_pin:tienda.admin_pin||tienda.store_id };
   localStorage.setItem('hes_store', JSON.stringify(cfg));
   localStorage.setItem('hes_role', 'gerente');
   applyStoreConfig(cfg, 'gerente');
