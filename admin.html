@@ -10,6 +10,7 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.min.js"></script>
 <script>if(window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.worker.min.js';</script>
+<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
 * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
 :root { --rojo:#D12026; --naranja:#F37021; --azul:#336BB4; --verde:#1a8c4e; --bg:#f6f6f7; }
@@ -88,6 +89,20 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
 .btn-del { background:#fff5f5;border:1.5px solid #ffd5d5;color:var(--rojo);border-radius:8px;padding:7px 10px;font-size:14px;cursor:pointer;flex-shrink:0; }
 .empty { text-align:center;color:#ccc;font-size:13px;padding:24px; }
 
+/* COMISIONES — vista previa editable */
+.comis-card { background:#fff;border:1px solid #ececec;border-left:4px solid var(--teal,#0e9594);border-radius:12px;padding:12px 14px;margin-bottom:10px; }
+.comis-card.warn { border-left-color:var(--naranja); }
+.comis-top { display:flex;align-items:center;gap:8px;margin-bottom:8px; }
+.comis-top input.nombre { flex:1;font-family:'Montserrat',sans-serif;font-size:13.5px;font-weight:700;border:1.5px solid #e0e0e0;border-radius:8px;padding:7px 9px;background:#fafafa;outline:none; }
+.comis-top input.nombre:focus { border-color:var(--rojo);background:#fff; }
+.comis-del { background:#fff5f5;border:1.5px solid #ffd5d5;color:var(--rojo);border-radius:8px;padding:5px 9px;font-size:13px;cursor:pointer;flex-shrink:0; }
+.comis-grid { display:grid;grid-template-columns:repeat(3,1fr);gap:8px; }
+.comis-f { display:flex;flex-direction:column;gap:3px; }
+.comis-f label { font-size:9.5px;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:.3px; }
+.comis-f input, .comis-f select { font-family:'Montserrat',sans-serif;font-size:12.5px;font-weight:600;border:1.5px solid #e0e0e0;border-radius:7px;padding:6px 8px;background:#fafafa;outline:none;width:100%; }
+.comis-f input:focus, .comis-f select:focus { border-color:var(--rojo);background:#fff; }
+.comis-sec { font-size:9.5px;font-weight:800;color:var(--teal,#0e9594);text-transform:uppercase;letter-spacing:.4px;margin:8px 0 4px; }
+
 /* SPIN */
 .spin { display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite;vertical-align:middle;margin-right:6px; }
 @keyframes sp{ to{ transform:rotate(360deg); } }
@@ -131,6 +146,8 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
     <button onclick="tab('bundles',this)">🎁 Bundles</button>
     <button onclick="tab('eol',this)">🏷️ EOL</button>
     <button onclick="tab('avisos',this);cargarListaAvisos()">📢 Avisos</button>
+    <button onclick="tab('comis',this);cargarComisionesCloud()">💰 Comisiones</button>
+    <button onclick="tab('config',this);loadConfig()">⚙️ Config</button>
   </div>
 
   <!-- CATÁLOGO -->
@@ -295,6 +312,75 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
     <div class="divider">Avisos activos en nube</div>
     <div id="ceaLista"><p style="text-align:center;color:#aaa;font-size:12px;padding:12px">Abre esta pestaña para cargar…</p></div>
   </div>
+
+  <!-- COMISIONES Y EXTRACOBERTURA -->
+  <div class="pane" id="pane-comis">
+    <div class="card">
+      <h2>📊 Captura de "Comisiones HES" (Sonar)</h2>
+      <p class="note">Sube la captura de pantalla de la tabla <b>"Detalle de comisiones por empleado"</b>. La app la lee con OCR y prellena la lista de abajo — siempre revisa los números antes de guardar.</p>
+      <input type="file" id="fileComis" accept="image/*" hidden>
+      <div class="filebox" id="fboxComis" onclick="document.getElementById('fileComis').click()">
+        <div class="ph" id="fphComis">📷 Toca para elegir la captura de Comisiones</div>
+      </div>
+      <div id="comisOcrStatus" style="display:none;text-align:center;padding:10px;font-size:12px;color:#888;font-weight:700">Leyendo imagen…</div>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <h2>🛡️ Captura de "Garantías por fechas" (Sonar Attach)</h2>
+      <p class="note">Sube la captura de la tabla de extracobertura. Se cruza automáticamente con la lista de arriba por número de empleado.</p>
+      <input type="file" id="fileGar" accept="image/*" hidden>
+      <div class="filebox" id="fboxGar" onclick="document.getElementById('fileGar').click()">
+        <div class="ph" id="fphGar">📷 Toca para elegir la captura de Extracobertura</div>
+      </div>
+      <div id="garOcrStatus" style="display:none;text-align:center;padding:10px;font-size:12px;color:#888;font-weight:700">Leyendo imagen…</div>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <h2>🗓️ Periodos</h2>
+      <div class="field"><label>Periodo de comisiones</label><input id="comisPeriodo" placeholder="Ej: jul 2026 (mes a la fecha)"></div>
+      <div class="field"><label>Periodo de garantías</label><input id="comisPeriodoGar" placeholder="Ej: 1–5 jul 2026 (semana a la fecha)"></div>
+    </div>
+
+    <div class="list-hdr" style="display:flex;align-items:center;justify-content:space-between;margin-top:18px">
+      <span>Vista previa — revisa antes de guardar</span>
+      <button onclick="agregarEmpleadoManual()" style="font-size:11px;padding:4px 10px;border:1.5px solid var(--linea);background:#fff;color:#555;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700">＋ Agregar</button>
+    </div>
+    <div id="comisPreview"><p class="empty" style="text-align:center;color:#ccc;font-size:13px;padding:20px">Sube una captura para empezar.</p></div>
+
+    <button class="btn-pri" id="btnComis" onclick="guardarComisiones()" style="margin-top:14px" disabled>💾 Guardar comisiones en la nube</button>
+    <div class="result" id="resComis"></div>
+
+    <div class="divider">Guardado actualmente en la nube</div>
+    <div id="comisCloudInfo"><p style="text-align:center;color:#aaa;font-size:12px;padding:12px">Abre esta pestaña para cargar…</p></div>
+  </div>
+
+  <!-- CONFIG TIENDA -->
+  <div class="pane" id="pane-config">
+    <div class="card">
+      <h2>⚙️ Configuración de tienda</h2>
+      <p class="note">Datos necesarios para que la app de <b>Captura de Series</b> funcione en todos los dispositivos del equipo.</p>
+      <div class="field">
+        <label>URL del GAS (Apps Script)</label>
+        <input id="cfgGas" type="url" placeholder="https://script.google.com/macros/s/…/exec">
+      </div>
+      <div class="field">
+        <label>URL de la hoja de ventas (Google Sheets)</label>
+        <input id="cfgSheet" type="url" placeholder="https://docs.google.com/spreadsheets/d/…/edit">
+        <p style="font-size:11px;color:#aaa;margin-top:4px">Link de la hoja donde se concentran las ventas del equipo.</p>
+      </div>
+      <div class="field">
+        <label>Responsable de descargas</label>
+        <input id="cfgHoja" placeholder="Ej: Laura Bonilla">
+        <p style="font-size:11px;color:#aaa;margin-top:4px">Nombre exacto del asesor que puede abrir la hoja desde Captura de Series.</p>
+      </div>
+      <div class="field">
+        <label>Vendedores del equipo (uno por línea)</label>
+        <textarea id="cfgVend" rows="6" placeholder="Ana García&#10;Luis Pérez&#10;María López"></textarea>
+      </div>
+      <button class="btn-pri" id="btnConfig" onclick="guardarConfig()">💾 Guardar configuración</button>
+      <div class="result" id="resConfig"></div>
+    </div>
+  </div>
 </div>
 
 <div id="toast"></div>
@@ -303,6 +389,10 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
 const _cfg  = (function(){ try{ return JSON.parse(localStorage.getItem('hes_store')||'null'); }catch(e){ return null; } })();
 const _role = localStorage.getItem('hes_role');
 const API   = (_cfg && _cfg.gas_url) ? _cfg.gas_url : 'https://script.google.com/macros/s/AKfycbwbZFsiDqZrNitPKNLqr4r6xOFu3VKprtXJacScftIJmcQdAl_yytjxK8BymWvy8I1gjA/exec';
+const SB_URL = 'https://rjdrljtujbwooejrpyqv.supabase.co';
+const SB_KEY = 'sb_publishable_mELjDmCaFpNOxcwPi5MB2A_qSZ5ZA2z';
+let sb = null;
+function initSB(){ try{ if(!window.supabase) return false; sb=window.supabase.createClient(SB_URL,SB_KEY); return true; }catch(e){ return false; } }
 
 /* ===== ACCESO: solo gerente ===== */
 (function(){
@@ -1393,6 +1483,351 @@ async function eliminarAviso(id){
     if(j.ok){ toast('Aviso eliminado',true); cargarListaAvisos(); }
     else toast(j.error||'Error',false);
   } catch(e){ toast('Error al eliminar',false); }
+}
+
+/* ================================================================
+   TAB COMISIONES — OCR de capturas de Sonar (Comisiones + Extracobertura)
+   Lee la captura con Tesseract.js (bounding boxes por palabra), agrupa
+   en renglones por cercanía en Y, clasifica cada token (dinero/porcentaje/
+   entero/texto) y cruza ambos reportes por número de empleado.
+   SIEMPRE se muestra una vista previa editable antes de guardar — el OCR
+   de una tabla densa nunca es 100% confiable.
+   ================================================================ */
+let comisionesDraft = {};
+
+let tesseractLoading = null;
+function loadTesseract(){
+  if(window.Tesseract) return Promise.resolve();
+  if(tesseractLoading) return tesseractLoading;
+  tesseractLoading = new Promise((res, rej)=>{
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    s.onload = res; s.onerror = rej;
+    document.head.appendChild(s);
+  });
+  return tesseractLoading;
+}
+function normTxt(s){ return String(s||'').normalize('NFD').replace(/[^\x00-\x7F]/g,'').toUpperCase().trim(); }
+function escHtml(s){ return String(s||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function tituloCase(s){ return String(s).toLowerCase().replace(/(^|\s)([a-záéíóúñ])/g, (m,sp,c)=> sp+c.toUpperCase()); }
+
+async function ocrWords(file){
+  await loadTesseract();
+  const worker = await Tesseract.createWorker('spa');
+  const { data } = await worker.recognize(file);
+  await worker.terminate();
+  return data.words || [];
+}
+
+// Agrupa palabras (con bbox) en renglones por cercanía en Y; dentro de cada renglón, ordena por X
+function agruparRenglones(words){
+  const items = words.filter(w=>w.text && w.text.trim()).map(w=>({
+    text:w.text.trim(), x0:w.bbox.x0, y:(w.bbox.y0+w.bbox.y1)/2, h:(w.bbox.y1-w.bbox.y0)
+  }));
+  items.sort((a,b)=>a.y-b.y);
+  const renglones = [];
+  items.forEach(it=>{
+    let row = renglones.find(r=> Math.abs(r.y-it.y) < Math.max(10, it.h*0.6));
+    if(!row){ row = { y:it.y, items:[] }; renglones.push(row); }
+    row.items.push(it);
+    row.y = row.items.reduce((s,w)=>s+w.y,0)/row.items.length;
+  });
+  renglones.sort((a,b)=>a.y-b.y);
+  renglones.forEach(r=> r.items.sort((a,b)=>a.x0-b.x0));
+  return renglones;
+}
+
+// Clasifica cada palabra de un renglón: dinero / porcentaje / entero (pzas) / No. Empleado / texto
+function tokenizarFila(items){
+  const toks = [];
+  for(let i=0;i<items.length;i++){
+    const t = items[i].text;
+    const s = t.replace(/^\$/,'');
+    const next = items[i+1] && items[i+1].text;
+    // Número (con o sin decimales) seguido de un "%" suelto → porcentaje partido en 2 tokens
+    // (debe revisarse ANTES que "dinero", porque "56,25" solo también matchea el patrón de dinero)
+    if(/^\d{1,3}(?:[.,]\d{1,2})?$/.test(s) && next === '%'){
+      toks.push({tipo:'pct', val: parseFloat(s.replace(',','.'))}); i++; continue;
+    }
+    const pctM = s.match(/^(\d{1,3}(?:[.,]\d{1,2})?)%$/);
+    if(pctM){ toks.push({tipo:'pct', val: parseFloat(pctM[1].replace(',','.'))}); continue; }
+    if(/^\d{1,3}(\.\d{3})+(,\d{1,2})?$/.test(s)){ toks.push({tipo:'money', val: parseFloat(s.replace(/\./g,'').replace(',','.'))}); continue; }
+    if(/^\d+,\d{2}$/.test(s)){ toks.push({tipo:'money', val: parseFloat(s.replace(',','.'))}); continue; }
+    if(/^\d{5,7}$/.test(s)){ toks.push({tipo:'empno', val: s}); continue; }
+    if(/^\d{1,3}$/.test(s)){ toks.push({tipo:'int', val: parseInt(s,10)}); continue; }
+    if(s === '%') continue;
+    toks.push({tipo:'text', val: t});
+  }
+  return toks;
+}
+
+const PUESTOS_CONOCIDOS = ['Gerente de Tienda','Subgerente de Tienda','Asesor de Tienda','Encargado de Tienda','Auxiliar de Tienda'];
+// Busca en qué posición de la lista de palabras empieza un puesto conocido (nombre y puesto
+// vienen pegados en un solo bloque de texto, truncados con "..."), y devuelve dónde cortar.
+function ubicarPuesto(restoWords){
+  const norm = restoWords.map(w=> normTxt(w).replace(/\.+$/,''));
+  for(let start=0; start<norm.length; start++){
+    for(const p of PUESTOS_CONOCIDOS){
+      const palabrasP = normTxt(p).split(' ');
+      let ok = true;
+      for(let j=0; j<palabrasP.length; j++){
+        const w = norm[start+j];
+        if(!w || w.length<2 || !palabrasP[j].startsWith(w)){ ok=false; break; }
+      }
+      if(ok) return { puesto:p, start };
+    }
+  }
+  return null;
+}
+
+function asegurarFila(key){
+  if(!comisionesDraft[key]) comisionesDraft[key] = { empNo:key, nombre:'', nombreCompleto:false, puesto:'',
+    venta:null, pptoPct:null, alcance:null, garantiaPct:null, garantiaPzas:null, garantiaElegible:null, garantiaMonto:null };
+  return comisionesDraft[key];
+}
+
+async function procesarComisionesImg(file){
+  document.getElementById('fboxComis').classList.add('ok');
+  document.getElementById('fphComis').textContent = '✓ ' + file.name;
+  const status = document.getElementById('comisOcrStatus');
+  status.style.display='block'; status.textContent='Leyendo imagen…';
+  try{
+    const words = await ocrWords(file);
+    const renglones = agruparRenglones(words);
+    let encontrados = 0;
+    renglones.forEach(row=>{
+      const toks = tokenizarFila(row.items);
+      const idxEmp = toks.findIndex(t=>t.tipo==='empno');
+      if(idxEmp<0) return;
+      const empNo = toks[idxEmp].val;
+      const restoWordsFull = toks.slice(idxEmp+1).filter(t=>t.tipo==='text').map(t=>t.val);
+      // "Sobre"/"Menor"/"Mayor" son palabras de columnas posteriores (Tipo Aplicación, Nivel de
+      // comisión) que nunca aparecen en un nombre o puesto — acotan dónde termina ese bloque.
+      const stopIdx = restoWordsFull.findIndex(w=> ['SOBRE','MENOR','MAYOR'].includes(normTxt(w).replace(/\.+$/,'')));
+      const restoWords = stopIdx>=0 ? restoWordsFull.slice(0, stopIdx) : restoWordsFull;
+      const ubic = ubicarPuesto(restoWords);
+      const puesto = ubic ? ubic.puesto : '';
+      let nombre = (ubic ? restoWords.slice(0, ubic.start) : restoWords).join(' ');
+      nombre = nombre.replace(/\.{2,}$/,'').trim();
+      const primerPctIdx = toks.findIndex(t=>t.tipo==='pct');
+      const moneys = toks.filter((t,i)=> t.tipo==='money' && (primerPctIdx<0 || i<primerPctIdx));
+      const pcts = toks.filter(t=>t.tipo==='pct');
+      const venta = moneys.length ? moneys[moneys.length-1].val : null;
+      const pptoPct = pcts[0] ? pcts[0].val : null;
+      const alcance = pcts[1] ? pcts[1].val : null;
+      if(venta==null && pptoPct==null && alcance==null) return;
+      encontrados++;
+      const rec = asegurarFila(String(empNo));
+      rec.venta = venta; rec.pptoPct = pptoPct; rec.alcance = alcance;
+      if(puesto) rec.puesto = puesto;
+      if(!rec.nombreCompleto && nombre) rec.nombre = nombre;
+    });
+    status.style.display='none';
+    toast(encontrados ? (encontrados+' fila(s) leídas de Comisiones ✓') : 'No reconocí filas — revisa la captura o agrega manualmente', encontrados>0);
+    renderComisPreview();
+  }catch(e){
+    status.style.display='none';
+    toast('Error al leer la imagen: '+e.message, false);
+  }
+}
+
+async function procesarGarantiasImg(file){
+  document.getElementById('fboxGar').classList.add('ok');
+  document.getElementById('fphGar').textContent = '✓ ' + file.name;
+  const status = document.getElementById('garOcrStatus');
+  status.style.display='block'; status.textContent='Leyendo imagen…';
+  try{
+    const words = await ocrWords(file);
+    const renglones = agruparRenglones(words);
+
+    const textoCompleto = renglones.map(r=>r.items.map(i=>i.text).join(' ')).join(' ');
+    const fm = textoCompleto.match(/(\d{1,2}\s+[a-zA-Zé]{3,}\s+\d{4})\s*-\s*(\d{1,2}\s+[a-zA-Zé]{3,}\s+\d{4})/);
+    if(fm && !document.getElementById('comisPeriodoGar').value.trim()){
+      document.getElementById('comisPeriodoGar').value = fm[1] + ' – ' + fm[2];
+    }
+
+    let storeIdDetectado = null, encontrados = 0;
+    renglones.forEach(row=>{
+      const juntoSinEspacios = row.items.map(i=>i.text).join('').replace(/\s+/g,'');
+      const m = juntoSinEspacios.match(/(\d{3,6})-(\d{4,7})-([A-ZÁÉÍÓÚÑ]+)/i);
+      if(!m) return;
+      const storeId = m[1], empNo = m[2];
+      storeIdDetectado = storeId;
+
+      const rowTextoConEspacios = row.items.map(i=>i.text).join(' ');
+      const m2 = rowTextoConEspacios.match(/\d{3,6}\s*-\s*\d{4,7}\s*-\s*([A-ZÁÉÍÓÚÑ ]+)/i);
+      let nombreCompleto = m2 ? m2[1].trim().replace(/\s{2,}/g,' ').replace(/[\d%].*$/,'').trim() : '';
+
+      const toks = tokenizarFila(row.items);
+      const primerPctIdx = toks.findIndex(t=>t.tipo==='pct');
+      const pcts = toks.filter(t=>t.tipo==='pct');
+      const ints = toks.filter((t,i)=> t.tipo==='int' && (primerPctIdx<0 || i>primerPctIdx));
+      const moneys = toks.filter(t=>t.tipo==='money');
+      const garantiaPct = pcts[0] ? pcts[0].val : null;
+      const garantiaPzas = ints[0] ? ints[0].val : null;
+      const garantiaElegible = ints[1] ? ints[1].val : null;
+      const garantiaMonto = moneys[0] ? moneys[0].val : null;
+      if(garantiaPct==null && garantiaMonto==null) return;
+      encontrados++;
+
+      const rec = asegurarFila(String(empNo));
+      rec.garantiaPct = garantiaPct; rec.garantiaPzas = garantiaPzas;
+      rec.garantiaElegible = garantiaElegible; rec.garantiaMonto = garantiaMonto;
+      if(nombreCompleto){ rec.nombre = tituloCase(nombreCompleto); rec.nombreCompleto = true; }
+    });
+
+    status.style.display='none';
+    if(storeIdDetectado && _cfg && _cfg.store_id && String(storeIdDetectado) !== String(_cfg.store_id)){
+      if(!confirm('⚠️ Esta captura parece ser de la tienda ' + storeIdDetectado + ', pero estás en Admin de la tienda ' + _cfg.store_id + '.\n\n¿Guardar de todos modos los datos leídos?')){
+        toast('Descartado — vuelve a intentar con la captura correcta', false);
+        return;
+      }
+    }
+    toast(encontrados ? (encontrados+' fila(s) leídas de Extracobertura ✓') : 'No reconocí filas — revisa la captura o agrega manualmente', encontrados>0);
+    renderComisPreview();
+  }catch(e){
+    status.style.display='none';
+    toast('Error al leer la imagen: '+e.message, false);
+  }
+}
+
+function renderComisPreview(){
+  const cont = document.getElementById('comisPreview');
+  const keys = Object.keys(comisionesDraft);
+  document.getElementById('btnComis').disabled = keys.length===0;
+  if(!keys.length){
+    cont.innerHTML = '<p class="empty" style="text-align:center;color:#ccc;font-size:13px;padding:20px">Sube una captura para empezar.</p>';
+    return;
+  }
+  cont.innerHTML = keys.map(k=>{
+    const r = comisionesDraft[k];
+    const faltaGar = r.garantiaPct==null;
+    return `<div class="comis-card ${faltaGar?'warn':''}">
+      <div class="comis-top">
+        <input class="nombre" value="${escHtml(r.nombre)}" placeholder="Nombre completo" oninput="comisUpdate('${k}','nombre',this.value)">
+        <button class="comis-del" onclick="eliminarComisFila('${k}')" title="Quitar">✕</button>
+      </div>
+      <div class="comis-f" style="margin-bottom:6px"><label>Puesto</label>
+        <select onchange="comisUpdate('${k}','puesto',this.value)">
+          <option value="">—</option>
+          ${PUESTOS_CONOCIDOS.map(p=>`<option value="${p}" ${r.puesto===p?'selected':''}>${p}</option>`).join('')}
+        </select>
+      </div>
+      <div class="comis-sec">💰 Comisiones</div>
+      <div class="comis-grid">
+        <div class="comis-f"><label>Venta</label><input type="number" step="0.01" value="${r.venta??''}" oninput="comisUpdate('${k}','venta',this.value)"></div>
+        <div class="comis-f"><label>% Ppto</label><input type="number" step="0.01" value="${r.pptoPct??''}" oninput="comisUpdate('${k}','pptoPct',this.value)"></div>
+        <div class="comis-f"><label>Alcance %</label><input type="number" step="0.01" value="${r.alcance??''}" oninput="comisUpdate('${k}','alcance',this.value)"></div>
+      </div>
+      <div class="comis-sec">🛡️ Extracobertura ${faltaGar?'<span style="color:var(--naranja);text-transform:none;font-weight:600"> · sin datos</span>':''}</div>
+      <div class="comis-grid">
+        <div class="comis-f"><label>Garantía %</label><input type="number" step="0.01" value="${r.garantiaPct??''}" oninput="comisUpdate('${k}','garantiaPct',this.value)"></div>
+        <div class="comis-f"><label>Pzas Garantía</label><input type="number" value="${r.garantiaPzas??''}" oninput="comisUpdate('${k}','garantiaPzas',this.value)"></div>
+        <div class="comis-f"><label>Pzas Elegible</label><input type="number" value="${r.garantiaElegible??''}" oninput="comisUpdate('${k}','garantiaElegible',this.value)"></div>
+      </div>
+      <div class="comis-f" style="margin-top:6px"><label>Monto Garantía ($)</label><input type="number" step="0.01" value="${r.garantiaMonto??''}" oninput="comisUpdate('${k}','garantiaMonto',this.value)"></div>
+    </div>`;
+  }).join('');
+}
+function comisUpdate(key, field, val){
+  const r = comisionesDraft[key]; if(!r) return;
+  if(field==='nombre'){ r.nombre = val; r.nombreCompleto = true; }
+  else if(field==='puesto'){ r.puesto = val; }
+  else { r[field] = val===''? null : Number(val); }
+}
+function eliminarComisFila(key){ delete comisionesDraft[key]; renderComisPreview(); }
+function agregarEmpleadoManual(){
+  asegurarFila('manual'+Date.now());
+  renderComisPreview();
+}
+
+async function guardarComisiones(){
+  const keys = Object.keys(comisionesDraft);
+  if(!keys.length) return;
+  const rows = keys.map(k=>{
+    const r = comisionesDraft[k];
+    return { empNo:r.empNo, nombre:r.nombre, puesto:r.puesto, venta:r.venta||0, pptoPct:r.pptoPct||0, alcance:r.alcance||0,
+             garantiaPct:r.garantiaPct, garantiaPzas:r.garantiaPzas, garantiaElegible:r.garantiaElegible, garantiaMonto:r.garantiaMonto };
+  }).filter(r=>r.nombre);
+  if(!rows.length){ toast('Faltan nombres — revisa la vista previa', false); return; }
+  const btn = document.getElementById('btnComis');
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span>Guardando…';
+  document.getElementById('resComis').className = 'result';
+  try{
+    await fetch(API, {method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({tipo:'comisiones', rows,
+        periodoComisiones: document.getElementById('comisPeriodo').value.trim(),
+        periodoGarantias: document.getElementById('comisPeriodoGar').value.trim()})});
+    await new Promise(r=>setTimeout(r,1500));
+    showResult('resComis', true, '✅ Comisiones guardadas — el equipo ya las puede ver en su Tablero.');
+    cargarComisionesCloud();
+  }catch(e){ showResult('resComis', false, 'Error al guardar: '+e.message); }
+  btn.disabled=false; btn.textContent='💾 Guardar comisiones en la nube';
+}
+
+async function cargarComisionesCloud(){
+  const el = document.getElementById('comisCloudInfo');
+  el.innerHTML = '<p style="text-align:center;color:#aaa;font-size:12px;padding:12px">Cargando…</p>';
+  try{
+    const data = await jsonp(API+'?modo=comisiones');
+    if(!data || !Array.isArray(data.empleados) || !data.empleados.length){
+      el.innerHTML = '<p style="text-align:center;color:#aaa;font-size:12px;padding:12px">Sin comisiones guardadas todavía.</p>';
+      return;
+    }
+    el.innerHTML = `<p style="font-size:11px;color:#888;margin-bottom:8px">Actualizado: <b>${data.actualizado||'—'}</b> · Periodo: ${data.periodoComisiones||'—'}</p>` +
+      data.empleados.map(e=>`<div class="prev-item"><strong>${escHtml(e.nombre)}</strong><span>${escHtml(e.puesto||'')} · venta ${money(e.venta)} · ${e.alcance}% de meta${e.garantiaPct!=null?' · '+e.garantiaPct+'% garantía':''}</span></div>`).join('');
+  }catch(e){
+    el.innerHTML = '<p style="text-align:center;color:#aaa;font-size:12px;padding:12px">Error al cargar.</p>';
+  }
+}
+
+document.getElementById('fileComis').onchange = function(e){ const f=e.target.files&&e.target.files[0]; if(f) procesarComisionesImg(f); };
+document.getElementById('fileGar').onchange = function(e){ const f=e.target.files&&e.target.files[0]; if(f) procesarGarantiasImg(f); };
+
+/* ================================================================
+   TAB CONFIG — Configuración de tienda
+   ================================================================ */
+function loadConfig(){
+  const cfg = _cfg || {};
+  document.getElementById('cfgGas').value   = cfg.gas_url   || '';
+  document.getElementById('cfgSheet').value = cfg.sheet_url || '';
+  document.getElementById('cfgHoja').value  = cfg.hoja_auth || '';
+  document.getElementById('cfgVend').value  = (cfg.vendedores||[]).join('\n');
+}
+
+async function guardarConfig(){
+  const gas_url    = document.getElementById('cfgGas').value.trim();
+  const sheet_url  = document.getElementById('cfgSheet').value.trim();
+  const hoja_auth  = document.getElementById('cfgHoja').value.trim();
+  const vendedores = document.getElementById('cfgVend').value
+    .split('\n').map(s=>s.trim()).filter(Boolean);
+
+  const btn = document.getElementById('btnConfig');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span>Guardando…';
+
+  try{
+    const stored = JSON.parse(localStorage.getItem('hes_store')||'{}');
+    const updated = Object.assign({}, stored, {gas_url, sheet_url, hoja_auth, vendedores});
+    localStorage.setItem('hes_store', JSON.stringify(updated));
+  }catch(e){}
+
+  try{
+    if(!sb) initSB();
+    if(sb){
+      const storeId = (_cfg && _cfg.store_id) || '';
+      if(storeId){
+        await sb.from('tiendas')
+          .update({gas_url, sheet_url, hoja_auth, vendedores})
+          .eq('store_id', storeId);
+      }
+    }
+  }catch(e){ console.warn('Supabase config update:', e); }
+
+  btn.disabled = false;
+  btn.textContent = '💾 Guardar configuración';
+  showResult('resConfig', true,
+    '✅ Guardado. El equipo verá estos datos la próxima vez que abran Captura de Series o recarguen el tablero.');
 }
 </script>
 </body>

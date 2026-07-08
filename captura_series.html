@@ -6,12 +6,13 @@
 <meta name="theme-color" content="#D12026">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="HES 1217">
-<title>Captura de Series · HES 1217</title>
+<meta name="apple-mobile-web-app-title" content="HES Red">
+<title>Captura de Series · HES Red</title>
 <link rel="apple-touch-icon" href="logo_odemas.png">
 <link rel="manifest" href="manifest.json">
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script type="module">
   // Decodificador potente (ZXing-WASM) que localiza el código en fotos reales, también en iPhone
   try {
@@ -123,6 +124,22 @@
   .seg-si.active { background:#eafaf1; border-color:var(--verde); color:var(--verde); }
   .seg-no.active { background:#fdeaea; border-color:var(--rojo); color:var(--rojo); }
 
+  /* ---------- Pantalla de identificación de tienda (candado) ---------- */
+  #storeGate{ position:fixed; inset:0; z-index:200; background:#fff; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; padding:24px 22px calc(24px + env(safe-area-inset-bottom));
+    text-align:center; }
+  #storeGate.hide{ display:none; }
+  .sg-err{ font-size:12px; color:var(--rojo); font-weight:700; min-height:16px; text-align:center; margin-bottom:6px; }
+  .sg-pin-dots{ display:flex; gap:14px; margin:18px 0 6px; }
+  .sg-pin-dot{ width:14px; height:14px; border-radius:50%; border:2px solid #ddd; transition:.15s; }
+  .sg-pin-dot.on{ background:var(--rojo); border-color:var(--rojo); }
+  .sg-numpad{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; width:240px; margin-top:10px; }
+  .sg-numpad button{ height:58px; border-radius:14px; border:1.5px solid var(--linea); background:#fff;
+    font-family:inherit; font-size:22px; font-weight:700; cursor:pointer; color:#1a1a1a; }
+  .sg-numpad button:active{ background:#f5f5f5; transform:scale(.96); }
+  .sg-num-del{ font-size:17px !important; color:#888 !important; }
+  .sg-loading{ font-size:13px; color:#bbb; margin-top:10px; }
+
   /* ---------- Pantalla de inicio (selección de vendedor) ---------- */
   #gate{ position:fixed; inset:0; z-index:100; background:#fff; display:flex; flex-direction:column;
     align-items:center; justify-content:center; padding:24px 22px calc(24px + env(safe-area-inset-bottom));
@@ -151,11 +168,32 @@
 </head>
 <body>
 
-<!-- Pantalla de inicio: selección de vendedor -->
-<div id="gate">
+<!-- Pantalla de identificación de tienda (candado) -->
+<div id="storeGate" class="hide">
   <img class="gate-logo" src="logo_odemas.png" alt="Odemás">
   <h1 class="gate-title">Captura de Series</h1>
-  <p class="gate-sub">HES 1217 · Angelópolis</p>
+  <p class="gate-sub">Ingresa el PIN de tu tienda</p>
+  <div class="sg-pin-dots">
+    <div class="sg-pin-dot" id="sgd0"></div>
+    <div class="sg-pin-dot" id="sgd1"></div>
+    <div class="sg-pin-dot" id="sgd2"></div>
+    <div class="sg-pin-dot" id="sgd3"></div>
+  </div>
+  <div class="sg-err" id="sgErr"></div>
+  <div class="sg-numpad" id="sgPad">
+    <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
+    <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
+    <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
+    <button class="sg-num-del" data-k="del">⌫</button><button data-k="0">0</button><button data-k="ok">✓</button>
+  </div>
+  <p class="sg-loading" id="sgLoading" style="display:none">Verificando…</p>
+</div>
+
+<!-- Pantalla de inicio: selección de vendedor -->
+<div id="gate" class="hide">
+  <img class="gate-logo" src="logo_odemas.png" alt="Odemás">
+  <h1 class="gate-title">Captura de Series</h1>
+  <p class="gate-sub" id="gateSub">HES · Odemás</p>
   <p class="gate-q">¿Quién eres?</p>
   <div class="gate-names" id="gateNames"></div>
 </div>
@@ -164,14 +202,17 @@
   <img src="logo_odemas.png" alt="Odemás">
   <div class="h-txt">
     <h1>Captura de Series</h1>
-    <p>HES 1217 · Reporte de ventas</p>
+    <p id="headerSub">Reporte de ventas</p>
   </div>
   <div class="count"><div class="n" id="count">0</div><div class="l">capturadas</div></div>
 </header>
 
 <div class="vendbar">
   <span>👤 <b id="vendLabel">—</b></span>
-  <button id="btnChange">Cambiar</button>
+  <span style="display:flex;gap:6px">
+    <button id="btnChange">Cambiar</button>
+    <button id="btnChangeStore" style="background:#f0f0f0;color:#888">Otra tienda</button>
+  </span>
 </div>
 
 <main>
@@ -218,12 +259,12 @@
   <div id="lista"><p class="empty">Aún no hay series capturadas hoy.</p></div>
   <p class="hist-note" id="histNote"></p>
 
-  <footer>Odemás · Grupo Gigante · HES Angelópolis 1217</footer>
+  <footer id="footerTxt">Odemás · Grupo Gigante</footer>
 </main>
 
 <div class="footbar">
   <button class="btn btn-csv" id="btnCsv">📊 Abrir hoja de ventas</button>
-  <div class="lock-msg" id="lockMsg">🔒 Solo <b>Laura</b> abre la hoja de ventas</div>
+  <div class="lock-msg" id="lockMsg">🔒 Solo <b>el responsable</b> abre la hoja de ventas</div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -231,21 +272,72 @@
 <script>
 /* Catálogo de productos: { "UPC": {s:"SKU", d:"Descripción"} } — generado del Excel */
 let CATALOGO = {"6941487240579":{"s":"100074509","d":"HUAWEI WATCH WATCH KID RS"},"6941487240586":{"s":"100074525","d":"HUAWEI WATCH WATCH KID AZ"},"6941487288427":{"s":"100143252","d":"HUAWEI WATCH ULTIMATE 1.5\" PT"},"6941487294848":{"s":"100163270","d":"HUAWEI WATCH FIT SE 1.64\" RS"},"6941487294831":{"s":"100163288","d":"HUAWEI WATCH FIT SE 1.64\" NG"},"6942103112225":{"s":"100189390","d":"AUDÍF OPEN EAR HW FREECLIP NG"},"6942103112232":{"s":"100189411","d":"AUDÍF OPEN EAR HW FREECLIP MO"},"6942103114168":{"s":"100190761","d":"MATEBOOK D16 CI5 16GB+1TB GR"},"6942103112782":{"s":"100195554","d":"MATEBOOK D16 CI5 8+512 GB PL"},"6942103118050":{"s":"100201934","d":"HUAWEI BAND 9 AMOLED 1.47\" RS"},"6942103118067":{"s":"100201969","d":"HUAWEI BAND 9 AMOLED 1.47\" BN"},"6942103118074":{"s":"100201977","d":"HUAWEI BAND 9 AMOLED 1.47\" AM"},"6942103118081":{"s":"100201985","d":"HUAWEI BAND 9 AMOLED 1.47\" NG"},"6942103123924":{"s":"100211497","d":"HUAWEI PURA 70 6,6\" 12/256GB RS"},"6942103123931":{"s":"100211500","d":"HUAWEI PURA 70 6,6\" 12/256GB BN"},"6942103123948":{"s":"100211518","d":"HUAWEI PURA 70 6,6\" 12/256GB NG"},"6942103123955":{"s":"100211526","d":"HUAWEI PURA 70 PRO 12/512GB BN"},"6942103123962":{"s":"100211534","d":"HUAWEI PURA 70 PRO 12/512GB NG"},"6942103123979":{"s":"100211542","d":"HUAWEI PURA 70 ULT 16GB/1TB VD"},"6942103123986":{"s":"100211551","d":"HUAWEI PURA 70 ULT 16GB/1TB NG"},"6942103127120":{"s":"100211569","d":"HUAWEI PURA 70 ULT 16/512GB VD"},"6942103127137":{"s":"100211577","d":"HUAWEI PURA 70 ULT 16/512GB NG"},"6942103116131":{"s":"100211585","d":"MATEBOOK D14 CI5 8GB/512GB GR"},"6942103118531":{"s":"100211614","d":"HUAWEI WATCH FIT 3 1.82\" NG"},"6942103118548":{"s":"100211622","d":"HUAWEI WATCH FIT 3 1.82\" RS"},"6942103119842":{"s":"100211631","d":"HUAWEI WATCH FIT 3 1.82\" BN"},"6942103119200":{"s":"100211649","d":"HUAWEI WATCH FIT 3 1.82\" VD"},"6942103118630":{"s":"100211657","d":"HUAWEI WATCH FIT 3 1.82\" GR"},"6942103116322":{"s":"100215421","d":"AUDÍF OPEN EAR HW FREECLIP BGE"},"6942103123535":{"s":"100215455","d":"AUDIF IN EAR HW FREEBUDS 6I BN"},"6942103123542":{"s":"100215463","d":"AUDIF IN EAR HW FREEBUDS 6I NG"},"6942103123559":{"s":"100215471","d":"AUDIF IN EAR HW FREEBUDS 6I MO"},"6942103117039":{"s":"100215551","d":"SMARTWATCH HUAWEI 4 PRO 1.5\" GR"},"6942103120657":{"s":"100219835","d":"MATEBOOK 14 CU5 16GB 1TB VD"},"6942103120664":{"s":"100219843","d":"MATEBOOK 14 CU7 16GB 1TB VERDE"},"6942103112768":{"s":"100219851","d":"MATEBOOK D16 CI5 16GB 512GB PL"},"6942103112911":{"s":"100219851","d":"MATEBOOK D16 CI5 16GB 512GB PL"},"6942103125164":{"s":"100219860","d":"MATEPAD KEY 11.5\" S 8/256GB GR"},"6942103125171":{"s":"100219907","d":"MATEPAD KEY 11.5\" S 8/256GB MO"},"6942103125379":{"s":"100219923","d":"MATEPAD SE KEY 11\" 8GB 128GB GR"},"6942103125386":{"s":"100219940","d":"MATEPAD SE KEY 11\" 8GB 128GB AZ"},"6942103129322":{"s":"100229101","d":"HUAWEI WATCH FIT 3 1.82\" DORADO"},"6942103118647":{"s":"100229179","d":"HUAWEI WATCH FIT 3 1.82\" BNA"},"6942103131233":{"s":"100229208","d":"HUAWEI WATCH GT5 41MM AMOLED AZ"},"6942103131257":{"s":"100229224","d":"HUAWEI WATCH GT5 41MM AMOLED CF"},"6942103131240":{"s":"100229241","d":"HUAWEI WATCH GT5 41MM AMOLED BN"},"6942103131264":{"s":"100229259","d":"HUAWEI WATCH GT5 41MM AMOLED DO"},"6942103131325":{"s":"100229275","d":"HUAWEI WATCH GT5 PRO 42MM BN"},"6942103131332":{"s":"100229283","d":"HUAWEI WATCH GT5 PRO 42MM BNA"},"6942103131103":{"s":"100229291","d":"HUAWEI WATCH GT5 46MM AMOLED NG"},"6942103131110":{"s":"100229304","d":"HUAWEI WATCH GT5 46MM AMOLED CF"},"6942103131127":{"s":"100229312","d":"HUAWEI WATCH GT5 46MM AMOLED AZ"},"6942103131134":{"s":"100229321","d":"HUAWEI WATCH GT5 PRO 46MM NG"},"6942103131141":{"s":"100229339","d":"HUAWEI WATCH GT5 PRO 46MM PT"},"6941487288410":{"s":"100229347","d":"HUAWEI WATCH ULTIMATE 1.5\" NG"},"6942103131752":{"s":"100229363","d":"HUAWEI WATCH D2 1.82\" AMOLED NG"},"6942103131769":{"s":"100229371","d":"HUAWEI WATCH D2 1.82\" AMOLED DO"},"6942103134876":{"s":"100229380","d":"HUAWEI WATCH ULT GOLF 1.5\" VD"},"6942103130731":{"s":"100229398","d":"MATEPAD PRO 12.2\" 12/256GB NG"},"6942103132452":{"s":"100229401","d":"MATEPAD 12X KEY 12\" 12/256GB VD"},"6942103130748":{"s":"100229427","d":"MATEPAD PRO 12.2\" 12/512GB DO"},"6942103131745":{"s":"100236096","d":"HUAWEI PURA 70 ULT 16/512GB CF"},"6942103145513":{"s":"100244213","d":"HUAWEI NOVA 13 PRO 12/512GB VD"},"6942103145520":{"s":"100244264","d":"HUAWEI NOVA 13 PRO 12/512GB BN"},"6942103145506":{"s":"100244272","d":"HUAWEI NOVA 13 PRO 12/512GB NG"},"6942103145483":{"s":"100244299","d":"HUAWEI NOVA 13 12GB 256GB VD"},"6942103145490":{"s":"100244301","d":"HUAWEI NOVA 13 12GB 256GB BN"},"6942103145476":{"s":"100244310","d":"HUAWEI NOVA 13 12GB 256GB NG"},"6942103141980":{"s":"100244328","d":"HUAWEI NOVA 13I 8GB 256GB BN"},"6942103141973":{"s":"100244336","d":"HUAWEI NOVA 13I 8GB 256GB AZ"},"6942103146213":{"s":"100244344","d":"HUAWEI MATE X6 12GB 512GB NG"},"6942103146206":{"s":"100244352","d":"HUAWEI MATE X6 12GB 512GB RJ"},"6942103146190":{"s":"100244361","d":"HUAWEI MATE X6 12GB 512GB GR"},"6942103138768":{"s":"100245646","d":"AUDIF IN EAR HW F-BUDS PRO 4 NG"},"6942103138775":{"s":"100245654","d":"AUDIF IN EAR HW F-BUDS PRO 4 BN"},"6942103138782":{"s":"100245689","d":"AUDIF IN EAR HW F-BUDS PRO 4 VD"},"6942103141577":{"s":"100245697","d":"AUDÍF OPEN EAR HW FREECLIP ROSA"},"6942103115622":{"s":"100190876","d":"MATEBOOK D16 CI9 16GB+1TB GR"},"6942103144004":{"s":"100248572","d":"MATEBOOK D16 23 CI5 16GB+1TB PL"},"6942103112508":{"s":"100220019","d":"M-PENCIL HUAWEI 3RA GEN BLANCO"},"6942103148460":{"s":"100250576","d":"MATEPAD PRO 13.2\" 12/512GB DO"},"6942103149306":{"s":"100250138","d":"HUAWEI MATE XT ULT 16GB 1TB RJ"},"6942103149290":{"s":"100250162","d":"HUAWEI MATE XT ULT 16GB 1TB NG"},"6942103140105":{"s":"100248564","d":"AUDIF IN EAR FREEBUDS SE 3 BG"},"6942103140112":{"s":"100248556","d":"AUDIF IN EAR FREEBUDS SE 3 NG"},"6942103150784":{"s":"100250496","d":"HUAWEI BAND 10 AMOLED 1.47\" NGC"},"6942103150807":{"s":"100250517","d":"HUAWEI BAND 10 AMOLED 1.47\" BN"},"6942103149153":{"s":"100250525","d":"HUAWEI BAND 10 AMOLED 1.47\" RS"},"6942103149146":{"s":"100250533","d":"HUAWEI BAND 10 AMOLED 1.47\" NG"},"6942103114809":{"s":"100190956","d":"MATEPAD PRO 13.2 12+256GB NG"},"6942103150791":{"s":"100250509","d":"HUAWEI BAND 10 AMOLED 1.47\" AZ"},"6942103120619":{"s":"100219780","d":"MATEBOOK X PRO CU9 32GB 2TB AZ"},"6942103147449":{"s":"100250568","d":"AUDIF OVER EAR HWEI FREEARC VD"},"6942103147425":{"s":"100250541","d":"AUDIF OVER EAR HWEI FREEARC NG"},"6942103147432":{"s":"100250550","d":"AUDIF OVER EAR HWEI FREEARC GR"},"6942103116124":{"s":"100211593","d":"MATEBOOK D14 CI5 16GB/512GB GR"},"6942103147753":{"s":"100258105","d":"AUDIF IN EAR HW FREEBUDS 6 NG"},"6942103147746":{"s":"100258121","d":"AUDIF IN EAR HW FREEBUDS 6 BN"},"6942103147760":{"s":"100258148","d":"AUDIF IN EAR HW FREEBUDS 6 MO"},"6942103155345":{"s":"100259554","d":"HUAWEI WATCH FIT 4 1.82\" AL NG"},"6942103155376":{"s":"100259600","d":"HUAWEI WATCH FIT 4 1.82\" AL GR"},"6942103155352":{"s":"100259571","d":"HUAWEI WATCH FIT 4 1.82\" AL MO"},"6942103155369":{"s":"100259597","d":"HUAWEI WATCH FIT 4 1.82\" AL BN"},"6942103155390":{"s":"100259634","d":"HUAWEI WATCH FIT 4 PRO 1.82\" AZ"},"6942103155406":{"s":"100259651","d":"HUAWEI WATCH FIT 4 PRO 1.82\" VD"},"6942103154652":{"s":"100259511","d":"HUAWEI WATCH 5 42MM 1.38\" VERDE"},"6942103154621":{"s":"100259546","d":"HUAWEI WATCH 5 42MM 1.38\" DO"},"6942103154638":{"s":"100259520","d":"HUAWEI WATCH 5 42MM 1.38\" BN"},"6942103154676":{"s":"100259482","d":"HUAWEI WATCH 5 46MM TI 1.5\" PT"},"6942103154683":{"s":"100259466","d":"HUAWEI WATCH 5 46MM 1.5\" NEGRO"},"6942103154645":{"s":"100259538","d":"HUAWEI WATCH 5 42MM 1.38\" BEIGE"},"6942103154669":{"s":"100259491","d":"HUAWEI WATCH 5 46MM TI 1.5\" MO"},"6942103155383":{"s":"100259626","d":"HUAWEI WATCH FIT 4 PRO 1.82\" NG"},"6942103150814":{"s":"100266834","d":"HUAWEI BAND 10 AMOLED 1.47\" MO"},"6942103145605":{"s":"100266851","d":"HUAWEI NOVA Y72S 8/128GB AZUL"},"6942103145599":{"s":"100266869","d":"HUAWEI NOVA Y72S 8/128GB NEGRO"},"6942103116728":{"s":"100256417","d":"MOUSE HUAWEI CD26 SENSOR TOG GR"},"6942103135057":{"s":"100261849","d":"ROUTER HUAWEI BE3 WI-FI7 3600MB"},"6942103127953":{"s":"100261822","d":"ROUTER HUAWEI AX2 WI-FI6 1500MB"},"6941487252503":{"s":"100102207","d":"MESH HUAWEI 3 WS8100-32 2PZ"},"6941487295210":{"s":"100261785","d":"ROUTER HUAWEI AX3 WI-FI6 3000MB"},"6942103161490":{"s":"100270593","d":"MATEPAD PRO 12.2\" 12GB 512GB VD"},"6942103165320":{"s":"100269146","d":"HUAWEI PURA 80 PRO 12/512GB RJ"},"6942103165344":{"s":"100269162","d":"HUAWEI PURA 80 PRO 12/512GB NG"},"6942103165337":{"s":"100269154","d":"HUAWEI PURA 80 PRO 12/512GB BN"},"6942103165405":{"s":"100269120","d":"HUAWEI PURA 80 ULT 16/512GB NG"},"6942103165412":{"s":"100269138","d":"HUAWEI PURA 80 ULT 16/512GB DO"},"6942103163487":{"s":"100270526","d":"HUAWEI MATEPAD 11.5\" 8/128GB GR"},"6942103163494":{"s":"100270542","d":"MATEPAD 11.5\" 8/128GB +TECLD GR"},"6942103164965":{"s":"100270577","d":"MATEPAD 11.5\" 8/256GB +TECLD GR"},"6942103163524":{"s":"100270585","d":"MATEPAD 11.5\" 8/256GB +TECLD MO"},"6942103168710":{"s":"100274877","d":"HUAWEI WATCH GT6 1.47\" AMLD NG"},"6942103168727":{"s":"100274906","d":"HUAWEI WATCH GT6 1.47\" AMLD CF"},"6942103168734":{"s":"100274914","d":"HUAWEI WATCH GT6 1.47\" AMLD VD"},"6942103168765":{"s":"100274922","d":"HUAWEI WATCH GT6 PRO 1.47\" NG"},"6942103169595":{"s":"100274957","d":"HUAWEI WATCH GT6 1.32\" AMLD NG"},"6942103169625":{"s":"100274973","d":"HUAWEI WATCH GT6 1.32\" AMLD BN"},"6942103169632":{"s":"100274990","d":"HUAWEI WATCH GT6 1.32\" AMLD MO"},"6942103168741":{"s":"100274949","d":"HUAWEI WATCH GT6 PRO 1.47\" CAFÉ"},"6942103168758":{"s":"100274931","d":"HUAWEI WATCH GT6 PRO 1.47\" PT"},"6942103163180":{"s":"100275028","d":"HUAWEI WATCH D2 1.82\" AMOLED AZ"},"6942103169151":{"s":"100272687","d":"HUAWEI PURA 80 6.6\" 12/256GB DO"},"6942103169144":{"s":"100272661","d":"HUAWEI PURA 80 6.6\" 12/256GB BN"},"6942103169137":{"s":"100272644","d":"HUAWEI PURA 80 6.6\" 12/256GB NG"},"6942103169380":{"s":"100275001","d":"HUAWEI WATCH ULTIMATE 2 1.5\" NG"},"6942103166617":{"s":"100276717","d":"MATEPAD 12X 12/256GB BN + TECLD"},"6942103166624":{"s":"100276696","d":"MATEPAD 12X 12/256GB VD + TECLD"},"6942103164163":{"s":"100276661","d":"MESH HUAWEI X1PRO AC3600 NG PK"},"6942103169397":{"s":"100275010","d":"HUAWEI WATCH ULTIMATE 2 1.5\" AZ"},"6942103173806":{"s":"100279918","d":"MATEBOOK D16 CI5 16GB 1TB GRIS"},"6942103180064":{"s":"100280732","d":"MATEPAD 11.5\" 12/256GB GR +TCL"},"6942103181658":{"s":"100280724","d":"MATEPAD 11.5\" 12/256GB VD +TCL"},"6942103169434":{"s":"100280847","d":"AUDÍF OPEN EAR HW FREECLIP 2 NG"},"6942103169458":{"s":"100280863","d":"AUDÍF OPEN EAR HW FREECLIP 2 AZ"},"6942103169441":{"s":"100280855","d":"AUDÍF OPEN EAR HW FREECLIP 2 BN"},"6942103172809":{"s":"100280741","d":"HUAWEI NOVA 14 6.7\" 12/512GB NG"},"6942103172816":{"s":"100280791","d":"HUAWEI NOVA 14 PRO 12/512GB AZ"},"6942103172786":{"s":"100280775","d":"HUAWEI NOVA 14 PRO 12/512GB NG"},"6942103172793":{"s":"100280783","d":"HUAWEI NOVA 14 PRO 12/512GB BN"},"6942103172779":{"s":"100280759","d":"HUAWEI NOVA 14 6.7\" 12/512GB BN"},"6942103172762":{"s":"100280767","d":"HUAWEI NOVA 14 6.7\" 12/512GB AZ"},"6942103182341":{"s":"100280880","d":"HUAWEI MATE X7 16GB 512GB ROJO"},"6942103182334":{"s":"100280871","d":"HUAWEI MATE X7 16GB 512GB NEGRO"},"6942103166501":{"s":"100276725","d":"M-PENCIL PRO HUAWEI CD56 BLANCO"},"6942103176357":{"s":"100283327","d":"HUAWEI WATCH ULT DESIGN 1.5\" PR"},"6942103175084":{"s":"100279926","d":"MATEBOOK D16 CI5 16GB 512GB GR"},"6942103171574":{"s":"100285200","d":"AUDÍF IN EAR HW F-BUDS PRO 5 BN"},"6942103171598":{"s":"100285218","d":"AUDÍF IN EAR HW F-BUDS PRO 5 AN"},"6942103171581":{"s":"100285197","d":"AUDÍF IN EAR HW F-BUDS PRO 5 NG"},"6942103176555":{"s":"100283319","d":"HUAWEI WATCH 5 46MM 1.5\" AZUL"},"6942103179259":{"s":"100286237","d":"MATEBOOK 14 CU5 16GB 1TB GRSP"},"6942103179266":{"s":"100286245","d":"MATEBOOK 14 CU7 16GB 1TB GRSP"},"6942103178733":{"s":"100286085","d":"AUDÍF OPEN EAR HW FREECLIP 2 RS"},"6942103182389":{"s":"100288144","d":"HUAWEI BAND 11 1.62\" AMLD AL BN"},"6942103182372":{"s":"100288128","d":"HUAWEI BAND 11 1.62\" AMLD AL NG"},"6942103182426":{"s":"100288187","d":"HUAWEI BAND 11 PRO 1.62\" AL NG"},"6942103182440":{"s":"100288195","d":"HUAWEI BAND 11 PRO 1.62\" AL VD"},"6942103182433":{"s":"100288283","d":"HUAWEI BAND 11 PRO 1.62\" AL AZ"},"6942103185687":{"s":"100288662","d":"HUAWEI WATCH GT RUNNER2 1.32 NG"},"6942103185663":{"s":"100288671","d":"HUAWEI WATCH GT RUNNER2 1.32 NJ"},"6942103173011":{"s":"100278940","d":"ROUTER HUAWEI AX3S 3000MB NEGRO"},"6942103173004":{"s":"100278931","d":"ROUTER HUAWEI BE3 PRO 3600MB NG"},"6942103181030":{"s":"100282252","d":"MESH HW X3PRO AC3600 +EXT NG PK"},"6942103185656":{"s":"100288742","d":"HUAWEI WATCH GT RUNNER2 1.32 AZ"},"6942103182419":{"s":"100288179","d":"HUAWEI BAND 11 1.62\" AMLD AL VD"},"6942103182396":{"s":"100288152","d":"HUAWEI BAND 11 1.62\" AMLD AL MO"},"6942103193019":{"s":"100295475","d":"MATEPAD MIN 8.8 12/256GB VD+FDA"},"6942103182402":{"s":"100288161","d":"HUAWEI BAND 11 1.62 AMLD AL BGE"},"6942103187766":{"s":"100293242","d":"HUAWEI MATE 80 PRO 16/512GB DO"},"6942103190858":{"s":"100295900","d":"HUAWEI WATCH FIT 5 1.82\" VID NG"},"6942103190872":{"s":"100295918","d":"HUAWEI WATCH FIT 5 1.82\" VID PR"},"6942103190865":{"s":"100295934","d":"HUAWEI WATCH FIT 5 1.82\" VID BN"},"6942103190902":{"s":"100295942","d":"HUAWEI WATCH FIT 5 PRO 1.92\" NG"},"6942103190919":{"s":"100295951","d":"HUAWEI WATCH FIT 5 PRO 1.92\" BN"},"6942103190926":{"s":"100296646","d":"HUAWEI WATCH FIT 5 PRO 1.92\" NJ"},"6942103173936":{"s":"100300975","d":"AUDÍF IN EAR HW FREEBUDS SE2 BN"},"6942103183492":{"s":"100301003","d":"AUDÍF IN EAR HW FREEBUDS SE2 AZ"},"6942103187773":{"s":"100293234","d":"HUAWEI MATE 80 PRO 16/512GB VD"},"6942103187759":{"s":"100293226","d":"HUAWEI MATE 80 PRO 16/512GB NG"},"6942103197277":{"s":"100302479","d":"HUAWEI NOVA 15 MAX 8GB 256GB DO"},"6942103197260":{"s":"100302452","d":"HUAWEI NOVA 15 MAX 8GB 256GB NG"},"6942103197284":{"s":"100302461","d":"HUAWEI NOVA 15 MAX 8GB 256GB VD"},"6942103163517":{"s":"100270551","d":"HUAWEI MATEPAD 11.5\" 8/256GB GR"},"6942103165450":{"s":"100274391","d":"AUDIF IN EAR HW FREEBUDS SE4 NG"},"6942103165443":{"s":"100274404","d":"AUDIF IN EAR HW FREEBUDS SE4 BN"},"6942103164781":{"s":"100274412","d":"AUDIF IN EAR HW FREEBUDS 7I NG"},"6942103193002":{"s":"100295483","d":"MATEPAD MINI 8.8 8/256GB NG+FDA"},"6942103181979":{"s":"100300967","d":"AUDÍF OPEN EAR HW FREECLIP 2 PR"},"6942103193668":{"s":"100304263","d":"HUAWEI WATCH KIDS X1 1.82\" AZ"},"6942103193675":{"s":"100304271","d":"HUAWEI WATCH KIDS X1 1.82\" ROSA"},"6942103193644":{"s":"100304280","d":"HUAWEI WATCH KID X1 PRO 1.82 NG"},"6942103193651":{"s":"100304298","d":"HUAWEI WATCH KID X1 PRO 1.82 PR"}};
-const KEY = 'hes1217_series_v1';
-let items = JSON.parse(localStorage.getItem(KEY) || '[]');
+/* ====== Config dinámica por tienda (desde hes_store en localStorage) ======
+   NUNCA hay fallback a datos de otra tienda: si el dispositivo no tiene
+   hes_store guardado, la app se bloquea con el candado de tienda (#storeGate)
+   hasta que se identifique con el PIN correcto. ====== */
+const _storeConfig = (function(){ try{ return JSON.parse(localStorage.getItem('hes_store')||'null'); }catch(e){ return null; } })();
+const STORE_READY = !!(_storeConfig && _storeConfig.store_id);
+const _storeId = STORE_READY ? _storeConfig.store_id : '_sinid';
+
+const KEY = 'hes' + _storeId + '_series_v1';
+let items = STORE_READY ? JSON.parse(localStorage.getItem(KEY) || '[]') : [];
 
 /* ====== NUBE: concentrado de ventas de todos (Hoja de Google) ====== */
-// Pega aquí la URL del Web App de Google Apps Script (termina en /exec):
-const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbwbZFsiDqZrNitPKNLqr4r6xOFu3VKprtXJacScftIJmcQdAl_yytjxK8BymWvy8I1gjA/exec';
-// Link de la Hoja de Google (concentrado de ventas) que abre Laura:
-const SHEET_BASE = 'https://docs.google.com/spreadsheets/d/1rcHq6XdJ8K2fSDQkVQf5agbCLG4zD3c4b58mF90oBq0/edit';
-const GKEY = 'hes1217_ventas_gid';
+const CLOUD_URL = (_storeConfig && _storeConfig.gas_url) ? _storeConfig.gas_url : '';
+const SHEET_BASE = (_storeConfig && _storeConfig.sheet_url) ? _storeConfig.sheet_url : '';
+const GKEY = 'hes' + _storeId + '_ventas_gid';
 let ventasGid = localStorage.getItem(GKEY) || '';
-const SHEET_URL = () => ventasGid ? SHEET_BASE + '#gid=' + ventasGid : SHEET_BASE;
-const PKEY = 'hes1217_pending';
-let pending = JSON.parse(localStorage.getItem(PKEY) || '[]');
+const SHEET_URL = () => SHEET_BASE ? (ventasGid ? SHEET_BASE.split('#')[0] + '#gid=' + ventasGid : SHEET_BASE) : '';
+const PKEY = 'hes' + _storeId + '_pending';
+let pending = STORE_READY ? JSON.parse(localStorage.getItem(PKEY) || '[]') : [];
 function savePending(){ localStorage.setItem(PKEY, JSON.stringify(pending)); }
 let flushing = false;
+
+/* ====== Candado de tienda: identifica el dispositivo con el PIN de su tienda ====== */
+const SB_URL = 'https://rjdrljtujbwooejrpyqv.supabase.co';
+const SB_KEY = 'sb_publishable_mELjDmCaFpNOxcwPi5MB2A_qSZ5ZA2z';
+let _sb = null;
+function _initSB(){ try{ if(!window.supabase) return false; _sb = window.supabase.createClient(SB_URL, SB_KEY); return true; }catch(e){ return false; } }
+
+(function storeGateInit(){
+  if(STORE_READY){
+    document.getElementById('storeGate').classList.add('hide');
+    return;
+  }
+  document.getElementById('gate').classList.add('hide');
+  document.getElementById('storeGate').classList.remove('hide');
+
+  let sgPin = '';
+  const sgErr = document.getElementById('sgErr');
+  const sgLoading = document.getElementById('sgLoading');
+  function paintDots(){ for(let i=0;i<4;i++) document.getElementById('sgd'+i).classList.toggle('on', i<sgPin.length); }
+  async function sgCheck(){
+    sgErr.textContent = '';
+    if(!_sb && !_initSB()){ sgErr.textContent = 'Sin conexión. Intenta de nuevo.'; sgPin=''; paintDots(); return; }
+    sgLoading.style.display = 'block';
+    const { data } = await _sb.from('tiendas').select('*').eq('store_id', sgPin).eq('activo', true).maybeSingle();
+    sgLoading.style.display = 'none';
+    if(!data){
+      sgErr.textContent = 'PIN incorrecto, intenta de nuevo';
+      sgPin=''; paintDots();
+      return;
+    }
+    const cfg = { store_id:data.store_id, nombre:data.nombre, ciudad:data.ciudad||'', gas_url:data.gas_url||'',
+      sheet_url:data.sheet_url||'', hoja_auth:data.hoja_auth||'',
+      vendedores:Array.isArray(data.vendedores)?data.vendedores:[], admin_pin:data.admin_pin||data.store_id };
+    localStorage.setItem('hes_store', JSON.stringify(cfg));
+    location.reload();
+  }
+  document.getElementById('sgPad').addEventListener('click', e=>{
+    const k = e.target.dataset.k; if(!k) return;
+    if(k==='del'){ sgPin = sgPin.slice(0,-1); paintDots(); return; }
+    if(k==='ok'){ if(sgPin.length===4) sgCheck(); return; }
+    if(sgPin.length>=4) return;
+    sgPin += k; paintDots();
+    if(sgPin.length===4) sgCheck();
+  });
+})();
 
 /* Fotos: se comprimen y se mandan a Drive (vía Apps Script). Se guardan en memoria
    (no en localStorage) por id; se suben con la captura y se borran al subir. */
@@ -282,7 +374,7 @@ async function flushCloud(){
 window.addEventListener('online', flushCloud);
 
 /* Catálogo desde la nube (lo sube la página "Actualizar datos"); si no hay, usa el de la app */
-const CATKEY = 'hes1217_catalogo';
+const CATKEY = 'hes' + _storeId + '_catalogo';
 // Solo aceptamos un catálogo válido: objeto (no array) con llaves tipo UPC numérico
 function esCatalogoValido(c){
   if(!c || typeof c!=='object' || Array.isArray(c)) return false;
@@ -312,7 +404,7 @@ function refreshCatalogo(){
 }
 
 /* Promociones (subidas en "Actualizar datos"); por SKU, con vigencia */
-const PROMOKEY = 'hes1217_promos';
+const PROMOKEY = 'hes' + _storeId + '_promos';
 let PROMOS = {};
 function esPromosValido(p){ return p && typeof p==='object' && !Array.isArray(p); }
 try{ const p = JSON.parse(localStorage.getItem(PROMOKEY) || 'null'); if(esPromosValido(p)) PROMOS = p; }catch(e){}
@@ -395,6 +487,7 @@ function eliminarDeNube(id){
   pending = pending.filter(p => p.id !== id);
   savePending();
   if(estabaPendiente) return;
+  if(!CLOUD_URL) return;
   // Ya estaba en la hoja → pide al Apps Script que borre la fila
   fetch(CLOUD_URL, {
     method:'POST', mode:'no-cors',
@@ -612,7 +705,8 @@ $('fileCam').onchange = e => {
 
 /* ---------- Abrir la hoja de ventas (Google Sheets) ---------- */
 $('btnCsv').onclick = async () => {
-  if(currentVend !== DESCARGA_AUTORIZADA){ toast('Solo Laura puede abrir la hoja', 'warn'); return; }
+  if(!SHEET_BASE){ toast('La hoja no está configurada — pide al gerente que la configure en Admin', 'warn'); return; }
+  if(currentVend !== DESCARGA_AUTORIZADA){ toast('Solo ' + (DESCARGA_AUTORIZADA || 'el responsable') + ' puede abrir la hoja', 'warn'); return; }
   await flushCloud();   // primero sube lo que falte de este teléfono
   window.open(SHEET_URL(), '_blank');
   toast('Abriendo hoja de ventas…', 'ok');
@@ -621,21 +715,31 @@ $('btnCsv').onclick = async () => {
 // Enter en serie = agregar rápido
 $('serie').addEventListener('keydown', e => { if(e.key==='Enter') $('btnAdd').click(); });
 
-/* ---------- Vendedor / pantalla de inicio (HES 1217) ---------- */
-// Para editar el equipo, cambia esta lista:
-const VENDEDORES = ['Arnulfo González','Arturo Aguilar','Laura Bonilla','Miguel Ángel García','Ángel Perea'];
-const VKEY = 'hes1217_vend';
-const DESCARGA_AUTORIZADA = 'Laura Bonilla';   // solo esta persona descarga el Excel
+/* ---------- Vendedor / pantalla de inicio ----------
+   Sin fallback a nombres de otra tienda: si el gerente aún no configuró el
+   equipo en Admin > Config, la lista sale vacía y se avisa explícitamente. */
+const VENDEDORES = (_storeConfig && Array.isArray(_storeConfig.vendedores)) ? _storeConfig.vendedores : [];
+const VKEY = 'hes' + _storeId + '_vend';
+const DESCARGA_AUTORIZADA = (_storeConfig && _storeConfig.hoja_auth) ? _storeConfig.hoja_auth : '';
 let currentVend = '';
 
 function updateDownloadAccess(){
-  const ok = currentVend === DESCARGA_AUTORIZADA;
+  const hasSheet = !!SHEET_BASE;
+  const ok = hasSheet && !!DESCARGA_AUTORIZADA && currentVend === DESCARGA_AUTORIZADA;
   $('btnCsv').style.display = ok ? '' : 'none';
-  $('lockMsg').style.display = ok ? 'none' : '';
+  $('lockMsg').style.display = (hasSheet && !ok) ? '' : 'none';
+  if(hasSheet) $('lockMsg').innerHTML = '🔒 Solo <b>' + esc(DESCARGA_AUTORIZADA || 'el responsable') + '</b> abre la hoja de ventas';
 }
 function setVend(n){ currentVend = n || ''; $('vendLabel').textContent = currentVend || '—'; updateDownloadAccess(); }
 function hideGate(){ $('gate').classList.add('hide'); }
 function buildGate(){
+  const sub = document.getElementById('gateSub');
+  if(sub && _storeConfig) sub.textContent = 'HES ' + _storeConfig.store_id + ' · ' + (_storeConfig.nombre || 'Odemás');
+  if(!VENDEDORES.length){
+    $('gateNames').innerHTML = '<p style="font-size:13px;color:#aaa;line-height:1.5">'
+      + 'El gerente aún no configuró el equipo de esta tienda.<br>Pide que lo haga en <b>Admin → ⚙️ Config</b>.</p>';
+    return;
+  }
   const cur = currentVend || localStorage.getItem(VKEY) || '';
   $('gateNames').innerHTML = VENDEDORES.map(n =>
     `<button class="gate-name${n===cur?' saved':''}" data-name="${esc(n)}">${esc(n)}${n===cur?'<span class="yo">tú</span>':''}</button>`).join('');
@@ -646,13 +750,24 @@ function buildGate(){
 function showGate(){ buildGate(); $('gate').classList.remove('hide'); }
 
 (function initGate(){
+  if(!STORE_READY) return;   // el candado de tienda sigue visible; no inicialices el resto
   const saved = localStorage.getItem(VKEY) || '';
   if(saved && VENDEDORES.includes(saved)) setVend(saved);
   updateDownloadAccess();   // estado inicial del botón de descarga
+  if(_storeConfig){
+    document.getElementById('headerSub').textContent = 'HES ' + _storeConfig.store_id + ' · Reporte de ventas';
+    document.getElementById('footerTxt').textContent = 'Odemás · Grupo Gigante · HES ' + _storeConfig.store_id;
+  }
   showGate();   // siempre se muestra al cargar la página
 })();
 
 $('btnChange').onclick = showGate;
+$('btnChangeStore').onclick = () => {
+  if(!confirm('¿Cambiar de tienda en este dispositivo?\n\nSe borrará la sesión guardada y deberás ingresar el PIN de la otra tienda.')) return;
+  localStorage.removeItem('hes_store');
+  localStorage.removeItem('hes_role');
+  location.reload();
+};
 
 render();
 function refreshGid(){
