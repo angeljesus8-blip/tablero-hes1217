@@ -103,6 +103,8 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
 .comis-f input, .comis-f select { font-family:'Montserrat',sans-serif;font-size:12.5px;font-weight:600;border:1.5px solid #e0e0e0;border-radius:7px;padding:6px 8px;background:#fafafa;outline:none;width:100%; }
 .comis-f input:focus, .comis-f select:focus { border-color:var(--rojo);background:#fff; }
 .comis-sec { font-size:9.5px;font-weight:800;color:var(--teal,#0e9594);text-transform:uppercase;letter-spacing:.4px;margin:8px 0 4px; }
+.comis-f input.sospechoso { border-color:var(--rojo);background:#fdeaea;color:var(--rojo);font-weight:800; }
+.comis-warn-tag { font-size:9px;font-weight:800;color:var(--rojo);margin-left:6px;text-transform:none;letter-spacing:0; }
 
 /* SPIN */
 .spin { display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite;vertical-align:middle;margin-right:6px; }
@@ -1521,20 +1523,46 @@ function escHtml(s){ return String(s||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<
 function tituloCase(s){ return String(s).toLowerCase().replace(/(^|\s)([a-záéíóúñ])/g, (m,sp,c)=> sp+c.toUpperCase()); }
 
 // Blanco y negro de alto contraste: las tablas de Sonar traen celdas con fondos de
-// color (morado, azul) que a veces el OCR no logra leer bien — binarizar la imagen
-// (texto negro puro, fondo blanco puro) elimina el color como problema.
+// color (morado, azul) que a veces el OCR no logra leer bien. En vez de un umbral fijo,
+// se calcula automáticamente por imagen (método de Otsu) para adaptarse a cada captura.
+function umbralOtsu(d){
+  const hist = new Array(256).fill(0);
+  for(let i=0; i<d.length; i+=4){
+    const gris = Math.round(0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2]);
+    hist[gris]++;
+  }
+  const total = d.length/4;
+  let sum = 0;
+  for(let t=0; t<256; t++) sum += t*hist[t];
+  let sumB=0, wB=0, maxVar=0, umbral=160;
+  for(let t=0; t<256; t++){
+    wB += hist[t]; if(wB===0) continue;
+    const wF = total - wB; if(wF===0) break;
+    sumB += t*hist[t];
+    const mB = sumB/wB, mF = (sum-sumB)/wF;
+    const varEntre = wB*wF*(mB-mF)*(mB-mF);
+    if(varEntre > maxVar){ maxVar = varEntre; umbral = t; }
+  }
+  return umbral;
+}
 async function preprocesarImagen(file){
   const bmp = await createImageBitmap(file);
+  // No controlamos cómo cada gerente toma su captura (zoom, resolución, recorte) —
+  // agrandar el texto antes del OCR ayuda cuando viene chico o borroso.
+  const escala = 2;
   const cv = document.createElement('canvas');
-  cv.width = bmp.width; cv.height = bmp.height;
+  cv.width = bmp.width * escala; cv.height = bmp.height * escala;
   const ctx = cv.getContext('2d');
-  ctx.drawImage(bmp, 0, 0);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(bmp, 0, 0, cv.width, cv.height);
   if(bmp.close) bmp.close();
   const img = ctx.getImageData(0, 0, cv.width, cv.height);
   const d = img.data;
+  const umbral = umbralOtsu(d);
   for(let i=0; i<d.length; i+=4){
     const gris = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
-    const v = gris < 160 ? 0 : 255;
+    const v = gris <= umbral ? 0 : 255;
     d[i]=d[i+1]=d[i+2]=v;
   }
   ctx.putImageData(img, 0, 0);
@@ -1776,6 +1804,14 @@ async function procesarGarantiasImg(file){
   }
 }
 
+// %Ppto es un valor fijo del plan de comisiones (10%, 20%, 35%...) — nunca pasa de 100,
+// así que si sale así es casi seguro basura del OCR. Alcance y Garantía% SÍ pueden pasar
+// de 100 legítimamente: un asesor puede vender más seguros de los que le tocan elegibles
+// esa semana, porque el cliente tiene 30 días después de la venta para comprarlo — no se
+// marcan como sospechosos aunque se vean altos.
+function esPctSospechoso(v){ return v!=null && (v>100 || v<0); }
+function claseSi(v){ return esPctSospechoso(v) ? 'sospechoso' : ''; }
+
 function renderComisPreview(){
   const cont = document.getElementById('comisPreview');
   const keys = Object.keys(comisionesDraft);
@@ -1787,11 +1823,13 @@ function renderComisPreview(){
   cont.innerHTML = keys.map(k=>{
     const r = comisionesDraft[k];
     const faltaGar = r.garantiaPct==null;
+    const sospechosos = ['pptoPct'].filter(f=>esPctSospechoso(r[f]));
     return `<div class="comis-card ${faltaGar?'warn':''}">
       <div class="comis-top">
         <input class="nombre" value="${escHtml(r.nombre)}" placeholder="Nombre completo" oninput="comisUpdate('${k}','nombre',this.value)">
         <button class="comis-del" onclick="eliminarComisFila('${k}')" title="Quitar">✕</button>
       </div>
+      ${sospechosos.length ? '<div class="comis-warn-tag">⚠ Revisa %Ppto, el OCR seguro se equivocó (salió mayor a 100)</div>' : ''}
       <div class="comis-f" style="margin-bottom:6px"><label>Puesto</label>
         <select onchange="comisUpdate('${k}','puesto',this.value)">
           <option value="">—</option>
@@ -1801,12 +1839,12 @@ function renderComisPreview(){
       <div class="comis-sec">💰 Comisiones</div>
       <div class="comis-grid">
         <div class="comis-f"><label>Venta</label><input type="number" step="0.01" value="${r.venta??''}" oninput="comisUpdate('${k}','venta',this.value)"></div>
-        <div class="comis-f"><label>% Ppto</label><input type="number" step="0.01" value="${r.pptoPct??''}" oninput="comisUpdate('${k}','pptoPct',this.value)"></div>
-        <div class="comis-f"><label>Alcance %</label><input type="number" step="0.01" value="${r.alcance??''}" oninput="comisUpdate('${k}','alcance',this.value)"></div>
+        <div class="comis-f"><label>% Ppto</label><input type="number" step="0.01" class="${claseSi(r.pptoPct)}" value="${r.pptoPct??''}" oninput="comisUpdate('${k}','pptoPct',this.value); this.classList.toggle('sospechoso', +this.value>100)"></div>
+        <div class="comis-f"><label>Alcance % <span style="font-weight:400;text-transform:none;color:#ccc">(puede pasar de 100)</span></label><input type="number" step="0.01" value="${r.alcance??''}" oninput="comisUpdate('${k}','alcance',this.value)"></div>
       </div>
       <div class="comis-sec">🛡️ Extracobertura ${faltaGar?'<span style="color:var(--naranja);text-transform:none;font-weight:600"> · sin datos</span>':''}</div>
       <div class="comis-grid">
-        <div class="comis-f"><label>Garantía %</label><input type="number" step="0.01" value="${r.garantiaPct??''}" oninput="comisUpdate('${k}','garantiaPct',this.value)"></div>
+        <div class="comis-f"><label>Garantía % <span style="font-weight:400;text-transform:none;color:#ccc">(puede pasar de 100)</span></label><input type="number" step="0.01" value="${r.garantiaPct??''}" oninput="comisUpdate('${k}','garantiaPct',this.value)"></div>
         <div class="comis-f"><label>Pzas Garantía</label><input type="number" value="${r.garantiaPzas??''}" oninput="comisUpdate('${k}','garantiaPzas',this.value)"></div>
         <div class="comis-f"><label>Pzas Elegible</label><input type="number" value="${r.garantiaElegible??''}" oninput="comisUpdate('${k}','garantiaElegible',this.value)"></div>
       </div>
