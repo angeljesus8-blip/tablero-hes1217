@@ -66,6 +66,7 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
 /* FILE UPLOAD */
 .filebox { border:2px dashed #e0e0e0;border-radius:12px;padding:18px;text-align:center;cursor:pointer;transition:.15s; }
 .filebox.ok { border-color:var(--verde);background:#f7fdfa; }
+.filebox:focus { outline:none;border-color:var(--rojo);background:#fffafa; }
 .filebox .ph { font-size:13px;color:#999;line-height:1.4; }
 
 /* RESULT */
@@ -319,8 +320,8 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
       <h2>📊 Captura de "Comisiones HES" (Sonar)</h2>
       <p class="note">Sube la captura de pantalla de la tabla <b>"Detalle de comisiones por empleado"</b>. La app la lee con OCR y prellena la lista de abajo — siempre revisa los números antes de guardar.</p>
       <input type="file" id="fileComis" accept="image/*" hidden>
-      <div class="filebox" id="fboxComis" onclick="document.getElementById('fileComis').click()">
-        <div class="ph" id="fphComis">📷 Toca para elegir la captura de Comisiones</div>
+      <div class="filebox" id="fboxComis" tabindex="0" onclick="document.getElementById('fileComis').click()">
+        <div class="ph" id="fphComis">📷 Toca para elegir el archivo, o da clic aquí y pega con Ctrl+V</div>
       </div>
       <div id="comisOcrStatus" style="display:none;text-align:center;padding:10px;font-size:12px;color:#888;font-weight:700">Leyendo imagen…</div>
     </div>
@@ -329,8 +330,8 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
       <h2>🛡️ Captura de "Garantías por fechas" (Sonar Attach)</h2>
       <p class="note">Sube la captura de la tabla de extracobertura. Se cruza automáticamente con la lista de arriba por número de empleado.</p>
       <input type="file" id="fileGar" accept="image/*" hidden>
-      <div class="filebox" id="fboxGar" onclick="document.getElementById('fileGar').click()">
-        <div class="ph" id="fphGar">📷 Toca para elegir la captura de Extracobertura</div>
+      <div class="filebox" id="fboxGar" tabindex="0" onclick="document.getElementById('fileGar').click()">
+        <div class="ph" id="fphGar">📷 Toca para elegir el archivo, o da clic aquí y pega con Ctrl+V</div>
       </div>
       <div id="garOcrStatus" style="display:none;text-align:center;padding:10px;font-size:12px;color:#888;font-weight:700">Leyendo imagen…</div>
     </div>
@@ -1783,6 +1784,28 @@ async function cargarComisionesCloud(){
 
 document.getElementById('fileComis').onchange = function(e){ const f=e.target.files&&e.target.files[0]; if(f) procesarComisionesImg(f); };
 document.getElementById('fileGar').onchange = function(e){ const f=e.target.files&&e.target.files[0]; if(f) procesarGarantiasImg(f); };
+
+/* Pegar captura directo del portapapeles (Ctrl+V) — evita depender de guardar
+   la imagen como archivo antes de subirla, útil cuando el recorte de pantalla
+   solo queda copiado y no se guarda automáticamente. Cada cuadro escucha su
+   propio evento "paste" (se dispara sobre el elemento que tiene el foco). */
+function extraerImagenPegada(e){
+  const items = (e.clipboardData && e.clipboardData.items) || [];
+  for(const it of items){ if(it.type && it.type.indexOf('image/')===0) return it.getAsFile(); }
+  return null;
+}
+document.getElementById('fboxComis').addEventListener('paste', function(e){
+  const file = extraerImagenPegada(e);
+  if(!file) return;
+  e.preventDefault();
+  procesarComisionesImg(file);
+});
+document.getElementById('fboxGar').addEventListener('paste', function(e){
+  const file = extraerImagenPegada(e);
+  if(!file) return;
+  e.preventDefault();
+  procesarGarantiasImg(file);
+});
 
 /* ================================================================
    TAB CONFIG — Configuración de tienda
