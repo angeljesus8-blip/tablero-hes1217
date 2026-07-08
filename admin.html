@@ -1520,10 +1520,33 @@ function normTxt(s){ return String(s||'').normalize('NFD').replace(/[^\x00-\x7F]
 function escHtml(s){ return String(s||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function tituloCase(s){ return String(s).toLowerCase().replace(/(^|\s)([a-záéíóúñ])/g, (m,sp,c)=> sp+c.toUpperCase()); }
 
+// Blanco y negro de alto contraste: las tablas de Sonar traen celdas con fondos de
+// color (morado, azul) que a veces el OCR no logra leer bien — binarizar la imagen
+// (texto negro puro, fondo blanco puro) elimina el color como problema.
+async function preprocesarImagen(file){
+  const bmp = await createImageBitmap(file);
+  const cv = document.createElement('canvas');
+  cv.width = bmp.width; cv.height = bmp.height;
+  const ctx = cv.getContext('2d');
+  ctx.drawImage(bmp, 0, 0);
+  if(bmp.close) bmp.close();
+  const img = ctx.getImageData(0, 0, cv.width, cv.height);
+  const d = img.data;
+  for(let i=0; i<d.length; i+=4){
+    const gris = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+    const v = gris < 160 ? 0 : 255;
+    d[i]=d[i+1]=d[i+2]=v;
+  }
+  ctx.putImageData(img, 0, 0);
+  return cv;
+}
+
 async function ocrWords(file){
   await loadTesseract();
   const worker = await Tesseract.createWorker('spa');
-  const { data } = await worker.recognize(file);
+  let entrada = file;
+  try{ entrada = await preprocesarImagen(file); }catch(e){ entrada = file; }
+  const { data } = await worker.recognize(entrada);
   await worker.terminate();
   return data.words || [];
 }
@@ -1542,8 +1565,26 @@ function agruparRenglones(words){
     row.y = row.items.reduce((s,w)=>s+w.y,0)/row.items.length;
   });
   renglones.sort((a,b)=>a.y-b.y);
-  renglones.forEach(r=> r.items.sort((a,b)=>a.x0-b.x0));
+  renglones.forEach(r=>{
+    r.items.sort((a,b)=>a.x0-b.x0);
+    r.items = fusionarFragmentosNumericos(r.items);
+  });
   return renglones;
+}
+
+// El OCR a veces parte un monto en dos por un espacio accidental
+// (ej. "$358" + ".806,80" en vez de "$358.806,80") — se vuelven a unir.
+function fusionarFragmentosNumericos(items){
+  const out = [];
+  for(let i=0; i<items.length; i++){
+    const cur = items[i], nxt = items[i+1];
+    if(nxt && /^\$?\d{1,3}$/.test(cur.text) && /^\.\d{3}([.,]\d+)*$/.test(nxt.text)){
+      out.push({ text: cur.text + nxt.text, x0: cur.x0, y: cur.y, h: cur.h });
+      i++; continue;
+    }
+    out.push(cur);
+  }
+  return out;
 }
 
 // Clasifica cada palabra de un renglón: dinero / porcentaje / entero (pzas) / No. Empleado / texto
@@ -1560,8 +1601,19 @@ function tokenizarFila(items){
     }
     const pctM = s.match(/^(\d{1,3}(?:[.,]\d{1,2})?)%$/);
     if(pctM){ toks.push({tipo:'pct', val: parseFloat(pctM[1].replace(',','.'))}); continue; }
-    if(/^\d{1,3}(\.\d{3})+(,\d{1,2})?$/.test(s)){ toks.push({tipo:'money', val: parseFloat(s.replace(/\./g,'').replace(',','.'))}); continue; }
-    if(/^\d+,\d{2}$/.test(s)){ toks.push({tipo:'money', val: parseFloat(s.replace(',','.'))}); continue; }
+    // Dinero con separador de miles ("35.441,20", "1.971.240,01"). El OCR a veces agrega o
+    // pierde un dígito decimal ("91.899,965" en vez de "91.899,96") — se toleran 1 a 4
+    // dígitos y se recortan/rellenan a 2, porque un monto siempre son centavos.
+    let mMoney;
+    if((mMoney = s.match(/^(\d{1,3}(?:\.\d{3})+)(?:,(\d{1,4}))?$/))){
+      const entero = mMoney[1].replace(/\./g,'');
+      const dec = (mMoney[2]||'00').slice(0,2).padEnd(2,'0');
+      toks.push({tipo:'money', val: parseFloat(entero+'.'+dec)}); continue;
+    }
+    if((mMoney = s.match(/^(\d+),(\d{1,4})$/))){
+      const dec = mMoney[2].slice(0,2).padEnd(2,'0');
+      toks.push({tipo:'money', val: parseFloat(mMoney[1]+'.'+dec)}); continue;
+    }
     if(/^\d{5,7}$/.test(s)){ toks.push({tipo:'empno', val: s}); continue; }
     if(/^\d{1,3}$/.test(s)){ toks.push({tipo:'int', val: parseInt(s,10)}); continue; }
     if(s === '%') continue;
@@ -1577,13 +1629,19 @@ function ubicarPuesto(restoWords){
   const norm = restoWords.map(w=> normTxt(w).replace(/\.+$/,''));
   for(let start=0; start<norm.length; start++){
     for(const p of PUESTOS_CONOCIDOS){
-      const palabrasP = normTxt(p).split(' ');
-      let ok = true;
-      for(let j=0; j<palabrasP.length; j++){
-        const w = norm[start+j];
-        if(!w || w.length<2 || !palabrasP[j].startsWith(w)){ ok=false; break; }
+      const completo = normTxt(p).split(' ');
+      // El OCR a veces se salta la palabra "DE" al truncar la columna (ej. lee
+      // "SUBGERENTE TI" en vez de "SUBGERENTE DE TI") — se prueba también sin ella.
+      const sinDe = completo.filter(w=>w!=='DE');
+      const variantes = sinDe.length!==completo.length ? [completo, sinDe] : [completo];
+      for(const palabrasP of variantes){
+        let ok = true;
+        for(let j=0; j<palabrasP.length; j++){
+          const w = norm[start+j];
+          if(!w || w.length<2 || !palabrasP[j].startsWith(w)){ ok=false; break; }
+        }
+        if(ok) return { puesto:p, start };
       }
-      if(ok) return { puesto:p, start };
     }
   }
   return null;
