@@ -508,7 +508,7 @@ function calcDerivados(){
   transitoMap = {}; (D.transito||[]).forEach(x=>{ transitoMap[x.sku]=(transitoMap[x.sku]||0)+x.cantidad; });
   RESURTIR = (D.inventario||[]).filter(x=>x.stock===0 && x.exhibe>0 && !eolSkuSet.has(x.sku))
               .sort((a,b)=> a.producto.localeCompare(b.producto));
-  AGOTADOS = (D.agotados||[])
+  AGOTADOS = (D.inventario||[]).filter(x=>(x.stock||0)===0 && (x.exhibe||0)===0 && !eolSkuSet.has(x.sku))
               .sort((a,b)=> a.producto.localeCompare(b.producto));
 }
 calcDerivados();
