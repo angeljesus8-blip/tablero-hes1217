@@ -372,7 +372,10 @@ window.addEventListener('load', init);
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  // La URL lleva versión para forzar que el navegador siempre revise si hay una
+  // versión nueva — GitHub Pages no deja controlar el Cache-Control de sw.js, así
+  // que sin esto el navegador a veces no detecta la actualización por su cuenta.
+  navigator.serviceWorker.register('./sw.js?v=62').catch(()=>{});
 }
 </script>
 </body>
