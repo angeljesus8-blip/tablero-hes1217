@@ -478,16 +478,6 @@ function tieneExistencia_(sku){
   return (inv.stock||0)>0 || (inv.exhibe||0)>0;
 }
 
-function actualizarSnapshotInv(){
-  // Acumula todos los SKUs conocidos en localStorage para detectar agotados
-  // que desaparecen del inventario actualizado (no solo los que llegan con stock=0)
-  const snap = JSON.parse(localStorage.getItem('hes_inv_snap')||'{}');
-  (D.inventario||[]).forEach(function(x){
-    if(x.sku && x.producto) snap[x.sku] = { sku:x.sku, producto:x.producto };
-  });
-  localStorage.setItem('hes_inv_snap', JSON.stringify(snap));
-}
-
 function calcDerivados(){
   EOL = (D.eol||[]).map(e=>{
     const inv = invBySku[e.sku] || {};
@@ -501,22 +491,7 @@ function calcDerivados(){
   transitoMap = {}; (D.transito||[]).forEach(x=>{ transitoMap[x.sku]=(transitoMap[x.sku]||0)+x.cantidad; });
   RESURTIR = (D.inventario||[]).filter(x=>x.stock===0 && x.exhibe>0 && !eolSkuSet.has(x.sku))
               .sort((a,b)=> a.producto.localeCompare(b.producto));
-
-  // Actualiza snapshot ANTES de calcular agotados
-  actualizarSnapshotInv();
-
-  // Caso 1: sigue en datos.js pero con stock=0 y exhibe=0
-  const agotadosEnInv = (D.inventario||[])
-    .filter(x=>(x.stock||0)===0 && (x.exhibe||0)===0 && !eolSkuSet.has(x.sku));
-
-  // Caso 2: estaba en inventario antes pero ya no viene en el archivo actualizado
-  const snap = JSON.parse(localStorage.getItem('hes_inv_snap')||'{}');
-  const skusActuales  = new Set((D.inventario||[]).map(x=>x.sku));
-  const skusResurtir  = new Set(RESURTIR.map(x=>x.sku));
-  const agotadosDeSnap = Object.values(snap)
-    .filter(x=> !skusActuales.has(x.sku) && !skusResurtir.has(x.sku) && !eolSkuSet.has(x.sku));
-
-  AGOTADOS = [...agotadosEnInv, ...agotadosDeSnap]
+  AGOTADOS = (D.agotados||[])
               .sort((a,b)=> a.producto.localeCompare(b.producto));
 }
 calcDerivados();
@@ -810,8 +785,26 @@ function cargarInventarioNube(){
         if(cl.p && !item.precio) item.precio = parseFloat(String(cl.p).replace(/[^0-9.]/g,''))||0;
       }
     });
+    // Agrega al inventario local los SKUs que el GAS conoce (Catalogo o Catalogo_ref)
+    // pero que no están en datos.js — esto incluye productos agotados que ya no vienen
+    // en el Excel de Sonar pero el GAS los conserva vía Catalogo_ref
+    const skusLocales = new Set((D.inventario||[]).map(function(x){ return x.sku; }));
+    Object.keys(data).forEach(function(sku){
+      if(skusLocales.has(sku)) return;
+      const cl = data[sku];
+      if(!cl || !cl.d) return; // sin descripción → SKU vacío, ignorar
+      const item = {
+        sku: sku,
+        producto: cl.d,
+        stock:    Math.max(0, (cl.o||0) - (cl.v||0)),
+        exhibe:   cl.e || 0,
+        precio:   parseFloat(String(cl.p||'').replace(/[^0-9.]/g,''))||0
+      };
+      if(!D.inventario) D.inventario = [];
+      D.inventario.push(item);
+      invBySku[sku] = item;
+    });
     // Actualiza invBySku para SKUs EOL que no están en D.inventario
-    // (ej: artículos removidos del catálogo pero que aún tienen pieza de exhibición)
     (D.eol||[]).forEach(function(e){
       if(invBySku[e.sku]) return;
       const cl = data[e.sku];
