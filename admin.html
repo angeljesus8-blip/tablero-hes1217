@@ -1522,59 +1522,14 @@ function normTxt(s){ return String(s||'').normalize('NFD').replace(/[^\x00-\x7F]
 function escHtml(s){ return String(s||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function tituloCase(s){ return String(s).toLowerCase().replace(/(^|\s)([a-záéíóúñ])/g, (m,sp,c)=> sp+c.toUpperCase()); }
 
-// Blanco y negro de alto contraste: las tablas de Sonar traen celdas con fondos de
-// color (morado, azul) que a veces el OCR no logra leer bien. En vez de un umbral fijo,
-// se calcula automáticamente por imagen (método de Otsu) para adaptarse a cada captura.
-function umbralOtsu(d){
-  const hist = new Array(256).fill(0);
-  for(let i=0; i<d.length; i+=4){
-    const gris = Math.round(0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2]);
-    hist[gris]++;
-  }
-  const total = d.length/4;
-  let sum = 0;
-  for(let t=0; t<256; t++) sum += t*hist[t];
-  let sumB=0, wB=0, maxVar=0, umbral=160;
-  for(let t=0; t<256; t++){
-    wB += hist[t]; if(wB===0) continue;
-    const wF = total - wB; if(wF===0) break;
-    sumB += t*hist[t];
-    const mB = sumB/wB, mF = (sum-sumB)/wF;
-    const varEntre = wB*wF*(mB-mF)*(mB-mF);
-    if(varEntre > maxVar){ maxVar = varEntre; umbral = t; }
-  }
-  return umbral;
-}
-async function preprocesarImagen(file){
-  const bmp = await createImageBitmap(file);
-  // No controlamos cómo cada gerente toma su captura (zoom, resolución, recorte) —
-  // agrandar el texto antes del OCR ayuda cuando viene chico o borroso.
-  const escala = 2;
-  const cv = document.createElement('canvas');
-  cv.width = bmp.width * escala; cv.height = bmp.height * escala;
-  const ctx = cv.getContext('2d');
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(bmp, 0, 0, cv.width, cv.height);
-  if(bmp.close) bmp.close();
-  const img = ctx.getImageData(0, 0, cv.width, cv.height);
-  const d = img.data;
-  const umbral = umbralOtsu(d);
-  for(let i=0; i<d.length; i+=4){
-    const gris = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
-    const v = gris <= umbral ? 0 : 255;
-    d[i]=d[i+1]=d[i+2]=v;
-  }
-  ctx.putImageData(img, 0, 0);
-  return cv;
-}
-
+// La imagen se manda tal cual a Tesseract. Se probó blanco y negro (Otsu) + agrandado
+// antes del OCR para las celdas de color de Sonar, pero pegaba palabras y partía
+// números decimales ("8.99%" -> "8" + "99%") — salía peor que la imagen cruda. Si el
+// OCR falla en alguna fila, la vista previa editable es donde se corrige a mano.
 async function ocrWords(file){
   await loadTesseract();
   const worker = await Tesseract.createWorker('spa');
-  let entrada = file;
-  try{ entrada = await preprocesarImagen(file); }catch(e){ entrada = file; }
-  const { data } = await worker.recognize(entrada);
+  const { data } = await worker.recognize(file);
   await worker.terminate();
   return data.words || [];
 }
