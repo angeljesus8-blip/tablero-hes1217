@@ -237,6 +237,7 @@ const _cfg = (function(){ try{ return JSON.parse(localStorage.getItem('hes_store
 const CLOUD_URL = (_cfg && _cfg.gas_url) ? _cfg.gas_url : 'https://script.google.com/macros/s/AKfycbwbZFsiDqZrNitPKNLqr4r6xOFu3VKprtXJacScftIJmcQdAl_yytjxK8BymWvy8I1gjA/exec';
 const TIENDA_ID     = (_cfg && _cfg.store_id) || '1217';
 const TIENDA_NOMBRE = (_cfg && _cfg.nombre)   || 'Angelópolis';
+const ROLE          = localStorage.getItem('hes_role') || 'asesor';
 document.getElementById('updated').innerHTML = '<span style="color:var(--naranja);font-weight:700">Sin confirmar</span>';
 document.getElementById('liveWarning').classList.add('visible');
 (function(){
@@ -647,12 +648,45 @@ function rowResurtir(x){
   const badge = sinPiso
     ? `<span class="exh" style="background:#fdeaea;color:var(--rojo);font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;white-space:nowrap;">📭 sin piso</span>`
     : `<span class="exh" style="background:#fff5ee;color:var(--naranja);font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;white-space:nowrap;">🪟 ${x.exhibe} piso</span>`;
+  const btnEol = ROLE === 'gerente'
+    ? `<button onclick="marcarNoResurtir('${x.sku}','${x.producto.replace(/'/g,'')}',this)"
+         title="Ya no se resurte — quitar del listado"
+         style="background:none;border:1.5px solid #ddd;border-radius:7px;cursor:pointer;padding:3px 8px;font-size:11px;font-weight:700;color:#aaa;flex-shrink:0;white-space:nowrap">✕ EOL</button>`
+    : '';
   return `<div class="inv-row">
     <div class="dot cero"></div>
     <div class="inv-info"><h4>${x.producto}</h4><span>SKU ${x.sku||'—'}</span></div>
     ${badge}
+    ${btnEol}
     <div class="stock cero"><div class="num">0</div><div class="lbl lbl2">piezas</div></div>
   </div>`;
+}
+
+function marcarNoResurtir(sku, producto, btn){
+  if(!confirm('"' + producto + '"\n\n¿Ya no se va a resurtir? Se quitará del listado.')) return;
+  if(btn){ btn.disabled=true; btn.textContent='…'; }
+  const cb = '_cbEolAdd' + Date.now();
+  window[cb] = function(data){
+    delete window[cb];
+    const sc = document.getElementById('_eolAdd_sc'); if(sc) sc.remove();
+    if(data && data.ok !== false){
+      eolSkuSet.add(sku);
+      calcDerivados();
+      render();
+    } else {
+      if(btn){ btn.disabled=false; btn.textContent='✕ EOL'; }
+      alert('No se pudo guardar. Verifica tu conexión.');
+    }
+  };
+  const sc = document.createElement('script');
+  sc.id = '_eolAdd_sc';
+  sc.src = CLOUD_URL + '?modo=eol_add&sku=' + encodeURIComponent(sku) + '&pin=' + encodeURIComponent(TIENDA_ID) + '&callback=' + cb;
+  sc.onerror = function(){
+    delete window[cb]; sc.remove();
+    if(btn){ btn.disabled=false; btn.textContent='✕ EOL'; }
+    alert('Sin conexión.');
+  };
+  document.head.appendChild(sc);
 }
 function rowInv(x){
   const cls = x.stock===0 ? 'cero' : x.stock<=3 ? 'bajo' : 'ok';
