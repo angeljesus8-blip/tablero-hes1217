@@ -1041,6 +1041,9 @@ OneSignalDeferred.push(async function(OneSignal){
 });
 
 actualizarCampana();
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('./sw.js?v=62').catch(()=>{});
+}
 </script>
 </body>
 </html>
