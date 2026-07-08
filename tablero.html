@@ -265,7 +265,7 @@ const money2 = n => '$'+Number(n||0).toLocaleString('es-MX',{minimumFractionDigi
 const eolSkuSet = new Set((D.eol||[]).map(e=>e.sku));
 
 // Variables recalculables cuando llegan datos de la nube
-let EOL = [], eolMap = {}, transitoMap = {}, RESURTIR = [];
+let EOL = [], eolMap = {}, transitoMap = {}, RESURTIR = [], AGOTADOS = [];
 const PROMOS_KEY   = 'hes1217_promos_cache';
 const BUNDLES_KEY  = 'hes1217_bundles_cache';
 let PROMOS = [];
@@ -491,6 +491,8 @@ function calcDerivados(){
   transitoMap = {}; (D.transito||[]).forEach(x=>{ transitoMap[x.sku]=(transitoMap[x.sku]||0)+x.cantidad; });
   RESURTIR = (D.inventario||[]).filter(x=>x.stock===0 && x.exhibe>0 && !eolSkuSet.has(x.sku))
               .sort((a,b)=> a.producto.localeCompare(b.producto));
+  AGOTADOS = (D.inventario||[]).filter(x=>(x.stock||0)===0 && (x.exhibe||0)===0 && !eolSkuSet.has(x.sku))
+              .sort((a,b)=> a.producto.localeCompare(b.producto));
 }
 calcDerivados();
 
@@ -502,7 +504,7 @@ function cuenta(id){
   if(id==='nov')   return (D.novedades||[]).filter(x=>coincide(x.titulo,x.detalle)).length;
   if(id==='inv')   return (D.inventario||[]).filter(x=>coincide(x.producto,x.sku)&&((x.stock||0)>0||(x.exhibe||0)>0)).length;
   if(id==='resurtir') return RESURTIR.filter(x=>coincide(x.producto,x.sku)).length;
-  if(id==='agotados') return (D.agotados||[]).filter(x=>coincide(x.producto,x.sku)).length;
+  if(id==='agotados') return AGOTADOS.filter(x=>coincide(x.producto,x.sku)).length;
   if(id==='transito') return (D.transito||[]).filter(x=>coincide(x.producto,x.sku)).length;
   if(id==='aviso') return (D.avisos||[]).filter(x=>coincide(x.titulo,x.detalle)).length;
   return 0;
@@ -518,7 +520,7 @@ function seccionTieneItems(id){
   if(id==='nov')      return (D.novedades||[]).length>0;
   if(id==='inv')      return (D.inventario||[]).length>0;
   if(id==='resurtir') return RESURTIR.length>0;
-  if(id==='agotados') return (D.agotados||[]).length>0;
+  if(id==='agotados') return AGOTADOS.length>0;
   if(id==='aviso')    return (D.avisos||[]).length>0;
   return false;
 }
@@ -671,7 +673,7 @@ function render(){
   const nov    = (D.novedades||[]).filter(x=>coincide(x.titulo,x.detalle));
   const inv    = (D.inventario||[]).filter(x=>coincide(x.producto,x.sku)&&((x.stock||0)>0||(x.exhibe||0)>0));
   const resurtir = RESURTIR.filter(x=>coincide(x.producto,x.sku));
-  const agotados = (D.agotados||[]).filter(x=>coincide(x.producto,x.sku));
+  const agotados = AGOTADOS.filter(x=>coincide(x.producto,x.sku));
   const transito = (D.transito||[]).filter(x=>coincide(x.producto,x.sku));
   const hoyStr = new Date().toISOString().slice(0,10);
   const avisos = (D.avisos||[]).filter(x=>coincide(x.titulo,x.detalle) && (!x.d2||x.d2>=hoyStr));
