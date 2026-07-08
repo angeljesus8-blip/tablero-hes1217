@@ -1944,6 +1944,9 @@ async function guardarConfig(){
   showResult('resConfig', true,
     '✅ Guardado. El equipo verá estos datos la próxima vez que abran Captura de Series o recarguen el tablero.');
 }
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('./sw.js?v=62').catch(()=>{});
+}
 </script>
 </body>
 </html>
