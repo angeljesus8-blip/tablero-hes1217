@@ -324,6 +324,10 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
         <div class="ph" id="fphComis">📷 Toca para elegir el archivo, o da clic aquí y pega con Ctrl+V</div>
       </div>
       <div id="comisOcrStatus" style="display:none;text-align:center;padding:10px;font-size:12px;color:#888;font-weight:700">Leyendo imagen…</div>
+      <details id="comisDebugWrap" style="margin-top:8px;display:none">
+        <summary style="font-size:11px;color:#aaa;cursor:pointer">🔍 Ver texto leído por el OCR (para depurar)</summary>
+        <pre id="comisDebugTxt" style="white-space:pre-wrap;font-size:11px;color:#888;background:#fafafa;border:1px solid #eee;border-radius:8px;padding:8px;margin-top:6px;max-height:220px;overflow:auto"></pre>
+      </details>
     </div>
 
     <div class="card" style="margin-top:14px">
@@ -334,6 +338,10 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
         <div class="ph" id="fphGar">📷 Toca para elegir el archivo, o da clic aquí y pega con Ctrl+V</div>
       </div>
       <div id="garOcrStatus" style="display:none;text-align:center;padding:10px;font-size:12px;color:#888;font-weight:700">Leyendo imagen…</div>
+      <details id="garDebugWrap" style="margin-top:8px;display:none">
+        <summary style="font-size:11px;color:#aaa;cursor:pointer">🔍 Ver texto leído por el OCR (para depurar)</summary>
+        <pre id="garDebugTxt" style="white-space:pre-wrap;font-size:11px;color:#888;background:#fafafa;border:1px solid #eee;border-radius:8px;padding:8px;margin-top:6px;max-height:220px;overflow:auto"></pre>
+      </details>
     </div>
 
     <div class="card" style="margin-top:14px">
@@ -1587,6 +1595,17 @@ function asegurarFila(key){
   return comisionesDraft[key];
 }
 
+// Muestra, por renglón, el texto crudo detectado y cómo se clasificó cada token —
+// sirve para ver exactamente qué leyó el OCR cuando un número sale mal.
+function volcarDebugFilas(renglones){
+  return renglones.map((row,i)=>{
+    const crudo = row.items.map(it=>it.text).join(' ');
+    const toks = tokenizarFila(row.items);
+    const clasif = toks.map(t=> t.tipo + (t.val!==undefined?'('+t.val+')':'')).join(' ');
+    return 'Fila '+(i+1)+':\n  crudo:  '+crudo+'\n  tokens: '+clasif;
+  }).join('\n\n');
+}
+
 async function procesarComisionesImg(file){
   document.getElementById('fboxComis').classList.add('ok');
   document.getElementById('fphComis').textContent = '✓ ' + file.name;
@@ -1595,6 +1614,8 @@ async function procesarComisionesImg(file){
   try{
     const words = await ocrWords(file);
     const renglones = agruparRenglones(words);
+    document.getElementById('comisDebugTxt').textContent = volcarDebugFilas(renglones);
+    document.getElementById('comisDebugWrap').style.display = 'block';
     let encontrados = 0;
     renglones.forEach(row=>{
       const toks = tokenizarFila(row.items);
@@ -1640,6 +1661,8 @@ async function procesarGarantiasImg(file){
   try{
     const words = await ocrWords(file);
     const renglones = agruparRenglones(words);
+    document.getElementById('garDebugTxt').textContent = volcarDebugFilas(renglones);
+    document.getElementById('garDebugWrap').style.display = 'block';
 
     const textoCompleto = renglones.map(r=>r.items.map(i=>i.text).join(' ')).join(' ');
     const fm = textoCompleto.match(/(\d{1,2}\s+[a-zA-Zé]{3,}\s+\d{4})\s*-\s*(\d{1,2}\s+[a-zA-Zé]{3,}\s+\d{4})/);
@@ -1658,6 +1681,9 @@ async function procesarGarantiasImg(file){
       const rowTextoConEspacios = row.items.map(i=>i.text).join(' ');
       const m2 = rowTextoConEspacios.match(/\d{3,6}\s*-\s*\d{4,7}\s*-\s*([A-ZÁÉÍÓÚÑ ]+)/i);
       let nombreCompleto = m2 ? m2[1].trim().replace(/\s{2,}/g,' ').replace(/[\d%].*$/,'').trim() : '';
+      // Sin nombre reconocible, no es una fila real de empleado — probablemente un
+      // falso positivo del patrón tienda-empno (evita tarjetas fantasma vacías).
+      if(!nombreCompleto) return;
 
       const toks = tokenizarFila(row.items);
       const primerPctIdx = toks.findIndex(t=>t.tipo==='pct');
