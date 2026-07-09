@@ -243,17 +243,26 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
   <!-- EOL -->
   <div class="pane" id="pane-eol">
     <div class="card">
+      <h2>📊 Subir lista desde Excel</h2>
+      <p class="note">Excel con columna <b>SKU</b> (obligatoria) y opcionalmente <b>Descripcion</b>/<b>Precio</b>. Útil para agregar muchos SKUs de golpe — por ejemplo la lista de "Discontinued" del inventario corporativo.</p>
+      <input type="file" id="fileEolXlsx" accept=".xlsx,.xls" hidden>
+      <div class="filebox" id="fboxEolXlsx" onclick="document.getElementById('fileEolXlsx').click()">
+        <div class="ph" id="fphEolXlsx">📄 Toca para elegir el Excel de EOL</div>
+      </div>
+    </div>
+    <div class="divider">o desde CEA de Promos (PDF)</div>
+    <div class="card">
       <h2>📎 Desde CEA de Promos (PDF)</h2>
       <p class="note">Sube el PDF del CEA normal. La app extrae automáticamente los productos con estatus EOL.</p>
       <input type="file" id="filePdfEol" accept="application/pdf,.pdf" hidden>
       <div class="filebox" id="fboxEol" onclick="document.getElementById('filePdfEol').click()">
         <div class="ph" id="fphEol">📄 Toca para elegir el PDF del CEA</div>
       </div>
-      <div id="previewEol" style="display:none">
-        <div class="prev-hdr" id="prevHdrEol"></div>
-        <div id="prevListEol"></div>
-        <button class="btn-pri" id="btnSaveEol" onclick="saveEolFromPdf()">💾 Guardar todos en la nube</button>
-      </div>
+    </div>
+    <div id="previewEol" style="display:none">
+      <div class="prev-hdr" id="prevHdrEol"></div>
+      <div id="prevListEol"></div>
+      <button class="btn-pri" id="btnSaveEol" onclick="saveEolFromPdf()">💾 Guardar todos en la nube</button>
     </div>
     <div class="divider">o agregar manualmente</div>
     <div class="card">
@@ -1305,22 +1314,97 @@ document.getElementById('filePdfEol').onchange=async function(e){
   }
 };
 
+const _esperar=ms=>new Promise(r=>setTimeout(r,ms));
 async function saveEolFromPdf(){
   const btn=document.getElementById('btnSaveEol');
   const rows=btn._rows||[];
   if(!rows.length) return;
-  btn.disabled=true; btn.textContent='Guardando…';
+  btn.disabled=true;
   let ok=0,skip=0,err=0;
-  for(const r of rows){
+  for(let i=0;i<rows.length;i++){
+    const r=rows[i];
+    btn.textContent=`Guardando… (${i+1}/${rows.length})`;
     try{
       const res=await jsonp(apiUrl('eol_add',{sku:r.sku,precio:r.pr}));
       res&&res.existe?skip++:ok++;
     }catch(e){ err++; }
+    // Espaciar las llamadas — Google limita las peticiones seguidas al mismo
+    // Apps Script; en ráfaga rápida algunas fallan en silencio sin error visible.
+    await _esperar(1200);
   }
   toast(`${ok} agregados${skip?' · '+skip+' ya existían':''}${err?' · '+err+' error':''}`,err===0);
   btn.textContent='💾 Guardar todos en la nube'; btn.disabled=false;
   if(ok) loadEol();
 }
+
+async function parseEolXlsx(file){
+  const buf=await file.arrayBuffer();
+  const wb=XLSX.read(buf,{type:'array'});
+  const ws=wb.Sheets[wb.SheetNames[0]];
+  const aoa=XLSX.utils.sheet_to_json(ws,{header:1,raw:false,defval:''});
+
+  let h=-1;
+  for(let i=0;i<Math.min(aoa.length,25);i++){
+    const up=aoa[i].map(c=>String(c||'').trim().toUpperCase());
+    if(up.some(c=>c==='SKU'||c.includes('SKU'))){ h=i; break; }
+  }
+  if(h<0) throw new Error('No encontré columna SKU en el archivo');
+
+  const H=aoa[h].map(c=>String(c||'').trim().toUpperCase());
+  const fi=test=>H.findIndex(c=>test(c));
+  const iSku  = fi(c=>c==='SKU'||c.includes('SKU'));
+  const iDesc = fi(c=>c.includes('DESCRI')||c.includes('PRODUC')||c.includes('ARTIC'));
+  const iPx   = fi(c=>c.includes('PRECIO')||c.includes('COSTO'));
+  const iFlag = fi(c=>c.includes('AGREGAR')||c.includes('SI/NO')||c.includes('EOL'));
+
+  const seen={},rows=[];
+  for(let r=h+1;r<aoa.length;r++){
+    const row=aoa[r]; if(!row) continue;
+    const sku=String(row[iSku]||'').trim().replace(/\.0$/,'');
+    if(!sku || !/^\d{4,}$/.test(sku)) continue;
+    // Si el archivo tiene una columna de confirmación (ej. "Agregar a EOL SI/NO"),
+    // solo se toman las filas marcadas — permite mandar la lista completa de
+    // candidatos y que el gerente ya haya decidido cuáles sí en el propio Excel.
+    if(iFlag>=0){
+      const flag=String(row[iFlag]||'').trim().toUpperCase();
+      if(flag && flag!=='SI' && flag!=='SÍ' && flag!=='YES' && flag!=='X') continue;
+      if(!flag) continue;
+    }
+    if(seen[sku]) continue; seen[sku]=1;
+    rows.push({
+      sku,
+      desc: iDesc>=0 ? String(row[iDesc]||'').trim() : '',
+      pr: iPx>=0 ? String(row[iPx]||'').trim().replace(/[^0-9.]/g,'') : ''
+    });
+  }
+  return rows;
+}
+
+document.getElementById('fileEolXlsx').onchange=async function(e){
+  const f=e.target.files&&e.target.files[0]; if(!f) return;
+  const ph=document.getElementById('fphEolXlsx');
+  const fbox=document.getElementById('fboxEolXlsx');
+  fbox.classList.remove('ok'); ph.innerHTML='<em>Leyendo Excel…</em>';
+  document.getElementById('previewEol').style.display='none';
+  try{
+    const rows=await parseEolXlsx(f);
+    if(!rows.length) throw new Error('No encontré SKUs para agregar — revisa la columna SKU (y la de confirmación, si trae una)');
+    fbox.classList.add('ok');
+    ph.innerHTML=`✓ ${f.name}<br>${rows.length} SKU(s) para agregar`;
+    document.getElementById('prevHdrEol').textContent=rows.length+' productos EOL encontrados en el Excel:';
+    document.getElementById('prevListEol').innerHTML=rows.map(r=>`
+      <div class="prev-item">
+        <strong>SKU ${r.sku}</strong>
+        <span>${r.desc||'(sin descripción en el archivo)'}${r.pr?' · precio $'+r.pr:''}</span>
+      </div>`).join('');
+    document.getElementById('btnSaveEol')._rows=rows;
+    document.getElementById('previewEol').style.display='block';
+  }catch(err){
+    fbox.classList.remove('ok');
+    ph.textContent='📄 Toca para elegir el Excel de EOL';
+    toast(err.message,false);
+  }
+};
 
 async function loadEol(){
   document.getElementById('listE').innerHTML='<div class="empty">Cargando…</div>';
@@ -1945,7 +2029,7 @@ async function guardarConfig(){
     '✅ Guardado. El equipo verá estos datos la próxima vez que abran Captura de Series o recarguen el tablero.');
 }
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('./sw.js?v=62').catch(()=>{});
+  navigator.serviceWorker.register('./sw.js?v=63').catch(()=>{});
 }
 </script>
 </body>
