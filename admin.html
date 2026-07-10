@@ -1315,6 +1315,13 @@ document.getElementById('filePdfEol').onchange=async function(e){
 };
 
 const _esperar=ms=>new Promise(r=>setTimeout(r,ms));
+// El límite de peticiones seguidas de Google a un mismo Apps Script es inconsistente
+// (a veces 1.5s entre llamadas alcanza, a veces se necesitan 5s) — se reintenta una
+// vez con más espera antes de darla por perdida, en vez de solo contar el error.
+async function _eolAddConReintento(sku,precio){
+  try{ return await jsonp(apiUrl('eol_add',{sku,precio})); }
+  catch(e){ await _esperar(4000); return await jsonp(apiUrl('eol_add',{sku,precio})); }
+}
 async function saveEolFromPdf(){
   const btn=document.getElementById('btnSaveEol');
   const rows=btn._rows||[];
@@ -1325,12 +1332,10 @@ async function saveEolFromPdf(){
     const r=rows[i];
     btn.textContent=`Guardando… (${i+1}/${rows.length})`;
     try{
-      const res=await jsonp(apiUrl('eol_add',{sku:r.sku,precio:r.pr}));
+      const res=await _eolAddConReintento(r.sku,r.pr);
       res&&res.existe?skip++:ok++;
     }catch(e){ err++; }
-    // Espaciar las llamadas — Google limita las peticiones seguidas al mismo
-    // Apps Script; en ráfaga rápida algunas fallan en silencio sin error visible.
-    await _esperar(1200);
+    await _esperar(2500);
   }
   toast(`${ok} agregados${skip?' · '+skip+' ya existían':''}${err?' · '+err+' error':''}`,err===0);
   btn.textContent='💾 Guardar todos en la nube'; btn.disabled=false;
@@ -2029,7 +2034,7 @@ async function guardarConfig(){
     '✅ Guardado. El equipo verá estos datos la próxima vez que abran Captura de Series o recarguen el tablero.');
 }
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('./sw.js?v=63').catch(()=>{});
+  navigator.serviceWorker.register('./sw.js?v=64').catch(()=>{});
 }
 </script>
 </body>
