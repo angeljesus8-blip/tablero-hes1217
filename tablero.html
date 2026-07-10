@@ -662,6 +662,20 @@ function rowResurtir(x){
   </div>`;
 }
 
+function resurtirWA(){
+  const lines = ['🔄 *Resurtir · HES ' + TIENDA_NOMBRE + '*'];
+  if(AGOTADOS.length){
+    lines.push('', '📭 *Sin existencia — pedir urgente (' + AGOTADOS.length + ')*');
+    AGOTADOS.forEach(x => lines.push('• ' + x.producto + ' (SKU ' + x.sku + ')'));
+  }
+  if(RESURTIR.length){
+    lines.push('', '🪟 *Queda piso — pedir caja (' + RESURTIR.length + ')*');
+    RESURTIR.forEach(x => lines.push('• ' + x.producto + ' (SKU ' + x.sku + ')'));
+  }
+  lines.push('', '_HES ' + TIENDA_NOMBRE + ' · Odemás Grupo Gigante_');
+  window.open('https://wa.me/?text=' + encodeURIComponent(lines.join('\n')), '_blank');
+}
+
 function marcarNoResurtir(sku, producto, btn){
   if(!confirm('"' + producto + '"\n\n¿Ya no se va a resurtir? Se quitará del listado.')) return;
   if(btn){ btn.disabled=true; btn.textContent='…'; }
@@ -811,6 +825,9 @@ function render(){
   if(f==='resurtir'){
     if(agotados.length) html += seccion('📭 Sin existencia — pedir urgente', agotados, rowResurtir);
     if(resurtir.length) html += seccion('🪟 Queda piso — pedir caja', resurtir, rowResurtir);
+    if(RESURTIR.length || AGOTADOS.length){
+      html += `<button class="btn-wa" style="margin-top:14px" onclick="resurtirWA()">📲 Compartir lista completa por WhatsApp</button>`;
+    }
   }
   if(f==='transito') html += seccion('🚚 En tránsito · venta a promesa de entrega', transito, cardTransito);
   if(f==='inv')   html += seccion('📊 Inventario · existencias', inv, rowInv);
@@ -1042,7 +1059,7 @@ OneSignalDeferred.push(async function(OneSignal){
 
 actualizarCampana();
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('./sw.js?v=64').catch(()=>{});
+  navigator.serviceWorker.register('./sw.js?v=65').catch(()=>{});
 }
 </script>
 </body>
