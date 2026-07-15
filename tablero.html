@@ -476,11 +476,15 @@ function resumenWA(){
   window.open('https://wa.me/?text='+encodeURIComponent(msg.trim()),'_blank');
 }
 /* ---- WhatsApp share ---- */
-function compartirWA(prodEnc,sku,pv,pb){
+function compartirWA(prodEnc,sku,pv,pb,sinSeguro){
   const producto=decodeURIComponent(prodEnc);
-  const s=seguroPara(pb||pv);
   let msg='*'+producto+'*\n💰 '+money(pv);
-  if(s){ msg+='\n\n🛡️ Seguro:\n  +1 año: '+money(pv+s.p1)+'\n  +2 años: '+money(pv+s.p2); }
+  // Los bundles ya traen el seguro incluido dentro de su precio — ofrecerlo
+  // aparte aquí sería cobrarlo dos veces (ver sinSeguro=true en cardBundle).
+  if(!sinSeguro){
+    const s=seguroPara(pb||pv);
+    if(s){ msg+='\n\n🛡️ Seguro:\n  +1 año: '+money(pv+s.p1)+'\n  +2 años: '+money(pv+s.p2); }
+  }
   const msi=[];
   if(pv>=1500) msi.push('6 MSI');
   if(pv>=10000) msi.push('12 MSI');
@@ -555,9 +559,10 @@ function cardBundle(x){
   const prods=skuArr.map(s=>invBySku[s]?invBySku[s].producto:'SKU '+s);
   const vig = x.d2 ? badgeVigencia(x.d2) : '';
   const precioNum = Number(x.precio)||0;
-  const bunId = 'bun_'+(x.nombre||'b').replace(/[^a-z0-9]/gi,'').slice(0,12);
-  const sel = precioNum ? segSelector(bunId, precioNum, precioNum) : '';
-  const waBtn = precioNum ? `<button class="btn-wa" onclick="compartirWA('${encodeURIComponent(x.nombre||'Bundle')}','${skuArr.join('+')}',${precioNum},${precioNum})">📲 Compartir por WhatsApp</button>` : '';
+  // Sin selector de seguro aparte: el precio del bundle ya incluye el seguro
+  // de los artículos que le tocan (ver regla de combos), ofrecerlo aquí de
+  // nuevo lo cobraría dos veces.
+  const waBtn = precioNum ? `<button class="btn-wa" onclick="compartirWA('${encodeURIComponent(x.nombre||'Bundle')}','${skuArr.join('+')}',${precioNum},${precioNum},true)">📲 Compartir por WhatsApp</button>` : '';
   return `<div class="card t-bundle">
     <div class="top"><h3>${x.nombre||'Bundle'}</h3><span class="tag bundle">🎁 ×2</span></div>
     <p class="det">${prods.slice(0,4).map(p=>'· '+p).join('<br>')}${prods.length>4?`<br>· <em>+${prods.length-4} más</em>`:''}</p>
@@ -565,7 +570,7 @@ function cardBundle(x){
       ${precioNum?`<span class="precio">${money(precioNum)}</span>`:''}
       ${vig}
     </div>
-    ${sel}${waBtn}
+    ${waBtn}
   </div>`;
 }
 function cardPromo(x){
@@ -1059,7 +1064,7 @@ OneSignalDeferred.push(async function(OneSignal){
 
 actualizarCampana();
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('./sw.js?v=67').catch(()=>{});
+  navigator.serviceWorker.register('./sw.js?v=68').catch(()=>{});
 }
 </script>
 </body>
