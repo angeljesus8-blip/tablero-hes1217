@@ -287,6 +287,10 @@ const money = n => '$'+Number(n||0).toLocaleString('es-MX');
 const money2 = n => '$'+Number(n||0).toLocaleString('es-MX',{minimumFractionDigits:2, maximumFractionDigits:2});
 const eolSkuSet = new Set((D.eol||[]).map(e=>e.sku));
 
+// SKUs EOL pausados por indicacion del area comercial — no mostrar como vendibles
+// aunque el sistema ya los marque "listo" (ver [[project_hes_ang...]] combos EOL)
+const EOL_PAUSADOS = new Set(['100280724']); // MatePad 11.5" VD+TCL — pendiente autorizacion comercial
+
 // Variables recalculables cuando llegan datos de la nube
 let EOL = [], eolMap = {}, transitoMap = {}, RESURTIR = [], AGOTADOS = [];
 const PROMOS_KEY   = 'hes1217_promos_cache';
@@ -522,7 +526,7 @@ function calcDerivados(){
     const precio = e.precio || inv.precio || 0;
     return { sku:e.sku, producto:e.producto||inv.producto||('SKU '+e.sku),
       precio:precio, precio50:precio?precio/2:null, stock, exhibe, estado };
-  }).filter(e=>e.exhibe>0);
+  }).filter(e=>e.exhibe>0 && !EOL_PAUSADOS.has(e.sku));
   eolMap = {}; EOL.forEach(e=>{ eolMap[e.sku]=e.estado; });
   transitoMap = {}; (D.transito||[]).forEach(x=>{ transitoMap[x.sku]=(transitoMap[x.sku]||0)+x.cantidad; });
   RESURTIR = (D.inventario||[]).filter(x=>x.stock===0 && x.exhibe>0 && !eolSkuSet.has(x.sku))
@@ -1099,7 +1103,7 @@ OneSignalDeferred.push(async function(OneSignal){
 
 actualizarCampana();
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('./sw.js?v=71').catch(()=>{});
+  navigator.serviceWorker.register('./sw.js?v=72').catch(()=>{});
 }
 </script>
 </body>
