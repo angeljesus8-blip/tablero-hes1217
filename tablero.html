@@ -485,7 +485,14 @@ function compartirWA(prodEnc,sku,pv,pb,sinSeguro,incluyeEnc){
   // aparte aquí sería cobrarlo dos veces (ver sinSeguro=true en cardBundle).
   if(!sinSeguro){
     const s=seguroPara(pb||pv);
-    if(s){ msg+='\n\n🛡️ Seguro:\n  +1 año: '+money(pv+s.p1)+'\n  +2 años: '+money(pv+s.p2); }
+    if(s){
+      msg+='\n\n🛡️ Seguro:\n  +1 año: '+money(pv+s.p1)+'\n  +2 años: '+money(pv+s.p2);
+      // Relojes de $8,000+ con seguro: regalo de cuerda digital de saltar
+      const esReloj = /WATCH/i.test(producto) && !/BAND/i.test(producto);
+      if(esReloj && (pb||pv) >= 8000){
+        msg += '\n\n🎁 ¡Agrega el seguro y llévate una cuerda digital de saltar de regalo!';
+      }
+    }
   }
   const msi=[];
   if(pv>=1500) msi.push('6 MSI');
@@ -1067,7 +1074,7 @@ OneSignalDeferred.push(async function(OneSignal){
 
 actualizarCampana();
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('./sw.js?v=69').catch(()=>{});
+  navigator.serviceWorker.register('./sw.js?v=70').catch(()=>{});
 }
 </script>
 </body>
