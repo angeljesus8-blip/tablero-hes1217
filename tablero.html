@@ -194,6 +194,11 @@
   .dash-lbl { font-size:11px; color:#888; font-weight:700; margin-top:5px; }
   /* ---- WhatsApp share ---- */
   .btn-wa { display:flex; align-items:center; justify-content:center; gap:6px; background:#eafaf1; color:#128C7E; border:none; border-radius:10px; padding:9px 14px; font-family:'Montserrat',sans-serif; font-size:12px; font-weight:700; cursor:pointer; margin-top:10px; width:100%; }
+
+  .eol-bundle-tip { margin-top:10px; padding:9px 11px; border-radius:9px; background:#fff8ec; border:1px solid #ffe6bd; }
+  .eol-bundle-tip .tip-lbl { font-size:10.5px; font-weight:800; color:var(--naranja); text-transform:uppercase; letter-spacing:.4px; }
+  .eol-bundle-tip .tip-nom { font-size:12.5px; font-weight:700; margin-top:2px; }
+  .eol-bundle-tip .precio { font-size:15px; }
 </style>
 </head>
 <body>
@@ -610,6 +615,25 @@ function cardPrecioReg(x){
     ${sel}${waBtn}
   </div>`;
 }
+function bundlesParaSku(sku){
+  return BUNDLES.filter(b=>(b.skus||'').split(',').map(s=>s.trim()).includes(sku));
+}
+function bundleTip(sku){
+  const bs = bundlesParaSku(sku);
+  if(!bs.length) return '';
+  return bs.map(b=>{
+    const skuArr=(b.skus||'').split(',').map(s=>s.trim()).filter(Boolean);
+    const prods=skuArr.map(s=>invBySku[s]?invBySku[s].producto:'SKU '+s);
+    const precioNum=Number(b.precio)||0;
+    const incluyeTxt=prods.map(p=>'• '+p).join('\n');
+    return `<div class="eol-bundle-tip">
+      <div class="tip-lbl">🎁 Mejor opción — vender en combo</div>
+      <div class="tip-nom">${b.nombre}</div>
+      <div class="meta"><span class="precio">${money(precioNum)}</span></div>
+      <button class="btn-wa" onclick="compartirWA('${encodeURIComponent(b.nombre||'Bundle')}','${skuArr.join('+')}',${precioNum},${precioNum},true,'${encodeURIComponent(incluyeTxt)}')">📲 Compartir combo</button>
+    </div>`;
+  }).join('');
+}
 function cardEol(e){
   if(e.estado==='listo'){
     return `<div class="card t-eol listo">
@@ -620,6 +644,7 @@ function cardEol(e){
         <span class="badge">SKU ${e.sku}</span>
       </div>
       <p class="warn">⚠️ Al 50% pierde garantía de fábrica y NO es elegible para Assurant.</p>
+      ${bundleTip(e.sku)}
     </div>`;
   }
   if(e.estado==='pendiente'){
@@ -1074,7 +1099,7 @@ OneSignalDeferred.push(async function(OneSignal){
 
 actualizarCampana();
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('./sw.js?v=70').catch(()=>{});
+  navigator.serviceWorker.register('./sw.js?v=71').catch(()=>{});
 }
 </script>
 </body>
