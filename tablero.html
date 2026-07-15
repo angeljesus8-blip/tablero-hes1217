@@ -199,6 +199,16 @@
   .eol-bundle-tip .tip-lbl { font-size:10.5px; font-weight:800; color:var(--naranja); text-transform:uppercase; letter-spacing:.4px; }
   .eol-bundle-tip .tip-nom { font-size:12.5px; font-weight:700; margin-top:2px; }
   .eol-bundle-tip .precio { font-size:15px; }
+
+  .combo-group { margin-bottom:16px; }
+  .combo-group-lbl { font-size:11.5px; font-weight:800; color:var(--naranja); margin:0 2px 8px; display:flex; align-items:center; gap:5px; }
+  .combo-carousel { display:flex; gap:10px; overflow-x:auto; scroll-snap-type:x mandatory;
+    -webkit-overflow-scrolling:touch; scrollbar-width:none; padding:0 2px 6px; margin:0 -2px; }
+  .combo-carousel::-webkit-scrollbar { display:none; }
+  .combo-slide { min-width:87%; scroll-snap-align:start; flex-shrink:0; }
+  .combo-slide .card { margin-bottom:0; height:100%; }
+  .combo-dots { display:flex; justify-content:center; gap:6px; margin-top:2px; }
+  .combo-dots span { width:5px; height:5px; border-radius:50%; background:#e0d5c5; }
 </style>
 </head>
 <body>
@@ -625,18 +635,25 @@ function bundlesParaSku(sku){
 function bundleTip(sku){
   const bs = bundlesParaSku(sku);
   if(!bs.length) return '';
-  return bs.map(b=>{
+  const tips = bs.map(b=>{
     const skuArr=(b.skus||'').split(',').map(s=>s.trim()).filter(Boolean);
     const prods=skuArr.map(s=>invBySku[s]?invBySku[s].producto:'SKU '+s);
     const precioNum=Number(b.precio)||0;
     const incluyeTxt=prods.map(p=>'• '+p).join('\n');
     return `<div class="eol-bundle-tip">
-      <div class="tip-lbl">🎁 Mejor opción — vender en combo</div>
+      <div class="tip-lbl">🎁 ${bs.length>1?'Opción de combo':'Mejor opción — vender en combo'}</div>
       <div class="tip-nom">${b.nombre}</div>
       <div class="meta"><span class="precio">${money(precioNum)}</span></div>
       <button class="btn-wa" onclick="compartirWA('${encodeURIComponent(b.nombre||'Bundle')}','${skuArr.join('+')}',${precioNum},${precioNum},true,'${encodeURIComponent(incluyeTxt)}')">📲 Compartir combo</button>
     </div>`;
-  }).join('');
+  });
+  if(tips.length===1) return tips[0];
+  const dots = tips.map(()=>'<span></span>').join('');
+  return `<div class="combo-group" style="margin-top:10px">
+    <div class="combo-group-lbl" style="margin:0 0 6px">🔀 ${tips.length} opciones de combo — desliza →</div>
+    <div class="combo-carousel">${tips.map(t=>`<div class="combo-slide">${t}</div>`).join('')}</div>
+    <div class="combo-dots">${dots}</div>
+  </div>`;
 }
 function cardEol(e){
   if(e.estado==='listo'){
@@ -768,6 +785,30 @@ function seccion(titulo, items, fn){
   return `<div class="grupo-titulo">${titulo}</div>` + items.map(fn).join('');
 }
 
+function mainSkuBundle(b){
+  return (b.skus||'').split(',')[0].trim();
+}
+function seccionBundles(titulo, items){
+  if(!items || !items.length) return '';
+  const grupos = [], idx = {};
+  items.forEach(b=>{
+    const ms = mainSkuBundle(b);
+    if(idx[ms]==null){ idx[ms]=grupos.length; grupos.push({sku:ms, items:[]}); }
+    grupos[idx[ms]].items.push(b);
+  });
+  const html = grupos.map(g=>{
+    if(g.items.length===1) return cardBundle(g.items[0]);
+    const nombreProd = invBySku[g.sku]?invBySku[g.sku].producto:'Producto';
+    const dots = g.items.map(()=>'<span></span>').join('');
+    return `<div class="combo-group">
+      <div class="combo-group-lbl">🔀 ${nombreProd} · ${g.items.length} opciones — desliza para ver más →</div>
+      <div class="combo-carousel">${g.items.map(b=>`<div class="combo-slide">${cardBundle(b)}</div>`).join('')}</div>
+      <div class="combo-dots">${dots}</div>
+    </div>`;
+  }).join('');
+  return `<div class="grupo-titulo">${titulo}</div>` + html;
+}
+
 function render(){
   renderChips();
   const f = filtroActivo;
@@ -837,7 +878,7 @@ function render(){
     html += seccion('⏳ EOL próximos · agotar stock cerrado', eolPend, cardEol);
     html += seccion('Agotados', eolAgot, cardEol);
   }
-  if(f==='bundle') html += seccion('🎁 Paquetes vigentes', bundles, cardBundle);
+  if(f==='bundle') html += seccionBundles('🎁 Paquetes vigentes', bundles);
   if(f==='promo'){
     const ocultasTxt = promosSinStock>0 ? ` · ${promosSinStock} sin existencia ocultas` : '';
     const promoSkus = new Set(PROMOS.map(p => p.sku));
@@ -1103,7 +1144,7 @@ OneSignalDeferred.push(async function(OneSignal){
 
 actualizarCampana();
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('./sw.js?v=72').catch(()=>{});
+  navigator.serviceWorker.register('./sw.js?v=73').catch(()=>{});
 }
 </script>
 </body>
