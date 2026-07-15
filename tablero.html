@@ -480,7 +480,7 @@ function compartirWA(prodEnc,sku,pv,pb){
   const producto=decodeURIComponent(prodEnc);
   const s=seguroPara(pb||pv);
   let msg='*'+producto+'*\nSKU '+sku+'\n💰 '+money(pv);
-  if(s){ msg+='\n\n🛡️ Assurant:\n  +1 año: '+money(pv+s.p1)+'\n  +2 años: '+money(pv+s.p2); }
+  if(s){ msg+='\n\n🛡️ Seguro:\n  +1 año: '+money(pv+s.p1)+'\n  +2 años: '+money(pv+s.p2); }
   const msi=[];
   if(pv>=1500) msi.push('6 MSI');
   if(pv>=10000) msi.push('12 MSI');
@@ -1059,7 +1059,7 @@ OneSignalDeferred.push(async function(OneSignal){
 
 actualizarCampana();
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('./sw.js?v=65').catch(()=>{});
+  navigator.serviceWorker.register('./sw.js?v=66').catch(()=>{});
 }
 </script>
 </body>
