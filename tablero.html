@@ -205,7 +205,7 @@
   .combo-carousel { display:flex; gap:10px; overflow-x:auto; scroll-snap-type:x mandatory;
     -webkit-overflow-scrolling:touch; scrollbar-width:none; padding:0 2px 6px; margin:0 -2px; }
   .combo-carousel::-webkit-scrollbar { display:none; }
-  .combo-slide { min-width:87%; scroll-snap-align:start; flex-shrink:0; }
+  .combo-slide { flex:0 0 88%; width:88%; min-width:0; scroll-snap-align:start; }
   .combo-slide .card { margin-bottom:0; height:100%; }
   .combo-dots { display:flex; justify-content:center; gap:6px; margin-top:2px; }
   .combo-dots span { width:5px; height:5px; border-radius:50%; background:#e0d5c5; }
@@ -1144,7 +1144,7 @@ OneSignalDeferred.push(async function(OneSignal){
 
 actualizarCampana();
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('./sw.js?v=73').catch(()=>{});
+  navigator.serviceWorker.register('./sw.js?v=74').catch(()=>{});
 }
 </script>
 </body>
