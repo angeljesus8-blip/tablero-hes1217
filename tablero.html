@@ -613,12 +613,23 @@ function renderChips(){
 // EOL última pieza → 50% del regular; con promoción → precio promo; si no → regular.
 function _promoDe(sku){ return PROMOS.find(p=>p.sku===sku); }
 function _eolDe(sku){ return EOL.find(e=>e.sku===sku); }
+function _eolRaw(sku){ return (D.eol||[]).find(e=>e.sku===sku); }
+// Un EOL solo se vende al 50% cuando está "listo" (stock cerrado en 0 y con
+// pieza de exhibición). Un EOL que todavía tiene stock (pendiente, ej. Pura 80)
+// se vende a su precio NORMAL de promoción, NO al 50%.
+function esVentaAl50(sku){
+  const er=_eolRaw(sku);
+  if(!er || !parseFloat(er.precio)) return false;
+  const ea=(typeof EOL!=='undefined')?EOL.find(x=>x.sku===sku):null;
+  if(ea) return ea.estado==='listo';
+  // No está en el array calculado (exhibición 0 en datos locales): se considera
+  // venta al 50% solo si ya no tiene stock cerrado NI promoción vigente.
+  const inv=invBySku[sku]||{};
+  return (inv.stock||0)===0 && !_promoDe(sku);
+}
 function precioVentaEnCombo(sku){
-  // EOL (última pieza) se vende a 50% del regular. Uso D.eol directo (tiene el
-  // precio de todos los SKU EOL); el array EOL calculado excluye los que ya no
-  // tienen pieza de exhibición, y el precio igual debe mostrarse en el combo.
-  const eolRaw=(D.eol||[]).find(e=>e.sku===sku);
-  if(eolRaw && parseFloat(eolRaw.precio)) return {precio:(parseFloat(eolRaw.precio)||0)/2, nota:'−50% última pieza'};
+  const er=_eolRaw(sku);
+  if(esVentaAl50(sku)) return {precio:(parseFloat(er.precio)||0)/2, nota:'−50% última pieza'};
   const p=_promoDe(sku);
   if(p){
     const v=parseFloat(String(p.pp||p.pr||0).replace(/[^0-9.]/g,''));
@@ -626,6 +637,7 @@ function precioVentaEnCombo(sku){
   }
   const inv=invBySku[sku];
   if(inv && inv.precio) return {precio:parseFloat(inv.precio)||0, nota:''};
+  if(er && parseFloat(er.precio)) return {precio:parseFloat(er.precio)||0, nota:''};
   return {precio:0, nota:'sin precio'};
 }
 // Desglose completo del combo: cada artículo con su precio, mica, seguro y total.
@@ -1217,7 +1229,7 @@ OneSignalDeferred.push(async function(OneSignal){
 
 actualizarCampana();
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('./sw.js?v=76').catch(()=>{});
+  navigator.serviceWorker.register('./sw.js?v=77').catch(()=>{});
 }
 </script>
 </body>
