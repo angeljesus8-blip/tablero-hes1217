@@ -209,6 +209,19 @@
   .combo-slide .card { margin-bottom:0; height:100%; }
   .combo-dots { display:flex; justify-content:center; gap:6px; margin-top:2px; }
   .combo-dots span { width:5px; height:5px; border-radius:50%; background:#e0d5c5; }
+
+  .bundle-desglose { margin-top:10px; }
+  .dg-row { display:flex; justify-content:space-between; gap:12px; font-size:12px; padding:3px 0; color:#555; align-items:baseline; }
+  .dg-row > span { line-height:1.3; }
+  .dg-row b { font-weight:700; color:#333; white-space:nowrap; }
+  .dg-row em { color:#aaa; font-style:normal; font-size:10px; font-weight:600; }
+  .dg-sub { border-top:1px solid var(--linea); margin-top:4px; padding-top:6px; color:#888; font-weight:600; }
+  .dg-seg span, .dg-seg b { color:var(--verde); }
+  .dg-regalo span { color:var(--naranja); font-weight:600; }
+  .dg-regalo b { color:var(--naranja); font-weight:700; font-size:11px; }
+  .dg-total { border-top:2px solid var(--rojo); margin-top:5px; padding-top:6px; font-size:14px; }
+  .dg-total span { font-weight:700; color:#333; }
+  .dg-total b { color:var(--rojo); font-size:16px; }
 </style>
 </head>
 <body>
@@ -596,6 +609,52 @@ function renderChips(){
   c.querySelectorAll('.chip').forEach(b=>b.onclick=()=>{ filtroActivo=b.dataset.f; render(); });
 }
 
+// Precio de venta de un artículo DENTRO de un combo:
+// EOL última pieza → 50% del regular; con promoción → precio promo; si no → regular.
+function _promoDe(sku){ return PROMOS.find(p=>p.sku===sku); }
+function _eolDe(sku){ return EOL.find(e=>e.sku===sku); }
+function precioVentaEnCombo(sku){
+  // EOL (última pieza) se vende a 50% del regular. Uso D.eol directo (tiene el
+  // precio de todos los SKU EOL); el array EOL calculado excluye los que ya no
+  // tienen pieza de exhibición, y el precio igual debe mostrarse en el combo.
+  const eolRaw=(D.eol||[]).find(e=>e.sku===sku);
+  if(eolRaw && parseFloat(eolRaw.precio)) return {precio:(parseFloat(eolRaw.precio)||0)/2, nota:'−50% última pieza'};
+  const p=_promoDe(sku);
+  if(p){
+    const v=parseFloat(String(p.pp||p.pr||0).replace(/[^0-9.]/g,''));
+    if(v) return {precio:v, nota:(p.pp&&p.pr&&String(p.pp)!==String(p.pr))?'promo':''};
+  }
+  const inv=invBySku[sku];
+  if(inv && inv.precio) return {precio:parseFloat(inv.precio)||0, nota:''};
+  return {precio:0, nota:'sin precio'};
+}
+// Desglose completo del combo: cada artículo con su precio, mica, seguro y total.
+function desgloseBundle(x){
+  const skuArr=(x.skus||'').split(',').map(s=>s.trim()).filter(Boolean);
+  const total=Number(x.precio)||0;
+  let sub=0;
+  const rows=skuArr.map(s=>{
+    const {precio,nota}=precioVentaEnCombo(s);
+    sub+=precio;
+    const nombre=invBySku[s]?invBySku[s].producto:('SKU '+s);
+    return `<div class="dg-row"><span>${nombre}${nota?` <em>${nota}</em>`:''}</span><b>${money2(precio)}</b></div>`;
+  }).join('');
+  let extras=total-sub;
+  const tieneMica=/mica/i.test(x.nombre||'');
+  let micaRow='';
+  if(tieneMica){ micaRow=`<div class="dg-row"><span>Mica de hidrogel</span><b>${money2(149)}</b></div>`; extras-=149; }
+  const segRow= extras>0.5 ? `<div class="dg-row dg-seg"><span>🛡️ Seguro incluido</span><b>${money2(extras)}</b></div>` : '';
+  const rg=(x.nombre||'').match(/regalo:\s*([^)·]+)/i);
+  const regaloLine= rg ? `<div class="dg-row dg-regalo"><span>🎁 Regalo: ${rg[1].trim()}</span><b>Incluido</b></div>` : '';
+  return `<div class="bundle-desglose">
+    ${rows}
+    <div class="dg-row dg-sub"><span>Subtotal productos</span><b>${money2(sub)}</b></div>
+    ${micaRow}
+    ${segRow}
+    ${regaloLine}
+    <div class="dg-row dg-total"><span>Total combo</span><b>${money2(total)}</b></div>
+  </div>`;
+}
 function cardBundle(x){
   const skuArr=(x.skus||'').split(',').map(s=>s.trim()).filter(Boolean);
   const prods=skuArr.map(s=>invBySku[s]?invBySku[s].producto:'SKU '+s);
@@ -607,12 +666,9 @@ function cardBundle(x){
   const incluyeTxt = prods.map(p=>'• '+p).join('\n');
   const waBtn = precioNum ? `<button class="btn-wa" onclick="compartirWA('${encodeURIComponent(x.nombre||'Bundle')}','${skuArr.join('+')}',${precioNum},${precioNum},true,'${encodeURIComponent(incluyeTxt)}')">📲 Compartir por WhatsApp</button>` : '';
   return `<div class="card t-bundle">
-    <div class="top"><h3>${x.nombre||'Bundle'}</h3><span class="tag bundle">🎁 ×2</span></div>
-    <p class="det">${prods.slice(0,4).map(p=>'· '+p).join('<br>')}${prods.length>4?`<br>· <em>+${prods.length-4} más</em>`:''}</p>
-    <div class="meta">
-      ${precioNum?`<span class="precio">${money(precioNum)}</span>`:''}
-      ${vig}
-    </div>
+    <div class="top"><h3>${x.nombre||'Bundle'}</h3><span class="tag bundle">🎁</span></div>
+    ${desgloseBundle(x)}
+    ${vig?`<div class="meta">${vig}</div>`:''}
     ${waBtn}
   </div>`;
 }
@@ -1161,7 +1217,7 @@ OneSignalDeferred.push(async function(OneSignal){
 
 actualizarCampana();
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('./sw.js?v=74').catch(()=>{});
+  navigator.serviceWorker.register('./sw.js?v=75').catch(()=>{});
 }
 </script>
 </body>
