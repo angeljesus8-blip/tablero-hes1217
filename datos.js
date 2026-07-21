@@ -23,7 +23,7 @@ window.DATOS = {
   //   Precios regulares de "Artículos Totales" + "Muebles Tienda".
   //   Falta solo 100261822 (Router AX2): no aparece en ningún reporte con precio.
   eol: [
-    { sku: "100102207", precio: 2990 },
+    { sku: "100102207", precio: 2999 },
     { sku: "100229321", precio: 4990 },
     { sku: "100229371", precio: 7490 },
     { sku: "100245646", precio: 3990 },
