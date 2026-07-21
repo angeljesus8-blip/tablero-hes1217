@@ -932,13 +932,19 @@ function cargarInventarioNube(){
     delete window[cb];
     const sc = document.getElementById('_inv_sc');
     if(sc) sc.remove();
+    // Stock disponible: si el informe trae ON HAND úsalo; si viene en 0/blanco
+    // pero el producto está en exhibición, esa es su existencia real.
+    function stockDe(cl){
+      const base = (cl.o > 0) ? cl.o : (cl.e || 0);
+      return Math.max(0, base - (cl.v || 0));
+    }
     // Actualiza stock en cada producto del inventario local
     (D.inventario||[]).forEach(function(item){
       const cl = data[item.sku];
       if(cl && typeof cl.o === 'number'){
         item._onhand  = cl.o;
         item._vendido = cl.v || 0;
-        item.stock    = Math.max(0, cl.o - (cl.v || 0));
+        item.stock    = stockDe(cl);
         if(typeof cl.e === 'number') item.exhibe = cl.e;
         if(cl.p && !item.precio) item.precio = parseFloat(String(cl.p).replace(/[^0-9.]/g,''))||0;
       }
@@ -954,7 +960,7 @@ function cargarInventarioNube(){
       const item = {
         sku: sku,
         producto: cl.d,
-        stock:    Math.max(0, (cl.o||0) - (cl.v||0)),
+        stock:    stockDe(cl),
         exhibe:   cl.e || 0,
         precio:   parseFloat(String(cl.p||'').replace(/[^0-9.]/g,''))||0
       };
@@ -969,7 +975,7 @@ function cargarInventarioNube(){
       if(!cl) return;
       invBySku[e.sku] = {
         sku: e.sku, producto: cl.d||'',
-        stock: Math.max(0,(cl.o||0)-(cl.v||0)),
+        stock: stockDe(cl),
         exhibe: cl.e||0,
         precio: parseFloat(String(cl.p||'').replace(/[^0-9.]/g,''))||0
       };
