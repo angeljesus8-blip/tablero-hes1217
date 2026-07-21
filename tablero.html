@@ -932,10 +932,11 @@ function cargarInventarioNube(){
     delete window[cb];
     const sc = document.getElementById('_inv_sc');
     if(sc) sc.remove();
-    // Stock disponible: si el informe trae ON HAND úsalo; si viene en 0/blanco
-    // pero el producto está en exhibición, esa es su existencia real.
+    // Stock disponible = ON HAND (almacén) + exhibición − vendido.
+    // El informe de ON HAND NO incluye las unidades de exhibición, así que se
+    // suman; para productos solo en exhibición el ON HAND viene en 0/blanco.
     function stockDe(cl){
-      const base = (cl.o > 0) ? cl.o : (cl.e || 0);
+      const base = (cl.o || 0) + (cl.e || 0);
       return Math.max(0, base - (cl.v || 0));
     }
     // Actualiza stock en cada producto del inventario local
