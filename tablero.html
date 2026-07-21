@@ -528,7 +528,21 @@ function tieneExistencia_(sku){
   return (inv.stock||0)>0 || (inv.exhibe||0)>0;
 }
 
+// Calcula el stock cerrado y la exhibición restante desde los datos crudos de
+// la nube. Corre dentro de calcDerivados (no al cargar) para que respete el
+// estado EOL aunque los datos de EOL lleguen después del inventario.
+function finalizarStock(item){
+  if(!item || item._onhand === undefined) return;   // sin datos de nube: conserva lo estático
+  const o = item._onhand||0, e = item._exhibeRaw||0, v = item._vendido||0, ev = item._ev||0;
+  item.stock = Math.max(0, o - v);                   // stock cerrado (almacén), sin exhibición
+  // La exhibición solo la venden los productos EOL; ahí las ventas que exceden
+  // el almacén la descuentan. Usa su propio corte (ev), que NO se reinicia con
+  // el ON HAND diario, para que una pieza vendida no reaparezca al día siguiente.
+  item.exhibe = eolSkuSet.has(item.sku) ? Math.max(0, e - Math.max(0, ev - o)) : e;
+}
 function calcDerivados(){
+  (D.inventario||[]).forEach(finalizarStock);
+  Object.keys(invBySku).forEach(function(sku){ finalizarStock(invBySku[sku]); });
   EOL = (D.eol||[]).map(e=>{
     const inv = invBySku[e.sku] || {};
     const stock = inv.stock||0, exhibe = inv.exhibe||0;
@@ -932,27 +946,21 @@ function cargarInventarioNube(){
     delete window[cb];
     const sc = document.getElementById('_inv_sc');
     if(sc) sc.remove();
-    // Stock cerrado (almacén) = ON HAND − vendido. NO incluye la exhibición:
-    // la pieza de exhibición solo es vendible si el producto es EOL, y eso se
-    // maneja aparte (tarjetas EOL 50% / sección Resurtir).
-    function stockDe(cl){
-      return Math.max(0, (cl.o || 0) - (cl.v || 0));
+    // Guarda los datos crudos de la nube; el stock cerrado y la exhibición
+    // restante se calculan en calcDerivados (finalizarStock), que corre también
+    // cuando llegan los datos de EOL.
+    function rawFields(cl){
+      return {
+        _onhand:    cl.o || 0,
+        _vendido:   cl.v || 0,
+        _exhibeRaw: (typeof cl.e === 'number') ? cl.e : 0,
+        _ev:        cl.ev || 0
+      };
     }
-    // Piezas de exhibición que quedan. Las ventas consumen primero el almacén
-    // y solo lo que exceda al ON HAND baja de la exhibición — así, al vender la
-    // pieza de exhibición (permitido en EOL), ésta se descuenta y deja de verse.
-    function exhibeDe(cl){
-      const vendidasDeExhib = Math.max(0, (cl.v || 0) - (cl.o || 0));
-      return Math.max(0, (cl.e || 0) - vendidasDeExhib);
-    }
-    // Actualiza stock en cada producto del inventario local
     (D.inventario||[]).forEach(function(item){
       const cl = data[item.sku];
       if(cl && typeof cl.o === 'number'){
-        item._onhand  = cl.o;
-        item._vendido = cl.v || 0;
-        item.stock    = stockDe(cl);
-        item.exhibe   = exhibeDe(cl);
+        Object.assign(item, rawFields(cl));
         if(cl.p && !item.precio) item.precio = parseFloat(String(cl.p).replace(/[^0-9.]/g,''))||0;
       }
     });
@@ -964,13 +972,11 @@ function cargarInventarioNube(){
       if(skusLocales.has(sku)) return;
       const cl = data[sku];
       if(!cl || !cl.d) return; // sin descripción → SKU vacío, ignorar
-      const item = {
+      const item = Object.assign({
         sku: sku,
         producto: cl.d,
-        stock:    stockDe(cl),
-        exhibe:   exhibeDe(cl),
         precio:   parseFloat(String(cl.p||'').replace(/[^0-9.]/g,''))||0
-      };
+      }, rawFields(cl));
       if(!D.inventario) D.inventario = [];
       D.inventario.push(item);
       invBySku[sku] = item;
@@ -980,12 +986,10 @@ function cargarInventarioNube(){
       if(invBySku[e.sku]) return;
       const cl = data[e.sku];
       if(!cl) return;
-      invBySku[e.sku] = {
+      invBySku[e.sku] = Object.assign({
         sku: e.sku, producto: cl.d||'',
-        stock: stockDe(cl),
-        exhibe: exhibeDe(cl),
         precio: parseFloat(String(cl.p||'').replace(/[^0-9.]/g,''))||0
-      };
+      }, rawFields(cl));
     });
     D._invCloud = true;
     const w = document.getElementById('liveWarning');
