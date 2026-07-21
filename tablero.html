@@ -932,12 +932,18 @@ function cargarInventarioNube(){
     delete window[cb];
     const sc = document.getElementById('_inv_sc');
     if(sc) sc.remove();
-    // Stock disponible = ON HAND (almacén) + exhibición − vendido.
-    // El informe de ON HAND NO incluye las unidades de exhibición, así que se
-    // suman; para productos solo en exhibición el ON HAND viene en 0/blanco.
+    // Stock cerrado (almacén) = ON HAND − vendido. NO incluye la exhibición:
+    // la pieza de exhibición solo es vendible si el producto es EOL, y eso se
+    // maneja aparte (tarjetas EOL 50% / sección Resurtir).
     function stockDe(cl){
-      const base = (cl.o || 0) + (cl.e || 0);
-      return Math.max(0, base - (cl.v || 0));
+      return Math.max(0, (cl.o || 0) - (cl.v || 0));
+    }
+    // Piezas de exhibición que quedan. Las ventas consumen primero el almacén
+    // y solo lo que exceda al ON HAND baja de la exhibición — así, al vender la
+    // pieza de exhibición (permitido en EOL), ésta se descuenta y deja de verse.
+    function exhibeDe(cl){
+      const vendidasDeExhib = Math.max(0, (cl.v || 0) - (cl.o || 0));
+      return Math.max(0, (cl.e || 0) - vendidasDeExhib);
     }
     // Actualiza stock en cada producto del inventario local
     (D.inventario||[]).forEach(function(item){
@@ -946,7 +952,7 @@ function cargarInventarioNube(){
         item._onhand  = cl.o;
         item._vendido = cl.v || 0;
         item.stock    = stockDe(cl);
-        if(typeof cl.e === 'number') item.exhibe = cl.e;
+        item.exhibe   = exhibeDe(cl);
         if(cl.p && !item.precio) item.precio = parseFloat(String(cl.p).replace(/[^0-9.]/g,''))||0;
       }
     });
@@ -962,7 +968,7 @@ function cargarInventarioNube(){
         sku: sku,
         producto: cl.d,
         stock:    stockDe(cl),
-        exhibe:   cl.e || 0,
+        exhibe:   exhibeDe(cl),
         precio:   parseFloat(String(cl.p||'').replace(/[^0-9.]/g,''))||0
       };
       if(!D.inventario) D.inventario = [];
@@ -977,7 +983,7 @@ function cargarInventarioNube(){
       invBySku[e.sku] = {
         sku: e.sku, producto: cl.d||'',
         stock: stockDe(cl),
-        exhibe: cl.e||0,
+        exhibe: exhibeDe(cl),
         precio: parseFloat(String(cl.p||'').replace(/[^0-9.]/g,''))||0
       };
     });
