@@ -339,6 +339,18 @@ function promoActiva(sku){
   return pr;
 }
 
+/* EOL con 50% activo (solo cuando queda pieza de exhibición) — { sku: precio50 } */
+const EOLVKEY = 'hes1217_eol_venta';
+let EOL_VENTA = {};
+function esObjValido(o){ return o && typeof o==='object' && !Array.isArray(o); }
+try{ const e = JSON.parse(localStorage.getItem(EOLVKEY) || 'null'); if(esObjValido(e)) EOL_VENTA = e; }catch(e){}
+function refreshEolVenta(){
+  if(!CLOUD_URL) return;
+  catJsonp(CLOUD_URL + '?modo=eol_venta').then(e=>{
+    if(esObjValido(e)){ EOL_VENTA = e; localStorage.setItem(EOLVKEY, JSON.stringify(e)); }
+  }).catch(()=>{});
+}
+
 const $ = id => document.getElementById(id);
 const fields = ['serie','sku','precio','desc','vend'];
 
@@ -468,12 +480,13 @@ function setRecon(ok){
   const f = $('sku').closest('.field');
   if(f) f.classList.toggle('bad', !ok);
 }
-// Muestra/oculta la etiqueta de PROMO
+// Muestra/oculta la etiqueta de PROMO / EOL
 function setPromo(on, promo){
   const b = $('promoBadge');
   if(on && promo){
     const pr = String(promo.pr||'').replace(/[^0-9.,]/g,'');
-    b.innerHTML = '🏷️ PROMO' + (pr ? ' · antes <s>$'+pr+'</s>' : '');
+    const etiqueta = promo.__eol ? '🏷️ EOL −50%' : '🏷️ PROMO';
+    b.innerHTML = etiqueta + (pr ? ' · antes <s>$'+pr+'</s>' : '');
     b.classList.add('show');
   } else { b.classList.remove('show'); }
 }
@@ -491,8 +504,13 @@ function routeCode(text, fmt){
       $('sku').value = hit.s || '';
       $('desc').value = hit.d || '';
       if(hit.p) $('precio').value = String(hit.p).replace(/[^0-9.]/g,'');   // autollena precio (editable)
+      const eol50 = EOL_VENTA[hit.s];
       const promo = promoActiva(hit.s);
-      if(promo){
+      if(eol50){
+        $('precio').value = String(eol50);                                  // EOL: 50% activo (solo exhibición)
+        setPromo(true, {pr: hit.p, __eol:true});
+        toast('🏷️ EOL −50% · $' + eol50, 'ok');
+      } else if(promo){
         $('precio').value = String(promo.pp).replace(/[^0-9.]/g,'');         // precio promo vigente
         setPromo(true, promo);
         toast('🏷️ PROMO ' + (hit.s||''), 'ok');
@@ -687,6 +705,7 @@ function refreshGid(){
 flushCloud();      // sube al concentrado lo que haya quedado pendiente
 refreshCatalogo(); // trae el catálogo más reciente de la nube
 refreshPromos();   // trae las promociones vigentes
+refreshEolVenta(); // trae los EOL con 50% activo (solo exhibición)
 refreshGid();      // obtiene el GID de la hoja Ventas para el link directo
 </script>
 <div id="modalSeguro" class="modal-seg">
