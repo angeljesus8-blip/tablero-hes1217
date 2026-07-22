@@ -767,6 +767,7 @@ function cardPreventa(p){
       <span class="precio">${money(p.precio)}</span>
       <span class="pv-reg">antes ${money(p.reg)}</span>
       <span class="pv-msi">💳 ${p.msi}</span>
+      <span class="badge">SKU ${p.sku}</span>
     </div>
     ${segLine}
     <div class="pv-btns">
@@ -781,7 +782,7 @@ function cardApartado(a){
   return `<div class="card ap-row">
     <div style="flex:1;min-width:0">
       <h4 style="font-size:13.5px;font-weight:700">${a.cliente||'(sin nombre)'} ${a.seguro==='Si'?'🛡️':''}</h4>
-      <span style="font-size:11px;color:#999">${p.ver||''} ${p.color||''} · ${a.telefono||'sin tel'} · ${money(Number(a.precio)||0)}${a.transaccion?' · Tx '+a.transaccion:''}</span>
+      <span style="font-size:11px;color:#999">${p.ver||''} ${p.color||''} · SKU ${a.sku} · ${a.telefono||'sin tel'} · ${money(Number(a.precio)||0)}${a.transaccion?' · Tx '+a.transaccion:''}</span>
     </div>
     <span class="ap-est${ent?' ent':''}">${a.estatus||'Apartado'}</span>
   </div>`;
@@ -815,7 +816,7 @@ function abrirApartado(sku){
   _apartSku = sku;
   const p = preventaBySku[sku];
   document.getElementById('apModalTitle').textContent = 'Apartar Pura 90S '+p.ver+' · '+p.color;
-  document.getElementById('apModalSub').textContent = money(p.precio)+' · '+p.cap+' · '+p.msi;
+  document.getElementById('apModalSub').textContent = 'SKU '+p.sku+' · '+money(p.precio)+' · '+p.cap+' · '+p.msi;
   document.getElementById('apCliente').value='';
   document.getElementById('apTel').value='';
   document.getElementById('apVend').value='';
@@ -1451,7 +1452,7 @@ OneSignalDeferred.push(async function(OneSignal){
 
 actualizarCampana();
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('./sw.js?v=79').catch(()=>{});
+  navigator.serviceWorker.register('./sw.js?v=80').catch(()=>{});
 }
 </script>
 </body>
