@@ -861,12 +861,12 @@ function preventaWA(sku){
     lines.push('🚀 *Preventa HUAWEI Pura 90S '+p.ver+'*','',
       '🎨 '+p.color+' · '+p.cap, '💰 '+money(p.precio)+'  (antes '+money(p.reg)+')', '💳 '+p.msi);
     if(s) lines.push('🛡️ Con Seguro 1 año: '+money(p.precio+s.p1));
-    lines.push('', '📦 Preventa: apartas tu pieza pagando hoy y te la entregamos al llegar.');
+    lines.push('', '📦 Aparta tu pieza pagando hoy.');
     if(disp<=2 && disp>0) lines.push('⚠️ ¡Solo quedan '+disp+' piezas de este color!');
     lines.push('', '_HES '+TIENDA_NOMBRE+'_');
   } else {
     lines.push('🚀 *Preventa HUAWEI Pura 90S — HES '+TIENDA_NOMBRE+'*','',
-      'Aparta tu pieza pagando hoy, entrega al llegar el stock:');
+      'Aparta tu pieza pagando hoy:');
     ['Pro Max|12/512GB','Pro|12/512GB','Pro|12/256GB'].forEach(k=>{
       const arr=PREVENTA.filter(p=>p.ver+'|'+p.cap===k); if(!arr.length) return;
       lines.push('', '📱 *'+arr[0].ver+' '+arr[0].cap+'* — '+money(arr[0].precio)+' · '+arr[0].msi);
