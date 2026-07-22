@@ -222,6 +222,46 @@
   .dg-total { border-top:2px solid var(--rojo); margin-top:5px; padding-top:6px; font-size:14px; }
   .dg-total span { font-weight:700; color:#333; }
   .dg-total b { color:var(--rojo); font-size:16px; }
+
+  /* ---- Preventa ---- */
+  .card.t-preventa { border-left-color:#7c3aed; }
+  .card.t-preventa.pv-agot { opacity:.55; }
+  .pv-banner { background:linear-gradient(135deg,#7c3aed,#a855f7); color:#fff; border-radius:14px; padding:14px 16px; margin-bottom:14px; }
+  .pv-banner-t { font-size:16px; font-weight:800; }
+  .pv-banner-s { font-size:11.5px; opacity:.92; margin-top:3px; line-height:1.4; }
+  .pv-banner-n { font-size:12px; font-weight:700; margin-top:8px; background:rgba(255,255,255,.18); display:inline-block; padding:4px 10px; border-radius:8px; }
+  .pv-cupo { font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.3px; padding:3px 8px; border-radius:6px; flex-shrink:0; white-space:nowrap; }
+  .pv-cupo.ok { background:#edfaf3; color:var(--verde); }
+  .pv-cupo.pocas { background:#fff5ee; color:var(--naranja); }
+  .pv-cupo.ultima { background:#fdeaea; color:var(--rojo); }
+  .pv-cupo.agot { background:#f2f2f2; color:#999; }
+  .pv-meta { display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; margin-top:8px; }
+  .pv-reg { font-size:11px; color:#bbb; text-decoration:line-through; font-weight:600; }
+  .pv-msi { font-size:11px; color:var(--azul); font-weight:700; }
+  .pv-seg { font-size:12px; color:var(--verde); margin-top:6px; }
+  .pv-btns { display:flex; gap:8px; margin-top:10px; }
+  .btn-apartar { flex:1; background:#7c3aed; color:#fff; border:none; border-radius:10px; padding:10px; font-family:inherit; font-size:13px; font-weight:700; cursor:pointer; }
+  .btn-apartar:disabled { background:#ddd; color:#999; cursor:default; }
+  .btn-wa.pv-wa { width:auto; margin-top:0; padding:9px 14px; flex-shrink:0; }
+  .ap-row { display:flex; align-items:center; gap:10px; padding:11px 14px; }
+  .ap-est { font-size:10px; font-weight:800; text-transform:uppercase; padding:3px 8px; border-radius:6px; background:#f3effe; color:#7c3aed; flex-shrink:0; }
+  .ap-est.ent { background:#eafaf1; color:var(--verde); }
+
+  /* ---- Modal apartado ---- */
+  .ap-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:200; align-items:flex-end; justify-content:center; }
+  .ap-modal.show { display:flex; }
+  .ap-box { background:#fff; width:100%; max-width:480px; border-radius:18px 18px 0 0; padding:18px 18px 24px; max-height:92vh; overflow-y:auto; }
+  .ap-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:14px; }
+  .ap-title { font-size:16px; font-weight:800; line-height:1.25; }
+  .ap-sub { font-size:12px; color:#888; font-weight:600; margin-top:2px; }
+  .ap-close { background:none; border:none; font-size:20px; color:#aaa; cursor:pointer; line-height:1; }
+  .ap-lbl { display:block; font-size:11px; font-weight:700; color:#888; text-transform:uppercase; letter-spacing:.4px; margin:10px 2px 5px; }
+  .ap-inp { width:100%; border:1.5px solid var(--linea); border-radius:11px; padding:12px 14px; font-family:inherit; font-size:15px; outline:none; }
+  .ap-inp:focus { border-color:#7c3aed; }
+  .ap-toggle { display:flex; align-items:center; gap:9px; font-size:13.5px; margin:16px 2px 4px; cursor:pointer; }
+  .ap-toggle input { width:20px; height:20px; accent-color:var(--verde); }
+  .ap-guardar { width:100%; background:#7c3aed; color:#fff; border:none; border-radius:12px; padding:14px; font-family:inherit; font-size:15px; font-weight:800; cursor:pointer; margin-top:18px; }
+  .ap-guardar:disabled { background:#c9b6f0; }
 </style>
 </head>
 <body>
@@ -258,6 +298,23 @@
 
 <footer id="tbFooter">Odemás · Grupo Gigante — uso interno HES</footer>
 
+<div id="apModal" class="ap-modal">
+  <div class="ap-box">
+    <div class="ap-head">
+      <div><div class="ap-title" id="apModalTitle">Apartar</div><div class="ap-sub" id="apModalSub"></div></div>
+      <button class="ap-close" onclick="cerrarApartado()">✕</button>
+    </div>
+    <label class="ap-lbl">Cliente</label>
+    <input id="apCliente" class="ap-inp" type="text" placeholder="Nombre del cliente" autocomplete="off">
+    <label class="ap-lbl">Teléfono</label>
+    <input id="apTel" class="ap-inp" type="tel" inputmode="numeric" placeholder="10 dígitos" autocomplete="off">
+    <label class="ap-lbl">Vendedor</label>
+    <input id="apVend" class="ap-inp" type="text" placeholder="Quién apartó" autocomplete="off">
+    <label class="ap-toggle"><input id="apSeguro" type="checkbox"> 🛡️ El cliente se llevó <b>Seguro</b></label>
+    <button id="apGuardar" class="ap-guardar" onclick="guardarApartado()">Guardar apartado</button>
+  </div>
+</div>
+
 <script src="datos.js"></script>
 <script>
 const D = window.DATOS || {};
@@ -280,6 +337,7 @@ const FILTROS = [
   { id:'inv',    label:'📊 Inventario' },
   { id:'bundle', label:'🎁 Bundles' },
   { id:'promo',  label:'🔥 Promos' },
+  { id:'preventa', label:'🚀 Preventa' },
   { id:'eol',   label:'🏷️ Vender 50%' },
   { id:'resurtir', label:'🔄 Resurtir' },
   { id:'transito', label:'🚚 En tránsito' },
@@ -288,6 +346,28 @@ const FILTROS = [
 ];
 let filtroActivo = 'inicio';
 let busqueda = '';
+
+/* ====== Preventa Pura 90S (lanzamiento CEA 243 · inicia 22-jul-2026) ====== */
+const PREVENTA_INICIA = '2026-07-22';
+const PREVENTA = [
+  {sku:'100307448', ver:'Pro Max', cap:'12/512GB', color:'Graphite Black', precio:22999, reg:32999, msi:'18 MSI', cupo:4},
+  {sku:'100307464', ver:'Pro Max', cap:'12/512GB', color:'Blush Gold',     precio:22999, reg:32999, msi:'18 MSI', cupo:5},
+  {sku:'100307481', ver:'Pro Max', cap:'12/512GB', color:'Blaze Purple',   precio:22999, reg:32999, msi:'18 MSI', cupo:2},
+  {sku:'100307499', ver:'Pro Max', cap:'12/512GB', color:'Orange Ocean',   precio:22999, reg:32999, msi:'18 MSI', cupo:5},
+  {sku:'100307501', ver:'Pro', cap:'12/512GB', color:'Coconut White', precio:18999, reg:27999, msi:'12 MSI', cupo:3},
+  {sku:'100307510', ver:'Pro', cap:'12/512GB', color:'Mulberry Black', precio:18999, reg:27999, msi:'12 MSI', cupo:4},
+  {sku:'100307536', ver:'Pro', cap:'12/512GB', color:'Guava Soda',     precio:18999, reg:27999, msi:'12 MSI', cupo:2},
+  {sku:'100307641', ver:'Pro', cap:'12/512GB', color:'Orange Soda',    precio:18999, reg:27999, msi:'12 MSI', cupo:4},
+  {sku:'100307544', ver:'Pro', cap:'12/256GB', color:'Mulberry Black', precio:15999, reg:22999, msi:'12 MSI', cupo:2},
+  {sku:'100307561', ver:'Pro', cap:'12/256GB', color:'Coconut White', precio:15999, reg:22999, msi:'12 MSI', cupo:2},
+  {sku:'100307595', ver:'Pro', cap:'12/256GB', color:'Orange Soda',    precio:15999, reg:22999, msi:'12 MSI', cupo:2},
+  {sku:'100307616', ver:'Pro', cap:'12/256GB', color:'Guava Soda',     precio:15999, reg:22999, msi:'12 MSI', cupo:1},
+];
+let APARTADOS = [];
+const preventaBySku = {}; PREVENTA.forEach(p=>preventaBySku[p.sku]=p);
+function apartadosVivos(sku){ return APARTADOS.filter(a=>a.sku===sku && String(a.estatus||'').toLowerCase()!=='cancelado'); }
+function disponibles(sku){ const p=preventaBySku[sku]; if(!p) return 0; return Math.max(0, p.cupo - apartadosVivos(sku).length); }
+function preventaTotalDisp(){ return PREVENTA.reduce((s,p)=>s+disponibles(p.sku),0); }
 
 function diasRestantes(fecha){
   const f = new Date(fecha+'T00:00:00');
@@ -577,6 +657,7 @@ function cuenta(id){
   if(id==='inicio') return '';
   if(id==='bundle') return BUNDLES.filter(x=>coincide(x.nombre,x.sku1,x.sku2)).length;
   if(id==='promo') return PROMOS.filter(x=>coincide(x.producto,x.sku) && tieneExistencia_(x.sku)).length;
+  if(id==='preventa') return preventaTotalDisp();
   if(id==='eol')   return EOL.filter(e=>coincide(e.producto,e.sku) && e.estado==='listo').length;
   if(id==='nov')   return (D.novedades||[]).filter(x=>coincide(x.titulo,x.detalle)).length;
   if(id==='inv')   return (D.inventario||[]).filter(x=>coincide(x.producto,x.sku)&&((x.stock||0)>0||(x.exhibe||0)>0)).length;
@@ -591,6 +672,7 @@ function seccionTieneItems(id){
   if(id==='inicio')   return true;
   if(id==='bundle')   return BUNDLES.length>0;
   if(id==='promo')    return PROMOS.length>0;
+  if(id==='preventa') return PREVENTA.length>0;
   if(id==='eol')      return EOL.length>0;
   if(id==='transito') return (D.transito||[]).length>0;
   if(id==='nov')      return (D.novedades||[]).length>0;
@@ -666,6 +748,140 @@ function desgloseBundle(x){
     ${regaloLine}
     <div class="dg-row dg-total"><span>Total combo</span><b>${money2(total)}</b></div>
   </div>`;
+}
+/* ===================== PREVENTA ===================== */
+function cardPreventa(p){
+  const disp = disponibles(p.sku);
+  const agot = disp<=0;
+  const cls = agot ? 'agot' : disp<=1 ? 'ultima' : disp<=2 ? 'pocas' : 'ok';
+  const s = seguroPara(p.reg, p.sku);
+  const segLine = s ? `<div class="pv-seg">🛡️ Con Seguro 1 año: <b>${money(p.precio + s.p1)}</b></div>` : '';
+  return `<div class="card t-preventa${agot?' pv-agot':''}">
+    <div class="top">
+      <h3>${p.color}</h3>
+      <span class="pv-cupo ${cls}">${agot?'AGOTADO':`Quedan ${disp} de ${p.cupo}`}</span>
+    </div>
+    <div class="pv-meta">
+      <span class="precio">${money(p.precio)}</span>
+      <span class="pv-reg">antes ${money(p.reg)}</span>
+      <span class="pv-msi">💳 ${p.msi}</span>
+    </div>
+    ${segLine}
+    <div class="pv-btns">
+      <button class="btn-apartar" ${agot?'disabled':''} onclick="abrirApartado('${p.sku}')">${agot?'Sin cupo':'📝 Apartar'}</button>
+      <button class="btn-wa pv-wa" onclick="preventaWA('${p.sku}')">📲</button>
+    </div>
+  </div>`;
+}
+function cardApartado(a){
+  const p=preventaBySku[a.sku]||{};
+  const ent = String(a.estatus||'').toLowerCase()==='entregado';
+  return `<div class="card ap-row">
+    <div style="flex:1;min-width:0">
+      <h4 style="font-size:13.5px;font-weight:700">${a.cliente||'(sin nombre)'} ${a.seguro==='Si'?'🛡️':''}</h4>
+      <span style="font-size:11px;color:#999">${p.ver||''} ${p.color||''} · ${a.telefono||'sin tel'} · ${money(Number(a.precio)||0)}</span>
+    </div>
+    <span class="ap-est${ent?' ent':''}">${a.estatus||'Apartado'}</span>
+  </div>`;
+}
+function seccionPreventa(){
+  const preInicio = HOY < new Date(PREVENTA_INICIA+'T00:00:00');
+  let html = `<div class="pv-banner">
+    <div class="pv-banner-t">🚀 Preventa HUAWEI Pura 90S</div>
+    <div class="pv-banner-s">${preInicio?'Inicia el 22 de julio · ':''}El cliente paga completo y aparta su pieza. Entrega al llegar el stock.</div>
+    <div class="pv-banner-n">Quedan <b>${preventaTotalDisp()}</b> de 36 piezas de tu cupo</div>
+  </div>`;
+  const orden = ['Pro Max|12/512GB','Pro|12/512GB','Pro|12/256GB'];
+  const titulos = {'Pro Max|12/512GB':'Pura 90S Pro Max · 12/512GB','Pro|12/512GB':'Pura 90S Pro · 12/512GB','Pro|12/256GB':'Pura 90S Pro · 12/256GB'};
+  orden.forEach(k=>{
+    const arr = PREVENTA.filter(p=>p.ver+'|'+p.cap===k);
+    if(!arr.length) return;
+    const dispG = arr.reduce((s,p)=>s+disponibles(p.sku),0);
+    html += `<div class="grupo-titulo">${titulos[k]} · ${money(arr[0].precio)} · ${arr[0].msi} · ${dispG} disp.</div>`;
+    html += arr.map(cardPreventa).join('');
+  });
+  html += `<button class="btn-wa" style="margin-top:6px" onclick="preventaWA()">📲 Compartir preventa completa por WhatsApp</button>`;
+  const aps = APARTADOS.filter(a=>preventaBySku[a.sku]);
+  if(aps.length){
+    html += `<div class="grupo-titulo" style="margin-top:20px">📋 Apartados registrados (${aps.length})</div>`;
+    html += aps.map(cardApartado).join('');
+  }
+  return html;
+}
+let _apartSku = null;
+function abrirApartado(sku){
+  _apartSku = sku;
+  const p = preventaBySku[sku];
+  document.getElementById('apModalTitle').textContent = 'Apartar Pura 90S '+p.ver+' · '+p.color;
+  document.getElementById('apModalSub').textContent = money(p.precio)+' · '+p.cap+' · '+p.msi;
+  document.getElementById('apCliente').value='';
+  document.getElementById('apTel').value='';
+  document.getElementById('apVend').value='';
+  document.getElementById('apSeguro').checked=false;
+  document.getElementById('apModal').classList.add('show');
+}
+function cerrarApartado(){ document.getElementById('apModal').classList.remove('show'); _apartSku=null; }
+function guardarApartado(){
+  const sku=_apartSku; if(!sku) return;
+  const cliente=document.getElementById('apCliente').value.trim();
+  const tel=document.getElementById('apTel').value.trim();
+  const vend=document.getElementById('apVend').value.trim();
+  const seguro=document.getElementById('apSeguro').checked?'Si':'No';
+  if(!cliente){ alert('Escribe el nombre del cliente.'); return; }
+  const p=preventaBySku[sku];
+  const btn=document.getElementById('apGuardar'); btn.disabled=true; btn.textContent='Guardando…';
+  const cb='_cbApAdd'+Date.now();
+  window[cb]=function(data){
+    delete window[cb]; const sc=document.getElementById('_apAdd_sc'); if(sc) sc.remove();
+    btn.disabled=false; btn.textContent='Guardar apartado';
+    if(data && data.ok!==false){
+      APARTADOS.push({id:data.id||('A'+Date.now()), sku:sku, color:p.color, cliente:cliente,
+        telefono:tel, precio:String(p.precio), seguro:seguro, vend:vend, estatus:'Apartado'});
+      cerrarApartado(); render(); cargarApartadosNube();
+    } else { alert('No se pudo guardar el apartado. Revisa tu conexión.'); }
+  };
+  const sc=document.createElement('script'); sc.id='_apAdd_sc';
+  sc.src=CLOUD_URL+'?modo=apartado_add&pin='+encodeURIComponent(TIENDA_ID)
+    +'&sku='+encodeURIComponent(sku)+'&color='+encodeURIComponent(p.color)
+    +'&cliente='+encodeURIComponent(cliente)+'&telefono='+encodeURIComponent(tel)
+    +'&precio='+encodeURIComponent(p.precio)+'&seguro='+encodeURIComponent(seguro)
+    +'&vend='+encodeURIComponent(vend)+'&callback='+cb;
+  sc.onerror=function(){ delete window[cb]; sc.remove(); btn.disabled=false; btn.textContent='Guardar apartado'; alert('Sin conexión.'); };
+  document.head.appendChild(sc);
+}
+function preventaWA(sku){
+  const lines=[];
+  if(sku){
+    const p=preventaBySku[sku]; const disp=disponibles(sku); const s=seguroPara(p.reg,p.sku);
+    lines.push('🚀 *Preventa HUAWEI Pura 90S '+p.ver+'*','',
+      '🎨 '+p.color+' · '+p.cap, '💰 '+money(p.precio)+'  (antes '+money(p.reg)+')', '💳 '+p.msi);
+    if(s) lines.push('🛡️ Con Seguro 1 año: '+money(p.precio+s.p1));
+    lines.push('', '📦 Preventa: apartas tu pieza pagando hoy y te la entregamos al llegar.');
+    if(disp<=2 && disp>0) lines.push('⚠️ ¡Solo quedan '+disp+' piezas de este color!');
+    lines.push('', '_HES '+TIENDA_NOMBRE+'_');
+  } else {
+    lines.push('🚀 *Preventa HUAWEI Pura 90S — HES '+TIENDA_NOMBRE+'*','',
+      'Aparta tu pieza pagando hoy, entrega al llegar el stock:');
+    ['Pro Max|12/512GB','Pro|12/512GB','Pro|12/256GB'].forEach(k=>{
+      const arr=PREVENTA.filter(p=>p.ver+'|'+p.cap===k); if(!arr.length) return;
+      lines.push('', '📱 *'+arr[0].ver+' '+arr[0].cap+'* — '+money(arr[0].precio)+' · '+arr[0].msi);
+      arr.forEach(p=>{ const d=disponibles(p.sku); lines.push('  • '+p.color+(d<=0?' (agotado)':d<=2?(' — solo '+d):'')); });
+    });
+    lines.push('', '_HES '+TIENDA_NOMBRE+' · Odemás_');
+  }
+  window.open('https://wa.me/?text='+encodeURIComponent(lines.join('\n')),'_blank');
+}
+function cargarApartadosNube(){
+  if(!CLOUD_URL) return;
+  const cb='_cbApart'+Date.now();
+  window[cb]=function(data){
+    delete window[cb]; const sc=document.getElementById('_apart_sc'); if(sc) sc.remove();
+    if(Array.isArray(data)){ APARTADOS=data; render(); }
+  };
+  const sc=document.createElement('script'); sc.id='_apart_sc';
+  sc.src=CLOUD_URL+'?modo=apartados&callback='+cb;
+  sc.onerror=function(){ delete window[cb]; sc.remove(); };
+  document.head.appendChild(sc);
 }
 function cardBundle(x){
   const skuArr=(x.skus||'').split(',').map(s=>s.trim()).filter(Boolean);
@@ -961,6 +1177,7 @@ function render(){
     html += seccion('Agotados', eolAgot, cardEol);
   }
   if(f==='bundle') html += seccionBundles('🎁 Paquetes vigentes', bundles);
+  if(f==='preventa') html += seccionPreventa();
   if(f==='promo'){
     const ocultasTxt = promosSinStock>0 ? ` · ${promosSinStock} sin existencia ocultas` : '';
     const promoSkus = new Set(PROMOS.map(p => p.sku));
@@ -1188,6 +1405,7 @@ cargarEolNube();
 cargarPromosNube();
 cargarBundlesNube();
 cargarAvisosNube();
+cargarApartadosNube();
 
 // ── Push notifications (OneSignal) ──────────────────────────────
 const ONE_APP_ID = 'db32a1ef-d484-4be3-adfc-2a9e17f7e4f1';
@@ -1229,7 +1447,7 @@ OneSignalDeferred.push(async function(OneSignal){
 
 actualizarCampana();
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('./sw.js?v=77').catch(()=>{});
+  navigator.serviceWorker.register('./sw.js?v=78').catch(()=>{});
 }
 </script>
 </body>
