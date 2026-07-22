@@ -310,6 +310,8 @@
     <input id="apTel" class="ap-inp" type="tel" inputmode="numeric" placeholder="10 dígitos" autocomplete="off">
     <label class="ap-lbl">Vendedor</label>
     <input id="apVend" class="ap-inp" type="text" placeholder="Quién apartó" autocomplete="off">
+    <label class="ap-lbl">N° de transacción</label>
+    <input id="apTransaccion" class="ap-inp" type="text" inputmode="numeric" placeholder="Folio del ticket de pago" autocomplete="off">
     <label class="ap-toggle"><input id="apSeguro" type="checkbox"> 🛡️ El cliente se llevó <b>Seguro</b></label>
     <button id="apGuardar" class="ap-guardar" onclick="guardarApartado()">Guardar apartado</button>
   </div>
@@ -779,7 +781,7 @@ function cardApartado(a){
   return `<div class="card ap-row">
     <div style="flex:1;min-width:0">
       <h4 style="font-size:13.5px;font-weight:700">${a.cliente||'(sin nombre)'} ${a.seguro==='Si'?'🛡️':''}</h4>
-      <span style="font-size:11px;color:#999">${p.ver||''} ${p.color||''} · ${a.telefono||'sin tel'} · ${money(Number(a.precio)||0)}</span>
+      <span style="font-size:11px;color:#999">${p.ver||''} ${p.color||''} · ${a.telefono||'sin tel'} · ${money(Number(a.precio)||0)}${a.transaccion?' · Tx '+a.transaccion:''}</span>
     </div>
     <span class="ap-est${ent?' ent':''}">${a.estatus||'Apartado'}</span>
   </div>`;
@@ -817,6 +819,7 @@ function abrirApartado(sku){
   document.getElementById('apCliente').value='';
   document.getElementById('apTel').value='';
   document.getElementById('apVend').value='';
+  document.getElementById('apTransaccion').value='';
   document.getElementById('apSeguro').checked=false;
   document.getElementById('apModal').classList.add('show');
 }
@@ -826,6 +829,7 @@ function guardarApartado(){
   const cliente=document.getElementById('apCliente').value.trim();
   const tel=document.getElementById('apTel').value.trim();
   const vend=document.getElementById('apVend').value.trim();
+  const transaccion=document.getElementById('apTransaccion').value.trim();
   const seguro=document.getElementById('apSeguro').checked?'Si':'No';
   if(!cliente){ alert('Escribe el nombre del cliente.'); return; }
   const p=preventaBySku[sku];
@@ -836,7 +840,7 @@ function guardarApartado(){
     btn.disabled=false; btn.textContent='Guardar apartado';
     if(data && data.ok!==false){
       APARTADOS.push({id:data.id||('A'+Date.now()), sku:sku, color:p.color, cliente:cliente,
-        telefono:tel, precio:String(p.precio), seguro:seguro, vend:vend, estatus:'Apartado'});
+        telefono:tel, precio:String(p.precio), seguro:seguro, vend:vend, estatus:'Apartado', transaccion:transaccion});
       cerrarApartado(); render(); cargarApartadosNube();
     } else { alert('No se pudo guardar el apartado. Revisa tu conexión.'); }
   };
@@ -845,7 +849,7 @@ function guardarApartado(){
     +'&sku='+encodeURIComponent(sku)+'&color='+encodeURIComponent(p.color)
     +'&cliente='+encodeURIComponent(cliente)+'&telefono='+encodeURIComponent(tel)
     +'&precio='+encodeURIComponent(p.precio)+'&seguro='+encodeURIComponent(seguro)
-    +'&vend='+encodeURIComponent(vend)+'&callback='+cb;
+    +'&vend='+encodeURIComponent(vend)+'&transaccion='+encodeURIComponent(transaccion)+'&callback='+cb;
   sc.onerror=function(){ delete window[cb]; sc.remove(); btn.disabled=false; btn.textContent='Guardar apartado'; alert('Sin conexión.'); };
   document.head.appendChild(sc);
 }
@@ -1447,7 +1451,7 @@ OneSignalDeferred.push(async function(OneSignal){
 
 actualizarCampana();
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('./sw.js?v=78').catch(()=>{});
+  navigator.serviceWorker.register('./sw.js?v=79').catch(()=>{});
 }
 </script>
 </body>
