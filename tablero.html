@@ -760,7 +760,7 @@ function cardPreventa(p){
   const segLine = s ? `<div class="pv-seg">🛡️ Con Seguro 1 año: <b>${money(p.precio + s.p1)}</b></div>` : '';
   return `<div class="card t-preventa${agot?' pv-agot':''}">
     <div class="top">
-      <h3>${p.color}</h3>
+      <h3>${p.color} <span style="font-weight:600;color:#999;font-size:12px">· ${p.cap}</span></h3>
       <span class="pv-cupo ${cls}">${agot?'AGOTADO':`Quedan ${disp} de ${p.cupo}`}</span>
     </div>
     <div class="pv-meta">
@@ -782,7 +782,7 @@ function cardApartado(a){
   return `<div class="card ap-row">
     <div style="flex:1;min-width:0">
       <h4 style="font-size:13.5px;font-weight:700">${a.cliente||'(sin nombre)'} ${a.seguro==='Si'?'🛡️':''}</h4>
-      <span style="font-size:11px;color:#999">${p.ver||''} ${p.color||''} · SKU ${a.sku} · ${a.telefono||'sin tel'} · ${money(Number(a.precio)||0)}${a.transaccion?' · Tx '+a.transaccion:''}</span>
+      <span style="font-size:11px;color:#999">${p.ver||''} ${p.color||''} ${p.cap?'· '+p.cap:''} · SKU ${a.sku} · ${a.telefono||'sin tel'} · ${money(Number(a.precio)||0)}${a.transaccion?' · Tx '+a.transaccion:''}</span>
     </div>
     <span class="ap-est${ent?' ent':''}">${a.estatus||'Apartado'}</span>
   </div>`;
@@ -1452,7 +1452,7 @@ OneSignalDeferred.push(async function(OneSignal){
 
 actualizarCampana();
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('./sw.js?v=80').catch(()=>{});
+  navigator.serviceWorker.register('./sw.js?v=81').catch(()=>{});
 }
 </script>
 </body>
