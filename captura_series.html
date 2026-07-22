@@ -298,9 +298,14 @@ function esCatalogoValido(c){
   return /^[0-9]{6,14}$/.test(k[0]);
 }
 try{ const c = JSON.parse(localStorage.getItem(CATKEY) || 'null'); if(esCatalogoValido(c)) CATALOGO = Object.assign({}, CATALOGO, c); }catch(e){}
+let _jsonpN = 0;
 function catJsonp(url){
   return new Promise((res, rej)=>{
-    const cb = 'cc_' + Date.now(); const s = document.createElement('script');
+    // Nombre de callback ÚNICO: Date.now() solo NO basta — varias llamadas
+    // disparadas juntas (catálogo/promos/eol) caían en el mismo milisegundo,
+    // colisionaban el callback y CRUZABAN las respuestas (ej. EOL recibía la
+    // lista de promos y marcaba todo como "EOL −50%"). El contador lo evita.
+    const cb = 'cc_' + Date.now() + '_' + (++_jsonpN); const s = document.createElement('script');
     const t = setTimeout(()=>{ cleanup(); rej(); }, 15000);
     function cleanup(){ clearTimeout(t); delete window[cb]; s.remove(); }
     window[cb] = d => { cleanup(); res(d); };
@@ -339,15 +344,19 @@ function promoActiva(sku){
   return pr;
 }
 
-/* EOL con 50% activo (solo cuando queda pieza de exhibición) — { sku: precio50 } */
+/* EOL con 50% activo (solo cuando queda pieza de exhibición) — { sku: precio50 }
+   IMPORTANTE: el 50% NO se cachea en el teléfono. Un precio al 50% es una
+   decisión delicada, así que solo se aplica cuando se confirma EN VIVO con la
+   nube. Si no hay señal o la llamada falla, EOL_VENTA queda vacío y se usa el
+   precio normal (nunca un 50% de una copia vieja). Ver captura EOL Kids X1. */
 const EOLVKEY = 'hes1217_eol_venta';
 let EOL_VENTA = {};
 function esObjValido(o){ return o && typeof o==='object' && !Array.isArray(o); }
-try{ const e = JSON.parse(localStorage.getItem(EOLVKEY) || 'null'); if(esObjValido(e)) EOL_VENTA = e; }catch(e){}
+try{ localStorage.removeItem(EOLVKEY); }catch(e){}   // limpia cualquier copia vieja pegada
 function refreshEolVenta(){
   if(!CLOUD_URL) return;
   catJsonp(CLOUD_URL + '?modo=eol_venta').then(e=>{
-    if(esObjValido(e)){ EOL_VENTA = e; localStorage.setItem(EOLVKEY, JSON.stringify(e)); }
+    if(esObjValido(e)){ EOL_VENTA = e; }   // solo de la nube en vivo, sin persistir
   }).catch(()=>{});
 }
 
@@ -722,7 +731,7 @@ refreshGid();      // obtiene el GID de la hoja Ventas para el link directo
 
 <script>
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  navigator.serviceWorker.register('./sw.js?v=83').catch(()=>{});
 }
 </script>
 </body>
