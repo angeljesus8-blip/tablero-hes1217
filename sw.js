@@ -1,18 +1,30 @@
 importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
-const CACHE = 'hes1217-v85';
+// ÚNICO lugar donde vive la versión de la app. Las páginas ya no la repiten:
+// registran './sw.js' con updateViaCache:'none' y el navegador detecta el
+// cambio al ver que este archivo es distinto. Subir el número aquí y ya.
+const VERSION = 'v86';
+const CACHE = 'hes1217-' + VERSION;
 const ARCHIVOS = [
   './index.html',
   './tablero.html',
   './captura_series.html',
   './admin.html',
+  './comisiones.html',
   './datos.js',
+  './comisiones_datos.js',
   './logo_odemas.png',
   './icon-192.png',
   './icon-512.png',
 ];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ARCHIVOS)));
+  // Uno por uno y tolerando fallos: con addAll(), un solo archivo que dé 404
+  // aborta la instalación completa y la app se queda sin service worker.
+  e.waitUntil(
+    caches.open(CACHE).then(c =>
+      Promise.all(ARCHIVOS.map(u => c.add(u).catch(() => {})))
+    )
+  );
   self.skipWaiting();
 });
 
