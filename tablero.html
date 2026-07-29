@@ -337,7 +337,29 @@ document.getElementById('liveWarning').classList.add('visible');
   const ft=document.getElementById('tbFooter'); if(ft) ft.textContent='Odemás · Grupo Gigante — uso interno HES '+TIENDA_ID;
 })();
 
-const HOY = new Date();
+/* ---- El día, en vivo ----
+   La app queda abierta como PWA días enteros en el celular del asesor, así que
+   la fecha NO se puede fijar al cargar: tocarDia() la vuelve a leer y avisa
+   cuando ya cambió el día.
+   Siempre fecha LOCAL: toISOString() devuelve UTC y en México (UTC-6) a partir
+   de las 6 pm ya es "mañana" — las promos que vencían ese mismo día se caían
+   del tablero justo en la hora pico. */
+let HOY = new Date();
+function hoyISO(d){
+  d = d || new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+let HOY_ISO = hoyISO(HOY);
+// Vigencia por fechas d1/d2 (ambas inclusive); sin fecha = siempre vigente
+const vigenteHoy = x => (!x.d1 || HOY_ISO >= x.d1) && (!x.d2 || HOY_ISO <= x.d2);
+// Relee el reloj. true = ya es otro día (hay que re-filtrar vigencias).
+function tocarDia(){
+  HOY = new Date();
+  const iso = hoyISO(HOY);
+  if(iso === HOY_ISO) return false;
+  HOY_ISO = iso;
+  return true;
+}
 
 const FILTROS = [
   { id:'inicio', label:'🏠 Inicio' },
@@ -378,7 +400,11 @@ function preventaTotalDisp(){ return PREVENTA.reduce((s,p)=>s+disponibles(p.sku)
 
 function diasRestantes(fecha){
   const f = new Date(fecha+'T00:00:00');
-  return Math.round((f - HOY)/86400000);
+  // Contra la MEDIANOCHE de hoy, no contra la hora actual: comparando con el
+  // instante, una promo que vence hoy salía "Vencida" a partir del mediodía
+  // (Math.round de -0.5 días).
+  const base = new Date(HOY.getFullYear(), HOY.getMonth(), HOY.getDate());
+  return Math.round((f - base)/86400000);
 }
 function badgeVigencia(fecha){
   const d = diasRestantes(fecha);
@@ -412,8 +438,7 @@ let BUNDLES = [];
 (function(){
   try{
     const c=JSON.parse(localStorage.getItem(BUNDLES_KEY)||'null');
-    const hoy=new Date().toISOString().slice(0,10);
-    if(Array.isArray(c)) BUNDLES=c.filter(x=>(!x.d1||hoy>=x.d1)&&(!x.d2||hoy<=x.d2));
+    if(Array.isArray(c)) BUNDLES=c.filter(vigenteHoy);
   }catch(e){}
 })();   // promociones vigentes — se cargan de la nube y se cachean en localStorage
 
@@ -421,10 +446,7 @@ let BUNDLES = [];
 (function(){
   try{
     const c = JSON.parse(localStorage.getItem(PROMOS_KEY)||'null');
-    if(Array.isArray(c) && c.length){
-      const hoy = new Date().toISOString().slice(0,10);
-      PROMOS = c.filter(x=> (!x.d1||hoy>=x.d1) && (!x.d2||hoy<=x.d2));
-    }
+    if(Array.isArray(c) && c.length) PROMOS = c.filter(vigenteHoy);
   }catch(e){}
 })();
 
@@ -530,8 +552,9 @@ const SERIES_KEY = 'hes1217_series_v1';   // misma clave que escribe captura_ser
 let VENTAS_NUBE = null;        // {vendedor:{c,s}} de TODA la tienda; null = no disponible
 let VENTAS_NUBE_HORA = '';
 
-function localDate(){ const d=new Date(); return d.getFullYear()+'-'+(d.getMonth()+1).toString().padStart(2,'0')+'-'+d.getDate().toString().padStart(2,'0'); }
-function attKey(){ return 'att_'+localDate(); }
+// El conteo manual se guarda por día; hoyISO() se relee cada vez, así que al
+// cruzar la medianoche el contador arranca solo en cero.
+function attKey(){ return 'att_'+hoyISO(); }
 // Ajustes manuales del día (los botones ✓/✗)
 function attManual(){ try{ return JSON.parse(localStorage.getItem(attKey())||'{"c":0,"s":0}'); }catch(e){ return {c:0,s:0}; } }
 
@@ -622,10 +645,9 @@ function resumenWA(){
   const pct=total>0?Math.round(att.c/total*100):0;
   const emoji=pct>=25?'✅':pct>=15?'⚠️':'🔴';
   const hoy=new Date().toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'});
-  const hoyStr2=new Date().toISOString().slice(0,10);
   const promoAct=PROMOS.filter(x=>tieneExistencia_(x.sku)).length;
   const eolList=EOL.filter(e=>e.estado==='listo').length;
-  const avisosAct=(D.avisos||[]).filter(a=>!a.d2||a.d2>=hoyStr2).length;
+  const avisosAct=(D.avisos||[]).filter(a=>!a.d2||a.d2>=HOY_ISO).length;
   let msg=`📊 *Resumen HES ${TIENDA_ID} · ${hoy}*\n\n`;
   msg+=`🛡️ *Assurant: ${total>0?pct+'% '+emoji:'sin registros'}* (${att.c}/${total})\n`;
   filasLeaderboard().forEach(f=>{
@@ -1155,6 +1177,8 @@ function seccionBundles(titulo, items){
 }
 
 function render(){
+  // Cruzar la medianoche con la app abierta también cuenta como cambio de día.
+  if(tocarDia()){ refiltrarCaches(); pintarUpdated(); }
   renderChips();
   const f = filtroActivo;
   let html = '';
@@ -1173,13 +1197,12 @@ function render(){
   const agotados = AGOTADOS.filter(x=>coincide(x.producto,x.sku));
   const resurtirTodos = [...agotados, ...resurtir];
   const transito = (D.transito||[]).filter(x=>coincide(x.producto,x.sku));
-  const hoyStr = new Date().toISOString().slice(0,10);
-  const avisos = (D.avisos||[]).filter(x=>coincide(x.titulo,x.detalle) && (!x.d2||x.d2>=hoyStr));
+  const avisos = (D.avisos||[]).filter(x=>coincide(x.titulo,x.detalle) && (!x.d2||x.d2>=HOY_ISO));
 
   if(f==='inicio'){
     const promoAct = PROMOS.filter(x=>tieneExistencia_(x.sku)).length;
     const eolList  = EOL.filter(e=>e.estado==='listo').length;
-    const avisosAct= (D.avisos||[]).filter(a=>!a.d2||a.d2>=hoyStr).length;
+    const avisosAct= (D.avisos||[]).filter(a=>!a.d2||a.d2>=HOY_ISO).length;
     const resurtirN= RESURTIR.length + AGOTADOS.length;
     const att=attTotal(); const total=att.c+att.s;
     const cap=attCapturado(); const man=attManual();
@@ -1384,6 +1407,25 @@ function reintentarCargas(){
   actualizarBanner();
 }
 
+/* ---- Antigüedad del inventario ----
+   Con la PWA abierta varios días, "Live 09:12" del martes se ve idéntico al de
+   hoy. Si la última confirmación no es de hoy, se dice con todas sus letras. */
+let _invFecha = null;      // Date de la última confirmación de inventario
+let _ultimaCarga = 0;      // ms de la última carga con éxito
+let _ultimoIntento = 0;    // ms del último intento (con o sin éxito)
+
+function pintarUpdated(){
+  const el = document.getElementById('updated');
+  if(!el || !_invFecha) return;
+  const t = _invFecha.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
+  if(hoyISO(_invFecha) === HOY_ISO){
+    el.innerHTML = 'Live ' + t + '<b style="color:var(--verde);display:block;font-size:11px">● en vivo</b>';
+  }else{
+    const dia = _invFecha.toLocaleDateString('es-MX',{day:'numeric',month:'short'});
+    el.innerHTML = dia + ' ' + t + '<b style="color:var(--naranja);display:block;font-size:11px">● no es de hoy</b>';
+  }
+}
+
 /* ---- Aplicadores ----
    Separados de las funciones que piden los datos, porque la misma respuesta
    puede llegar por una llamada suelta (modo=inventario) o dentro del paquete
@@ -1438,9 +1480,9 @@ function aplicarInventario(data){
       }, rawFields(cl));
     });
     D._invCloud = true;
-    const t = new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
-    const el = document.getElementById('updated');
-    if(el) el.innerHTML = 'Live ' + t + '<b style="color:var(--verde);display:block;font-size:11px">● en vivo</b>';
+    _invFecha = new Date();
+    _ultimaCarga = Date.now();
+    pintarUpdated();
   })(data);
 }
 
@@ -1455,22 +1497,36 @@ function aplicarEol(data){
 }
 
 function aplicarPromos(data){
-  const hoy = new Date().toISOString().slice(0,10);
   const todas = Object.keys(data).map(function(sku){
     const p = data[sku] || {};
     const inv = invBySku[sku];
     return { sku:sku, producto:p.d||(inv && inv.producto)||('SKU '+sku),
       pr:(p.pr!=null?p.pr:null), pp:(p.pp!=null?p.pp:null), d1:p.d1||null, d2:p.d2||null };
   });
+  // Se cachea la lista COMPLETA (no la filtrada): así, al cambiar el día, las
+  // vigencias se recalculan desde el caché aunque el celular esté sin red.
   try{ localStorage.setItem(PROMOS_KEY, JSON.stringify(todas)); }catch(e){}
-  PROMOS = todas.filter(x=> (!x.d1||hoy>=x.d1) && (!x.d2||hoy<=x.d2))
+  PROMOS = todas.filter(vigenteHoy)
                 .sort(function(a,b){ return a.producto.localeCompare(b.producto); });
 }
 
 function aplicarBundles(data){
   try{ localStorage.setItem(BUNDLES_KEY, JSON.stringify(data)); }catch(e){}
-  const hoy = new Date().toISOString().slice(0,10);
-  BUNDLES = data.filter(x=>(!x.d1||hoy>=x.d1)&&(!x.d2||hoy<=x.d2));
+  BUNDLES = data.filter(vigenteHoy);
+}
+
+/* Vuelve a filtrar promos y combos desde el caché — para cuando cambió el día
+   sin que haya habido una carga nueva de la nube. */
+function refiltrarCaches(){
+  try{
+    const c = JSON.parse(localStorage.getItem(PROMOS_KEY)||'null');
+    if(Array.isArray(c)) PROMOS = c.filter(vigenteHoy)
+      .sort(function(a,b){ return a.producto.localeCompare(b.producto); });
+  }catch(e){}
+  try{
+    const b = JSON.parse(localStorage.getItem(BUNDLES_KEY)||'null');
+    if(Array.isArray(b)) BUNDLES = b.filter(vigenteHoy);
+  }catch(e){}
 }
 
 function aplicarAvisos(data){
@@ -1603,22 +1659,51 @@ async function cargarTodoNube(){
   return true;
 }
 
+let _refrescando = false;
+async function refrescarNube(){
+  if(_refrescando) return;
+  _refrescando = true;
+  _ultimoIntento = Date.now();
+  try{
+    if(await cargarTodoNube()) return;
+    // Respaldo: de una en una y espaciadas, porque juntas se pierden en silencio.
+    // Orden por criticidad: primero lo que decide un precio o un cupo frente al
+    // cliente (stock, 50% de EOL, apartados de preventa); los avisos y el
+    // leaderboard pueden esperar.
+    cargarInventarioNube();
+    cargarEolNube();
+    cargarApartadosNube();
+    cargarPromosNube();
+    cargarBundlesNube();
+    cargarAvisosNube();
+    cargarVentasNube();
+  } finally { _refrescando = false; }
+}
+
 render();
 actualizarBanner();
-(async function arranque(){
-  if(await cargarTodoNube()) return;
-  // Respaldo: de una en una y espaciadas, porque juntas se pierden en silencio.
-  // Orden por criticidad: primero lo que decide un precio o un cupo frente al
-  // cliente (stock, 50% de EOL, apartados de preventa); los avisos y el
-  // leaderboard pueden esperar.
-  cargarInventarioNube();
-  cargarEolNube();
-  cargarApartadosNube();
-  cargarPromosNube();
-  cargarBundlesNube();
-  cargarAvisosNube();
-  cargarVentasNube();
-})();
+refrescarNube();
+
+/* ---- Al volver a la app ----
+   El asesor deja la PWA abierta y regresa horas (o días) después: sin esto ve
+   el stock, las vigencias y el leaderboard del momento en que la abrió. */
+const REFRESCO_MS = 5*60*1000;   // datos más viejos que esto se vuelven a pedir
+const ESPERA_MIN_MS = 30*1000;   // ...pero nunca dos viajes al GAS tan seguidos
+
+function alVolver(){
+  if(document.visibilityState !== 'visible') return;
+  const cambioDia = tocarDia();
+  if(cambioDia){
+    refiltrarCaches();   // vigencias al día aunque no haya red
+    pintarUpdated();
+    render();
+  }
+  if(Date.now() - _ultimoIntento < ESPERA_MIN_MS) return;
+  if(cambioDia || Date.now() - _ultimaCarga > REFRESCO_MS) refrescarNube();
+}
+document.addEventListener('visibilitychange', alVolver);
+window.addEventListener('focus', alVolver);
+window.addEventListener('online', function(){ _ultimoIntento = 0; alVolver(); });
 
 // ── Push notifications (OneSignal) ──────────────────────────────
 const ONE_APP_ID = 'db32a1ef-d484-4be3-adfc-2a9e17f7e4f1';
@@ -1660,7 +1745,7 @@ OneSignalDeferred.push(async function(OneSignal){
 
 actualizarCampana();
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('./sw.js?v=85').catch(()=>{});
+  navigator.serviceWorker.register('./sw.js', {updateViaCache:'none'}).catch(()=>{});
 }
 </script>
 </body>
