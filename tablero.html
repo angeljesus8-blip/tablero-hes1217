@@ -38,7 +38,8 @@
     padding:12px 14px; font-size:12px; line-height:1.5; }
   #liveWarning.visible { display:flex; }
   #liveWarning .lw-icon { font-size:20px; flex-shrink:0; margin-top:1px; }
-  #liveWarning b { font-size:13px; font-weight:800; color:var(--rojo); display:block; margin-bottom:2px; }
+  /* Solo el título va en bloque: los <b> dentro del mensaje deben quedar en línea */
+  #liveWarningTitulo { font-size:13px; font-weight:800; color:var(--rojo); display:block; margin-bottom:2px; }
   #liveWarning p { color:#7a4a00; font-weight:600; margin:0; }
   #liveWarning.err { background:#fdeaea; border-color:var(--rojo); }
   #liveWarning.err p { color:var(--rojo); }
@@ -183,6 +184,10 @@
   .lead-name { flex:1; font-size:13px; font-weight:700; }
   .lead-ventas { font-size:11px; color:#aaa; font-weight:700; white-space:nowrap; min-width:52px; text-align:center; }
   .lead-att { font-size:12px; font-weight:800; white-space:nowrap; min-width:80px; text-align:right; }
+  .lead-fuente { font-size:10px; color:#bbb; font-weight:600; margin-top:9px; text-align:center; line-height:1.4; }
+  .lw-btn { background:#fff; border:1.5px solid var(--naranja); color:var(--naranja); border-radius:8px;
+    padding:5px 11px; font-family:'Montserrat',sans-serif; font-size:11px; font-weight:800; cursor:pointer; margin-top:7px; }
+  #liveWarning.err .lw-btn { border-color:var(--rojo); color:var(--rojo); }
   /* ── Botones ── */
   .att-btns { display:flex; gap:10px; }
   .att-btn { flex:1; padding:12px; border:none; border-radius:12px; font-family:'Montserrat',sans-serif; font-size:13px; font-weight:800; cursor:pointer; }
@@ -289,7 +294,7 @@
 <div id="liveWarning">
   <span class="lw-icon">⚠️</span>
   <div>
-    <b>Inventario sin confirmar</b>
+    <b id="liveWarningTitulo">Inventario sin confirmar</b>
     <p id="liveWarningMsg">Conectando… no cotices piezas al cliente hasta ver <b style="color:var(--verde)">● en vivo</b> arriba</p>
   </div>
 </div>
@@ -513,62 +518,107 @@ function onPromoSliderScroll(el) {
   document.querySelectorAll('.promo-tab').forEach((t,i) => t.classList.toggle('active', i===idx));
   document.querySelectorAll('.promo-dot').forEach((d,i) => d.classList.toggle('active', i===idx));
 }
-/* ---- Assurant attach rate ---- */
+/* ---- Assurant attach rate ----
+   El attach se DERIVA de las ventas capturadas en Captura de Series, que ya
+   guarda cada venta como {vend, fecha, seguro:true/false}. Antes esta tarjeta
+   y el leaderboard leían 'attv_<vendedor>_<fecha>', una clave que ninguna app
+   escribía nunca: el equipo aparecía siempre en "—" y el resumen de WhatsApp
+   salía sin renglones por vendedor.
+   Los botones ✓/✗ siguen existiendo, pero solo como AJUSTE MANUAL para ventas
+   que no pasaron por la app (por eso se suman aparte y se pueden reiniciar). */
+const SERIES_KEY = 'hes1217_series_v1';   // misma clave que escribe captura_series.html
+let VENTAS_NUBE = null;        // {vendedor:{c,s}} de TODA la tienda; null = no disponible
+let VENTAS_NUBE_HORA = '';
+
 function localDate(){ const d=new Date(); return d.getFullYear()+'-'+(d.getMonth()+1).toString().padStart(2,'0')+'-'+d.getDate().toString().padStart(2,'0'); }
 function attKey(){ return 'att_'+localDate(); }
-function attLoad(){ return JSON.parse(localStorage.getItem(attKey())||'{"c":0,"s":0}'); }
+// Ajustes manuales del día (los botones ✓/✗)
+function attManual(){ try{ return JSON.parse(localStorage.getItem(attKey())||'{"c":0,"s":0}'); }catch(e){ return {c:0,s:0}; } }
+
+// Ventas capturadas HOY en este dispositivo
+function ventasHoyLocal(){
+  try{
+    const items = JSON.parse(localStorage.getItem(SERIES_KEY)||'[]');
+    const hoy = new Date().toLocaleDateString('es-MX');
+    return items.filter(i=>i.fecha===hoy);
+  }catch(e){ return []; }
+}
+// {vendedor:{c,s}} — de la nube si el GAS ya expone modo=ventas_hoy (toda la
+// tienda); si no, de las capturas de este equipo.
+function attPorVendedor(){
+  if(VENTAS_NUBE) return VENTAS_NUBE;
+  const acc = {};
+  ventasHoyLocal().forEach(v=>{
+    const n = v.vend || '(sin nombre)';
+    if(!acc[n]) acc[n] = {c:0,s:0};
+    if(v.seguro===true) acc[n].c++; else acc[n].s++;
+  });
+  return acc;
+}
+function attCapturado(){
+  const por = attPorVendedor(); const t = {c:0,s:0};
+  Object.keys(por).forEach(n=>{ t.c += por[n].c||0; t.s += por[n].s||0; });
+  return t;
+}
+function attTotal(){
+  const cap = attCapturado(), m = attManual();
+  return { c: cap.c + (m.c||0), s: cap.s + (m.s||0) };
+}
 function attAdd(tipo){
-  const k=attKey(); const att=attLoad(); att[tipo]++;
-  localStorage.setItem(k,JSON.stringify(att)); attRefresh(att);
+  const m = attManual(); m[tipo] = (m[tipo]||0) + 1;
+  localStorage.setItem(attKey(), JSON.stringify(m));
+  render();
 }
-function attRefresh(att){
-  const total=att.c+att.s;
-  const pct=total>0?Math.round(att.c/total*100):0;
-  const col=pct>=25?'var(--verde)':pct>=15?'var(--naranja)':'var(--rojo)';
-  const re=document.getElementById('attRate'); const su=document.getElementById('attSub');
-  const bf=document.getElementById('attBarFill');
-  if(re){re.textContent=total>0?pct+'%':'—'; re.style.color=col;}
-  if(su) su.textContent=att.c+' con seguro de '+total+' ventas hoy '+(pct>=25?'✅':pct>0?'⚠️':'');
-  if(bf){ bf.style.width=Math.min(pct,100)+'%'; bf.style.background=col; }
+function attReset(){
+  const m = attManual(); const n = (m.c||0)+(m.s||0);
+  if(!n){ alert('No hay registros manuales que reiniciar.\n\nLas ventas capturadas en Captura de Series no se borran desde aquí.'); return; }
+  if(!confirm('¿Borrar los '+n+' registro(s) manuales de hoy?\n\nLas ventas capturadas en la app NO se tocan.')) return;
+  localStorage.removeItem(attKey());
+  render();
 }
-function attReset(){ localStorage.removeItem(attKey()); attRefresh({c:0,s:0}); }
 
 /* ---- Leaderboard & Resumen WA ---- */
 const VENDEDORES_TB = (_cfg && Array.isArray(_cfg.vendedores) && _cfg.vendedores.length)
   ? _cfg.vendedores
   : ['Arnulfo González','Arturo Aguilar','Miguel Ángel García'];
-function attVendHoyTB(vend){
-  return JSON.parse(localStorage.getItem('attv_'+vend+'_'+localDate())||'{"c":0,"s":0}');
-}
-function ventasHoyVend(vend){
-  try{
-    const items=JSON.parse(localStorage.getItem('hes1217_series_v1')||'[]');
-    const hoy=new Date().toLocaleDateString('es-MX');
-    return items.filter(i=>i.fecha===hoy&&i.vend===vend).length;
-  }catch(e){ return 0; }
-}
 function nombreCorto(n){ const p=n.split(' '); return p[0]+(p[1]?' '+p[1][0]+'.':''); }
+// Vendedores configurados + cualquiera que haya vendido hoy, ordenados por attach
+function filasLeaderboard(){
+  const por = attPorVendedor();
+  const nombres = Array.from(new Set(VENDEDORES_TB.concat(Object.keys(por))));
+  return nombres.map(v=>{
+    const a = por[v] || {c:0,s:0};
+    const t = a.c + a.s;
+    return { vend:v, c:a.c, s:a.s, total:t, pct: t>0 ? Math.round(a.c/t*100) : null };
+  }).sort((a,b)=>{
+    if(a.pct===null && b.pct===null) return a.vend.localeCompare(b.vend);
+    if(a.pct===null) return 1;
+    if(b.pct===null) return -1;
+    return b.pct - a.pct || b.total - a.total;
+  });
+}
 function leaderboardHtml(){
-  const rows=VENDEDORES_TB.map(v=>{
-    const av=attVendHoyTB(v); const tv=av.c+av.s;
-    const pv=tv>0?Math.round(av.c/tv*100):null;
-    const ev=pv===null?'':pv>=25?'✅':pv>=15?'⚠️':'🔴';
-    const col=pv===null?'#aaa':pv>=25?'var(--verde)':pv>=15?'var(--naranja)':'var(--rojo)';
-    const vtas=ventasHoyVend(v);
+  const rows = filasLeaderboard().map(f=>{
+    const ev = f.pct===null?'':f.pct>=25?'✅':f.pct>=15?'⚠️':'🔴';
+    const col= f.pct===null?'#aaa':f.pct>=25?'var(--verde)':f.pct>=15?'var(--naranja)':'var(--rojo)';
     return `<div class="lead-row">
-      <span class="lead-name">${nombreCorto(v)}</span>
-      <span class="lead-ventas">${vtas?vtas+' vta'+(vtas!==1?'s':''):'—'}</span>
-      <span class="lead-att" style="color:${col}">${pv!==null?pv+'% '+ev:'—'}</span>
+      <span class="lead-name">${nombreCorto(f.vend)}</span>
+      <span class="lead-ventas">${f.total?f.total+' vta'+(f.total!==1?'s':''):'—'}</span>
+      <span class="lead-att" style="color:${col}">${f.pct!==null?f.pct+'% '+ev:'—'}</span>
     </div>`;
   }).join('');
+  const fuente = VENTAS_NUBE
+    ? `Ventas de toda la tienda · ${VENTAS_NUBE_HORA}`
+    : 'Solo las ventas capturadas en <b>este</b> equipo';
   return `<div class="card lead-card">
     <div class="lead-head">👥 Equipo hoy — Assurant</div>
     ${rows}
+    <div class="lead-fuente">${fuente}</div>
     <button class="btn-wa" onclick="resumenWA()">📲 Compartir resumen por WhatsApp</button>
   </div>`;
 }
 function resumenWA(){
-  const att=attLoad(); const total=att.c+att.s;
+  const att=attTotal(); const total=att.c+att.s;
   const pct=total>0?Math.round(att.c/total*100):0;
   const emoji=pct>=25?'✅':pct>=15?'⚠️':'🔴';
   const hoy=new Date().toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'});
@@ -578,10 +628,9 @@ function resumenWA(){
   const avisosAct=(D.avisos||[]).filter(a=>!a.d2||a.d2>=hoyStr2).length;
   let msg=`📊 *Resumen HES ${TIENDA_ID} · ${hoy}*\n\n`;
   msg+=`🛡️ *Assurant: ${total>0?pct+'% '+emoji:'sin registros'}* (${att.c}/${total})\n`;
-  VENDEDORES_TB.forEach(v=>{
-    const av=attVendHoyTB(v); const tv=av.c+av.s; if(!tv) return;
-    const pv=Math.round(av.c/tv*100);
-    msg+=`  · ${nombreCorto(v)} → ${av.c}/${tv} = ${pv}% ${pv>=25?'✅':pv>=15?'⚠️':'🔴'}\n`;
+  filasLeaderboard().forEach(f=>{
+    if(!f.total) return;
+    msg+=`  · ${nombreCorto(f.vend)} → ${f.c}/${f.total} = ${f.pct}% ${f.pct>=25?'✅':f.pct>=15?'⚠️':'🔴'}\n`;
   });
   if(promoAct) msg+=`\n🔥 Promos vigentes: ${promoAct}`;
   if(eolList)  msg+=`\n🏷️ EOL al 50%: ${eolList}`;
@@ -792,7 +841,9 @@ function seccionPreventa(){
   let html = `<div class="pv-banner">
     <div class="pv-banner-t">🚀 Preventa HUAWEI Pura 90S</div>
     <div class="pv-banner-s">${preInicio?'Inicia el 22 de julio · ':''}El cliente paga completo y aparta su pieza. Entrega al llegar el stock.</div>
-    <div class="pv-banner-n">Quedan <b>${preventaTotalDisp()}</b> de 36 piezas de tu cupo</div>
+    <div class="pv-banner-n">${CARGAS.apartados==='ok'
+      ? `Quedan <b>${preventaTotalDisp()}</b> de 36 piezas de tu cupo`
+      : '⏳ Confirmando cupo con la nube — no prometas la última pieza todavía'}</div>
   </div>`;
   const orden = ['Pro Max|12/512GB','Pro|12/512GB','Pro|12/256GB'];
   const titulos = {'Pro Max|12/512GB':'Pura 90S Pro Max · 12/512GB','Pro|12/512GB':'Pura 90S Pro · 12/512GB','Pro|12/256GB':'Pura 90S Pro · 12/256GB'};
@@ -835,24 +886,24 @@ function guardarApartado(){
   if(!cliente){ alert('Escribe el nombre del cliente.'); return; }
   const p=preventaBySku[sku];
   const btn=document.getElementById('apGuardar'); btn.disabled=true; btn.textContent='Guardando…';
-  const cb='_cbApAdd'+Date.now();
-  window[cb]=function(data){
-    delete window[cb]; const sc=document.getElementById('_apAdd_sc'); if(sc) sc.remove();
+  const qs='modo=apartado_add&pin='+encodeURIComponent(TIENDA_ID)
+    +'&sku='+encodeURIComponent(sku)+'&color='+encodeURIComponent(p.color)
+    +'&cliente='+encodeURIComponent(cliente)+'&telefono='+encodeURIComponent(tel)
+    +'&precio='+encodeURIComponent(p.precio)+'&seguro='+encodeURIComponent(seguro)
+    +'&vend='+encodeURIComponent(vend)+'&transaccion='+encodeURIComponent(transaccion);
+  // prioritario: el vendedor está esperando con el cliente enfrente, no puede
+  // hacer fila detrás de las cargas de arranque.
+  gasPedir(qs, { prioritario:true }).then(function(data){
     btn.disabled=false; btn.textContent='Guardar apartado';
     if(data && data.ok!==false){
       APARTADOS.push({id:data.id||('A'+Date.now()), sku:sku, color:p.color, cliente:cliente,
         telefono:tel, precio:String(p.precio), seguro:seguro, vend:vend, estatus:'Apartado', transaccion:transaccion});
       cerrarApartado(); render(); cargarApartadosNube();
     } else { alert('No se pudo guardar el apartado. Revisa tu conexión.'); }
-  };
-  const sc=document.createElement('script'); sc.id='_apAdd_sc';
-  sc.src=CLOUD_URL+'?modo=apartado_add&pin='+encodeURIComponent(TIENDA_ID)
-    +'&sku='+encodeURIComponent(sku)+'&color='+encodeURIComponent(p.color)
-    +'&cliente='+encodeURIComponent(cliente)+'&telefono='+encodeURIComponent(tel)
-    +'&precio='+encodeURIComponent(p.precio)+'&seguro='+encodeURIComponent(seguro)
-    +'&vend='+encodeURIComponent(vend)+'&transaccion='+encodeURIComponent(transaccion)+'&callback='+cb;
-  sc.onerror=function(){ delete window[cb]; sc.remove(); btn.disabled=false; btn.textContent='Guardar apartado'; alert('Sin conexión.'); };
-  document.head.appendChild(sc);
+  }).catch(function(){
+    btn.disabled=false; btn.textContent='Guardar apartado';
+    alert('Sin conexión — el apartado NO se guardó. Intenta de nuevo.');
+  });
 }
 function preventaWA(sku){
   const lines=[];
@@ -876,17 +927,16 @@ function preventaWA(sku){
   }
   window.open('https://wa.me/?text='+encodeURIComponent(lines.join('\n')),'_blank');
 }
-function cargarApartadosNube(){
+async function cargarApartadosNube(){
   if(!CLOUD_URL) return;
-  const cb='_cbApart'+Date.now();
-  window[cb]=function(data){
-    delete window[cb]; const sc=document.getElementById('_apart_sc'); if(sc) sc.remove();
-    if(Array.isArray(data)){ APARTADOS=data; render(); }
-  };
-  const sc=document.createElement('script'); sc.id='_apart_sc';
-  sc.src=CLOUD_URL+'?modo=apartados&callback='+cb;
-  sc.onerror=function(){ delete window[cb]; sc.remove(); };
-  document.head.appendChild(sc);
+  let data;
+  try{
+    data = await gasPedir('modo=apartados');
+    if(!Array.isArray(data)) throw new Error('respuesta inválida');
+  }catch(e){ marcarCarga('apartados', false); return; }
+  APARTADOS = data;
+  render();
+  marcarCarga('apartados', true);
 }
 function cardBundle(x){
   const skuArr=(x.skus||'').split(',').map(s=>s.trim()).filter(Boolean);
@@ -1043,10 +1093,8 @@ function resurtirWA(){
 function marcarNoResurtir(sku, producto, btn){
   if(!confirm('"' + producto + '"\n\n¿Ya no se va a resurtir? Se quitará del listado.')) return;
   if(btn){ btn.disabled=true; btn.textContent='…'; }
-  const cb = '_cbEolAdd' + Date.now();
-  window[cb] = function(data){
-    delete window[cb];
-    const sc = document.getElementById('_eolAdd_sc'); if(sc) sc.remove();
+  const qs = 'modo=eol_add&sku=' + encodeURIComponent(sku) + '&pin=' + encodeURIComponent(TIENDA_ID);
+  gasPedir(qs, { prioritario:true }).then(function(data){
     if(data && data.ok !== false){
       eolSkuSet.add(sku);
       calcDerivados();
@@ -1055,16 +1103,10 @@ function marcarNoResurtir(sku, producto, btn){
       if(btn){ btn.disabled=false; btn.textContent='✕ EOL'; }
       alert('No se pudo guardar. Verifica tu conexión.');
     }
-  };
-  const sc = document.createElement('script');
-  sc.id = '_eolAdd_sc';
-  sc.src = CLOUD_URL + '?modo=eol_add&sku=' + encodeURIComponent(sku) + '&pin=' + encodeURIComponent(TIENDA_ID) + '&callback=' + cb;
-  sc.onerror = function(){
-    delete window[cb]; sc.remove();
+  }).catch(function(){
     if(btn){ btn.disabled=false; btn.textContent='✕ EOL'; }
-    alert('Sin conexión.');
-  };
-  document.head.appendChild(sc);
+    alert('Sin conexión — no se guardó.');
+  });
 }
 function rowInv(x){
   const cls = x.stock===0 ? 'cero' : x.stock<=3 ? 'bajo' : 'ok';
@@ -1139,14 +1181,20 @@ function render(){
     const eolList  = EOL.filter(e=>e.estado==='listo').length;
     const avisosAct= (D.avisos||[]).filter(a=>!a.d2||a.d2>=hoyStr).length;
     const resurtirN= RESURTIR.length + AGOTADOS.length;
-    const att=attLoad(); const total=att.c+att.s;
+    const att=attTotal(); const total=att.c+att.s;
+    const cap=attCapturado(); const man=attManual();
+    const nCap=cap.c+cap.s, nMan=(man.c||0)+(man.s||0);
     const pct=total>0?Math.round(att.c/total*100):0;
     const col=pct>=25?'var(--verde)':pct>=15?'var(--naranja)':'var(--rojo)';
     const barW=Math.min(pct,100);
+    // De dónde salió el número: capturas de la app + ajustes manuales
+    const origen = total===0 ? 'Aún sin ventas registradas hoy'
+      : (nCap?`${nCap} de Captura de Series`:'') + (nCap&&nMan?' + ':'') + (nMan?`${nMan} manual${nMan!==1?'es':''}`:'');
     html += `<div class="card att-card">
       <div class="att-header"><span>🛡️ Assurant del día</span><button class="att-reset" onclick="attReset()">↺ Reiniciar</button></div>
       <div class="att-rate" id="attRate" style="color:${col}">${total>0?pct+'%':'—'}</div>
       <div class="att-sub" id="attSub">${att.c} con seguro de ${total} ventas hoy ${pct>=25?'✅':pct>0?'⚠️':''}</div>
+      <div class="lead-fuente" style="text-align:left;margin:-6px 0 10px">${origen}</div>
       <div class="att-prog">
         <div class="att-prog-track">
           <div class="att-prog-fill" id="attBarFill" style="width:${barW}%;background:${col}"></div>
@@ -1158,6 +1206,7 @@ function render(){
         <button class="att-btn att-si" onclick="attAdd('c')">✓ Con seguro</button>
         <button class="att-btn att-no" onclick="attAdd('s')">✗ Sin seguro</button>
       </div>
+      <div class="lead-fuente" style="margin-top:8px">Usa estos botones solo para ventas que <b>no</b> capturaste en la app</div>
     </div>
     <div class="dash-grid">
       <div class="dash-stat" onclick="filtroActivo='promo';render()">
@@ -1230,12 +1279,119 @@ document.getElementById('q').addEventListener('input', e=>{
   render();
 });
 
-function cargarInventarioNube(){
-  const cb = '_cbInv' + Date.now();
-  window[cb] = function(data){
-    delete window[cb];
-    const sc = document.getElementById('_inv_sc');
-    if(sc) sc.remove();
+/* ================= Cola de llamadas al GAS =================
+   Google Apps Script descarta las llamadas que llegan encimadas y lo hace EN
+   SILENCIO (responde 200 sin ejecutar). Antes las 6 cargas salían todas en el
+   mismo instante: unas llegaban y otras no, así que promos/combos/avisos se
+   quedaban vacíos —y sus pestañas se ocultaban solas por seccionTieneItems()—
+   sin que nadie se enterara. Ahora salen de una en una, espaciadas, con
+   timeout, reintento y aviso visible si algo no llegó. */
+const GAS_GAP        = 1500;    // ms de separación entre llamadas
+const GAS_TIMEOUT    = 15000;   // ms de espera por respuesta
+const GAS_REINTENTOS = 2;
+
+let _gasCola = [], _gasCorriendo = false, _gasN = 0;
+const espera = ms => new Promise(r=>setTimeout(r, ms));
+
+function gasJsonp(qs){
+  return new Promise(function(resolve, reject){
+    // Callback único: Date.now() solo no basta, dos llamadas en el mismo
+    // milisegundo se pisan y cruzan las respuestas (ya pasó en Captura de Series).
+    const cb = '_gas' + Date.now() + '_' + (++_gasN);
+    const sc = document.createElement('script');
+    const t  = setTimeout(function(){ limpiar(); reject(new Error('timeout')); }, GAS_TIMEOUT);
+    function limpiar(){ clearTimeout(t); delete window[cb]; sc.remove(); }
+    window[cb] = function(d){ limpiar(); resolve(d); };
+    sc.onerror = function(){ limpiar(); reject(new Error('red')); };
+    sc.src = CLOUD_URL + '?' + qs + '&callback=' + cb;
+    document.head.appendChild(sc);
+  });
+}
+
+// prioritario:true → se cuela al frente (para escrituras: apartados, EOL)
+function gasPedir(qs, opts){
+  opts = opts || {};
+  return new Promise(function(resolve, reject){
+    const tarea = { qs, resolve, reject, intentos:0,
+      max: opts.reintentos!=null ? opts.reintentos : GAS_REINTENTOS };
+    if(opts.prioritario) _gasCola.unshift(tarea); else _gasCola.push(tarea);
+    _gasBombear();
+  });
+}
+
+async function _gasBombear(){
+  if(_gasCorriendo) return;
+  _gasCorriendo = true;
+  while(_gasCola.length){
+    const t = _gasCola.shift();
+    try{
+      t.resolve(await gasJsonp(t.qs));
+    }catch(e){
+      if(t.intentos < t.max){
+        t.intentos++;
+        _gasCola.unshift(t);                      // reintenta antes que el resto
+        await espera(GAS_GAP * (t.intentos + 1)); // ...dándole más aire cada vez
+        continue;
+      }
+      t.reject(e);
+    }
+    if(_gasCola.length) await espera(GAS_GAP);
+  }
+  _gasCorriendo = false;
+}
+
+/* ---- Estado de las cargas + aviso al usuario ---- */
+const CARGAS = { inventario:'pendiente', eol:'pendiente', promos:'pendiente',
+                 bundles:'pendiente', avisos:'pendiente', apartados:'pendiente' };
+const CARGA_NOMBRE = { inventario:'inventario', eol:'EOL', promos:'promos',
+                       bundles:'combos', avisos:'avisos', apartados:'apartados' };
+function marcarCarga(k, ok){ CARGAS[k] = ok ? 'ok' : 'error'; actualizarBanner(); }
+
+function actualizarBanner(){
+  const w = document.getElementById('liveWarning');
+  const t = document.getElementById('liveWarningTitulo');
+  const m = document.getElementById('liveWarningMsg');
+  if(!w || !t || !m) return;
+  const btn = '<button class="lw-btn" onclick="reintentarCargas()">↻ Reintentar</button>';
+  if(CARGAS.inventario === 'error'){
+    w.className = 'visible err';
+    t.textContent = 'Sin conexión al inventario';
+    m.innerHTML = 'No se pudo confirmar el stock — <b>los números que ves pueden estar desactualizados</b>.<br>' + btn;
+    return;
+  }
+  if(CARGAS.inventario === 'pendiente'){
+    w.className = 'visible';
+    t.textContent = 'Inventario sin confirmar';
+    m.innerHTML = 'Conectando… no cotices piezas al cliente hasta ver <b style="color:var(--verde)">● en vivo</b> arriba';
+    return;
+  }
+  const fallidas = Object.keys(CARGAS).filter(k=>CARGAS[k]==='error').map(k=>CARGA_NOMBRE[k]);
+  if(fallidas.length){
+    w.className = 'visible';
+    t.textContent = 'Faltan datos por cargar';
+    m.innerHTML = 'No cargó: <b>' + fallidas.join(', ') + '</b>. Esas pestañas pueden verse vacías o incompletas.<br>' + btn;
+    return;
+  }
+  w.className = '';
+}
+
+function reintentarCargas(){
+  const mapa = { inventario:cargarInventarioNube, eol:cargarEolNube, promos:cargarPromosNube,
+                 bundles:cargarBundlesNube, avisos:cargarAvisosNube, apartados:cargarApartadosNube };
+  Object.keys(CARGAS).forEach(function(k){
+    if(CARGAS[k] === 'error'){ CARGAS[k] = 'pendiente'; mapa[k](); }
+  });
+  actualizarBanner();
+}
+
+/* ---- Aplicadores ----
+   Separados de las funciones que piden los datos, porque la misma respuesta
+   puede llegar por una llamada suelta (modo=inventario) o dentro del paquete
+   completo (modo=todo). */
+const _esObj = d => d && typeof d === 'object' && !Array.isArray(d);
+
+function aplicarInventario(data){
+  (function(data){
     // Guarda los datos crudos de la nube; el stock cerrado y la exhibición
     // restante se calculan en calcDerivados (finalizarStock), que corre también
     // cuando llegan los datos de EOL.
@@ -1282,135 +1438,187 @@ function cargarInventarioNube(){
       }, rawFields(cl));
     });
     D._invCloud = true;
-    const w = document.getElementById('liveWarning');
-    if(w){ w.classList.remove('visible'); w.classList.remove('err'); }
     const t = new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
     const el = document.getElementById('updated');
     if(el) el.innerHTML = 'Live ' + t + '<b style="color:var(--verde);display:block;font-size:11px">● en vivo</b>';
-    calcDerivados();
-    render();
-  };
-  const sc = document.createElement('script');
-  sc.id = '_inv_sc';
-  sc.src = CLOUD_URL + '?modo=inventario&callback=' + cb;
-  sc.onerror = function(){
-    delete window[cb]; sc.remove();
-    const w = document.getElementById('liveWarning');
-    const m = document.getElementById('liveWarningMsg');
-    if(w){ w.classList.add('visible'); w.classList.add('err'); }
-    if(m) m.innerHTML = 'Sin conexión al inventario en vivo — <b>los números que ves pueden estar desactualizados</b>';
-    const el = document.getElementById('updated');
-    if(el) el.innerHTML = '<span style="color:var(--rojo);font-weight:700">Sin conexión</span>';
-  };
-  document.head.appendChild(sc);
+  })(data);
 }
 
-function cargarEolNube(){
-  const cb = '_cbEol' + Date.now();
-  window[cb] = function(data){
-    delete window[cb];
-    const sc = document.getElementById('_eol_sc'); if(sc) sc.remove();
-    if(!Array.isArray(data)) return;
-    const skusLocales = new Set((D.eol||[]).map(function(e){ return e.sku; }));
-    data.forEach(function(e){
-      if(skusLocales.has(e.sku)) return;
-      // SKU subido via admin (ADENDUM PDF) que no estaba en datos.js
-      (D.eol = D.eol||[]).push({ sku: e.sku, precio: parseFloat(e.precio)||0 });
-      eolSkuSet.add(e.sku);
-    });
-    calcDerivados();
-    render();
-  };
-  const sc = document.createElement('script');
-  sc.id = '_eol_sc';
-  sc.src = CLOUD_URL + '?modo=eol_cloud&callback=' + cb;
-  sc.onerror = function(){ delete window[cb]; sc.remove(); };
-  document.head.appendChild(sc);
+function aplicarEol(data){
+  const skusLocales = new Set((D.eol||[]).map(function(e){ return e.sku; }));
+  data.forEach(function(e){
+    if(skusLocales.has(e.sku)) return;
+    // SKU subido via admin (ADENDUM PDF) que no estaba en datos.js
+    (D.eol = D.eol||[]).push({ sku: e.sku, precio: parseFloat(e.precio)||0 });
+    eolSkuSet.add(e.sku);
+  });
+}
+
+function aplicarPromos(data){
+  const hoy = new Date().toISOString().slice(0,10);
+  const todas = Object.keys(data).map(function(sku){
+    const p = data[sku] || {};
+    const inv = invBySku[sku];
+    return { sku:sku, producto:p.d||(inv && inv.producto)||('SKU '+sku),
+      pr:(p.pr!=null?p.pr:null), pp:(p.pp!=null?p.pp:null), d1:p.d1||null, d2:p.d2||null };
+  });
+  try{ localStorage.setItem(PROMOS_KEY, JSON.stringify(todas)); }catch(e){}
+  PROMOS = todas.filter(x=> (!x.d1||hoy>=x.d1) && (!x.d2||hoy<=x.d2))
+                .sort(function(a,b){ return a.producto.localeCompare(b.producto); });
+}
+
+function aplicarBundles(data){
+  try{ localStorage.setItem(BUNDLES_KEY, JSON.stringify(data)); }catch(e){}
+  const hoy = new Date().toISOString().slice(0,10);
+  BUNDLES = data.filter(x=>(!x.d1||hoy>=x.d1)&&(!x.d2||hoy<=x.d2));
+}
+
+function aplicarAvisos(data){
+  const locales = new Set((D.avisos||[]).map(function(a){ return a.titulo; }));
+  data.forEach(function(a){
+    if(locales.has(a.titulo)) return;
+    (D.avisos = D.avisos||[]).unshift(a);
+  });
+}
+
+// Devuelve false si la respuesta no trae el formato esperado (GAS sin el modo)
+function aplicarVentas(data){
+  if(!_esObj(data) || !_esObj(data.vend)) return false;
+  const acc = {};
+  Object.keys(data.vend).forEach(function(n){
+    const v = data.vend[n] || {};
+    acc[n] = { c:Number(v.c)||0, s:Number(v.s)||0 };
+  });
+  VENTAS_NUBE = acc;
+  VENTAS_NUBE_HORA = 'actualizado ' + new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
+  return true;
+}
+
+/* ---- Cargas sueltas (respaldo si no hay modo=todo) ---- */
+async function cargarInventarioNube(){
+  let data;
+  try{
+    data = await gasPedir('modo=inventario');
+    if(!_esObj(data)) throw new Error('respuesta inválida');
+  }catch(e){
+    marcarCarga('inventario', false);
+    const el = document.getElementById('updated');
+    if(el) el.innerHTML = '<span style="color:var(--rojo);font-weight:700">Sin conexión</span>';
+    return;
+  }
+  aplicarInventario(data);
+  calcDerivados();
+  render();
+  marcarCarga('inventario', true);
+}
+
+async function cargarEolNube(){
+  let data;
+  try{
+    data = await gasPedir('modo=eol_cloud');
+    if(!Array.isArray(data)) throw new Error('respuesta inválida');
+  }catch(e){ marcarCarga('eol', false); return; }
+  aplicarEol(data);
+  calcDerivados();
+  render();
+  marcarCarga('eol', true);
 }
 
 let _promosCargando = false;
-function cargarPromosNube(manual){
+async function cargarPromosNube(manual){
   if(_promosCargando) return;
   _promosCargando = true;
   const btnR = document.getElementById('btnRefreshPromos');
   if(btnR){ btnR.textContent='↻'; btnR.disabled=true; btnR.classList.add('girando'); }
-  const cb = '_cbPromo' + Date.now();
-  window[cb] = function(data){
-    delete window[cb];
-    _promosCargando = false;
-    const sc = document.getElementById('_promo_sc'); if(sc) sc.remove();
-    if(btnR){ btnR.textContent='↻ Actualizar'; btnR.disabled=false; btnR.classList.remove('girando'); }
-    if(data && typeof data === 'object' && !Array.isArray(data)){
-      const hoy = new Date().toISOString().slice(0,10);
-      const todas = Object.keys(data).map(function(sku){
-        const p = data[sku] || {};
-        const inv = invBySku[sku];
-        return { sku:sku, producto:p.d||(inv && inv.producto)||('SKU '+sku),
-          pr:(p.pr!=null?p.pr:null), pp:(p.pp!=null?p.pp:null), d1:p.d1||null, d2:p.d2||null };
-      });
-      try{ localStorage.setItem(PROMOS_KEY, JSON.stringify(todas)); }catch(e){}
-      PROMOS = todas.filter(x=> (!x.d1||hoy>=x.d1) && (!x.d2||hoy<=x.d2))
-                    .sort(function(a,b){ return a.producto.localeCompare(b.producto); });
-      render();
-    }
-  };
-  const sc = document.createElement('script');
-  sc.id = '_promo_sc';
-  sc.src = CLOUD_URL + '?modo=promos&callback=' + cb;
-  sc.onerror = function(){
-    delete window[cb]; _promosCargando=false; sc.remove();
-    if(btnR){ btnR.textContent='↻ Actualizar'; btnR.disabled=false; btnR.classList.remove('girando'); }
-  };
-  document.head.appendChild(sc);
+  function soltarBoton(){
+    const b = document.getElementById('btnRefreshPromos');
+    if(b){ b.textContent='↻ Actualizar'; b.disabled=false; b.classList.remove('girando'); }
+  }
+  let data;
+  try{
+    // El botón "↻ Actualizar" lo pide el usuario y está esperando: va al frente.
+    data = await gasPedir('modo=promos', { prioritario: !!manual });
+    if(!_esObj(data)) throw new Error('respuesta inválida');
+  }catch(e){
+    _promosCargando = false; soltarBoton(); marcarCarga('promos', false); return;
+  }
+  _promosCargando = false;
+  aplicarPromos(data);
+  render();
+  soltarBoton();
+  marcarCarga('promos', true);
 }
 
-function cargarBundlesNube(){
-  const cb='_cbB'+Date.now();
-  window[cb]=function(data){
-    delete window[cb];
-    const sc=document.getElementById('_bun_sc'); if(sc) sc.remove();
-    if(Array.isArray(data)){
-      try{ localStorage.setItem(BUNDLES_KEY,JSON.stringify(data)); }catch(e){}
-      const hoy=new Date().toISOString().slice(0,10);
-      BUNDLES=data.filter(x=>(!x.d1||hoy>=x.d1)&&(!x.d2||hoy<=x.d2));
-      render();
-    }
-  };
-  const sc=document.createElement('script');
-  sc.id='_bun_sc';
-  sc.src=CLOUD_URL+'?modo=bundles&callback='+cb;
-  sc.onerror=function(){ delete window[cb]; sc.remove(); };
-  document.head.appendChild(sc);
+async function cargarBundlesNube(){
+  let data;
+  try{
+    data = await gasPedir('modo=bundles');
+    if(!Array.isArray(data)) throw new Error('respuesta inválida');
+  }catch(e){ marcarCarga('bundles', false); return; }
+  aplicarBundles(data);
+  render();
+  marcarCarga('bundles', true);
 }
 
-function cargarAvisosNube(){
-  const cb='_cbAv'+Date.now();
-  window[cb]=function(data){
-    delete window[cb];
-    const sc=document.getElementById('_av_sc'); if(sc) sc.remove();
-    if(!Array.isArray(data)) return;
-    const hoy=new Date().toISOString().slice(0,10);
-    const locales=new Set((D.avisos||[]).map(function(a){ return a.titulo; }));
-    data.forEach(function(a){
-      if(locales.has(a.titulo)) return;
-      (D.avisos=D.avisos||[]).unshift(a);
-    });
-    render();
-  };
-  const sc=document.createElement('script');
-  sc.id='_av_sc';
-  sc.src=CLOUD_URL+'?modo=avisos_cloud&callback='+cb;
-  sc.onerror=function(){ delete window[cb]; sc.remove(); };
-  document.head.appendChild(sc);
+async function cargarAvisosNube(){
+  let data;
+  try{
+    data = await gasPedir('modo=avisos_cloud');
+    if(!Array.isArray(data)) throw new Error('respuesta inválida');
+  }catch(e){ marcarCarga('avisos', false); return; }
+  aplicarAvisos(data);
+  render();
+  marcarCarga('avisos', true);
+}
+
+/* Ventas del día de TODA la tienda, para el leaderboard de Assurant.
+   Si el GAS todavía no expone modo=ventas_hoy, no es un error: el tablero se
+   queda con las ventas capturadas en este equipo (ver attPorVendedor). */
+async function cargarVentasNube(){
+  let data;
+  try{ data = await gasPedir('modo=ventas_hoy', { reintentos:0 }); }
+  catch(e){ return; }
+  if(aplicarVentas(data)) render();
+}
+
+/* Todo en un solo viaje (~4 s contra ~20 s de las seis llamadas). Si este GAS
+   no tiene el modo, contesta con la lista de ventas —su else final— así que hay
+   que revisar la FORMA de lo que llega, no solo que llegue. */
+async function cargarTodoNube(){
+  let d;
+  try{
+    d = await gasPedir('modo=todo', { reintentos:1 });
+    if(!_esObj(d) || !_esObj(d.inventario)) throw new Error('sin modo=todo');
+  }catch(e){ return false; }
+
+  aplicarInventario(d.inventario);                             marcarCarga('inventario', true);
+  if(Array.isArray(d.eol))       { aplicarEol(d.eol);          marcarCarga('eol', true); }
+  if(_esObj(d.promos))           { aplicarPromos(d.promos);    marcarCarga('promos', true); }
+  if(Array.isArray(d.bundles))   { aplicarBundles(d.bundles);  marcarCarga('bundles', true); }
+  if(Array.isArray(d.avisos))    { aplicarAvisos(d.avisos);    marcarCarga('avisos', true); }
+  if(Array.isArray(d.apartados)) { APARTADOS = d.apartados;    marcarCarga('apartados', true); }
+  aplicarVentas(d.ventas_hoy);
+  calcDerivados();
+  render();
+  return true;
 }
 
 render();
-cargarInventarioNube();
-cargarEolNube();
-cargarPromosNube();
-cargarBundlesNube();
-cargarAvisosNube();
-cargarApartadosNube();
+actualizarBanner();
+(async function arranque(){
+  if(await cargarTodoNube()) return;
+  // Respaldo: de una en una y espaciadas, porque juntas se pierden en silencio.
+  // Orden por criticidad: primero lo que decide un precio o un cupo frente al
+  // cliente (stock, 50% de EOL, apartados de preventa); los avisos y el
+  // leaderboard pueden esperar.
+  cargarInventarioNube();
+  cargarEolNube();
+  cargarApartadosNube();
+  cargarPromosNube();
+  cargarBundlesNube();
+  cargarAvisosNube();
+  cargarVentasNube();
+})();
 
 // ── Push notifications (OneSignal) ──────────────────────────────
 const ONE_APP_ID = 'db32a1ef-d484-4be3-adfc-2a9e17f7e4f1';
@@ -1452,7 +1660,7 @@ OneSignalDeferred.push(async function(OneSignal){
 
 actualizarCampana();
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('./sw.js?v=83').catch(()=>{});
+  navigator.serviceWorker.register('./sw.js?v=85').catch(()=>{});
 }
 </script>
 </body>
