@@ -335,10 +335,18 @@ function refreshPromos(){
     if(esPromosValido(p)){ PROMOS = p; localStorage.setItem(PROMOKEY, JSON.stringify(p)); }
   }).catch(()=>{});
 }
+// Fecha LOCAL del día. Con toISOString() (UTC) esto se corría un día completo
+// a partir de las 6 pm en México: el último día de una promo se dejaba de
+// aplicar en plena hora pico, y la del día siguiente se aplicaba antes de
+// tiempo. Aquí eso es el precio que se le cobra al cliente.
+function hoyISO(){
+  const d = new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
 // Devuelve la promo si está vigente hoy (por SKU), si no null
 function promoActiva(sku){
   const pr = PROMOS[sku]; if(!pr) return null;
-  const hoy = new Date().toISOString().slice(0,10);
+  const hoy = hoyISO();
   if(pr.d1 && hoy < pr.d1) return null;
   if(pr.d2 && hoy > pr.d2) return null;
   return pr;

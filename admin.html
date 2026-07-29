@@ -796,7 +796,9 @@ function _fmtDateXlsx(val){
   if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
   const m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
   if(m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
-  // número serial de Excel
+  // número serial de Excel. Aquí toISOString() SÍ es lo correcto y no debe
+  // cambiarse a fecha local: el serial se convierte a medianoche UTC, y leerlo
+  // en hora local (UTC-6) devolvería el día anterior.
   if(/^\d+(\.\d+)?$/.test(s)){
     const d=new Date(Math.round((+s-25569)*86400*1000));
     if(!isNaN(d)) return d.toISOString().slice(0,10);
@@ -1451,7 +1453,9 @@ async function delEol(sku){
 /* ===== AVISOS CEA / LEA ===== */
 const MESES_AV={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12};
 function isoAV(y,m,d){ return y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0'); }
-function d7(){ const f=new Date(Date.now()+7*24*60*60*1000); return f.toISOString().slice(0,10); }
+// Vigencia por defecto de un aviso: una semana. Fecha local — con toISOString()
+// (UTC) a partir de las 6 pm en México daba 8 días en vez de 7.
+function d7(){ const f=new Date(Date.now()+7*24*60*60*1000); return isoAV(f.getFullYear(), f.getMonth()+1, f.getDate()); }
 
 async function parseCeaPDF(file){
   if(!file) return;
