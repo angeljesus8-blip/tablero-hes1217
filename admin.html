@@ -112,6 +112,28 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
 
 /* TOAST */
 #toast { position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:10px 22px;border-radius:20px;font-size:13px;font-weight:700;color:#fff;opacity:0;transition:opacity .25s;pointer-events:none;z-index:999;white-space:nowrap; }
+
+/* Recortar la captura antes del OCR. Darle la pantalla completa a Tesseract
+   (menús de Sonar, gráficas, dos tablas) le hace confundir dígitos y perder
+   montos; con solo la tabla, lee bien. */
+#cropWrap { position:fixed;inset:0;background:#111;z-index:200;display:none;flex-direction:column; }
+#cropWrap.on { display:flex; }
+#cropTop { padding:12px 14px;color:#fff;background:#1c1c1c;border-bottom:2px solid var(--rojo); }
+#cropTop h3 { font-size:14px;font-weight:800;margin-bottom:3px; }
+#cropTop p { font-size:11.5px;color:#bbb;line-height:1.35; }
+#cropStage { flex:1;position:relative;overflow:auto;display:flex;align-items:center;justify-content:center;padding:8px;touch-action:none; }
+#cropBox { position:relative;line-height:0; }
+/* La captura se ve COMPLETA de un vistazo: si desbordara habría que hacer
+   scroll para marcar la tabla, y el scroll táctil pelea con el arrastre. */
+#cropImg { max-width:100%;max-height:100%;user-select:none;-webkit-user-drag:none;display:block; }
+#cropShade { position:absolute;inset:0;background:rgba(0,0,0,.55);pointer-events:none; }
+#cropSel { position:absolute;border:2px solid var(--naranja);box-shadow:0 0 0 9999px rgba(0,0,0,.55);display:none;pointer-events:none; }
+#cropBot { padding:10px 14px;background:#1c1c1c;display:flex;gap:8px;align-items:center;flex-wrap:wrap; }
+#cropInfo { color:#bbb;font-size:11.5px;flex:1;min-width:110px; }
+.crop-btn { border:none;border-radius:10px;padding:10px 14px;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer; }
+.crop-ok { background:var(--verde);color:#fff; }
+.crop-ok:disabled { background:#3a3a3a;color:#777;cursor:default; }
+.crop-alt { background:#333;color:#ddd; }
 #toast.show { opacity:1; }
 </style>
 </head>
@@ -329,7 +351,7 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
   <div class="pane" id="pane-comis">
     <div class="card">
       <h2>📊 Captura de "Comisiones HES" (Sonar)</h2>
-      <p class="note">Sube la captura de pantalla de la tabla <b>"Detalle de comisiones por empleado"</b>. La app la lee con OCR y prellena la lista de abajo — siempre revisa los números antes de guardar.</p>
+      <p class="note">Sube la captura de <b>"Detalle de comisiones por empleado"</b>. Puedes capturar la pantalla completa: antes de leerla te pide marcar la zona de la tabla, y eso es justo lo que hace que los montos salgan bien. Aun así, revisa los números antes de guardar.</p>
       <input type="file" id="fileComis" accept="image/*" hidden>
       <div class="filebox" id="fboxComis" tabindex="0" onclick="document.getElementById('fileComis').click()">
         <div class="ph" id="fphComis">📷 Toca para elegir el archivo, o da clic aquí y pega con Ctrl+V</div>
@@ -343,7 +365,7 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
 
     <div class="card" style="margin-top:14px">
       <h2>🛡️ Captura de "Garantías por fechas" (Sonar Attach)</h2>
-      <p class="note">Sube la captura de la tabla de extracobertura. Se cruza automáticamente con la lista de arriba por número de empleado.</p>
+      <p class="note">Sube la captura de la tabla de extracobertura; también te pedirá marcar la zona. Se cruza automáticamente con la lista de arriba por número de empleado.</p>
       <input type="file" id="fileGar" accept="image/*" hidden>
       <div class="filebox" id="fboxGar" tabindex="0" onclick="document.getElementById('fileGar').click()">
         <div class="ph" id="fphGar">📷 Toca para elegir el archivo, o da clic aquí y pega con Ctrl+V</div>
@@ -404,6 +426,27 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
 </div>
 
 <div id="toast"></div>
+
+<!-- Recorte de la captura antes del OCR -->
+<div id="cropWrap">
+  <div id="cropTop">
+    <h3 id="cropTitulo">Marca la tabla</h3>
+    <p>Arrastra un recuadro sobre <b>las filas de la tabla</b> (incluye los encabezados). Deja fuera los menús, las gráficas y las otras tablas — así el lector no confunde los números.</p>
+  </div>
+  <div id="cropStage">
+    <div id="cropBox">
+      <img id="cropImg" alt="Captura a recortar">
+      <div id="cropShade"></div>
+      <div id="cropSel"></div>
+    </div>
+  </div>
+  <div id="cropBot">
+    <span id="cropInfo">Sin zona marcada</span>
+    <button class="crop-btn crop-alt" onclick="cropCancelar()">Cancelar</button>
+    <button class="crop-btn crop-alt" onclick="cropCompleta()">Usar completa</button>
+    <button class="crop-btn crop-ok" id="cropOk" disabled onclick="cropAceptar()">Leer esta zona</button>
+  </div>
+</div>
 
 <script>
 const _cfg  = (function(){ try{ return JSON.parse(localStorage.getItem('hes_store')||'null'); }catch(e){ return null; } })();
@@ -1599,6 +1642,121 @@ async function eliminarAviso(id){
    ================================================================ */
 let comisionesDraft = {};
 
+/* ================= RECORTE PREVIO AL OCR =================
+   Medido con la captura real de "Comisiones HES": dándole la pantalla completa,
+   Tesseract acierta 10 de 12 valores (una venta con un dígito cambiado —$60 mil
+   de diferencia— y otra perdida por completo). Recortando solo la tabla:
+   12 de 12, y además reconoce los puestos. El modo PSM 6 asume que la imagen es
+   UN bloque de texto, así que todo lo que no sea la tabla lo estorba.
+   Devuelve una promesa: el recorte, la imagen completa, o null si se cancela. */
+let _cropResolver = null, _cropFile = null, _cropSel = null, _cropDrag = null;
+
+function pedirRecorte(file, titulo){
+  return new Promise(function(resolve){
+    _cropResolver = resolve; _cropFile = file; _cropSel = null; _cropDrag = null;
+    document.getElementById('cropTitulo').textContent = titulo;
+    const img = document.getElementById('cropImg');
+    img.src = URL.createObjectURL(file);
+    document.getElementById('cropSel').style.display = 'none';
+    document.getElementById('cropShade').style.display = 'block';
+    document.getElementById('cropOk').disabled = true;
+    document.getElementById('cropInfo').textContent = 'Sin zona marcada';
+    document.getElementById('cropWrap').classList.add('on');
+  });
+}
+
+function _cropCerrar(valor){
+  const img = document.getElementById('cropImg');
+  if(img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
+  document.getElementById('cropWrap').classList.remove('on');
+  const r = _cropResolver; _cropResolver = null; _cropFile = null;
+  if(r) r(valor);
+}
+function cropCancelar(){ _cropCerrar(null); }
+function cropCompleta(){ _cropCerrar(_cropFile); }
+
+// Coordenadas del puntero relativas a la imagen mostrada (mouse o dedo)
+function _cropPunto(ev){
+  const img = document.getElementById('cropImg');
+  const r = img.getBoundingClientRect();
+  const t = (ev.touches && ev.touches[0]) || (ev.changedTouches && ev.changedTouches[0]) || ev;
+  return {
+    x: Math.max(0, Math.min(r.width,  t.clientX - r.left)),
+    y: Math.max(0, Math.min(r.height, t.clientY - r.top))
+  };
+}
+
+function _cropPintar(){
+  const sel = document.getElementById('cropSel');
+  const img = document.getElementById('cropImg');
+  if(!_cropSel){ sel.style.display='none'; document.getElementById('cropShade').style.display='block'; return; }
+  const { x0, y0, x1, y1 } = _cropSel;
+  sel.style.left = Math.min(x0,x1) + 'px';
+  sel.style.top  = Math.min(y0,y1) + 'px';
+  sel.style.width  = Math.abs(x1-x0) + 'px';
+  sel.style.height = Math.abs(y1-y0) + 'px';
+  sel.style.display = 'block';
+  // La sombra la pinta el box-shadow gigante de #cropSel; la general estorba
+  document.getElementById('cropShade').style.display = 'none';
+  // Tamaño en píxeles REALES de la imagen, que es lo que verá el OCR
+  const esc = img.clientWidth ? img.naturalWidth / img.clientWidth : 1;
+  const w = Math.round(Math.abs(x1-x0) * esc), h = Math.round(Math.abs(y1-y0) * esc);
+  const chico = w < 300 || h < 60;
+  document.getElementById('cropInfo').innerHTML = w + ' × ' + h + ' px' +
+    (chico ? ' <b style="color:var(--naranja)">— zona muy chica, ¿alcanzas a leer los números?</b>' : '');
+  document.getElementById('cropOk').disabled = (w < 40 || h < 20);
+}
+
+(function cropEventos(){
+  const stage = document.getElementById('cropStage');
+  function inicio(ev){
+    if(ev.target.id !== 'cropImg') return;
+    ev.preventDefault();
+    const p = _cropPunto(ev);
+    _cropDrag = true; _cropSel = { x0:p.x, y0:p.y, x1:p.x, y1:p.y };
+    _cropPintar();
+  }
+  function mover(ev){
+    if(!_cropDrag) return;
+    ev.preventDefault();
+    const p = _cropPunto(ev);
+    _cropSel.x1 = p.x; _cropSel.y1 = p.y;
+    _cropPintar();
+  }
+  function fin(){ _cropDrag = false; }
+  stage.addEventListener('mousedown', inicio);
+  stage.addEventListener('mousemove', mover);
+  window.addEventListener('mouseup', fin);
+  stage.addEventListener('touchstart', inicio, {passive:false});
+  stage.addEventListener('touchmove', mover, {passive:false});
+  window.addEventListener('touchend', fin);
+})();
+
+function cropAceptar(){
+  const img = document.getElementById('cropImg');
+  // Sin selección, o sin layout de la imagen (ventana oculta, imagen aún sin
+  // pintar): mejor mandar la captura entera que un recorte vacío.
+  if(!_cropSel || !img.clientWidth){ _cropCerrar(_cropFile); return; }
+  const esc = img.naturalWidth / img.clientWidth;   // pantalla -> píxeles reales
+  const { x0, y0, x1, y1 } = _cropSel;
+  const sx = Math.round(Math.min(x0,x1) * esc), sy = Math.round(Math.min(y0,y1) * esc);
+  const sw = Math.round(Math.abs(x1-x0) * esc),  sh = Math.round(Math.abs(y1-y0) * esc);
+  const cv = document.createElement('canvas');
+  cv.width = sw; cv.height = sh;
+  // Fondo blanco: si la captura es PNG con transparencia, el negro por defecto
+  // deja el texto ilegible para el OCR.
+  const cx = cv.getContext('2d');
+  cx.fillStyle = '#fff'; cx.fillRect(0,0,sw,sh);
+  cx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+  const nombre = (_cropFile && _cropFile.name ? _cropFile.name.replace(/\.\w+$/,'') : 'captura') + ' (recorte).png';
+  cv.toBlob(function(blob){
+    let f;
+    try{ f = new File([blob], nombre, { type:'image/png' }); }
+    catch(e){ f = blob; f.name = nombre; }   // navegadores sin constructor File
+    _cropCerrar(f);
+  }, 'image/png');
+}
+
 let tesseractLoading = null;
 function loadTesseract(){
   if(window.Tesseract) return Promise.resolve();
@@ -1967,8 +2125,19 @@ async function cargarComisionesCloud(){
   }
 }
 
-document.getElementById('fileComis').onchange = function(e){ const f=e.target.files&&e.target.files[0]; if(f) procesarComisionesImg(f); };
-document.getElementById('fileGar').onchange = function(e){ const f=e.target.files&&e.target.files[0]; if(f) procesarGarantiasImg(f); };
+/* Toda imagen pasa primero por el recortador — es lo que hace la diferencia
+   entre leer bien la tabla y confundir montos (ver nota en pedirRecorte). */
+async function recortarYProcesar(file, cual){
+  const esGar = cual === 'gar';
+  const zona = await pedirRecorte(file, esGar
+    ? 'Marca la tabla de Garantías por fechas'
+    : 'Marca la tabla "Detalle de comisiones por empleado"');
+  if(!zona) return;                      // canceló
+  if(esGar) procesarGarantiasImg(zona); else procesarComisionesImg(zona);
+}
+
+document.getElementById('fileComis').onchange = function(e){ const f=e.target.files&&e.target.files[0]; if(f) recortarYProcesar(f,'comis'); e.target.value=''; };
+document.getElementById('fileGar').onchange = function(e){ const f=e.target.files&&e.target.files[0]; if(f) recortarYProcesar(f,'gar'); e.target.value=''; };
 
 /* Pegar captura directo del portapapeles (Ctrl+V) — evita depender de guardar
    la imagen como archivo antes de subirla, útil cuando el recorte de pantalla
@@ -1983,13 +2152,13 @@ document.getElementById('fboxComis').addEventListener('paste', function(e){
   const file = extraerImagenPegada(e);
   if(!file) return;
   e.preventDefault();
-  procesarComisionesImg(file);
+  recortarYProcesar(file, 'comis');
 });
 document.getElementById('fboxGar').addEventListener('paste', function(e){
   const file = extraerImagenPegada(e);
   if(!file) return;
   e.preventDefault();
-  procesarGarantiasImg(file);
+  recortarYProcesar(file, 'gar');
 });
 
 /* ================================================================
