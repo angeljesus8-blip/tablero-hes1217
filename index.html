@@ -117,12 +117,14 @@
 <div id="scPin" class="sc">
   <img class="auth-logo" src="logo_odemas.png" alt="Odemás">
   <h1 class="auth-title">Bienvenido</h1>
-  <p class="auth-sub">Ingresa el PIN de tu tienda</p>
+  <p class="auth-sub">Ingresa tu número de empleado<br><span style="font-size:11px;color:#bbb">o el PIN de la tienda y luego ✓</span></p>
   <div class="pin-dots">
     <div class="pin-dot" id="pd0"></div>
     <div class="pin-dot" id="pd1"></div>
     <div class="pin-dot" id="pd2"></div>
     <div class="pin-dot" id="pd3"></div>
+    <div class="pin-dot" id="pd4"></div>
+    <div class="pin-dot" id="pd5"></div>
   </div>
   <div class="pin-err" id="pinErr"></div>
   <div class="numpad">
@@ -235,7 +237,13 @@ function renderMenuCards(role) {
 
 function applyStoreConfig(cfg, role) {
   document.getElementById('storeLabel').textContent = 'HES ' + cfg.store_id + ' · ' + cfg.nombre;
-  document.getElementById('storeSub').textContent = (cfg.ciudad || 'Odemás') + ' · Menú del equipo';
+  // Si entró con su número de empleado, se le saluda por su nombre
+  let emp = null;
+  try { emp = JSON.parse(localStorage.getItem('hes_empleado')||'null'); } catch(e) {}
+  const primerNombre = emp && emp.nombre ? emp.nombre.split(' ').slice(0,2).join(' ') : '';
+  document.getElementById('storeSub').textContent = primerNombre
+    ? ('Hola, ' + primerNombre)
+    : ((cfg.ciudad || 'Odemás') + ' · Menú del equipo');
   document.getElementById('footerTxt').textContent = 'Odemás · Grupo Gigante — uso interno HES ' + cfg.store_id;
   const badge = document.getElementById('roleBadge');
   badge.textContent = role === 'gerente' ? 'Gerente' : 'Asesor';
@@ -255,14 +263,25 @@ function showScreen(name){ sc(name); }
 function showErr(id, msg) { const el=document.getElementById(id); el.textContent=msg; el.classList.add('show'); }
 function hideErr(id) { document.getElementById(id).classList.remove('show'); }
 
-/* ── PIN (asesores) ── */
+/* ── PIN (asesores) ──
+   Cada quien entra con SU número de empleado (6 dígitos). El PIN de la tienda
+   (4 dígitos) sigue aceptándose como respaldo mientras se termina de registrar
+   a todo el equipo: con 4 dígitos hay que darle al ✓, con 6 entra solo. */
+const PIN_LARGO = 6;
 let pinVal = '';
+function pinLimpiar() {
+  pinVal = '';
+  for (let i=0;i<PIN_LARGO;i++) {
+    const d = document.getElementById('pd'+i);
+    if (d) d.classList.remove('on');
+  }
+}
 function pinKey(d) {
-  if (pinVal.length >= 4) return;
+  if (pinVal.length >= PIN_LARGO) return;
   pinVal += d;
   document.getElementById('pd'+(pinVal.length-1)).classList.add('on');
   document.getElementById('pinErr').textContent = '';
-  if (pinVal.length === 4) pinCheck();
+  if (pinVal.length === PIN_LARGO) pinCheck();
 }
 function pinDel() {
   if (!pinVal.length) return;
@@ -272,30 +291,52 @@ function pinDel() {
 async function pinCheck() {
   const pin = pinVal;
   document.getElementById('pinErr').textContent = '';
-  if (!sb) { document.getElementById('pinErr').textContent = 'Sin conexión. Intenta de nuevo.'; pinVal=''; for(let i=0;i<4;i++) document.getElementById('pd'+i).classList.remove('on'); return; }
+  if (pin.length < 4) { document.getElementById('pinErr').textContent = 'Escribe tu número de empleado'; return; }
+  if (!sb) { document.getElementById('pinErr').textContent = 'Sin conexión. Intenta de nuevo.'; pinLimpiar(); return; }
   /* El PIN se valida EN EL SERVIDOR (función login_asesor), que devuelve solo
      lo que la app del asesor necesita. Antes se hacía un select('*') sobre
      `tiendas`, que bajaba al teléfono el admin_pin y las URLs de la hoja.
      Si la función todavía no está creada en Supabase, se usa el camino viejo
      para no dejar al equipo sin entrar (ver supabase_acceso.sql). */
-  let data = null;
-  const rpc = await sb.rpc('login_asesor', { p_pin: pin });
-  if (rpc.error) {
-    console.warn('login_asesor no disponible, usando el modo anterior:', rpc.error.message);
-    const vieja = await sb.from('tiendas').select('store_id,nombre,ciudad,gas_url,vendedores').eq('store_id', pin).eq('activo', true).maybeSingle();
-    data = vieja.data;
+  /* Primero se prueba como número de empleado (identifica a la persona) y luego
+     como PIN de tienda. Todo se valida EN EL SERVIDOR: antes se hacía un
+     select('*') sobre `tiendas` y el teléfono se llevaba el admin_pin. */
+  const uno = r => (Array.isArray(r) ? r[0] : r) || null;
+  let data = null, quien = null;
+
+  const porEmp = await sb.rpc('login_empleado', { p_pin: pin });
+  if (!porEmp.error) {
+    const e = uno(porEmp.data);
+    if (e) {
+      data = e;
+      quien = { empno:e.emp_no, nombre:e.emp_nombre, puesto:e.emp_puesto||'' };
+    }
   } else {
-    data = Array.isArray(rpc.data) ? rpc.data[0] : rpc.data;
+    console.warn('login_empleado no disponible todavía:', porEmp.error.message);
   }
+
   if (!data) {
-    document.getElementById('pinErr').textContent = 'PIN incorrecto, intenta de nuevo';
-    pinVal = '';
-    for (let i=0;i<4;i++) document.getElementById('pd'+i).classList.remove('on');
+    const porTienda = await sb.rpc('login_asesor', { p_pin: pin });
+    if (porTienda.error) {
+      console.warn('login_asesor no disponible, usando el modo anterior:', porTienda.error.message);
+      const vieja = await sb.from('tiendas').select('store_id,nombre,ciudad,gas_url,vendedores').eq('store_id', pin).eq('activo', true).maybeSingle();
+      data = vieja.data;
+    } else {
+      data = uno(porTienda.data);
+    }
+  }
+
+  if (!data) {
+    document.getElementById('pinErr').textContent = 'No reconozco ese número, intenta de nuevo';
+    pinLimpiar();
     return;
   }
   const cfg = { store_id:data.store_id, nombre:data.nombre, ciudad:data.ciudad||'', gas_url:data.gas_url||'', vendedores:Array.isArray(data.vendedores)?data.vendedores:[] };
   localStorage.setItem('hes_store', JSON.stringify(cfg));
   localStorage.setItem('hes_role', 'asesor');
+  // Quién entró: lo usan el tablero y Captura de Series para no preguntar el nombre
+  if (quien) localStorage.setItem('hes_empleado', JSON.stringify(quien));
+  else localStorage.removeItem('hes_empleado');
   applyStoreConfig(cfg, 'asesor');
   sc('menu');
 }
@@ -357,8 +398,8 @@ async function doLogout() {
   if (role === 'gerente' && sb) await sb.auth.signOut();
   localStorage.removeItem('hes_store');
   localStorage.removeItem('hes_role');
-  pinVal = '';
-  for (let i=0;i<4;i++) document.getElementById('pd'+i).classList.remove('on');
+  localStorage.removeItem('hes_empleado');
+  pinLimpiar();
   sc('pin');
 }
 
