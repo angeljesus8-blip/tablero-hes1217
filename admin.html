@@ -351,10 +351,10 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
   <div class="pane" id="pane-comis">
     <div class="card">
       <h2>📊 Captura de "Comisiones HES" (Sonar)</h2>
-      <p class="note">Sube la captura de <b>"Detalle de comisiones por empleado"</b>. Puedes capturar la pantalla completa: antes de leerla te pide marcar la zona de la tabla, y eso es justo lo que hace que los montos salgan bien. Aun así, revisa los números antes de guardar.</p>
+      <p class="note"><b>Lo más confiable:</b> en Sonar selecciona la tabla con el mouse, <b>Ctrl+C</b>, da clic en el cuadro de abajo y <b>Ctrl+V</b>. Los datos entran exactos y con el nombre completo — sin OCR y sin revisar dígitos. Si prefieres la captura de pantalla, también sirve: te pedirá marcar la zona de la tabla, y ahí sí conviene revisar los números.</p>
       <input type="file" id="fileComis" accept="image/*" hidden>
       <div class="filebox" id="fboxComis" tabindex="0" onclick="document.getElementById('fileComis').click()">
-        <div class="ph" id="fphComis">📷 Toca para elegir el archivo, o da clic aquí y pega con Ctrl+V</div>
+        <div class="ph" id="fphComis">📋 Da clic aquí y pega con Ctrl+V la tabla copiada de Sonar (o una captura)</div>
       </div>
       <div id="comisOcrStatus" style="display:none;text-align:center;padding:10px;font-size:12px;color:#888;font-weight:700">Leyendo imagen…</div>
       <details id="comisDebugWrap" style="margin-top:8px;display:none">
@@ -365,10 +365,10 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
 
     <div class="card" style="margin-top:14px">
       <h2>🛡️ Captura de "Garantías por fechas" (Sonar Attach)</h2>
-      <p class="note">Sube la captura de la tabla de extracobertura; también te pedirá marcar la zona. Se cruza automáticamente con la lista de arriba por número de empleado.</p>
+      <p class="note">Igual que arriba: <b>Ctrl+C</b> en Sonar y <b>Ctrl+V</b> aquí es lo más seguro (esta tabla es la que peor se lee por OCR, por sus celdas de color). Se cruza automáticamente con la lista de arriba por número de empleado.</p>
       <input type="file" id="fileGar" accept="image/*" hidden>
       <div class="filebox" id="fboxGar" tabindex="0" onclick="document.getElementById('fileGar').click()">
-        <div class="ph" id="fphGar">📷 Toca para elegir el archivo, o da clic aquí y pega con Ctrl+V</div>
+        <div class="ph" id="fphGar">📋 Da clic aquí y pega con Ctrl+V la tabla copiada de Sonar (o una captura)</div>
       </div>
       <div id="garOcrStatus" style="display:none;text-align:center;padding:10px;font-size:12px;color:#888;font-weight:700">Leyendo imagen…</div>
       <details id="garDebugWrap" style="margin-top:8px;display:none">
@@ -1642,6 +1642,139 @@ async function eliminarAviso(id){
    ================================================================ */
 let comisionesDraft = {};
 
+/* ================= PEGAR LA TABLA COMO TEXTO (sin OCR) =================
+   Lo mejor que le puede pasar a estos reportes: en Sonar se selecciona la tabla
+   con el mouse, Ctrl+C, y aquí Ctrl+V. Los informes son HTML, así que el
+   portapapeles trae los valores EXACTOS —y los nombres completos, no truncados
+   como en la captura—. Cero OCR, cero revisar dígitos.
+   Al copiar, cada celda cae en su propia línea. El orden de columnas se toma de
+   la fila de encabezados, que también se copia, en vez de suponerlo: así da
+   igual si el reporte trae o no las columnas "% Δ". */
+
+// Número en formato de Sonar: "$1.971.240,01" -> 1971240.01 · "58.91%" -> 58.91
+// Con coma, la coma es el decimal y los puntos son miles. Sin coma, el punto es
+// decimal salvo que le sigan 3 dígitos ("1.971.240" son miles).
+function numMX(s){
+  let t = String(s==null?'':s).replace(/[$%\s ↑↓▲▼]/g,'').trim();
+  if(!t || !/\d/.test(t)) return null;
+  const neg = /^-/.test(t);
+  t = t.replace(/^-/,'');
+  if(t.indexOf(',') >= 0){
+    t = t.replace(/\./g,'').replace(',', '.');
+  }else{
+    const m = t.match(/\.(\d+)$/);
+    if(m && m[1].length === 3) t = t.replace(/\./g,'');
+  }
+  const n = parseFloat(t);
+  return isNaN(n) ? null : (neg ? -n : n);
+}
+
+// Traduce cada encabezado copiado al campo que guardamos; null = columna que no
+// nos interesa (las "% Δ", niveles, etc.) pero que sí ocupa posición.
+function campoDeEncabezado(h){
+  const n = normTxt(h).replace(/[^A-Z%$ ]/g,'').replace(/\s+/g,' ').trim();
+  if(!n || n === '%' || n === '% A' || n === '%A' || n === 'A') return null;
+  if(n === 'TIENDA') return 'tienda';
+  if(n.indexOf('NO EMPLEADO') === 0) return 'empNo';
+  if(n.indexOf('NOMBRE EMPLEADO') === 0) return 'nombre';
+  if(n === 'PUESTO') return 'puesto';
+  if(n === 'VENTA') return 'venta';
+  if(n.indexOf('% PPTO') === 0) return 'pptoPct';
+  if(n.indexOf('ALCANCE') === 0) return 'alcance';
+  if(n.replace(/ /g,'').indexOf('TDAEMPLEADO') === 0) return 'tdaEmpleado';
+  if(n.indexOf('% GARANTIAS') === 0) return 'garantiaPct';
+  if(n.indexOf('PZAS GARANTIA') === 0) return 'garantiaPzas';
+  if(n.indexOf('PZAS ELEGIBLE') === 0) return 'garantiaElegible';
+  if(n.indexOf('$ GARANTIA') === 0) return 'garantiaMonto';
+  return null;
+}
+/* ¿Esta línea ya es un dato y no un encabezado? Marca dónde termina la fila de
+   encabezados: los que no nos interesan ("Tipo Aplicacion", "Nivel de comision")
+   igual tienen que contarse para no desalinear las columnas. */
+function pareceDato(l){
+  const s = String(l||'').trim();
+  return /^\d+\.$/.test(s)                      // "1." (numeración de Attach)
+      || /^\d{3,6}\s*-\s*\d{4,7}\s*-/.test(s)   // "1217-973345-NOMBRE"
+      || /^\$\s*\d/.test(s)                     // "$232.245,13" (pero NO "$ Garantía")
+      || /^-?[\d.,]+\s*%?$/.test(s);            // "1217", "58.91%", "40,54 %"
+}
+
+/* Convierte el texto pegado en filas de empleado. null si no reconoce una tabla
+   de Sonar. Se queda con la PRIMERA aparición de cada empleado y reporta las
+   repetidas, porque el informe trae un renglón por periodo. */
+function parsearTablaPegada(texto){
+  const lineas = String(texto||'').split(/\r?\n/).map(s=>s.trim()).filter(s=>s!=='');
+  // Los encabezados: arrancan en la primera columna reconocida y terminan donde
+  // empiezan los datos. Las desconocidas se guardan como null (ocupan posición).
+  let ini = -1, cols = null;
+  for(let i=0; i<lineas.length; i++){
+    if(!campoDeEncabezado(lineas[i]) || pareceDato(lineas[i])) continue;
+    const c = [];
+    let j = i;
+    for(; j<lineas.length && !pareceDato(lineas[j]); j++) c.push(campoDeEncabezado(lineas[j]) || null);
+    if(c.filter(Boolean).length >= 3){ ini = j; cols = c; break; }
+  }
+  if(!cols) return null;
+
+  const tipo = cols.indexOf('garantiaPct') >= 0 ? 'attach' : 'comisiones';
+  const N = cols.length;
+  const filas = [], vistos = {}, repetidos = [];
+  let i = ini;
+  while(i < lineas.length){
+    if(/^\d+\.$/.test(lineas[i])){ i++; continue; }   // numeración de fila de Attach
+    if(i + N > lineas.length) break;
+    const celdas = lineas.slice(i, i + N);
+    const r = {};
+    cols.forEach(function(campo, k){ if(campo) r[campo] = celdas[k]; });
+    i += N;
+
+    let empNo = null, nombre = null;
+    if(tipo === 'attach'){
+      const m = String(r.tdaEmpleado||'').match(/^\s*(\d{3,6})\s*-\s*(\d{4,7})\s*-\s*(.+)$/);
+      if(!m) continue;
+      empNo = m[2]; nombre = m[3].trim();
+    }else{
+      if(!/^\d{4,7}$/.test(String(r.empNo||'').trim())) continue;
+      empNo = String(r.empNo).trim(); nombre = String(r.nombre||'').trim();
+    }
+    nombre = nombre.replace(/#/g, 'Ñ');   // Sonar manda la Ñ corrupta: "SALDA#A"
+    if(vistos[empNo]){ if(repetidos.indexOf(nombre)<0) repetidos.push(nombre||empNo); continue; }
+    vistos[empNo] = true;
+    filas.push({ empNo:empNo, nombre:nombre, crudo:r });
+  }
+  return filas.length ? { tipo:tipo, filas:filas, repetidos:repetidos } : null;
+}
+
+/* Vuelca lo parseado al borrador que ya usa la vista previa editable. */
+function aplicarTablaPegada(res){
+  let n = 0;
+  res.filas.forEach(function(f){
+    const rec = asegurarFila(f.empNo);
+    if(f.nombre){ rec.nombre = tituloCase(f.nombre); rec.nombreCompleto = true; }
+    const c = f.crudo;
+    if(res.tipo === 'comisiones'){
+      rec.venta    = numMX(c.venta);
+      rec.pptoPct  = numMX(c.pptoPct);
+      rec.alcance  = numMX(c.alcance);
+      // El puesto de Sonar ("SUBGERENTE TIENDA RS") se acerca al de la lista
+      const p = normTxt(c.puesto||'');
+      const hit = PUESTOS_CONOCIDOS.filter(function(x){ return p.indexOf(normTxt(x).split(' ')[0]) === 0; })[0];
+      if(hit) rec.puesto = hit;
+    }else{
+      rec.garantiaPct      = numMX(c.garantiaPct);
+      rec.garantiaPzas     = numMX(c.garantiaPzas);
+      rec.garantiaElegible = numMX(c.garantiaElegible);
+      rec.garantiaMonto    = numMX(c.garantiaMonto);
+    }
+    n++;
+  });
+  renderComisPreview();
+  const nombre = res.tipo === 'comisiones' ? 'Comisiones' : 'Extracobertura';
+  let msg = n + ' fila(s) de ' + nombre + ' leídas del texto pegado ✓ (sin OCR)';
+  if(res.repetidos.length) msg += ' — ' + res.repetidos.length + ' empleado(s) venían repetidos por periodo: se tomó el primer renglón';
+  toast(msg, true);
+}
+
 /* ================= RECORTE PREVIO AL OCR =================
    Medido con la captura real de "Comisiones HES": dándole la pantalla completa,
    Tesseract acierta 10 de 12 valores (una venta con un dígito cambiado —$60 mil
@@ -2248,18 +2381,22 @@ function extraerImagenPegada(e){
   for(const it of items){ if(it.type && it.type.indexOf('image/')===0) return it.getAsFile(); }
   return null;
 }
-document.getElementById('fboxComis').addEventListener('paste', function(e){
+/* Al pegar: si viene TEXTO de una tabla de Sonar se usa tal cual (exacto, sin
+   OCR); si viene una imagen, se recorta y se lee con OCR. Da igual en cuál de
+   las dos cajas se pegue: el encabezado dice si es Comisiones o Extracobertura. */
+function alPegar(e, cual){
+  const texto = e.clipboardData && e.clipboardData.getData('text/plain');
+  if(texto && texto.trim().length > 20){
+    const res = parsearTablaPegada(texto);
+    if(res){ e.preventDefault(); aplicarTablaPegada(res); return; }
+  }
   const file = extraerImagenPegada(e);
   if(!file) return;
   e.preventDefault();
-  recortarYProcesar(file, 'comis');
-});
-document.getElementById('fboxGar').addEventListener('paste', function(e){
-  const file = extraerImagenPegada(e);
-  if(!file) return;
-  e.preventDefault();
-  recortarYProcesar(file, 'gar');
-});
+  recortarYProcesar(file, cual);
+}
+document.getElementById('fboxComis').addEventListener('paste', function(e){ alPegar(e,'comis'); });
+document.getElementById('fboxGar').addEventListener('paste', function(e){ alPegar(e,'gar'); });
 
 /* ================================================================
    TAB CONFIG — Configuración de tienda
