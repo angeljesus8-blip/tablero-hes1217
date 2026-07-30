@@ -225,8 +225,13 @@ const CARDS = [
 ];
 
 function renderMenuCards(role) {
+  // La tarjeta de Admin la ven el gerente (con su correo) y quien tenga el
+  // permiso marcado en la base — hoy Ángel y Miguel, el subgerente.
+  let emp = null;
+  try { emp = JSON.parse(localStorage.getItem('hes_empleado')||'null'); } catch(e) {}
+  const puedeAdmin = role === 'gerente' || !!(emp && emp.admin);
   const html = CARDS
-    .filter(c => !c.soloGerente || role === 'gerente')
+    .filter(c => !c.soloGerente || puedeAdmin)
     .map(c => `<a class="card ${c.cls}" href="${c.href}"${c.ext?' target="_blank" rel="noopener"':''}>
       <div class="ic">${c.icon}</div>
       <div><h2>${c.label}${c.ext?'<span class="ext"> ↗ abre fuera</span>':''}</h2><p>${c.desc}</p></div>
@@ -240,7 +245,14 @@ function applyStoreConfig(cfg, role) {
   // Si entró con su número de empleado, se le saluda por su nombre
   let emp = null;
   try { emp = JSON.parse(localStorage.getItem('hes_empleado')||'null'); } catch(e) {}
-  const primerNombre = emp && emp.nombre ? emp.nombre.split(' ').slice(0,2).join(' ') : '';
+  // Dos palabras, pero sin cortar en una partícula ("Ángel de Jesús" -> "Ángel",
+  // no "Ángel de").
+  const PARTICULAS = ['de','del','la','las','los','y'];
+  let primerNombre = '';
+  if (emp && emp.nombre) {
+    const p = emp.nombre.trim().split(/\s+/);
+    primerNombre = (p[1] && PARTICULAS.indexOf(p[1].toLowerCase()) < 0) ? p[0]+' '+p[1] : p[0];
+  }
   document.getElementById('storeSub').textContent = primerNombre
     ? ('Hola, ' + primerNombre)
     : ((cfg.ciudad || 'Odemás') + ' · Menú del equipo');
@@ -319,7 +331,9 @@ async function pinCheck(auto) {
     const e = uno(porEmp.data);
     if (e) {
       data = e;
-      quien = { empno:e.emp_no, nombre:e.emp_nombre, puesto:e.emp_puesto||'' };
+      // emp_admin: quién puede abrir Admin (el gerente y el subgerente). Es una
+      // pista para pintar el menú; Admin lo vuelve a preguntar al servidor.
+      quien = { empno:e.emp_no, nombre:e.emp_nombre, puesto:e.emp_puesto||'', admin: e.emp_admin === true };
     }
   } else {
     console.warn('login_empleado no disponible todavía:', porEmp.error.message);
