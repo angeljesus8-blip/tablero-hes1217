@@ -165,21 +165,24 @@
   <div class="auth-form" style="max-width:340px">
     <button class="auth-back" onclick="showScreen('login')">← Volver</button>
     <img class="auth-logo" src="logo_odemas.png" alt="Odemás" style="margin:4px auto 0;display:block">
-    <h1 class="auth-title" style="margin-bottom:0">Registrar tienda</h1>
-    <p class="auth-sub" style="margin-bottom:12px">Crea la cuenta de gerente de tu tienda</p>
+    <h1 class="auth-title" id="regTitulo" style="margin-bottom:0">Registrar tienda</h1>
+    <p class="auth-sub" id="regSub" style="margin-bottom:12px">Crea la cuenta de gerente de tu tienda</p>
     <div class="auth-err" id="regErr"></div>
     <div class="auth-ok"  id="regOk"></div>
     <input class="auth-inp" id="regEmail"  type="email"    placeholder="Correo de la tienda">
     <input class="auth-inp" id="regPass"   type="password" placeholder="Contraseña (mín. 6 caracteres)">
     <input class="auth-inp" id="regPass2"  type="password" placeholder="Confirmar contraseña">
-    <p class="auth-sep">— datos de la tienda —</p>
-    <div class="auth-row2">
-      <input class="auth-inp" id="regId"     type="text" placeholder="ID · ej: 1218" inputmode="numeric" maxlength="6">
-      <input class="auth-inp" id="regCiudad" type="text" placeholder="Ciudad">
+    <div id="regDatosTienda">
+      <p class="auth-sep">— datos de la tienda —</p>
+      <div class="auth-row2">
+        <input class="auth-inp" id="regId"     type="text" placeholder="ID · ej: 1218" inputmode="numeric" maxlength="6">
+        <input class="auth-inp" id="regCiudad" type="text" placeholder="Ciudad">
+      </div>
+      <input class="auth-inp" id="regNombre" type="text" placeholder="Nombre · ej: Angelópolis">
     </div>
-    <input class="auth-inp" id="regNombre" type="text" placeholder="Nombre · ej: Angelópolis">
     <button class="auth-btn" id="btnReg" onclick="doRegister()">Crear cuenta</button>
-    <p class="auth-hint">Recibirás un correo de confirmación antes de poder iniciar sesión.</p>
+    <p class="auth-hint" id="regHint">Recibirás un correo de confirmación antes de poder iniciar sesión.</p>
+    <span class="auth-link" id="regCambiar" onclick="cambiarModoRegistro()">Ya trabajo en una tienda registrada →</span>
   </div>
 </div>
 
@@ -379,20 +382,64 @@ async function doLogin() {
   const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
   btn.disabled = false; btn.textContent = 'Iniciar sesión';
   if (error) { showErr('loginErr', error.message.includes('Invalid') ? 'Correo o contraseña incorrectos' : error.message); return; }
-  // Columnas explícitas: el gerente sí puede leer su fila, pero el admin_pin no
-  // tiene por qué acabar en el localStorage del dispositivo.
-  const { data: tienda } = await sb.from('tiendas')
-    .select('store_id,nombre,ciudad,gas_url,sheet_url,hoja_auth,vendedores')
-    .eq('user_id', data.user.id).single();
-  if (!tienda) { showErr('loginErr', 'Tu cuenta no tiene una tienda asignada. Regístrala primero.'); return; }
+  /* Dos clases de cuenta: la dueña de la tienda (el correo de tienda) y la de
+     alguien del equipo con su propio correo —el subgerente—. La segunda no
+     aparece en `tiendas`, así que se busca su ficha por correo y se vincula. */
+  const COLS = 'store_id,nombre,ciudad,gas_url,sheet_url,hoja_auth,vendedores';
+  let tienda = (await sb.from('tiendas').select(COLS).eq('user_id', data.user.id).maybeSingle()).data;
+  let ficha = null;
+
+  if (!tienda) {
+    const v = await sb.rpc('vincular_mi_cuenta');
+    const r = v.data;
+    if (r && r.ok) {
+      ficha = r;
+      tienda = (await sb.from('tiendas').select(COLS).eq('store_id', r.store_id).maybeSingle()).data;
+    } else if (v.error) {
+      console.warn('vincular_mi_cuenta no disponible:', v.error.message);
+    }
+  }
+  if (!tienda) {
+    showErr('loginErr', ficha
+      ? 'Tu cuenta quedó vinculada pero no pude leer la tienda. Avisa al gerente.'
+      : 'Este correo no está dado de alta en ninguna tienda. Pide al gerente que registre tu correo en Admin → Equipo.');
+    return;
+  }
   const cfg = { store_id:tienda.store_id, nombre:tienda.nombre, ciudad:tienda.ciudad||'', gas_url:tienda.gas_url||'', sheet_url:tienda.sheet_url||'', hoja_auth:tienda.hoja_auth||'', vendedores:Array.isArray(tienda.vendedores)?tienda.vendedores:[] };
+  // Quien entra por su ficha se identifica igual que si hubiera usado su número
+  const rol = (!ficha || ficha.admin) ? 'gerente' : 'asesor';
   localStorage.setItem('hes_store', JSON.stringify(cfg));
-  localStorage.setItem('hes_role', 'gerente');
-  applyStoreConfig(cfg, 'gerente');
+  localStorage.setItem('hes_role', rol);
+  if (ficha) localStorage.setItem('hes_empleado', JSON.stringify({ empno:ficha.empno, nombre:ficha.nombre, puesto:'', admin: ficha.admin === true }));
+  else localStorage.removeItem('hes_empleado');
+  applyStoreConfig(cfg, rol);
   sc('menu');
 }
 
-/* ── Registro ── */
+/* ── Registro ──
+   Dos casos: quien registra una tienda nueva (crea la fila en `tiendas`) y
+   quien ya trabaja en una registrada —el subgerente— y solo necesita su cuenta:
+   su ficha ya existe, el gerente puso su correo en Admin → Equipo, y al entrar
+   se vincula sola. */
+let _modoEquipo = false;
+function cambiarModoRegistro() {
+  _modoEquipo = !_modoEquipo;
+  document.getElementById('regTitulo').textContent = _modoEquipo ? 'Crear mi cuenta' : 'Registrar tienda';
+  document.getElementById('regSub').textContent = _modoEquipo
+    ? 'Para quien ya trabaja en una tienda registrada'
+    : 'Crea la cuenta de gerente de tu tienda';
+  document.getElementById('regEmail').placeholder = _modoEquipo ? 'Tu correo' : 'Correo de la tienda';
+  document.getElementById('regDatosTienda').style.display = _modoEquipo ? 'none' : '';
+  document.getElementById('regHint').textContent = _modoEquipo
+    ? 'Usa el mismo correo que el gerente registró en tu ficha. Recibirás un correo de confirmación.'
+    : 'Recibirás un correo de confirmación antes de poder iniciar sesión.';
+  document.getElementById('regCambiar').textContent = _modoEquipo
+    ? '← Quiero registrar una tienda nueva'
+    : 'Ya trabajo en una tienda registrada →';
+  hideErr('regErr');
+  document.getElementById('regOk').classList.remove('show');
+}
+
 async function doRegister() {
   hideErr('regErr');
   document.getElementById('regOk').classList.remove('show');
@@ -402,7 +449,7 @@ async function doRegister() {
   const storeId= document.getElementById('regId').value.trim();
   const nombre = document.getElementById('regNombre').value.trim();
   const ciudad = document.getElementById('regCiudad').value.trim();
-  if (!email||!pass||!storeId||!nombre) { showErr('regErr','Llena todos los campos obligatorios'); return; }
+  if (!email || !pass || (!_modoEquipo && (!storeId || !nombre))) { showErr('regErr','Llena todos los campos obligatorios'); return; }
   if (pass !== pass2) { showErr('regErr','Las contraseñas no coinciden'); return; }
   if (pass.length < 6) { showErr('regErr','La contraseña debe tener mínimo 6 caracteres'); return; }
   const btn = document.getElementById('btnReg');
@@ -410,12 +457,14 @@ async function doRegister() {
   const { data, error } = await sb.auth.signUp({ email, password: pass });
   btn.disabled = false; btn.textContent = 'Crear cuenta';
   if (error) { showErr('regErr', error.message.includes('already')?'Este correo ya está registrado. Inicia sesión.':error.message); return; }
-  if (data.user) {
+  if (data.user && !_modoEquipo) {
     const { error:eT } = await sb.from('tiendas').insert({ user_id:data.user.id, store_id:storeId, nombre, ciudad, gas_url:'', vendedores:[], admin_pin:storeId });
     if (eT && eT.code==='23505') { showErr('regErr','El ID de tienda '+storeId+' ya está registrado.'); return; }
   }
   const ok = document.getElementById('regOk');
-  ok.textContent = '¡Cuenta creada! Revisa tu correo para confirmar y luego inicia sesión.';
+  ok.textContent = _modoEquipo
+    ? '¡Cuenta creada! Confirma tu correo y luego inicia sesión: tu tienda se reconoce sola.'
+    : '¡Cuenta creada! Revisa tu correo para confirmar y luego inicia sesión.';
   ok.classList.add('show');
 }
 
