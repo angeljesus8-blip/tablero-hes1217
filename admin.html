@@ -142,19 +142,9 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
 <!-- PIN -->
 <div id="pinWrap">
   <img src="logo_odemas.png" alt="Odemás">
-  <h1>Admin · HES 1217</h1>
-  <p>Ingresa tu PIN de 4 dígitos</p>
-  <div class="pin-row">
-    <div class="pin-dot" id="pd0"></div><div class="pin-dot" id="pd1"></div>
-    <div class="pin-dot" id="pd2"></div><div class="pin-dot" id="pd3"></div>
-  </div>
+  <h1>Admin</h1>
+  <p>Verificando tu acceso…</p>
   <div class="pin-err" id="pinErr"></div>
-  <div class="numpad">
-    <button onclick="key('1')">1</button><button onclick="key('2')">2</button><button onclick="key('3')">3</button>
-    <button onclick="key('4')">4</button><button onclick="key('5')">5</button><button onclick="key('6')">6</button>
-    <button onclick="key('7')">7</button><button onclick="key('8')">8</button><button onclick="key('9')">9</button>
-    <button></button><button onclick="key('0')">0</button><button class="num-del" onclick="del()">⌫</button>
-  </div>
 </div>
 
 <!-- ADMIN -->
@@ -469,77 +459,63 @@ function abrirAdmin(){
   loadBundles(); loadEol();
 }
 
-/* El admin_pin ya no se guarda al entrar (ver index.html). El que quedó de antes
-   en este dispositivo se borra en cuanto se confirma que el servidor ya sabe
-   verificar el PIN — no antes, o nos quedaríamos sin con qué comparar mientras
-   el SQL no esté aplicado. */
-function olvidarAdminPin(){
+// El admin_pin ya no se usa ni se guarda: si quedó de antes en el dispositivo,
+// se borra al abrir.
+(function(){
   try{
     if(_cfg && _cfg.admin_pin){
       delete _cfg.admin_pin;
       localStorage.setItem('hes_store', JSON.stringify(_cfg));
     }
   }catch(e){}
+})();
+
+/* Dos formas de entrar, ninguna con PIN compartido:
+     · la sesión de gerente (correo y contraseña), o
+     · haber entrado con un número de empleado que tenga permiso.
+   El permiso se pregunta AL SERVIDOR cada vez (puede_admin): lo que diga el
+   navegador no basta, porque el localStorage se puede editar a mano. */
+async function verificarAcceso(){
+  try{
+    if(!initSB()) return { ok:false, motivo:'sin_conexion' };
+    const { data } = await sb.auth.getSession();
+    if(data && data.session) return { ok:true, via:'sesión de gerente' };
+  }catch(e){ console.warn('No pude verificar la sesión:', e); }
+
+  let emp = null;
+  try{ emp = JSON.parse(localStorage.getItem('hes_empleado')||'null'); }catch(e){}
+  const tienda = (_cfg && _cfg.store_id) || '';
+  if(!emp || !emp.empno || !tienda) return { ok:false, motivo:'sin_identificar' };
+
+  try{
+    const { data, error } = await sb.rpc('puede_admin', { p_store_id: tienda, p_empno: String(emp.empno) });
+    if(error){ console.warn('puede_admin no disponible:', error.message); return { ok:false, motivo:'sin_conexion' }; }
+    if(data === true) return { ok:true, via:'número de empleado', quien: emp.nombre };
+  }catch(e){ console.warn('Error verificando el permiso:', e); }
+  return { ok:false, motivo:'sin_permiso', quien: emp.nombre };
+}
+
+function mostrarCerrado(motivo, quien){
+  const w = document.getElementById('pinWrap');
+  if(!w) return;
+  const msg = motivo === 'sin_permiso'
+    ? (quien ? quien.split(' ')[0] + ', tu usuario no tiene permiso para Admin.' : 'Tu usuario no tiene permiso para Admin.')
+    : motivo === 'sin_conexion'
+      ? 'No pude verificar tu acceso. Revisa tu conexión e intenta de nuevo.'
+      : 'Entra primero con tu número de empleado o con tu correo de gerente.';
+  w.innerHTML = '<img src="logo_odemas.png" alt="Odemás" style="height:44px">' +
+    '<h1 style="font-size:18px;font-weight:800">Admin</h1>' +
+    '<p style="font-size:13px;color:#888;text-align:center;max-width:280px">' + msg + '</p>' +
+    '<button onclick="location.replace(\'index.html\')" style="border:none;border-radius:12px;padding:12px 20px;background:var(--rojo);color:#fff;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer">← Ir al menú</button>';
 }
 
 window.addEventListener('load', async function(){
   const err = document.getElementById('pinErr');
-  if(err) err.textContent = 'Verificando tu sesión…';
-  let conSesion = false;
-  try{
-    if(initSB()){
-      const { data } = await sb.auth.getSession();
-      conSesion = !!(data && data.session);
-    }
-  }catch(e){ console.warn('No pude verificar la sesión:', e); }
-  if(err) err.textContent = '';
-  if(conSesion){ abrirAdmin(); return; }
-  // Sin sesión de gerente: si el dispositivo entró como asesor, de vuelta al menú
-  if(_role === 'asesor'){ window.location.replace('index.html'); return; }
+  if(err) err.textContent = 'Verificando tu acceso…';
+  const r = await verificarAcceso();
+  if(r.ok){ abrirAdmin(); return; }
+  mostrarCerrado(r.motivo, r.quien);
 });
-let pin='';
-function key(d){
-  if(pin.length>=4) return;
-  pin+=d;
-  document.getElementById('pd'+(pin.length-1)).classList.add('on');
-  document.getElementById('pinErr').textContent='';
-  if(pin.length===4) checkPin();
-}
-function del(){
-  if(!pin.length) return;
-  pin=pin.slice(0,-1);
-  document.getElementById('pd'+pin.length).classList.remove('on');
-}
-function pinFallido(msg){
-  document.getElementById('pinErr').textContent = msg || 'PIN incorrecto, intenta de nuevo';
-  pin='';
-  for(var i=0;i<4;i++) document.getElementById('pd'+i).classList.remove('on');
-}
-
-async function checkPin(){
-  const intento = pin;
-  const tienda = (_cfg && _cfg.store_id) ? _cfg.store_id : '1217';
-  document.getElementById('pinErr').textContent = 'Verificando…';
-  try{
-    if(!sb) initSB();
-    if(sb){
-      const { data, error } = await sb.rpc('verificar_pin_admin', { p_store_id: tienda, p_pin: intento });
-      if(!error){
-        olvidarAdminPin();   // el servidor ya verifica: el PIN local sale de aquí
-        if(data === true){ document.getElementById('pinErr').textContent=''; abrirAdmin(); }
-        else pinFallido();
-        return;
-      }
-      // La función todavía no existe en Supabase: se avisa y se sigue por el
-      // camino viejo, para no quedarse fuera de Admin (ver supabase_acceso.sql).
-      console.warn('verificar_pin_admin no disponible:', error.message);
-    }
-  }catch(e){ console.warn('Error verificando el PIN:', e); }
-  const viejo = (_cfg && _cfg.admin_pin) ? _cfg.admin_pin : '1217';
-  if(intento === viejo){ document.getElementById('pinErr').textContent=''; abrirAdmin(); }
-  else pinFallido();
-}
-
 /* ===== TABS ===== */
 function tab(id,btn){
   document.querySelectorAll('.pane').forEach(e=>e.classList.remove('on'));
