@@ -430,7 +430,12 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
           <label>Puesto</label>
           <select id="nuevoEmpPuesto"></select>
         </div>
+        <div class="field">
+          <label>Correo (opcional)</label>
+          <input id="nuevoEmpEmail" type="email" placeholder="solo si va a administrar">
+        </div>
       </div>
+      <p class="note" style="margin:-4px 0 8px;font-size:11.5px">El correo solo hace falta para quien vaya a <b>administrar</b>: con él crea su cuenta desde “Ya trabajo en una tienda registrada” y al entrar se vincula solo. Para vender basta el número.</p>
       <label class="eq-check"><input type="checkbox" id="nuevoEmpAdmin"> Puede abrir <b>Admin</b> (subir catálogo, promos, EOL y comisiones)</label>
       <button class="btn-pri" onclick="altaEmpleado()">➕ Agregar al equipo</button>
       <div class="result" id="resEquipo"></div>
@@ -611,7 +616,7 @@ async function cargarEquipo(){
   equipoAviso('');
 
   const { data, error } = await sb.from('empleados')
-    .select('id,empno,nombre,puesto,activo,admin')
+    .select('id,empno,nombre,puesto,activo,admin,email,user_id')
     .eq('store_id', _cfg.store_id)
     .order('activo', { ascending:false }).order('nombre');
   if(error){
@@ -633,7 +638,9 @@ function pintarEquipo(){
   cont.innerHTML = _equipo.map(function(e){
     return '<div class="eq-row' + (e.activo?'':' inactivo') + '">' +
       '<span class="eq-num">' + escHtml(e.empno) + '</span>' +
-      '<div class="eq-info"><b>' + escHtml(e.nombre) + '</b><span>' + escHtml(e.puesto||'—') + '</span></div>' +
+      '<div class="eq-info"><b>' + escHtml(e.nombre) + '</b><span>' + escHtml(e.puesto||'—') +
+        (e.email ? ' · ' + escHtml(e.email) + (e.user_id ? ' <b style="color:var(--verde)">✓ cuenta activa</b>' : ' <i>(falta que cree su cuenta)</i>') : '') +
+      '</span></div>' +
       '<div class="eq-tags">' +
         (e.admin ? '<span class="eq-tag admin">Admin</span>' : '') +
         (e.activo ? '' : '<span class="eq-tag baja">Sin acceso</span>') +
@@ -669,21 +676,45 @@ async function cambiarEquipo(id, campo, valor){
     : (valor ? quien + ' puede entrar de nuevo ✓' : quien + ' quedó sin acceso a la app'), true);
 }
 
+/* El correo es lo que enlaza la ficha con la cuenta que esa persona crea.
+   Mientras no cree la cuenta, la ficha lo muestra como pendiente. */
+async function editarCorreo(id){
+  const e = _equipo.filter(function(x){ return x.id === id; })[0];
+  if(!e) return;
+  const valor = prompt('Correo con el que ' + e.nombre.split(' ')[0] + ' va a iniciar sesión.\n\nDéjalo vacío para quitarlo.', e.email || '');
+  if(valor === null) return;
+  const email = valor.trim().toLowerCase();
+  if(email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ toast('Ese correo no se ve bien escrito', false); return; }
+  if(e.user_id && email !== (e.email||'') &&
+     !confirm('Esta persona ya vinculó su cuenta con el correo anterior.\n\nSi lo cambias, tendrá que volver a crear su cuenta con el correo nuevo. ¿Seguir?')) return;
+
+  const cambio = { email: email || null };
+  if(email !== (e.email||'')) cambio.user_id = null;   // se revincula con el correo nuevo
+  const { error } = await sb.from('empleados').update(cambio).eq('id', id);
+  if(error){ toast(errorEquipo(error), false); return; }
+  e.email = email || null;
+  if(cambio.user_id === null) e.user_id = null;
+  pintarEquipo();
+  toast(email ? 'Correo guardado — ahora ' + e.nombre.split(' ')[0] + ' puede crear su cuenta' : 'Correo quitado', true);
+}
+
 async function altaEmpleado(){
   const empno  = document.getElementById('nuevoEmpNo').value.trim();
   const nombre = document.getElementById('nuevoEmpNombre').value.trim();
   const puesto = document.getElementById('nuevoEmpPuesto').value;
   const admin  = document.getElementById('nuevoEmpAdmin').checked;
+  const email  = document.getElementById('nuevoEmpEmail').value.trim().toLowerCase();
   const res = document.getElementById('resEquipo');
   function fallo(m){ showResult('resEquipo', false, m); }
 
   if(!/^\d{4,10}$/.test(empno)) return fallo('El número de empleado debe traer solo dígitos (mínimo 4).');
   if(nombre.length < 4) return fallo('Escribe el nombre completo.');
   if(_equipo.some(function(x){ return x.empno === empno; })) return fallo('Ya hay alguien con el número ' + empno + '.');
+  if(email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return fallo('Ese correo no se ve bien escrito.');
 
   const { data, error } = await sb.from('empleados')
-    .insert({ store_id:_cfg.store_id, empno:empno, nombre:nombre, puesto:puesto, admin:admin, activo:true })
-    .select('id,empno,nombre,puesto,activo,admin').single();
+    .insert({ store_id:_cfg.store_id, empno:empno, nombre:nombre, puesto:puesto, admin:admin, activo:true, email:email||null })
+    .select('id,empno,nombre,puesto,activo,admin,email,user_id').single();
   if(error) return fallo(errorEquipo(error));
 
   _equipo.push(data);
@@ -692,6 +723,7 @@ async function altaEmpleado(){
   document.getElementById('nuevoEmpNo').value = '';
   document.getElementById('nuevoEmpNombre').value = '';
   document.getElementById('nuevoEmpAdmin').checked = false;
+  document.getElementById('nuevoEmpEmail').value = '';
   showResult('resEquipo', true, '✅ ' + nombre.split(' ')[0] + ' ya puede entrar con el número ' + empno + (admin ? ' y abrir Admin.' : '.'));
 }
 
