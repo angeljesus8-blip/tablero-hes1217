@@ -457,19 +457,46 @@ const SB_KEY = 'sb_publishable_mELjDmCaFpNOxcwPi5MB2A_qSZ5ZA2z';
 let sb = null;
 function initSB(){ try{ if(!window.supabase) return false; sb=window.supabase.createClient(SB_URL,SB_KEY); return true; }catch(e){ return false; } }
 
-/* ===== ACCESO: solo gerente ===== */
-(function(){
-  if (_role === 'gerente') {
-    document.getElementById('pinWrap').style.display = 'none';
-    document.getElementById('app').style.display = 'block';
-    loadBundles(); loadEol();
-  } else if (_role === 'asesor') {
-    window.location.replace('index.html');
-  }
-  // Si no hay rol, el PIN manual sigue funcionando como fallback
-})();
+/* ===== ACCESO =====
+   Antes bastaba con que localStorage dijera hes_role=gerente, y eso lo puede
+   escribir cualquiera desde el navegador. Ahora la puerta es la SESIÓN de
+   Supabase (el correo y contraseña con los que entras); si no hay sesión, queda
+   el PIN, que se verifica en el servidor (función verificar_pin_admin) para que
+   no tenga que viajar al dispositivo. Ver supabase_acceso.sql. */
+function abrirAdmin(){
+  document.getElementById('pinWrap').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  loadBundles(); loadEol();
+}
 
-const PIN_OK = (_cfg && _cfg.admin_pin) ? _cfg.admin_pin : '1217';
+/* El admin_pin ya no se guarda al entrar (ver index.html). El que quedó de antes
+   en este dispositivo se borra en cuanto se confirma que el servidor ya sabe
+   verificar el PIN — no antes, o nos quedaríamos sin con qué comparar mientras
+   el SQL no esté aplicado. */
+function olvidarAdminPin(){
+  try{
+    if(_cfg && _cfg.admin_pin){
+      delete _cfg.admin_pin;
+      localStorage.setItem('hes_store', JSON.stringify(_cfg));
+    }
+  }catch(e){}
+}
+
+window.addEventListener('load', async function(){
+  const err = document.getElementById('pinErr');
+  if(err) err.textContent = 'Verificando tu sesión…';
+  let conSesion = false;
+  try{
+    if(initSB()){
+      const { data } = await sb.auth.getSession();
+      conSesion = !!(data && data.session);
+    }
+  }catch(e){ console.warn('No pude verificar la sesión:', e); }
+  if(err) err.textContent = '';
+  if(conSesion){ abrirAdmin(); return; }
+  // Sin sesión de gerente: si el dispositivo entró como asesor, de vuelta al menú
+  if(_role === 'asesor'){ window.location.replace('index.html'); return; }
+});
 let pin='';
 function key(d){
   if(pin.length>=4) return;
@@ -483,16 +510,34 @@ function del(){
   pin=pin.slice(0,-1);
   document.getElementById('pd'+pin.length).classList.remove('on');
 }
-function checkPin(){
-  if(pin===PIN_OK){
-    document.getElementById('pinWrap').style.display='none';
-    document.getElementById('app').style.display='block';
-    loadBundles(); loadEol();
-  } else {
-    document.getElementById('pinErr').textContent='PIN incorrecto, intenta de nuevo';
-    pin='';
-    for(var i=0;i<4;i++) document.getElementById('pd'+i).classList.remove('on');
-  }
+function pinFallido(msg){
+  document.getElementById('pinErr').textContent = msg || 'PIN incorrecto, intenta de nuevo';
+  pin='';
+  for(var i=0;i<4;i++) document.getElementById('pd'+i).classList.remove('on');
+}
+
+async function checkPin(){
+  const intento = pin;
+  const tienda = (_cfg && _cfg.store_id) ? _cfg.store_id : '1217';
+  document.getElementById('pinErr').textContent = 'Verificando…';
+  try{
+    if(!sb) initSB();
+    if(sb){
+      const { data, error } = await sb.rpc('verificar_pin_admin', { p_store_id: tienda, p_pin: intento });
+      if(!error){
+        olvidarAdminPin();   // el servidor ya verifica: el PIN local sale de aquí
+        if(data === true){ document.getElementById('pinErr').textContent=''; abrirAdmin(); }
+        else pinFallido();
+        return;
+      }
+      // La función todavía no existe en Supabase: se avisa y se sigue por el
+      // camino viejo, para no quedarse fuera de Admin (ver supabase_acceso.sql).
+      console.warn('verificar_pin_admin no disponible:', error.message);
+    }
+  }catch(e){ console.warn('Error verificando el PIN:', e); }
+  const viejo = (_cfg && _cfg.admin_pin) ? _cfg.admin_pin : '1217';
+  if(intento === viejo){ document.getElementById('pinErr').textContent=''; abrirAdmin(); }
+  else pinFallido();
 }
 
 /* ===== TABS ===== */
