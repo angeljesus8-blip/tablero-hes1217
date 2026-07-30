@@ -107,6 +107,24 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
 .comis-warn-tag { font-size:9px;font-weight:800;color:var(--rojo);margin-left:6px;text-transform:none;letter-spacing:0; }
 
 /* SPIN */
+/* Equipo */
+.eq-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px; }
+.eq-check { display:flex;align-items:center;gap:8px;font-size:12.5px;color:#555;margin:10px 0 12px;cursor:pointer; }
+.eq-check input { width:17px;height:17px;accent-color:var(--rojo); }
+.eq-row { display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid #f0f0f0;flex-wrap:wrap; }
+.eq-row:last-child { border-bottom:none; }
+.eq-num { font-family:ui-monospace,Menlo,monospace;font-size:13px;font-weight:700;color:var(--azul);min-width:62px; }
+.eq-info { flex:1;min-width:130px; }
+.eq-info b { display:block;font-size:13.5px; }
+.eq-info span { font-size:11px;color:#999; }
+.eq-tags { display:flex;gap:6px;align-items:center;flex-wrap:wrap; }
+.eq-tag { font-size:10px;font-weight:800;padding:3px 8px;border-radius:20px;text-transform:uppercase;letter-spacing:.3px; }
+.eq-tag.admin { background:#fdeaea;color:var(--rojo); }
+.eq-tag.baja { background:#eee;color:#999; }
+.eq-btn { border:1px solid #ddd;background:#fff;border-radius:9px;padding:6px 10px;font-family:inherit;font-size:11.5px;font-weight:700;color:#666;cursor:pointer; }
+.eq-btn:hover { border-color:#bbb;color:#333; }
+.eq-btn.on { background:var(--rojo);border-color:var(--rojo);color:#fff; }
+.eq-row.inactivo .eq-info b, .eq-row.inactivo .eq-num { opacity:.45;text-decoration:line-through; }
 .spin { display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite;vertical-align:middle;margin-right:6px; }
 @keyframes sp{ to{ transform:rotate(360deg); } }
 
@@ -162,6 +180,7 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
     <button onclick="tab('eol',this)">🏷️ EOL</button>
     <button onclick="tab('avisos',this);cargarListaAvisos()">📢 Avisos</button>
     <button onclick="tab('comis',this);cargarComisionesCloud()">💰 Comisiones</button>
+    <button onclick="tab('equipo',this);cargarEquipo()">👥 Equipo</button>
     <button onclick="tab('config',this);loadConfig()">⚙️ Config</button>
   </div>
 
@@ -387,6 +406,37 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
   </div>
 
   <!-- CONFIG TIENDA -->
+  <!-- EQUIPO -->
+  <div class="pane" id="pane-equipo">
+    <div class="card">
+      <h2>👥 Quién entra a la app</h2>
+      <p class="note">Cada persona entra con <b>su número de empleado</b>. Aquí das de alta a los nuevos, das de baja a quien se va y decides quién puede abrir esta pantalla de Admin.</p>
+      <div id="equipoAviso" class="note" style="display:none;background:#fff6e5;border-color:#ffd28a;color:#8a6100"></div>
+      <div id="equipoLista"></div>
+    </div>
+
+    <div class="card" id="equipoAltaCard">
+      <h2>➕ Dar de alta</h2>
+      <div class="eq-grid">
+        <div class="field">
+          <label>Número de empleado</label>
+          <input id="nuevoEmpNo" inputmode="numeric" placeholder="Ej: <empno>" maxlength="10">
+        </div>
+        <div class="field">
+          <label>Nombre completo</label>
+          <input id="nuevoEmpNombre" placeholder="Ej: Elena Navarro Gálvez">
+        </div>
+        <div class="field">
+          <label>Puesto</label>
+          <select id="nuevoEmpPuesto"></select>
+        </div>
+      </div>
+      <label class="eq-check"><input type="checkbox" id="nuevoEmpAdmin"> Puede abrir <b>Admin</b> (subir catálogo, promos, EOL y comisiones)</label>
+      <button class="btn-pri" onclick="altaEmpleado()">➕ Agregar al equipo</button>
+      <div class="result" id="resEquipo"></div>
+    </div>
+  </div>
+
   <div class="pane" id="pane-config">
     <div class="card">
       <h2>⚙️ Configuración de tienda</h2>
@@ -516,6 +566,135 @@ window.addEventListener('load', async function(){
   if(r.ok){ abrirAdmin(); return; }
   mostrarCerrado(r.motivo, r.quien);
 });
+/* ================= EQUIPO: quién entra a la app =================
+   Escribe directo en la tabla `empleados`, que solo el gerente dueño puede
+   tocar (política RLS). Por eso esta pantalla pide sesión: si entraste con tu
+   número de empleado —como Miguel— puedes usar el resto de Admin, pero dar
+   accesos es cosa del gerente. */
+let _equipo = [];
+
+// Supabase contesta en inglés y hablando de "row-level security"; para quien usa
+// la app eso solo significa una cosa: le falta entrar como gerente.
+function errorEquipo(error){
+  const m = (error && error.message) || '';
+  if(/row-level security|permission denied/i.test(m) || error.code === '42501')
+    return 'Para esto necesitas entrar como gerente, con tu correo y contraseña.';
+  if(error && error.code === '23505') return 'Ese número ya está registrado en la tienda.';
+  return m || 'No se pudo guardar.';
+}
+
+function equipoAviso(msg){
+  const el = document.getElementById('equipoAviso');
+  el.style.display = msg ? 'block' : 'none';
+  el.innerHTML = msg || '';
+}
+
+async function cargarEquipo(){
+  const cont = document.getElementById('equipoLista');
+  const alta = document.getElementById('equipoAltaCard');
+  cont.innerHTML = '<p class="note" style="text-align:center;color:#bbb">Cargando…</p>';
+  // El <select> de puestos usa la misma lista que el resto de Admin
+  const sel = document.getElementById('nuevoEmpPuesto');
+  if(sel && !sel.options.length)
+    sel.innerHTML = PUESTOS_CONOCIDOS.map(p=>'<option value="'+p+'">'+p+'</option>').join('');
+
+  if(!sb) initSB();
+  let sesion = false;
+  try{ const { data } = await sb.auth.getSession(); sesion = !!(data && data.session); }catch(e){}
+  if(!sesion){
+    alta.style.display = 'none';
+    cont.innerHTML = '';
+    equipoAviso('Para dar de alta o quitar accesos necesitas entrar como gerente, con tu correo y contraseña. Sal del menú y usa <b>“Iniciar sesión con correo”</b>.');
+    return;
+  }
+  alta.style.display = '';
+  equipoAviso('');
+
+  const { data, error } = await sb.from('empleados')
+    .select('id,empno,nombre,puesto,activo,admin')
+    .eq('store_id', _cfg.store_id)
+    .order('activo', { ascending:false }).order('nombre');
+  if(error){
+    cont.innerHTML = '';
+    equipoAviso(escHtml(errorEquipo(error)));
+    return;
+  }
+  _equipo = data || [];
+  pintarEquipo();
+}
+
+function pintarEquipo(){
+  const cont = document.getElementById('equipoLista');
+  if(!_equipo.length){
+    cont.innerHTML = '<p class="note" style="text-align:center;color:#bbb">Todavía no hay nadie dado de alta.</p>';
+    return;
+  }
+  const admins = _equipo.filter(e=>e.admin && e.activo).length;
+  cont.innerHTML = _equipo.map(function(e){
+    return '<div class="eq-row' + (e.activo?'':' inactivo') + '">' +
+      '<span class="eq-num">' + escHtml(e.empno) + '</span>' +
+      '<div class="eq-info"><b>' + escHtml(e.nombre) + '</b><span>' + escHtml(e.puesto||'—') + '</span></div>' +
+      '<div class="eq-tags">' +
+        (e.admin ? '<span class="eq-tag admin">Admin</span>' : '') +
+        (e.activo ? '' : '<span class="eq-tag baja">Sin acceso</span>') +
+        '<button class="eq-btn' + (e.admin?' on':'') + '" onclick="cambiarEquipo(' + e.id + ',\'admin\',' + (!e.admin) + ')">' +
+          (e.admin ? 'Quitar Admin' : 'Dar Admin') + '</button>' +
+        '<button class="eq-btn" onclick="cambiarEquipo(' + e.id + ',\'activo\',' + (!e.activo) + ')">' +
+          (e.activo ? 'Dar de baja' : 'Reactivar') + '</button>' +
+      '</div></div>';
+  }).join('') +
+  '<p class="note" style="margin-top:12px;font-size:11.5px">Hay <b>' + admins + '</b> persona(s) con acceso a Admin. Quien esté dado de baja no puede entrar a la app con su número.</p>';
+}
+
+async function cambiarEquipo(id, campo, valor){
+  const e = _equipo.filter(function(x){ return x.id === id; })[0];
+  if(!e) return;
+  // Nadie se queda sin llave: siempre debe haber al menos un Admin activo
+  const activosAdmin = _equipo.filter(function(x){ return x.admin && x.activo && x.id !== id; }).length;
+  const seQuedaSinAdmin = (campo==='admin' && valor===false) || (campo==='activo' && valor===false && e.admin);
+  if(seQuedaSinAdmin && activosAdmin === 0){
+    toast('No puedes quitar el último acceso a Admin — quedarías sin quién administre la tienda', false);
+    return;
+  }
+  if(campo==='activo' && valor===false && !confirm('¿Dar de baja a ' + e.nombre + '?\n\nYa no podrá entrar a la app con su número. Puedes reactivarlo cuando quieras.')) return;
+
+  const cambio = {}; cambio[campo] = valor;
+  const { error } = await sb.from('empleados').update(cambio).eq('id', id);
+  if(error){ toast(errorEquipo(error), false); return; }
+  e[campo] = valor;
+  pintarEquipo();
+  const quien = e.nombre.split(' ')[0];
+  toast(campo === 'admin'
+    ? (valor ? quien + ' ya puede abrir Admin ✓' : 'A ' + quien + ' se le quitó el acceso a Admin')
+    : (valor ? quien + ' puede entrar de nuevo ✓' : quien + ' quedó sin acceso a la app'), true);
+}
+
+async function altaEmpleado(){
+  const empno  = document.getElementById('nuevoEmpNo').value.trim();
+  const nombre = document.getElementById('nuevoEmpNombre').value.trim();
+  const puesto = document.getElementById('nuevoEmpPuesto').value;
+  const admin  = document.getElementById('nuevoEmpAdmin').checked;
+  const res = document.getElementById('resEquipo');
+  function fallo(m){ showResult('resEquipo', false, m); }
+
+  if(!/^\d{4,10}$/.test(empno)) return fallo('El número de empleado debe traer solo dígitos (mínimo 4).');
+  if(nombre.length < 4) return fallo('Escribe el nombre completo.');
+  if(_equipo.some(function(x){ return x.empno === empno; })) return fallo('Ya hay alguien con el número ' + empno + '.');
+
+  const { data, error } = await sb.from('empleados')
+    .insert({ store_id:_cfg.store_id, empno:empno, nombre:nombre, puesto:puesto, admin:admin, activo:true })
+    .select('id,empno,nombre,puesto,activo,admin').single();
+  if(error) return fallo(errorEquipo(error));
+
+  _equipo.push(data);
+  _equipo.sort(function(a,b){ return (b.activo-a.activo) || a.nombre.localeCompare(b.nombre); });
+  pintarEquipo();
+  document.getElementById('nuevoEmpNo').value = '';
+  document.getElementById('nuevoEmpNombre').value = '';
+  document.getElementById('nuevoEmpAdmin').checked = false;
+  showResult('resEquipo', true, '✅ ' + nombre.split(' ')[0] + ' ya puede entrar con el número ' + empno + (admin ? ' y abrir Admin.' : '.'));
+}
+
 /* ===== TABS ===== */
 function tab(id,btn){
   document.querySelectorAll('.pane').forEach(e=>e.classList.remove('on'));
