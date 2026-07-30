@@ -276,23 +276,33 @@ function pinLimpiar() {
     if (d) d.classList.remove('on');
   }
 }
+/* Los números no miden todos igual: los de la tienda son de 6 dígitos y el de
+   Laura es de 5. Así que se intenta solo al completar 6, y también cuando lleva
+   5 o más y deja de teclear un momento. Ese intento automático es SILENCIOSO si
+   falla: si estaba a medias de escribir un número más largo, no le borra lo que
+   ya puso ni le grita "número incorrecto". */
+let _pinTimer = null;
 function pinKey(d) {
   if (pinVal.length >= PIN_LARGO) return;
   pinVal += d;
   document.getElementById('pd'+(pinVal.length-1)).classList.add('on');
   document.getElementById('pinErr').textContent = '';
-  if (pinVal.length === PIN_LARGO) pinCheck();
+  clearTimeout(_pinTimer);
+  if (pinVal.length === PIN_LARGO) { pinCheck(); return; }
+  if (pinVal.length >= 5) _pinTimer = setTimeout(()=>pinCheck(true), 1200);
 }
 function pinDel() {
   if (!pinVal.length) return;
   pinVal = pinVal.slice(0, -1);
   document.getElementById('pd'+pinVal.length).classList.remove('on');
 }
-async function pinCheck() {
+// auto=true → intento en segundo plano mientras teclea: si falla, no molesta
+async function pinCheck(auto) {
   const pin = pinVal;
+  clearTimeout(_pinTimer);
   document.getElementById('pinErr').textContent = '';
-  if (pin.length < 4) { document.getElementById('pinErr').textContent = 'Escribe tu número de empleado'; return; }
-  if (!sb) { document.getElementById('pinErr').textContent = 'Sin conexión. Intenta de nuevo.'; pinLimpiar(); return; }
+  if (pin.length < 4) { if(!auto) document.getElementById('pinErr').textContent = 'Escribe tu número de empleado'; return; }
+  if (!sb) { if(!auto){ document.getElementById('pinErr').textContent = 'Sin conexión. Intenta de nuevo.'; pinLimpiar(); } return; }
   /* El PIN se valida EN EL SERVIDOR (función login_asesor), que devuelve solo
      lo que la app del asesor necesita. Antes se hacía un select('*') sobre
      `tiendas`, que bajaba al teléfono el admin_pin y las URLs de la hoja.
@@ -327,6 +337,8 @@ async function pinCheck() {
   }
 
   if (!data) {
+    // Si fue el intento automático, se queda callado: puede que siga escribiendo
+    if (auto) return;
     document.getElementById('pinErr').textContent = 'No reconozco ese número, intenta de nuevo';
     pinLimpiar();
     return;
