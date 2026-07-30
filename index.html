@@ -273,14 +273,27 @@ async function pinCheck() {
   const pin = pinVal;
   document.getElementById('pinErr').textContent = '';
   if (!sb) { document.getElementById('pinErr').textContent = 'Sin conexión. Intenta de nuevo.'; pinVal=''; for(let i=0;i<4;i++) document.getElementById('pd'+i).classList.remove('on'); return; }
-  const { data, error } = await sb.from('tiendas').select('*').eq('store_id', pin).eq('activo', true).maybeSingle();
+  /* El PIN se valida EN EL SERVIDOR (función login_asesor), que devuelve solo
+     lo que la app del asesor necesita. Antes se hacía un select('*') sobre
+     `tiendas`, que bajaba al teléfono el admin_pin y las URLs de la hoja.
+     Si la función todavía no está creada en Supabase, se usa el camino viejo
+     para no dejar al equipo sin entrar (ver supabase_acceso.sql). */
+  let data = null;
+  const rpc = await sb.rpc('login_asesor', { p_pin: pin });
+  if (rpc.error) {
+    console.warn('login_asesor no disponible, usando el modo anterior:', rpc.error.message);
+    const vieja = await sb.from('tiendas').select('store_id,nombre,ciudad,gas_url,vendedores').eq('store_id', pin).eq('activo', true).maybeSingle();
+    data = vieja.data;
+  } else {
+    data = Array.isArray(rpc.data) ? rpc.data[0] : rpc.data;
+  }
   if (!data) {
     document.getElementById('pinErr').textContent = 'PIN incorrecto, intenta de nuevo';
     pinVal = '';
     for (let i=0;i<4;i++) document.getElementById('pd'+i).classList.remove('on');
     return;
   }
-  const cfg = { store_id:data.store_id, nombre:data.nombre, ciudad:data.ciudad||'', gas_url:data.gas_url||'', sheet_url:data.sheet_url||'', hoja_auth:data.hoja_auth||'', vendedores:Array.isArray(data.vendedores)?data.vendedores:[], admin_pin:data.admin_pin||data.store_id };
+  const cfg = { store_id:data.store_id, nombre:data.nombre, ciudad:data.ciudad||'', gas_url:data.gas_url||'', vendedores:Array.isArray(data.vendedores)?data.vendedores:[] };
   localStorage.setItem('hes_store', JSON.stringify(cfg));
   localStorage.setItem('hes_role', 'asesor');
   applyStoreConfig(cfg, 'asesor');
@@ -299,9 +312,13 @@ async function doLogin() {
   const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
   btn.disabled = false; btn.textContent = 'Iniciar sesión';
   if (error) { showErr('loginErr', error.message.includes('Invalid') ? 'Correo o contraseña incorrectos' : error.message); return; }
-  const { data: tienda } = await sb.from('tiendas').select('*').eq('user_id', data.user.id).single();
+  // Columnas explícitas: el gerente sí puede leer su fila, pero el admin_pin no
+  // tiene por qué acabar en el localStorage del dispositivo.
+  const { data: tienda } = await sb.from('tiendas')
+    .select('store_id,nombre,ciudad,gas_url,sheet_url,hoja_auth,vendedores')
+    .eq('user_id', data.user.id).single();
   if (!tienda) { showErr('loginErr', 'Tu cuenta no tiene una tienda asignada. Regístrala primero.'); return; }
-  const cfg = { store_id:tienda.store_id, nombre:tienda.nombre, ciudad:tienda.ciudad||'', gas_url:tienda.gas_url||'', sheet_url:tienda.sheet_url||'', hoja_auth:tienda.hoja_auth||'', vendedores:Array.isArray(tienda.vendedores)?tienda.vendedores:[], admin_pin:tienda.admin_pin||tienda.store_id };
+  const cfg = { store_id:tienda.store_id, nombre:tienda.nombre, ciudad:tienda.ciudad||'', gas_url:tienda.gas_url||'', sheet_url:tienda.sheet_url||'', hoja_auth:tienda.hoja_auth||'', vendedores:Array.isArray(tienda.vendedores)?tienda.vendedores:[] };
   localStorage.setItem('hes_store', JSON.stringify(cfg));
   localStorage.setItem('hes_role', 'gerente');
   applyStoreConfig(cfg, 'gerente');
