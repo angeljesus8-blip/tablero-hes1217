@@ -108,6 +108,9 @@
   .badge.stock-b.hay  { background:#eafaf1; color:var(--verde); }
   .badge.stock-b.poco { background:#fff5ee; color:var(--naranja); }
   .badge.stock-b.sin  { background:#fdeaea; color:var(--rojo); }
+  /* Agotado en tienda pero vendible: se pide a otra sucursal. Morado para que
+     no se confunda con "no hay" ni con "quedan pocas". */
+  .badge.stock-b.traer{ background:#f3effe; color:#6d3fd4; }
 
   /* ---------- Inventario ---------- */
   .inv-row { display:flex; align-items:center; gap:12px; background:#fff; border:1px solid var(--linea);
@@ -1082,7 +1085,12 @@ function cardPromo(x){
   const inv = invBySku[x.sku] || {};
   const st  = inv.stock || 0, ex = inv.exhibe || 0;
   const clsSt = st === 0 ? 'sin' : st <= 3 ? 'poco' : 'hay';
-  const stockB = `<span class="badge stock-b ${clsSt}">${st === 0 ? '✕ sin piezas' : st + (st === 1 ? ' pieza' : ' piezas')}</span>`;
+  // Sin piezas ni exhibición no está "sin piezas": está agotado en tienda y hay
+  // que pedirlo a otra. Decirlo así evita que se descarte la venta.
+  const agotado = st === 0 && ex === 0;
+  const stockB = agotado
+    ? `<span class="badge stock-b traer">✕ agotado · se trae de otra tienda</span>`
+    : `<span class="badge stock-b ${clsSt}">${st === 0 ? '✕ sin piezas' : st + (st === 1 ? ' pieza' : ' piezas')}</span>`;
   // Orden deliberado: producto → precio → piezas y vigencia → seguro → datos de
   // referencia. Antes todo pesaba igual y con 117 promos no había dónde mirar.
   const badges = `<div class="meta">${stockB}<span class="badge b-promo">🔥 Promo</span>${vig}</div>`;
@@ -1106,7 +1114,12 @@ function cardPrecioReg(x){
   // Misma jerarquía que cardPromo, para que los dos slides se lean igual.
   const st = x.stock || 0, ex = x.exhibe || 0;
   const clsSt = st === 0 ? 'sin' : st <= 3 ? 'poco' : 'hay';
-  const stockB = `<span class="badge stock-b ${clsSt}">${st === 0 ? '✕ sin piezas' : st + (st === 1 ? ' pieza' : ' piezas')}</span>`;
+  // Sin piezas ni exhibición no está "sin piezas": está agotado en tienda y hay
+  // que pedirlo a otra. Decirlo así evita que se descarte la venta.
+  const agotado = st === 0 && ex === 0;
+  const stockB = agotado
+    ? `<span class="badge stock-b traer">✕ agotado · se trae de otra tienda</span>`
+    : `<span class="badge stock-b ${clsSt}">${st === 0 ? '✕ sin piezas' : st + (st === 1 ? ' pieza' : ' piezas')}</span>`;
   const badges = `<div class="meta">${stockB}</div>`;
   const ref = [ex ? `<b>${ex}</b> en exhibición` : '', `SKU ${x.sku}`].filter(Boolean).join(' · ');
   const sel = precio
@@ -1307,8 +1320,12 @@ function render(){
 
   const bundles = BUNDLES.filter(x=>coincide(x.nombre,x.sku1,x.sku2));
   const promosTodas = PROMOS.filter(x=>coincide(x.producto,x.sku));
-  const promos = promosTodas.filter(x=>tieneExistencia_(x.sku));
-  const promosSinStock = promosTodas.length - promos.length;
+  /* Se listan TODAS, con las agotadas al final: una promo sin piezas se puede
+     vender igual trayendo el equipo de otra tienda, y antes se ocultaba —
+     el asesor no tenía dónde consultar el precio. */
+  const promos = promosTodas.slice().sort((a,b) =>
+    (tieneExistencia_(b.sku)?1:0) - (tieneExistencia_(a.sku)?1:0));
+  const promosSinStock = promosTodas.filter(x=>!tieneExistencia_(x.sku)).length;
   const eolAll = EOL.filter(e=>coincide(e.producto,e.sku));
   const eolListo = eolAll.filter(e=>e.estado==='listo');
   const eolPend  = eolAll.filter(e=>e.estado==='pendiente');
@@ -1378,15 +1395,22 @@ function render(){
   if(f==='bundle') html += seccionBundles('🎁 Paquetes vigentes', bundles);
   if(f==='preventa') html += seccionPreventa();
   if(f==='promo'){
-    const ocultasTxt = promosSinStock>0 ? ` · ${promosSinStock} sin existencia ocultas` : '';
     const promoSkus = new Set(PROMOS.map(p => p.sku));
+    /* Los agotados TAMBIÉN se listan (1-ago-2026). Antes el filtro exigía
+       existencia, así que un producto sin piezas desaparecía con todo y su
+       precio — y son justo los que el cliente pide y se traen de otra tienda.
+       Van al final, para que no estorben a quien solo está hojeando, pero el
+       buscador sí los encuentra. */
+    const conPiezas = x => (x.stock||0) > 0 || (x.exhibe||0) > 0;
     const sinPromo = (D.inventario||[]).filter(x =>
       coincide(x.producto, x.sku) &&
-      ((x.stock||0) > 0 || (x.exhibe||0) > 0) &&
       !promoSkus.has(x.sku) &&
       eolMap[x.sku] !== 'listo'
-    );
-    html += `<div class="promo-toolbar"><span>${promos.length} promo${promos.length!==1?'s':''} con existencia${ocultasTxt}</span><button id="btnRefreshPromos" onclick="cargarPromosNube(true)">↻ Actualizar</button></div>`;
+    ).sort((a,b) => (conPiezas(b)?1:0) - (conPiezas(a)?1:0));
+    const porTraer = sinPromo.filter(x => !conPiezas(x)).length
+                   + promosTodas.filter(x => !tieneExistencia_(x.sku)).length;
+    const traerTxt = porTraer > 0 ? ` · ${porTraer} agotado${porTraer!==1?'s':''} (se traen de otra tienda)` : '';
+    html += `<div class="promo-toolbar"><span>${promos.length} promo${promos.length!==1?'s':''} con existencia${traerTxt}</span><button id="btnRefreshPromos" onclick="cargarPromosNube(true)">↻ Actualizar</button></div>`;
     html += `<div class="promo-tabs">
       <button class="promo-tab active" onclick="slidePromo(0)">🔥 Promos (${promos.length})</button>
       <button class="promo-tab" onclick="slidePromo(1)">💰 Precio regular (${sinPromo.length})</button>
