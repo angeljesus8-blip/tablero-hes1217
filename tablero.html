@@ -422,6 +422,30 @@ function coincide(...campos){
   return campos.join(' ').toLowerCase().includes(busqueda);
 }
 
+/* Inventario guardado de la última vez que respondió la nube.
+   Va aquí a propósito: invBySku y eolSkuSet (abajo) se construyen una sola vez
+   al cargar, así que el caché tiene que estar puesto ANTES o quedan vacíos.
+
+   El inventario ya no viaja en datos.js — era público en GitHub Pages con 105
+   SKUs, su stock y los EOL con precio. Ahora solo vive en el celular de quien
+   entró, y solo mientras sirva: un stock de hace una semana hace prometer
+   piezas que no hay, y eso es peor que no tener dato. */
+const INV_KEY       = 'hes1217_inv_cache';
+const INV_HORAS_OK  = 24;   // hasta aquí se muestra sin peros
+const INV_HORAS_MAX = 72;   // pasado esto se descarta
+let _invEdadHoras = null;
+(function(){
+  try{
+    const c = JSON.parse(localStorage.getItem(INV_KEY)||'null');
+    if(!c || !c.guardado || !Array.isArray(c.inventario) || !c.inventario.length) return;
+    const horas = (Date.now() - c.guardado) / 36e5;
+    if(horas > INV_HORAS_MAX){ localStorage.removeItem(INV_KEY); return; }
+    _invEdadHoras = horas;
+    D.inventario = c.inventario;
+    if(Array.isArray(c.eol) && c.eol.length) D.eol = c.eol;
+  }catch(e){}
+})();
+
 const invBySku = {};
 (D.inventario||[]).forEach(x=>{ invBySku[x.sku]=x; });
 const money = n => '$'+Number(n||0).toLocaleString('es-MX');
@@ -454,6 +478,25 @@ let BUNDLES = [];
     if(Array.isArray(c) && c.length) PROMOS = c.filter(vigenteHoy);
   }catch(e){}
 })();
+
+
+// Si hay inventario guardado, decirlo desde el arranque en vez de dejar
+// "Sin confirmar" hasta que responda la nube.
+if(_invEdadHoras != null) setTimeout(function(){ try{ pintarUpdated(); }catch(e){} }, 0);
+
+function guardarInvCache(){
+  // Nunca guardar vacío: una corrida fallida borraría el inventario bueno que
+  // el asesor todavía puede necesitar sin señal.
+  if(!D.inventario || !D.inventario.length) return;
+  try{
+    localStorage.setItem(INV_KEY, JSON.stringify({
+      guardado: Date.now(),
+      inventario: D.inventario,
+      eol: D.eol || []
+    }));
+    _invEdadHoras = 0;
+  }catch(e){}   // cuota llena: seguimos con lo que hay en memoria
+}
 
 // Tabla Assurant "Lista de precios EC total 2025" — Reemplazo (<$5k) y Reparación ($5k+)
 const SEGUROS = [
@@ -1424,7 +1467,17 @@ let _ultimoIntento = 0;    // ms del último intento (con o sin éxito)
 
 function pintarUpdated(){
   const el = document.getElementById('updated');
-  if(!el || !_invFecha) return;
+  if(!el) return;
+  // Sin respuesta de la nube pero con inventario guardado: se muestra, diciendo
+  // de cuándo es. Que nadie prometa una pieza creyendo que el dato es de hoy.
+  if(!_invFecha && _invEdadHoras != null){
+    const h = Math.round(_invEdadHoras);
+    const txt = h < 1 ? 'hace un rato' : (h < 24 ? 'hace ' + h + ' h' : 'hace ' + Math.floor(h/24) + ' d');
+    const color = _invEdadHoras <= INV_HORAS_OK ? 'var(--naranja)' : 'var(--rojo)';
+    el.innerHTML = 'Guardado<b style="color:' + color + ';display:block;font-size:11px">● ' + txt + ' · confirma en sistema</b>';
+    return;
+  }
+  if(!_invFecha) return;
   const t = _invFecha.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
   if(hoyISO(_invFecha) === HOY_ISO){
     el.innerHTML = 'Live ' + t + '<b style="color:var(--verde);display:block;font-size:11px">● en vivo</b>';
@@ -1439,6 +1492,12 @@ function pintarUpdated(){
    puede llegar por una llamada suelta (modo=inventario) o dentro del paquete
    completo (modo=todo). */
 const _esObj = d => d && typeof d === 'object' && !Array.isArray(d);
+/* Desde que el Apps Script exige token, un rechazo llega como
+   {error:'no_autorizado'} — que TAMBIÉN es un objeto y pasaba _esObj. El
+   tablero lo tomaba por datos buenos, se marcaba "en vivo" con todo en cero y
+   pisaba el inventario guardado. */
+const _esError = d => _esObj(d) && typeof d.error === 'string';
+const _datosUtiles = d => _esObj(d) && !_esError(d) && Object.keys(d).length > 0;
 
 function aplicarInventario(data){
   (function(data){
@@ -1490,6 +1549,7 @@ function aplicarInventario(data){
     D._invCloud = true;
     _invFecha = new Date();
     _ultimaCarga = Date.now();
+    guardarInvCache();   // para que sirva sin red la próxima vez
     pintarUpdated();
   })(data);
 }
@@ -1563,9 +1623,13 @@ async function cargarInventarioNube(){
   let data;
   try{
     data = await gasPedir('modo=inventario');
-    if(!_esObj(data)) throw new Error('respuesta inválida');
+    if(_esError(data))      throw new Error('rechazado: ' + data.error);
+    if(!_datosUtiles(data)) throw new Error('respuesta inválida');
   }catch(e){
     marcarCarga('inventario', false);
+    // Si hay inventario guardado seguimos mostrándolo (con su edad); solo
+    // cuando no hay nada se anuncia que no hay conexión.
+    if(_invEdadHoras != null){ pintarUpdated(); return; }
     const el = document.getElementById('updated');
     if(el) el.innerHTML = '<span style="color:var(--rojo);font-weight:700">Sin conexión</span>';
     return;
