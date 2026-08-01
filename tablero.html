@@ -80,6 +80,10 @@
 
   .card .top { display:flex; align-items:flex-start; gap:8px; }
   .card h3 { font-size:14.5px; font-weight:700; line-height:1.3; flex:1; }
+  /* Título de las tarjetas de promo y precio regular: va solo, sin la fila
+     .top, porque el peso visual ahora lo carga el precio de abajo. */
+  .card h3.t-titulo { flex:none; margin:0 0 7px; font-size:13.5px; }
+  .badge.b-promo { background:#fdecec; color:var(--rojo); }
   .tag { font-size:9.5px; font-weight:800; text-transform:uppercase; letter-spacing:.4px;
     padding:3px 7px; border-radius:6px; flex-shrink:0; }
   .tag.promo  { background:#fff5ee; color:var(--naranja); }
@@ -133,14 +137,23 @@
   .dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
   .dot.ok{background:var(--verde);} .dot.bajo{background:var(--naranja);} .dot.cero{background:var(--rojo);}
   /* ---- Selector seguro + MSI ---- */
-  .seg-sel { margin-top:10px; }
-  .seg-chips { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px; }
+  .seg-sel { margin-top:8px; }
+  .seg-chips { display:flex; gap:6px; flex-wrap:wrap; margin:9px 0 0; }
+  /* Datos de referencia (SKU, exhibición, meses): presentes pero en voz baja,
+     para que el precio y las piezas se lean primero. */
+  .t-ref { font-size:10.5px; color:#a8a2a2; line-height:1.5; margin-top:7px; }
+  .t-ref b { color:#8a8484; font-weight:700; }
   .seg-chip { border:1.5px solid var(--linea); background:#fff; color:#555;
     font-family:inherit; font-size:12px; font-weight:700; padding:6px 13px;
     border-radius:20px; cursor:pointer; transition:.12s; }
   .seg-chip.active { background:var(--azul); color:#fff; border-color:var(--azul); }
-  .seg-desglose { display:flex; align-items:baseline; flex-wrap:wrap; gap:4px; margin-bottom:4px; }
-  .seg-precio-total { font-size:22px; font-weight:800; color:var(--rojo); line-height:1.2; }
+  .seg-desglose { display:flex; align-items:baseline; flex-wrap:wrap; gap:4px; margin-bottom:0; }
+  .seg-precio-total { font-size:25px; font-weight:800; color:var(--rojo); line-height:1.15;
+    font-variant-numeric:tabular-nums; letter-spacing:-.01em; }
+  /* Precio regular tachado, junto al de promo: el ahorro se ve sin buscarlo. */
+  .precio-reg { font-size:13px; font-weight:700; color:#bfb9b9; text-decoration:line-through;
+    font-variant-numeric:tabular-nums; }
+  .precio-linea { display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; }
   .seg-prod { font-size:16px; font-weight:700; color:#999; }
   .seg-op { font-size:13px; color:#aaa; font-weight:600; white-space:nowrap; }
   .seg-msi { margin-top:5px; }
@@ -567,7 +580,12 @@ function desgloseHtml(p0, total, segCosto) {
   if (!segCosto) return `<span class="seg-precio-total">${money(total)}</span>`;
   return `<span class="seg-prod">${money(p0)}</span><span class="seg-op"> + ${money(segCosto)} seguro = </span><span class="seg-precio-total">${money(total)}</span>`;
 }
-function segSelector(sku, precioBase, precioVenta) {
+/* El precio va PRIMERO y los meses al final, en gris (rediseño del 1-ago-2026):
+   la tarjeta mostraba once bloques con el mismo peso y no había dónde caer
+   primero. `enMedio` deja insertar los badges entre el precio y los chips sin
+   sacarlos del contenedor #id — selSeg busca .seg-desglose y .seg-msi ahí
+   dentro, así que todo lo dinámico tiene que seguir colgando de él. */
+function segSelector(sku, precioBase, precioVenta, enMedio, regularTachado) {
   const s = seguroPara(precioBase, sku);
   const p0 = parseFloat(String(precioVenta||0).replace(/[^0-9.]/g,'')) || 0;
   const p1 = s ? p0 + s.p1 : null;
@@ -577,12 +595,18 @@ function segSelector(sku, precioBase, precioVenta) {
   const id = 'sg_' + String(sku).replace(/\D/g,'');
   const chip1 = s ? `<button class="seg-chip" onclick="selSeg('${id}',1,${p0},${p1},${p2},${i1},${i2})">+ 1 año</button>` : '';
   const chip2 = s ? `<button class="seg-chip" onclick="selSeg('${id}',2,${p0},${p1},${p2},${i1},${i2})">+ 2 años</button>` : '';
+  // El tachado va FUERA de .seg-desglose: selSeg reescribe ese nodo completo al
+  // cambiar de seguro, y si estuviera dentro se borraría en el primer toque.
+  const tach = regularTachado ? `<span class="precio-reg">${money(regularTachado)}</span>` : '';
   return `<div class="seg-sel" id="${id}">
+    <div class="precio-linea">
+      <div class="seg-desglose">${desgloseHtml(p0, p0, 0)}</div>${tach}
+    </div>
+    ${enMedio || ''}
     <div class="seg-chips">
       <button class="seg-chip active" onclick="selSeg('${id}',0,${p0},${p1||p0},${p2||p0},${i1},${i2})">Sin seguro</button>
       ${chip1}${chip2}
     </div>
-    <div class="seg-desglose">${desgloseHtml(p0, p0, 0)}</div>
     <div class="seg-msi">${msiInfo(p0)}</div>
   </div>`;
 }
@@ -1050,41 +1074,49 @@ function cardPromo(x){
   const vig = x.d2 ? badgeVigencia(x.d2) : '';
   const precioBase = x.pr || x.pp;
   const precioVenta = x.pp || x.pr;
-  const sel = (precioBase && precioVenta) ? segSelector(x.sku, precioBase, precioVenta) : '';
   const pv = parseFloat(String(precioVenta||0).replace(/[^0-9.]/g,''))||0;
   const pb = parseFloat(String(precioBase||0).replace(/[^0-9.]/g,''))||0;
-  const waBtn = pv ? `<button class="btn-wa" onclick="compartirWA('${encodeURIComponent(x.producto)}','${x.sku}',${pv},${pb})">📲 Compartir por WhatsApp</button>` : '';
+  const waBtn = pv ? `<button class="btn-wa" onclick="compartirWA('${encodeURIComponent(x.producto)}','${x.sku}',${pv},${pb})">📲 Compartir</button>` : '';
   // Existencias del producto, aquí mismo: el asesor está viendo qué ofrecer y
-  // necesita saber si hay piezas sin salirse a la pestaña de Inventario.
+  // necesita saber si hay piezas sin salirse a otra pestaña.
   const inv = invBySku[x.sku] || {};
   const st  = inv.stock || 0, ex = inv.exhibe || 0;
   const clsSt = st === 0 ? 'sin' : st <= 3 ? 'poco' : 'hay';
-  const stockB = `<span class="badge stock-b ${clsSt}">${st === 0 ? '✕ sin piezas' : '📦 ' + st + (st === 1 ? ' pieza' : ' piezas')}</span>`;
-  const exhB = ex ? `<span class="badge">👁 ${ex} exhib.</span>` : '';
+  const stockB = `<span class="badge stock-b ${clsSt}">${st === 0 ? '✕ sin piezas' : st + (st === 1 ? ' pieza' : ' piezas')}</span>`;
+  // Orden deliberado: producto → precio → piezas y vigencia → seguro → datos de
+  // referencia. Antes todo pesaba igual y con 117 promos no había dónde mirar.
+  const badges = `<div class="meta">${stockB}<span class="badge b-promo">🔥 Promo</span>${vig}</div>`;
+  const ref = [
+    ex ? `<b>${ex}</b> en exhibición` : '',
+    `SKU ${x.sku}`
+  ].filter(Boolean).join(' · ');
+  const selA = (precioBase && precioVenta)
+    ? segSelector(x.sku, precioBase, precioVenta, badges, x.pr != null && pb > pv ? x.pr : null)
+    : badges;
   return `<div class="card t-promo">
-    <div class="top"><h3>${x.producto}</h3><span class="tag promo">🔥 PROMO</span></div>
-    <div class="meta">
-      ${stockB}${exhB}
-      ${x.pr!=null?`<span class="badge" style="text-decoration:line-through;color:#bbb">Reg ${money(x.pr)}</span>`:''}
-      <span class="badge">SKU ${x.sku}</span>${vig}
-    </div>
-    ${sel}${waBtn}
+    <h3 class="t-titulo">${x.producto}</h3>
+    ${selA}
+    <div class="t-ref">${ref}</div>
+    ${waBtn}
   </div>`;
 }
 function cardPrecioReg(x){
   const precio = x.precio || 0;
-  const sel = precio ? segSelector(x.sku, precio, precio) : `<span class="badge">Sin precio registrado</span>`;
-  const waBtn = precio ? `<button class="btn-wa" onclick="compartirWA('${encodeURIComponent(x.producto)}','${x.sku}',${precio},${precio})">📲 Compartir por WhatsApp</button>` : '';
-  // Mismas existencias que en la tarjeta de promo. Con esto los dos slides de
-  // esta pestaña cubren todo el inventario y la pestaña aparte sale sobrando.
+  const waBtn = precio ? `<button class="btn-wa" onclick="compartirWA('${encodeURIComponent(x.producto)}','${x.sku}',${precio},${precio})">📲 Compartir</button>` : '';
+  // Misma jerarquía que cardPromo, para que los dos slides se lean igual.
   const st = x.stock || 0, ex = x.exhibe || 0;
   const clsSt = st === 0 ? 'sin' : st <= 3 ? 'poco' : 'hay';
-  const stockB = `<span class="badge stock-b ${clsSt}">${st === 0 ? '✕ sin piezas' : '📦 ' + st + (st === 1 ? ' pieza' : ' piezas')}</span>`;
-  const exhB = ex ? `<span class="badge">👁 ${ex} exhib.</span>` : '';
+  const stockB = `<span class="badge stock-b ${clsSt}">${st === 0 ? '✕ sin piezas' : st + (st === 1 ? ' pieza' : ' piezas')}</span>`;
+  const badges = `<div class="meta">${stockB}</div>`;
+  const ref = [ex ? `<b>${ex}</b> en exhibición` : '', `SKU ${x.sku}`].filter(Boolean).join(' · ');
+  const sel = precio
+    ? segSelector(x.sku, precio, precio, badges)
+    : badges + `<div class="meta"><span class="badge">Sin precio registrado</span></div>`;
   return `<div class="card">
-    <div class="top"><h3>${x.producto}</h3></div>
-    <div class="meta">${stockB}${exhB}<span class="badge">SKU ${x.sku}</span></div>
-    ${sel}${waBtn}
+    <h3 class="t-titulo">${x.producto}</h3>
+    ${sel}
+    <div class="t-ref">${ref}</div>
+    ${waBtn}
   </div>`;
 }
 function bundlesParaSku(sku){
