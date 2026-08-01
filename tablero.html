@@ -98,6 +98,12 @@
   .badge { font-size:11px; font-weight:700; padding:3px 8px; border-radius:6px; background:#f2f2f2; color:#666; }
   .badge.urge { background:#fdeaea; color:var(--rojo); }
   .badge.ok { background:#eafaf1; color:var(--verde); }
+  /* Existencias dentro de la tarjeta de promo: verde hay, ámbar quedan pocas,
+     rojo no hay. Va primero en la fila de badges para que se vea antes que el
+     precio — de nada sirve la promo si no queda pieza. */
+  .badge.stock-b.hay  { background:#eafaf1; color:var(--verde); }
+  .badge.stock-b.poco { background:#fff5ee; color:var(--naranja); }
+  .badge.stock-b.sin  { background:#fdeaea; color:var(--rojo); }
 
   /* ---------- Inventario ---------- */
   .inv-row { display:flex; align-items:center; gap:12px; background:#fff; border:1px solid var(--linea);
@@ -1043,9 +1049,17 @@ function cardPromo(x){
   const pv = parseFloat(String(precioVenta||0).replace(/[^0-9.]/g,''))||0;
   const pb = parseFloat(String(precioBase||0).replace(/[^0-9.]/g,''))||0;
   const waBtn = pv ? `<button class="btn-wa" onclick="compartirWA('${encodeURIComponent(x.producto)}','${x.sku}',${pv},${pb})">📲 Compartir por WhatsApp</button>` : '';
+  // Existencias del producto, aquí mismo: el asesor está viendo qué ofrecer y
+  // necesita saber si hay piezas sin salirse a la pestaña de Inventario.
+  const inv = invBySku[x.sku] || {};
+  const st  = inv.stock || 0, ex = inv.exhibe || 0;
+  const clsSt = st === 0 ? 'sin' : st <= 3 ? 'poco' : 'hay';
+  const stockB = `<span class="badge stock-b ${clsSt}">${st === 0 ? '✕ sin piezas' : '📦 ' + st + (st === 1 ? ' pieza' : ' piezas')}</span>`;
+  const exhB = ex ? `<span class="badge">👁 ${ex} exhib.</span>` : '';
   return `<div class="card t-promo">
     <div class="top"><h3>${x.producto}</h3><span class="tag promo">🔥 PROMO</span></div>
     <div class="meta">
+      ${stockB}${exhB}
       ${x.pr!=null?`<span class="badge" style="text-decoration:line-through;color:#bbb">Reg ${money(x.pr)}</span>`:''}
       <span class="badge">SKU ${x.sku}</span>${vig}
     </div>
