@@ -245,6 +245,11 @@ let items = JSON.parse(localStorage.getItem(KEY) || '[]');
 /* ====== NUBE: concentrado de ventas de todos (Hoja de Google) ====== */
 // Pega aquí la URL del Web App de Google Apps Script (termina en /exec):
 const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbwbZFsiDqZrNitPKNLqr4r6xOFu3VKprtXJacScftIJmcQdAl_yytjxK8BymWvy8I1gjA/exec';
+// Token del Apps Script: llega del login (hes_store), nunca escrito aquí —
+// este archivo es público. gasQS() lo pega a cada llamada.
+const _cfgCS = (function(){ try{ return JSON.parse(localStorage.getItem('hes_store')||'null'); }catch(e){ return null; } })();
+const GAS_TOKEN = (_cfgCS && _cfgCS.gas_token) || '';
+const gasQS = qs => CLOUD_URL + '?' + qs + (GAS_TOKEN ? '&t=' + encodeURIComponent(GAS_TOKEN) : '');
 // Link de la Hoja de Google (concentrado de ventas) que abre Laura:
 const SHEET_BASE = 'https://docs.google.com/spreadsheets/d/1rcHq6XdJ8K2fSDQkVQf5agbCLG4zD3c4b58mF90oBq0/edit';
 const GKEY = 'hes1217_ventas_gid';
@@ -279,7 +284,7 @@ async function flushCloud(){
       const row = pending[0];
       const body = Object.assign({}, row);
       if(row.foto && photoMap[row.id]) body.img = photoMap[row.id];   // adjunta la foto
-      await fetch(CLOUD_URL, { method:'POST', mode:'no-cors',
+      await fetch(gasPost(), { method:'POST', mode:'no-cors',
         headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify(body) });
       if(row.foto) delete photoMap[row.id];
       pending.shift(); savePending();   // la red aceptó el envío
@@ -316,7 +321,7 @@ function catJsonp(url){
 }
 function refreshCatalogo(){
   if(!CLOUD_URL) return;
-  catJsonp(CLOUD_URL + '?modo=catalogo').then(c=>{
+  catJsonp(gasQS('modo=catalogo')).then(c=>{
     if(esCatalogoValido(c)){
       CATALOGO = Object.assign({}, CATALOGO, c);   // la nube manda; el de la app rellena huecos
       localStorage.setItem(CATKEY, JSON.stringify(c));
@@ -331,7 +336,7 @@ function esPromosValido(p){ return p && typeof p==='object' && !Array.isArray(p)
 try{ const p = JSON.parse(localStorage.getItem(PROMOKEY) || 'null'); if(esPromosValido(p)) PROMOS = p; }catch(e){}
 function refreshPromos(){
   if(!CLOUD_URL) return;
-  catJsonp(CLOUD_URL + '?modo=promos').then(p=>{
+  catJsonp(gasQS('modo=promos')).then(p=>{
     if(esPromosValido(p)){ PROMOS = p; localStorage.setItem(PROMOKEY, JSON.stringify(p)); }
   }).catch(()=>{});
 }
@@ -363,7 +368,7 @@ function esObjValido(o){ return o && typeof o==='object' && !Array.isArray(o); }
 try{ localStorage.removeItem(EOLVKEY); }catch(e){}   // limpia cualquier copia vieja pegada
 function refreshEolVenta(){
   if(!CLOUD_URL) return;
-  catJsonp(CLOUD_URL + '?modo=eol_venta').then(e=>{
+  catJsonp(gasQS('modo=eol_venta')).then(e=>{
     if(esObjValido(e)){ EOL_VENTA = e; }   // solo de la nube en vivo, sin persistir
   }).catch(()=>{});
 }
@@ -423,7 +428,7 @@ function eliminarDeNube(id){
   pending = pending.filter(p => p.id !== id);
   savePending();
   // Siempre avisa al servidor: si la fila ya subió la borra, si no existe no hace nada
-  fetch(CLOUD_URL, {
+  fetch(gasPost(), {
     method:'POST', mode:'no-cors',
     headers:{'Content-Type':'text/plain;charset=utf-8'},
     body: JSON.stringify({tipo:'eliminar', id})
@@ -672,10 +677,15 @@ $('btnCsv').onclick = async () => {
 $('serie').addEventListener('keydown', e => { if(e.key==='Enter') $('btnAdd').click(); });
 
 /* ---------- Vendedor / pantalla de inicio (HES 1217) ---------- */
-// Para editar el equipo, cambia esta lista:
-const VENDEDORES = ['Jorge Medina','María Fuentes','Elena Navarro','Luis Ortega','Ana Ramírez'];
+// El equipo se edita en Admin → Equipo; de ahí baja en la config de tienda.
+// Sin sesión va vacío: este archivo es público y no debe traer nombres.
+const VENDEDORES = (_cfgCS && Array.isArray(_cfgCS.vendedores) && _cfgCS.vendedores.length)
+  ? _cfgCS.vendedores
+  : [];
 const VKEY = 'hes1217_vend';
-const DESCARGA_AUTORIZADA = 'Elena Navarro';   // solo esta persona descarga el Excel
+// Quién puede bajar el Excel. Antes era un nombre escrito aquí; ahora sale de
+// la config, y si no viene, nadie descarga hasta que se configure.
+const DESCARGA_AUTORIZADA = (_cfgCS && _cfgCS.descarga_autorizada) || '';
 let currentVend = '';
 
 function updateDownloadAccess(){
@@ -715,7 +725,7 @@ function refreshGid(){
   };
   const sc = document.createElement('script');
   sc.id = '_gid_sc';
-  sc.src = CLOUD_URL + '?modo=estado&callback=' + cb;
+  sc.src = gasQS('modo=estado') + '&callback=' + cb;
   document.head.appendChild(sc);
 }
 
