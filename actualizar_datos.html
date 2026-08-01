@@ -113,12 +113,24 @@
 
 <script>
 const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbwbZFsiDqZrNitPKNLqr4r6xOFu3VKprtXJacScftIJmcQdAl_yytjxK8BymWvy8I1gjA/exec';
-const AUTORIZADOS = ['Ana Ramírez', 'Luis Ortega'];
+
+// Config de la sesión. Antes había aquí una lista de nombres completos, en un
+// archivo público, y elegir uno era todo el "control de acceso". Ahora la
+// identidad sale del login que ya validó Supabase.
+const _cfgAD = (function(){ try{ return JSON.parse(localStorage.getItem('hes_store')||'null'); }catch(e){ return null; } })();
+const GAS_TOKEN = (_cfgAD && _cfgAD.gas_token) || '';
+const gasQS = qs => CLOUD_URL + '?' + qs + (GAS_TOKEN ? '&t=' + encodeURIComponent(GAS_TOKEN) : '');
+const gasPost = () => CLOUD_URL + (GAS_TOKEN ? '?t=' + encodeURIComponent(GAS_TOKEN) : '');
+
+// Quien haya entrado; si no hay sesión, que lo diga en vez de dejar pasar.
+const AUTORIZADOS = (_cfgAD && _cfgAD.nombre) ? [_cfgAD.nombre] : [];
 const $ = id => document.getElementById(id);
 let quien = '', parsed = null;
 
 /* Pantalla de inicio */
-$('gateNames').innerHTML = AUTORIZADOS.map(n => `<button class="name" data-n="${n}">${n}</button>`).join('');
+$('gateNames').innerHTML = AUTORIZADOS.length
+  ? AUTORIZADOS.map(n => `<button class="name" data-n="${n}">${n}</button>`).join('')
+  : '<p style="color:#c62828;font-weight:600">Entra primero desde el tablero: esta página usa tu sesión.</p>';
 [...$('gateNames').children].forEach(b => b.onclick = () => { quien = b.dataset.n; $('whoLabel').textContent = quien; $('gate').classList.add('hide'); });
 
 /* Elegir archivo */
@@ -180,13 +192,13 @@ $('btnGo').onclick = async () => {
   $('btnGo').innerHTML = '<span class="spin"></span> Subiendo…';
   $('result').className = 'result';
   try{
-    await fetch(CLOUD_URL, { method:'POST', mode:'no-cors',
+    await fetch(gasPost(), { method:'POST', mode:'no-cors',
       headers:{'Content-Type':'text/plain;charset=utf-8'},
       body: JSON.stringify({ tipo:'catalogo', by: quien, rows: parsed }) });
     // confirma leyendo el estado del catálogo
     await new Promise(r => setTimeout(r, 2500));
     let estado = null;
-    try{ estado = await jsonp(CLOUD_URL + '?modo=estado'); }catch(e){}
+    try{ estado = await jsonp(gasQS('modo=estado')); }catch(e){}
     if(estado && Number(estado.catCount) > 0){
       showResult(true, `✅ Catálogo e inventario actualizados: <b>${estado.catCount}</b> productos.<br>Por ${estado.catBy||quien}. Los teléfonos tomarán el catálogo nuevo al abrir la app.`);
     } else {
@@ -314,10 +326,10 @@ $('btnPromo').onclick = async () => {
   $('btnPromo').disabled=true; const prev=$('btnPromo').textContent;
   $('btnPromo').innerHTML='<span class="spin"></span> Subiendo…'; $('resultPromo').className='result';
   try{
-    await fetch(CLOUD_URL, { method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain;charset=utf-8'},
+    await fetch(gasPost(), { method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain;charset=utf-8'},
       body: JSON.stringify({ tipo:'promos', by:quien, vig:parsedPromo.vig, rows:parsedPromo.rows }) });
     await new Promise(r=>setTimeout(r,2500));
-    let est=null; try{ est=await jsonp(CLOUD_URL+'?modo=estado'); }catch(e){}
+    let est=null; try{ est=await jsonp(gasQS('modo=estado')); }catch(e){}
     if(est && Number(est.promoCount)>0){
       showResultP(true, `✅ Promociones actualizadas: <b>${est.promoCount}</b> · vigencia ${est.promoVig||parsedPromo.vig}.<br>Por ${est.promoBy||quien}. La captura aplicará el precio promo vigente.`);
     } else {
