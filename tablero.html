@@ -380,11 +380,16 @@ function tocarDia(){
   return true;
 }
 
+/* La pestaña 📊 Inventario se retiró el 1-ago-2026: sus dos slides ya viven
+   dentro de 🔥 Promos y precios — "Promos" (con existencias) y "Precio regular"
+   (el resto del inventario, también con existencias). Tener las dos obligaba a
+   saltar entre pestañas para saber si de una promo quedaban piezas.
+   El código de la sección 'inv' se conserva por si hay que devolverla: basta
+   volver a agregar su renglón aquí. */
 const FILTROS = [
   { id:'inicio', label:'🏠 Inicio' },
-  { id:'inv',    label:'📊 Inventario' },
   { id:'bundle', label:'🎁 Bundles' },
-  { id:'promo',  label:'🔥 Promos' },
+  { id:'promo',  label:'🔥 Promos y precios' },
   { id:'preventa', label:'🚀 Preventa' },
   { id:'eol',   label:'🏷️ Vender 50%' },
   { id:'resurtir', label:'🔄 Resurtir' },
@@ -1070,9 +1075,15 @@ function cardPrecioReg(x){
   const precio = x.precio || 0;
   const sel = precio ? segSelector(x.sku, precio, precio) : `<span class="badge">Sin precio registrado</span>`;
   const waBtn = precio ? `<button class="btn-wa" onclick="compartirWA('${encodeURIComponent(x.producto)}','${x.sku}',${precio},${precio})">📲 Compartir por WhatsApp</button>` : '';
+  // Mismas existencias que en la tarjeta de promo. Con esto los dos slides de
+  // esta pestaña cubren todo el inventario y la pestaña aparte sale sobrando.
+  const st = x.stock || 0, ex = x.exhibe || 0;
+  const clsSt = st === 0 ? 'sin' : st <= 3 ? 'poco' : 'hay';
+  const stockB = `<span class="badge stock-b ${clsSt}">${st === 0 ? '✕ sin piezas' : '📦 ' + st + (st === 1 ? ' pieza' : ' piezas')}</span>`;
+  const exhB = ex ? `<span class="badge">👁 ${ex} exhib.</span>` : '';
   return `<div class="card">
     <div class="top"><h3>${x.producto}</h3></div>
-    <div class="meta"><span class="badge">SKU ${x.sku}</span></div>
+    <div class="meta">${stockB}${exhB}<span class="badge">SKU ${x.sku}</span></div>
     ${sel}${waBtn}
   </div>`;
 }
