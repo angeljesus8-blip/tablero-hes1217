@@ -7,3 +7,5 @@ eol/
 
 # Estado interno para comparar inventario día a día (no se publica)
 .snapshot_inventario.json
+comisiones_datos.js
+_privado_no_publicar/

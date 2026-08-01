@@ -327,6 +327,11 @@
 const D = window.DATOS || {};
 const _cfg = (function(){ try{ return JSON.parse(localStorage.getItem('hes_store')||'null'); }catch(e){ return null; } })();
 const CLOUD_URL = (_cfg && _cfg.gas_url) ? _cfg.gas_url : 'https://script.google.com/macros/s/AKfycbwbZFsiDqZrNitPKNLqr4r6xOFu3VKprtXJacScftIJmcQdAl_yytjxK8BymWvy8I1gjA/exec';
+// Token del Apps Script. Llega desde login_asesor/login_empleado — nunca se
+// escribe aquí: este archivo es público y eso anularía el candado.
+// Si falta, las llamadas salen sin token y el script las rechazará en cuanto
+// GAS_ESTRICTO esté en true (ver GAS_guardian.gs).
+const GAS_TOKEN = (_cfg && _cfg.gas_token) || '';
 const TIENDA_ID     = (_cfg && _cfg.store_id) || '1217';
 const TIENDA_NOMBRE = (_cfg && _cfg.nombre)   || 'Angelópolis';
 const ROLE          = localStorage.getItem('hes_role') || 'asesor';
@@ -601,9 +606,11 @@ function attReset(){
 }
 
 /* ---- Leaderboard & Resumen WA ---- */
+// Los nombres vienen de la config de tienda (Supabase). Sin sesión la lista va
+// vacía a propósito: este archivo es público y no debe traer nombres del equipo.
 const VENDEDORES_TB = (_cfg && Array.isArray(_cfg.vendedores) && _cfg.vendedores.length)
   ? _cfg.vendedores
-  : ['Arnulfo González','Arturo Aguilar','Miguel Ángel García'];
+  : [];
 function nombreCorto(n){ const p=n.split(' '); return p[0]+(p[1]?' '+p[1][0]+'.':''); }
 // Vendedores configurados + cualquiera que haya vendido hoy, ordenados por attach
 function filasLeaderboard(){
@@ -1326,7 +1333,8 @@ function gasJsonp(qs){
     function limpiar(){ clearTimeout(t); delete window[cb]; sc.remove(); }
     window[cb] = function(d){ limpiar(); resolve(d); };
     sc.onerror = function(){ limpiar(); reject(new Error('red')); };
-    sc.src = CLOUD_URL + '?' + qs + '&callback=' + cb;
+    sc.src = CLOUD_URL + '?' + qs + '&callback=' + cb
+           + (GAS_TOKEN ? '&t=' + encodeURIComponent(GAS_TOKEN) : '');
     document.head.appendChild(sc);
   });
 }
