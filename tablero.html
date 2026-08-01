@@ -355,8 +355,13 @@ function hoyISO(d){
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
 let HOY_ISO = hoyISO(HOY);
-// Vigencia por fechas d1/d2 (ambas inclusive); sin fecha = siempre vigente
-const vigenteHoy = x => (!x.d1 || HOY_ISO >= x.d1) && (!x.d2 || HOY_ISO <= x.d2);
+/* Vigencia por fechas d1/d2 (ambas inclusive). EXIGE fecha de fin.
+   Hasta el 1-ago-2026 la regla era "sin fecha = siempre vigente", y así 132 de
+   las 141 promos de la hoja —cargadas sin vigencia— se mostraban para siempre:
+   el equipo seguía viendo promociones terminadas en julio. Los 20 combos
+   activos sí traen fecha, así que no les afecta.
+   Si algo debe verse sin caducar, se le pone una fecha lejana; no se deja vacía. */
+const vigenteHoy = x => !!x.d2 && (!x.d1 || HOY_ISO >= x.d1) && HOY_ISO <= x.d2;
 // Relee el reloj. true = ya es otro día (hay que re-filtrar vigencias).
 function tocarDia(){
   HOY = new Date();
