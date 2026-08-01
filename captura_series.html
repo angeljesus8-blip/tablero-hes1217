@@ -348,12 +348,17 @@ function hoyISO(){
   const d = new Date();
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
-// Devuelve la promo si está vigente hoy (por SKU), si no null
+/* Devuelve la promo si está vigente hoy (por SKU), si no null.
+   SIN FECHA DE FIN NO SE APLICA. Antes "sin fecha" significaba "siempre
+   vigente" y el 1-ago-2026 se descubrió que 132 de 141 promos de la hoja no
+   tenían vigencia cargada: se seguía cobrando precio promocional de promos ya
+   terminadas. Aquí no es cosmético — esto decide el precio de una venta real. */
 function promoActiva(sku){
   const pr = PROMOS[sku]; if(!pr) return null;
+  if(!pr.d2) return null;
   const hoy = hoyISO();
   if(pr.d1 && hoy < pr.d1) return null;
-  if(pr.d2 && hoy > pr.d2) return null;
+  if(hoy > pr.d2) return null;
   return pr;
 }
 
