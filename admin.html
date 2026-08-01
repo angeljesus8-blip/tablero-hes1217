@@ -420,11 +420,11 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
       <div class="eq-grid">
         <div class="field">
           <label>Número de empleado</label>
-          <input id="nuevoEmpNo" inputmode="numeric" placeholder="Ej: <empno>" maxlength="10">
+          <input id="nuevoEmpNo" inputmode="numeric" placeholder="Número de empleado" maxlength="10">
         </div>
         <div class="field">
           <label>Nombre completo</label>
-          <input id="nuevoEmpNombre" placeholder="Ej: Elena Navarro Gálvez">
+          <input id="nuevoEmpNombre" placeholder="Nombre completo">
         </div>
         <div class="field">
           <label>Puesto</label>
@@ -457,7 +457,7 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
       </div>
       <div class="field">
         <label>Responsable de descargas</label>
-        <input id="cfgHoja" placeholder="Ej: Elena Navarro">
+        <input id="cfgHoja" placeholder="Nombre de la hoja">
         <p style="font-size:11px;color:#aaa;margin-top:4px">Nombre exacto del asesor que puede abrir la hoja desde Captura de Series.</p>
       </div>
       <div class="field">
@@ -497,6 +497,10 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
 const _cfg  = (function(){ try{ return JSON.parse(localStorage.getItem('hes_store')||'null'); }catch(e){ return null; } })();
 const _role = localStorage.getItem('hes_role');
 const API   = (_cfg && _cfg.gas_url) ? _cfg.gas_url : 'https://script.google.com/macros/s/AKfycbwbZFsiDqZrNitPKNLqr4r6xOFu3VKprtXJacScftIJmcQdAl_yytjxK8BymWvy8I1gjA/exec';
+// Token del Apps Script: viene del login, nunca escrito aquí (archivo público).
+const GAS_TOKEN = (_cfg && _cfg.gas_token) || '';
+const gasQS   = qs => API + '?' + qs + (GAS_TOKEN ? '&t=' + encodeURIComponent(GAS_TOKEN) : '');
+const gasPost = () => API + (GAS_TOKEN ? '?t=' + encodeURIComponent(GAS_TOKEN) : '');
 const SB_URL = 'https://rjdrljtujbwooejrpyqv.supabase.co';
 const SB_KEY = 'sb_publishable_mELjDmCaFpNOxcwPi5MB2A_qSZ5ZA2z';
 let sb = null;
@@ -748,7 +752,12 @@ function jsonp(url){
   });
 }
 function apiUrl(modo,extra){
-  return API+'?'+new URLSearchParams({modo,pin:PIN_OK,...extra}).toString();
+  // Antes mandaba pin:PIN_OK, una variable que no existe en este archivo: las
+  // llamadas que pasan por aquí (bundle_add, bundle_del, notificar) reventaban
+  // con ReferenceError. Ahora va el token, que es lo que el script espera.
+  const p = {modo, ...extra};
+  if (GAS_TOKEN) p.t = GAS_TOKEN;
+  return API+'?'+new URLSearchParams(p).toString();
 }
 const money=n=>'$'+Number(n||0).toLocaleString('es-MX');
 function toast(msg,ok){
@@ -825,7 +834,7 @@ async function subirExhibicion(){
   btn.disabled=true; btn.innerHTML='<span class="spin"></span>Subiendo…';
   document.getElementById('resExhib').className='result';
   try{
-    await fetch(API,{method:'POST',mode:'no-cors',
+    await fetch(gasPost(),{method:'POST',mode:'no-cors',
       headers:{'Content-Type':'text/plain;charset=utf-8'},
       body:JSON.stringify({tipo:'exhibicion',by:'Admin 1217',rows:parsedExhib})});
     await new Promise(r=>setTimeout(r,2000));
@@ -900,7 +909,7 @@ async function subirCatalogoRef(){
   btn.disabled=true; btn.innerHTML='<span class="spin"></span>Subiendo…';
   document.getElementById('resCatRef').className='result';
   try{
-    await fetch(API,{method:'POST',mode:'no-cors',
+    await fetch(gasPost(),{method:'POST',mode:'no-cors',
       headers:{'Content-Type':'text/plain;charset=utf-8'},
       body:JSON.stringify({tipo:'catalogo_ref',by:'Admin 1217',rows:parsedCatRef})});
     await new Promise(r=>setTimeout(r,2000));
@@ -969,11 +978,11 @@ async function subirCatalogo(){
   btn.disabled=true; btn.innerHTML='<span class="spin"></span>Subiendo…';
   document.getElementById('resCat').className='result';
   try{
-    await fetch(API,{method:'POST',mode:'no-cors',
+    await fetch(gasPost(),{method:'POST',mode:'no-cors',
       headers:{'Content-Type':'text/plain;charset=utf-8'},
       body:JSON.stringify({tipo:'catalogo',by:'Admin 1217',rows:parsedCat})});
     await new Promise(r=>setTimeout(r,2500));
-    let est=null; try{ est=await jsonp(API+'?modo=estado'); }catch(e){}
+    let est=null; try{ est=await jsonp(gasQS('modo=estado')); }catch(e){}
     if(est&&Number(est.catCount)>0){
       showResult('resCat',true,`✅ Catálogo actualizado: <b>${est.catCount}</b> productos. Los teléfonos tomarán el catálogo nuevo al abrir la app.`);
     } else {
@@ -1177,11 +1186,11 @@ async function subirPromos(){
   btn.disabled=true; btn.innerHTML='<span class="spin"></span>Subiendo…';
   document.getElementById('resPromos').className='result';
   try{
-    await fetch(API,{method:'POST',mode:'no-cors',
+    await fetch(gasPost(),{method:'POST',mode:'no-cors',
       headers:{'Content-Type':'text/plain;charset=utf-8'},
       body:JSON.stringify({tipo:'promos',by:'Admin 1217',vig:parsedPromos.vig,rows:parsedPromos.rows})});
     await new Promise(r=>setTimeout(r,2500));
-    let est=null; try{ est=await jsonp(API+'?modo=estado'); }catch(e){}
+    let est=null; try{ est=await jsonp(gasQS('modo=estado')); }catch(e){}
     const eolCount=parsedPromos.rows.filter(r=>r.est==='EOL').length;
     if(est&&Number(est.promoCount)>0){
       showResult('resPromos',true,
@@ -1408,7 +1417,7 @@ async function notificarEquipo(msg){
 
 async function loadBundles(){
   document.getElementById('listB').innerHTML='<div class="empty">Cargando…</div>';
-  try{ renderBundles(await jsonp(API+'?modo=bundles')||[]); }
+  try{ renderBundles(await jsonp(gasQS('modo=bundles'))||[]); }
   catch{ document.getElementById('listB').innerHTML='<div class="empty">Error al cargar</div>'; }
 }
 function renderBundles(list){
@@ -1461,7 +1470,7 @@ async function clearBundles(){
       toast('Todos los bundles eliminados ✓');
     } else {
       // Fallback: cargar lista y borrar uno por uno con bundle_del
-      const lista=await jsonp(API+'?modo=bundles')||[];
+      const lista=await jsonp(gasQS('modo=bundles'))||[];
       let n=0;
       for(const b of lista){
         await jsonp(apiUrl('bundle_del',{id:b.id})).catch(()=>{});
@@ -1690,7 +1699,7 @@ document.getElementById('fileEolXlsx').onchange=async function(e){
 
 async function loadEol(){
   document.getElementById('listE').innerHTML='<div class="empty">Cargando…</div>';
-  try{ renderEol(await jsonp(API+'?modo=eol_cloud')||[]); }
+  try{ renderEol(await jsonp(gasQS('modo=eol_cloud'))||[]); }
   catch{ document.getElementById('listE').innerHTML='<div class="empty">Error al cargar</div>'; }
 }
 function renderEol(list){
@@ -1838,7 +1847,7 @@ async function cargarListaAvisos(){
   const el=document.getElementById('ceaLista');
   el.innerHTML='<p style="text-align:center;color:#aaa;font-size:12px;padding:12px">Cargando…</p>';
   try{
-    const data=await jsonp(API+'?modo=avisos_cloud');
+    const data=await jsonp(gasQS('modo=avisos_cloud'));
     if(!Array.isArray(data)||data.length===0){
       el.innerHTML='<p style="text-align:center;color:#aaa;font-size:12px;padding:12px">Sin avisos en nube.</p>';
       return;
@@ -2563,7 +2572,7 @@ async function guardarComisiones(){
   btn.disabled = true; btn.innerHTML = '<span class="spin"></span>Guardando…';
   document.getElementById('resComis').className = 'result';
   try{
-    await fetch(API, {method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain;charset=utf-8'},
+    await fetch(gasPost(), {method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain;charset=utf-8'},
       body: JSON.stringify({tipo:'comisiones', rows,
         periodoComisiones: document.getElementById('comisPeriodo').value.trim(),
         periodoGarantias: document.getElementById('comisPeriodoGar').value.trim()})});
@@ -2578,7 +2587,7 @@ async function cargarComisionesCloud(){
   const el = document.getElementById('comisCloudInfo');
   el.innerHTML = '<p style="text-align:center;color:#aaa;font-size:12px;padding:12px">Cargando…</p>';
   try{
-    const data = await jsonp(API+'?modo=comisiones');
+    const data = await jsonp(gasQS('modo=comisiones'));
     if(!data || !Array.isArray(data.empleados) || !data.empleados.length){
       el.innerHTML = '<p style="text-align:center;color:#aaa;font-size:12px;padding:12px">Sin comisiones guardadas todavía.</p>';
       return;
