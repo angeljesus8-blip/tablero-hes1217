@@ -346,7 +346,7 @@ async function pinCheck(auto) {
     const porTienda = await sb.rpc('login_asesor', { p_pin: pin });
     if (porTienda.error) {
       console.warn('login_asesor no disponible, usando el modo anterior:', porTienda.error.message);
-      const vieja = await sb.from('tiendas').select('store_id,nombre,ciudad,gas_url,vendedores').eq('store_id', pin).eq('activo', true).maybeSingle();
+      const vieja = await sb.from('tiendas').select('store_id,nombre,ciudad,gas_url,gas_token,vendedores').eq('store_id', pin).eq('activo', true).maybeSingle();
       data = vieja.data;
     } else {
       data = uno(porTienda.data);
@@ -360,7 +360,10 @@ async function pinCheck(auto) {
     pinLimpiar();
     return;
   }
-  const cfg = { store_id:data.store_id, nombre:data.nombre, ciudad:data.ciudad||'', gas_url:data.gas_url||'', vendedores:Array.isArray(data.vendedores)?data.vendedores:[] };
+  // gas_token: sin esto el Apps Script rechaza cada llamada del tablero. Lo
+  // devuelven login_asesor y login_empleado; se arma el objeto campo por campo,
+  // asi que hay que nombrarlo o se pierde en silencio.
+  const cfg = { store_id:data.store_id, nombre:data.nombre, ciudad:data.ciudad||'', gas_url:data.gas_url||'', gas_token:data.gas_token||'', vendedores:Array.isArray(data.vendedores)?data.vendedores:[] };
   localStorage.setItem('hes_store', JSON.stringify(cfg));
   localStorage.setItem('hes_role', 'asesor');
   // Quién entró: lo usan el tablero y Captura de Series para no preguntar el nombre
@@ -385,7 +388,7 @@ async function doLogin() {
   /* Dos clases de cuenta: la dueña de la tienda (el correo de tienda) y la de
      alguien del equipo con su propio correo —el subgerente—. La segunda no
      aparece en `tiendas`, así que se busca su ficha por correo y se vincula. */
-  const COLS = 'store_id,nombre,ciudad,gas_url,sheet_url,hoja_auth,vendedores';
+  const COLS = 'store_id,nombre,ciudad,gas_url,gas_token,sheet_url,hoja_auth,vendedores';
   let tienda = (await sb.from('tiendas').select(COLS).eq('user_id', data.user.id).maybeSingle()).data;
   let ficha = null;
 
@@ -405,7 +408,7 @@ async function doLogin() {
       : 'Este correo no está dado de alta en ninguna tienda. Pide al gerente que registre tu correo en Admin → Equipo.');
     return;
   }
-  const cfg = { store_id:tienda.store_id, nombre:tienda.nombre, ciudad:tienda.ciudad||'', gas_url:tienda.gas_url||'', sheet_url:tienda.sheet_url||'', hoja_auth:tienda.hoja_auth||'', vendedores:Array.isArray(tienda.vendedores)?tienda.vendedores:[] };
+  const cfg = { store_id:tienda.store_id, nombre:tienda.nombre, ciudad:tienda.ciudad||'', gas_url:tienda.gas_url||'', gas_token:tienda.gas_token||'', sheet_url:tienda.sheet_url||'', hoja_auth:tienda.hoja_auth||'', vendedores:Array.isArray(tienda.vendedores)?tienda.vendedores:[] };
   // Quien entra por su ficha se identifica igual que si hubiera usado su número
   const rol = (!ficha || ficha.admin) ? 'gerente' : 'asesor';
   localStorage.setItem('hes_store', JSON.stringify(cfg));
