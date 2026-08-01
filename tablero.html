@@ -117,6 +117,9 @@
   .exh.eol-ready { background:#eafaf1; color:var(--verde); }
   .exh.eol-pend { background:#fff5ee; color:var(--naranja); }
   .exh.trans-b { background:#f3effe; color:#7c3aed; }
+  /* Precio de promoción dentro de la fila de inventario: el asesor ve las
+     piezas y a cuánto se vende sin cambiar de pestaña. */
+  .exh.promo-b { background:#fdecec; color:var(--rojo); }
   .card.t-eol.listo { border-left-color:var(--verde); background:#f7fdfa; box-shadow:0 2px 10px rgba(26,140,78,.10); }
   .eol-status { font-size:9.5px; font-weight:800; text-transform:uppercase; letter-spacing:.4px; padding:3px 7px; border-radius:6px; flex-shrink:0; }
   .eol-status.pend { background:#fff5ee; color:var(--naranja); }
@@ -1194,10 +1197,17 @@ function rowInv(x){
   const tr = transitoMap[x.sku];
   const trB = tr ? `<span class="exh trans-b">🚚 ${tr}</span>` : '';
   const vB = (D._invCloud && x._vendido) ? `<span class="exh" style="background:#f0f0f0;color:#999">−${x._vendido} vend.</span>` : '';
+  // Promo vigente del producto, si la hay. Va aquí para no obligar al asesor a
+  // saltar entre Inventario y Promos: ve las piezas y el precio en la misma fila.
+  // Si el producto ya se vende al 50% por EOL, ese badge manda y no se duplica:
+  // el 50% pisa a la promo (misma prioridad que precioVentaEnCombo).
+  const pr = est==='listo' ? null : _promoDe(x.sku);
+  const pp = pr ? parseFloat(String(pr.pp||pr.pr||0).replace(/[^0-9.]/g,'')) : 0;
+  const promoB = pp ? `<span class="exh promo-b">🔥 ${money(pp)}</span>` : '';
   return `<div class="inv-row">
     <div class="dot ${cls}"></div>
     <div class="inv-info" style="flex:1;min-width:0"><h4>${x.producto}</h4><span>SKU ${x.sku||'—'}</span></div>
-    ${eolB}${exh}${trB}${vB}
+    ${eolB}${promoB}${exh}${trB}${vB}
     <div class="stock ${cls}"><div class="num">${x.stock}</div><div class="lbl lbl2">para vender</div></div>
   </div>`;
 }
