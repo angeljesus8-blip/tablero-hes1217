@@ -187,3 +187,58 @@ END $fn$;
        (ventas totales del SKU − lo vendido desde el corte), y sin ventas
        cargadas no se puede calcular.
    ============================================================ */
+
+-- ------------------------------------------------------------
+-- 3 · VENTAS  ←  modo=exportar&hoja=Ventas
+-- ------------------------------------------------------------
+-- La fecha viene ya resuelta en _iso desde el Apps Script, que SI conoce la
+-- zona horaria. Armarla aqui haria que una venta de las 8 pm se guardara con
+-- la fecha del dia siguiente.
+--   con_seguro NULL a proposito: son las anteriores a julio-2026, cuando el
+--   campo no existia. Contarlas como "sin seguro" hundiria el attach rate.
+--   (funcion cargar_ventas — ver historial de git para el cuerpo completo)
+
+-- ------------------------------------------------------------
+-- 4 · CORTES DE INVENTARIO  ←  modo=inventario   ¡VA DESPUES DE LAS VENTAS!
+-- ------------------------------------------------------------
+-- El GAS no guarda el corte: guarda cuantas ventas habia cuando se tomo, y
+-- reporta v = (ventas totales de ahora) - corte. Aqui se despeja al reves:
+--     corte = total de ventas - v
+-- Por eso este paso NO puede ir antes de cargar_ventas: sin ventas cargadas el
+-- total es cero y todos los cortes saldrian en cero, con lo que el tablero
+-- mostraria como "vendido" todo el historico y el stock en cero.
+
+-- ------------------------------------------------------------
+-- 5 · SKUs SIN CODIGO DE BARRAS  ←  rescatar_sin_upc()
+-- ------------------------------------------------------------
+-- BUG ENCONTRADO AL MIGRAR: leerCatalogo_ indexa por UPC y hace
+--     if (upc) out[upc] = {...}
+-- asi que un SKU de Catalogo_ref SIN codigo de barras no sale nunca en
+-- modo=catalogo. Como Captura de Series se alimenta de ahi, ese producto no se
+-- autocompleta al teclear su SKU.
+--
+-- El 2-ago-2026 habia uno: 100270551, HUAWEI MatePad 11.5" 8/256GB.
+-- modo=inventario si lo conoce, asi que se rescata de ahi.
+--
+-- OJO: en el editor de Supabase, un INSERT ... WITH que va despues de otro
+-- SELECT no se ejecuta. Metido dentro de una funcion plpgsql si corre.
+
+/* ============================================================
+   PARIDAD — 2-ago-2026
+
+   inventario_vivo('1217') contra modo=inventario del Apps Script:
+
+     gas=215  supabase=215
+     difieren: onhand=0  vendido=0  exhibicion=0  exh_vendida=0
+     solo_en_gas=0  solo_en_supabase=0
+
+   Identicos en los 215 SKUs, incluidos los dos cortes. Es la funcion mas
+   delicada del sistema y la que se verifico contando cajas en piso.
+
+   Cargado hasta ahora:
+     catalogo 215 · inventario 214 · promos 117 · eol 133 · ventas 220
+     cortes onhand 215 · cortes exhibicion 215
+     bundles 0 y avisos 0 (el GAS tambien devuelve 0: estan vencidos)
+
+   FALTA: apartados (9), comisiones (4), y comparar las otras seis funciones.
+   ============================================================ */
