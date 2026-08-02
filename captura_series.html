@@ -314,7 +314,7 @@ async function flushCloud(){
       const res = await fetch(gasPost(), { method:'POST',
         headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify(body) });
       let r = null;
-      try{ r = JSON.parse(await res.text()); }catch(e){}
+      try{ r = JSON.parse(await res.text()); }catch(e){}   // r queda null y se maneja abajo
       if(!res.ok || !r || r.ok === false){
         const causa = (r && r.error) ? r.error : ('HTTP ' + res.status);
         avisoPendientes(pending.length + ' captura(s) sin subir — ' + causa
@@ -342,6 +342,8 @@ function esCatalogoValido(c){
   const k = Object.keys(c); if(!k.length) return false;
   return /^[0-9]{6,14}$/.test(k[0]);
 }
+// Cache corrupto: se ignora y se arranca con el catalogo de la app. La nube
+// lo reemplaza en cuanto responde, asi que callar aqui es correcto.
 try{ const c = JSON.parse(localStorage.getItem(CATKEY) || 'null'); if(esCatalogoValido(c)) CATALOGO = Object.assign({}, CATALOGO, c); }catch(e){}
 let _jsonpN = 0;
 function catJsonp(url){
@@ -374,6 +376,7 @@ function refreshCatalogo(){
 const PROMOKEY = 'hes1217_promos';
 let PROMOS = {};
 function esPromosValido(p){ return p && typeof p==='object' && !Array.isArray(p); }
+// Igual que el catalogo: sin cache se sigue sin promos hasta que llegue la nube.
 try{ const p = JSON.parse(localStorage.getItem(PROMOKEY) || 'null'); if(esPromosValido(p)) PROMOS = p; }catch(e){}
 function refreshPromos(){
   if(!CLOUD_URL) return;
@@ -411,7 +414,7 @@ function promoActiva(sku){
 const EOLVKEY = 'hes1217_eol_venta';
 let EOL_VENTA = {};
 function esObjValido(o){ return o && typeof o==='object' && !Array.isArray(o); }
-try{ localStorage.removeItem(EOLVKEY); }catch(e){}   // limpia cualquier copia vieja pegada
+try{ localStorage.removeItem(EOLVKEY); }catch(e){}   // si no se puede borrar, da igual: no se lee
 function refreshEolVenta(){
   if(!CLOUD_URL) return;
   catJsonp(gasQS('modo=eol_venta')).then(e=>{
@@ -432,7 +435,7 @@ function beep(){
     o.connect(g); g.connect(a.destination); o.frequency.value=880; o.type='sine';
     g.gain.setValueAtTime(.18,a.currentTime); o.start();
     g.gain.exponentialRampToValueAtTime(.0001,a.currentTime+.15); o.stop(a.currentTime+.15);
-  }catch(e){}
+  }catch(e){}   // sin audio no pasa nada: el aviso visual ya salio
 }
 function save(){ localStorage.setItem(KEY, JSON.stringify(items)); }
 
@@ -695,7 +698,7 @@ async function processImage(file){
         Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
         Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E ] });
       const text = await tmp.scanFile(file, false);
-      try{ tmp.clear(); }catch(e){}
+      try{ tmp.clear(); }catch(e){}   // limpiar el temporal es cortesia, no requisito
       if(text) routeCode(text, '');
     }catch(e){ /* nada */ }
   }

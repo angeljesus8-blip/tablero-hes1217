@@ -526,7 +526,7 @@ function abrirAdmin(){
       delete _cfg.admin_pin;
       localStorage.setItem('hes_store', JSON.stringify(_cfg));
     }
-  }catch(e){}
+  }catch(e){}   // limpiar el admin_pin viejo es higiene, no requisito
 })();
 
 /* Dos formas de entrar, ninguna con PIN compartido:
@@ -542,6 +542,7 @@ async function verificarAcceso(){
   }catch(e){ console.warn('No pude verificar la sesión:', e); }
 
   let emp = null;
+  // Ficha ilegible: se cae al camino de sesion de gerente.
   try{ emp = JSON.parse(localStorage.getItem('hes_empleado')||'null'); }catch(e){}
   const tienda = (_cfg && _cfg.store_id) || '';
   if(!emp || !emp.empno || !tienda) return { ok:false, motivo:'sin_identificar' };
@@ -608,12 +609,21 @@ async function cargarEquipo(){
     sel.innerHTML = PUESTOS_CONOCIDOS.map(p=>'<option value="'+p+'">'+p+'</option>').join('');
 
   if(!sb) initSB();
-  let sesion = false;
-  try{ const { data } = await sb.auth.getSession(); sesion = !!(data && data.session); }catch(e){}
+  // Distinguir "no hay sesion" de "no se pudo consultar": antes los dos casos
+  // decian lo mismo y mandaban al gerente a volver a entrar aunque ya estuviera
+  // dentro y el problema fuera otro.
+  let sesion = false, fallo = '';
+  try{
+    const { data, error } = await sb.auth.getSession();
+    if(error) fallo = error.message || 'error al consultar la sesión';
+    sesion = !!(data && data.session);
+  }catch(e){ fallo = String(e && e.message ? e.message : e); }
   if(!sesion){
     alta.style.display = 'none';
     cont.innerHTML = '';
-    equipoAviso('Para dar de alta o quitar accesos necesitas entrar como gerente, con tu correo y contraseña. Sal del menú y usa <b>“Iniciar sesión con correo”</b>.');
+    equipoAviso(fallo
+      ? 'No se pudo comprobar tu sesión (' + fallo + '). Revisa tu conexión y recarga; si sigue, vuelve a entrar con tu correo.'
+      : 'Para dar de alta o quitar accesos necesitas entrar como gerente, con tu correo y contraseña. Sal del menú y usa <b>“Iniciar sesión con correo”</b>.');
     return;
   }
   alta.style.display = '';
@@ -982,7 +992,7 @@ async function subirCatalogo(){
       headers:{'Content-Type':'text/plain;charset=utf-8'},
       body:JSON.stringify({tipo:'catalogo',by:'Admin 1217',rows:parsedCat})});
     await new Promise(r=>setTimeout(r,2500));
-    let est=null; try{ est=await jsonp(gasQS('modo=estado')); }catch(e){}
+    let est=null; try{ est=await jsonp(gasQS('modo=estado')); }catch(e){}   // sin estado se muestra 'Enviado, revisa en unos segundos' en vez de confirmar en falso
     if(est&&Number(est.catCount)>0){
       showResult('resCat',true,`✅ Catálogo actualizado: <b>${est.catCount}</b> productos. Los teléfonos tomarán el catálogo nuevo al abrir la app.`);
     } else {
@@ -1190,7 +1200,7 @@ async function subirPromos(){
       headers:{'Content-Type':'text/plain;charset=utf-8'},
       body:JSON.stringify({tipo:'promos',by:'Admin 1217',vig:parsedPromos.vig,rows:parsedPromos.rows})});
     await new Promise(r=>setTimeout(r,2500));
-    let est=null; try{ est=await jsonp(gasQS('modo=estado')); }catch(e){}
+    let est=null; try{ est=await jsonp(gasQS('modo=estado')); }catch(e){}   // sin estado se muestra 'Enviado, revisa en unos segundos' en vez de confirmar en falso
     const eolCount=parsedPromos.rows.filter(r=>r.est==='EOL').length;
     if(est&&Number(est.promoCount)>0){
       showResult('resPromos',true,
@@ -2665,22 +2675,37 @@ async function guardarConfig(){
     const stored = JSON.parse(localStorage.getItem('hes_store')||'{}');
     const updated = Object.assign({}, stored, {gas_url, sheet_url, hoja_auth, vendedores});
     localStorage.setItem('hes_store', JSON.stringify(updated));
-  }catch(e){}
+  }catch(e){}   // cuota llena: lo que importa es que quede en Supabase, abajo
 
+  /* Antes esto decía "✅ Guardado" pasara lo que pasara: el catch solo escribía
+     en la consola y el error que devuelve Supabase —que NO lanza excepción, lo
+     regresa en la respuesta— ni se miraba. La config podía no guardarse y el
+     gerente se iba tranquilo. */
+  let problema = '';
   try{
     if(!sb) initSB();
-    if(sb){
+    if(!sb){
+      problema = 'no se pudo conectar con Supabase';
+    }else{
       const storeId = (_cfg && _cfg.store_id) || '';
-      if(storeId){
-        await sb.from('tiendas')
+      if(!storeId){
+        problema = 'no hay tienda en la sesión; vuelve a entrar desde el menú';
+      }else{
+        const { error } = await sb.from('tiendas')
           .update({gas_url, sheet_url, hoja_auth, vendedores})
           .eq('store_id', storeId);
+        if(error) problema = error.message || 'Supabase rechazó el cambio';
       }
     }
-  }catch(e){ console.warn('Supabase config update:', e); }
+  }catch(e){ problema = String(e && e.message ? e.message : e); }
 
   btn.disabled = false;
   btn.textContent = '💾 Guardar configuración';
+  if(problema){
+    showResult('resConfig', false,
+      '⚠ NO se guardó: ' + problema + '. Vuelve a intentar; si sigue, revisa tu sesión.');
+    return;
+  }
   showResult('resConfig', true,
     '✅ Guardado. El equipo verá estos datos la próxima vez que abran Captura de Series o recarguen el tablero.');
 }
