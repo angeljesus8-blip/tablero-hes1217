@@ -752,9 +752,11 @@ const VENDEDORES = (_cfgCS && Array.isArray(_cfgCS.vendedores) && _cfgCS.vendedo
   ? _cfgCS.vendedores
   : [];
 const VKEY = 'hes1217_vend';
-// Quién puede bajar el Excel. Antes era un nombre escrito aquí; ahora sale de
-// la config, y si no viene, nadie descarga hasta que se configure.
-const DESCARGA_AUTORIZADA = (_cfgCS && _cfgCS.descarga_autorizada) || '';
+// Quién puede abrir la hoja de ventas. Antes era un nombre escrito aquí; sale
+// de la config de tienda, campo hoja_auth (se edita en Admin -> Configuración).
+// OJO: se llamó "descarga_autorizada" por error del 1-ago-2026 y ese campo no
+// existe, así que el botón quedó oculto para todos, incluida Laura.
+const DESCARGA_AUTORIZADA = (_cfgCS && _cfgCS.hoja_auth) || '';
 let currentVend = '';
 
 function updateDownloadAccess(){
