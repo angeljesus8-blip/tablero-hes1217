@@ -152,6 +152,63 @@ apunta a un archivo que ya no existe.
 4. **Cierra y abre la app** — sin eso estás viendo la versión vieja
 5. Si es horario de tienda y el cambio toca guardar datos, avisa antes
 
+---
+
+## Antes de mover algo grande
+
+No se empieza a escribir hasta tener esto contestado y acordado:
+
+1. **El problema real**, no el síntoma que se ve.
+2. **Inventario completo de lo afectado** — sacado con `grep`, no de memoria.
+3. **Qué se rompe si falla, y si avisaría.** Lo que falla callando cuesta horas.
+4. **El orden de los pasos**, incluyendo lo que va después y de qué depende cada
+   uno. Si un paso necesita que la gente vuelva a entrar, eso *es* un paso.
+5. **Cuándo.** Si toca guardar datos, no en horario de tienda.
+
+### Ejemplo de lo que NO se hizo así (1-ago-2026)
+
+Cerrar el Apps Script se ejecutó pieza por pieza. El inventario correcto era:
+
+| Ruta | Tipo | ¿Avisa si falla? |
+|---|---|---|
+| `tablero` · 10 modos | lee y escribe | No |
+| `captura_series` · guardar venta | escribe | **No** — `mode:'no-cors'` |
+| `admin` · 5 modos | escribe | No |
+| `actualizar_datos` · estado | lee | No |
+| `comisiones` · modo=comisiones | lee | No |
+
+Con esa tabla enfrente el orden salta solo: **primero** que todas puedan avisar,
+**luego** el token, **al final** cerrar. Se hizo al revés y se perdió un día de
+ventas.
+
+---
+
+## Lo que sigue, en orden
+
+Esto es el panorama completo, no una lista de pendientes sueltos.
+
+**A · Que nada falle callando** *(bloquea todo lo demás)*
+Los 26 `catch` vacíos que lista `verificar.py`. Mientras existan, cualquier
+cambio siguiente puede romper algo sin que nadie se entere. Empezar por
+`tablero.html` (9) y `admin.html` (6), que tocan datos.
+
+**B · Cerrar el Apps Script, bien esta vez**
+Depende de A. Orden: confirmar en el registro que ninguna llamada llega sin
+token → `GAS_ESTRICTO=true` fuera de horario → aplicar `GAS_arreglo_apartados.gs`
+para que el token valga por sí solo y el PIN quede de respaldo.
+
+**C · Migración a Supabase** *(el esquema ya está creado y vacío)*
+Depende de B: no tiene sentido migrar sobre una base que todavía falla callando.
+Paso 2 (copiar las 838 filas) → paso 3 (funciones de lectura por PIN) → paso 4
+(escribir en los dos lados un par de semanas) → paso 5 (leer de Supabase) →
+paso 6 (apagar el Apps Script).
+Lo que se gana: montar una tienda pasa de cuatro pasos manuales a un `INSERT`.
+
+**D · Limpieza pendiente** *(independiente, se puede hacer cuando sea)*
+Historial de git del tablero (todavía guarda `comisiones_datos.js` con nombres,
+ventas y comisiones) · ticket a GitHub por los commits huérfanos del planeador ·
+`exhibAt` para detectar cuándo el On Hand quedó viejo.
+
 ## Lo que todavía puede fallar callando
 
 26 `catch` vacíos repartidos en los seis html — `verificar.py` los lista. Son
