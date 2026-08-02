@@ -1,0 +1,32 @@
+name: Verificar tablero
+
+# Corre en cada push y en cada pull request. Si falla, el commit queda marcado
+# en rojo en GitHub — para enterarse antes de que lo note el equipo en piso.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # verificar.py compara contra el commit anterior para saber si se
+          # tocó un .html sin subir VERSION; con un checkout superficial no
+          # tendría con qué comparar.
+          fetch-depth: 2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Revisar
+        working-directory: 09_Tablero
+        run: python verificar.py
