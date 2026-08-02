@@ -198,6 +198,16 @@ ventas.
 
 ---
 
+## Cerrar el candado del Apps Script
+
+Listo para el 3-ago-2026, con una condición que hay que comprobar y no suponer:
+el registro del 2-ago traía **10 llamadas sin token** (`catalogo`, `promos` y
+`eol_venta`, tres de cada uno — el arranque de Captura de Series). Hay al menos
+un aparato con sesión de antes del 1-ago.
+
+No se cierra hasta que ese contador esté en cero. Procedimiento y reversión en
+`GAS_cerrar_candado.md`.
+
 ## Lo que sigue, en orden
 
 Esto es el panorama completo, no una lista de pendientes sueltos.
