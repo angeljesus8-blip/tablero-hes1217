@@ -85,6 +85,28 @@
 <script>
 /* ====== Sesión de tienda: sin hes_store no hay datos que mostrar ====== */
 const _storeConfig = (function(){ try{ return JSON.parse(localStorage.getItem('hes_store')||'null'); }catch(e){ return null; } })();
+
+/* Sesión de antes del candado (1-ago-2026): no trae gas_token. Hoy el Apps
+   Script todavía la deja pasar porque GAS_ESTRICTO está en false, pero en cuanto
+   se cierre, CADA llamada se rechaza. Se avisa desde que abre la app, no a media
+   captura, y sin sacar a nadie a la fuerza: el enlace lo decide la persona. */
+(function(){
+  var _c = _storeConfig;
+  if(!_c || !_c.store_id || _c.gas_token) return;
+  function _pintar(){
+    var b = document.createElement('div');
+    b.style.cssText = 'position:sticky;top:0;z-index:99;padding:11px 14px;'
+      + 'background:#fdf3dc;border-bottom:2px solid #F37021;color:#7a5200;'
+      + 'font-size:13px;font-weight:700;text-align:center;line-height:1.5';
+    b.innerHTML = '⚠ Tu sesión es de antes y va a dejar de funcionar. '
+      + '<a href="index.html" style="color:#D12026">Vuelve a entrar</a>'
+      + ' — no se pierde nada de lo que tengas capturado.';
+    document.body.insertBefore(b, document.body.firstChild);
+  }
+  if(document.readyState === 'loading') addEventListener('DOMContentLoaded', _pintar);
+  else _pintar();
+})();
+
 if(!_storeConfig || !_storeConfig.store_id){
   location.replace('index.html');
   throw new Error('Sin sesión de tienda — redirigiendo a login');
