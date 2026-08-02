@@ -2,7 +2,7 @@ importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
 // ÚNICO lugar donde vive la versión de la app. Las páginas ya no la repiten:
 // registran './sw.js' con updateViaCache:'none' y el navegador detecta el
 // cambio al ver que este archivo es distinto. Subir el número aquí y ya.
-const VERSION = 'v96';
+const VERSION = 'v97';
 const CACHE = 'hes1217-' + VERSION;
 const ARCHIVOS = [
   './index.html',
@@ -10,8 +10,11 @@ const ARCHIVOS = [
   './captura_series.html',
   './admin.html',
   './comisiones.html',
+  './actualizar_datos.html',
   './datos.js',
-  './comisiones_datos.js',
+  // comisiones_datos.js se elimino el 1-ago-2026 (traia nombres, ventas y
+  // montos de comision en un repo publico). Dejarlo aqui hacia que el service
+  // worker intentara precachear un 404 en cada instalacion.
   './logo_odemas.png',
   './icon-192.png',
   './icon-512.png',
