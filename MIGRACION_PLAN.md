@@ -1,0 +1,121 @@
+# Migración completa a Supabase
+
+Decidido el 2-ago-2026: se migra **todo**, incluidas las ventas. El Apps Script
+y la hoja de cálculo dejan de ser el sistema.
+
+Este documento existe para que se pueda revisar **antes** de que haya código, y
+para saber en cada momento qué falta y qué se puede revertir.
+
+---
+
+## Qué queremos
+
+Un solo sistema. Hoy hay dos verdades —la hoja y Supabase— y tres puertas: el
+Apps Script con un token compartido, Supabase con RLS, y la hoja abierta a quien
+tenga el enlace.
+
+Lo que se gana, concreto:
+
+- **Se acaba la cola.** Apps Script descarta en silencio las llamadas encimadas.
+  Por eso el tablero las manda de una en una y `modo=todo` tarda ~4 s. En
+  Supabase no hay cola ni descarte.
+- **Seguridad de verdad.** Hoy el token es uno solo para toda la tienda: quien
+  lo tiene, lo puede todo. Con RLS, cada quien ve lo suyo y el servidor lo
+  impone, no la app.
+- **Varias tiendas.** El esquema ya lleva `store_id` en las diez tablas.
+
+## Qué se pierde, y hay que reponer
+
+Esto no es efecto secundario: es trabajo del plan.
+
+| Lo que hoy da la hoja | Cómo se repone |
+|---|---|
+| Editar una venta a mano en la hoja | Pantalla de edición en Admin |
+| `autollenarSku_` llena desc y precio al teclear el SKU | Misma búsqueda, pero en la app |
+| Consultar ventas del día | Ya está: panel de Captura de Series |
+| Fotos de venta en Drive | Supabase Storage — **ver nota abajo** |
+
+**Las fotos son más fáciles de lo que parecen:** `DIAS_RETENCION = 7`, se borran
+solas a los 7 días. No hay histórico que mover; basta con que las nuevas vayan
+a Storage y dejar que las viejas caduquen donde están.
+
+## Lo delicado, por orden de riesgo
+
+**1 · La fórmula del inventario.** `leerInventario_` no es una lectura: calcula
+sobre dos cortes guardados en Propiedades del script (`ventaBaseline`,
+`exhibBaseline`). Se verificó **contando cajas en piso** que On Hand NO incluye
+la exhibición. Si esto se traduce mal, el tablero miente sobre el stock y nadie
+lo nota hasta que falta mercancía. Los baselines hay que modelarlos como tabla,
+no como propiedad suelta.
+
+**2 · Las ventas.** Es el flujo que da de comer a la tienda y acaba de
+estabilizarse tras perder capturas el 1-ago. Se migra con doble escritura, no de
+un salto.
+
+**3 · Las fechas.** La hoja guarda `2/8/2026` como texto; Postgres usa `date`.
+Toda comparación que hoy es texto pasa a ser fecha real — mejor, pero hay que
+convertir las ~200 existentes sin perder ninguna.
+
+**4 · El precio EOL al 50%.** `leerEolVenta_` depende del inventario calculado.
+Hereda el riesgo 1.
+
+---
+
+## Cómo se hará — cinco fases, cada una reversible
+
+Ninguna fase avanza sin que la anterior esté comprobada. En todas, revertir es
+volver una variable a su valor: el Apps Script sigue vivo hasta la fase 5.
+
+### Fase 1 · Datos y paridad — sin tocar las apps
+Cargar las ~838 filas a Supabase y escribir las funciones SQL equivalentes a
+cada modo del GAS.
+
+**La prueba:** para cada modo, pedir lo mismo al GAS y a Supabase y comparar las
+respuestas. Mientras no sean idénticas, no se sigue.
+
+Riesgo: ninguno. Las apps no se enteran.
+
+### Fase 2 · Lecturas
+Las apps leen de Supabase. Si falla, caen al Apps Script solas.
+
+Riesgo bajo, y es donde se cobra casi todo el beneficio de velocidad.
+
+### Fase 3 · Ventas — doble escritura
+Cada venta se guarda en los dos lados. Se comparan un par de días. Cuando
+cuadren sin diferencias, se apaga la escritura al GAS.
+
+Es la fase larga a propósito. No se acorta.
+
+### Fase 4 · Fotos, autollenado y edición
+Storage para las nuevas fotos; el autollenado y la edición de ventas se
+reconstruyen en Admin. Aquí es cuando la hoja deja de hacer falta.
+
+### Fase 5 · Retirar el Apps Script
+Solo cuando las cuatro anteriores lleven días estables. La hoja se queda como
+respaldo de solo lectura, sin nada que dependa de ella.
+
+---
+
+## Qué resultados dará
+
+- El tablero abre sin los ~4 s de espera y sin llamadas descartadas
+- Un solo lugar donde está la verdad
+- Cada persona ve lo que le toca, impuesto por el servidor
+- Listo para una segunda tienda sin duplicar nada
+
+## Qué implica
+
+- Es la cirugía más grande que se le ha hecho al sistema
+- Toca el flujo de ventas, que es el que no puede fallar
+- La hoja deja de ser herramienta: lo que hoy se hace ahí, se hará en Admin
+- No se hace en una sesión
+
+## Antes de empezar la fase 1
+
+Cerrar el candado (bloque B). Migrar dejando el endpoint viejo abierto es
+quedarse con dos puertas al mismo dato — justo lo que esta migración viene a
+resolver.
+
+---
+
+_Odemás · Grupo Gigante — uso interno HES 1217_
