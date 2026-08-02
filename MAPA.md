@@ -29,7 +29,8 @@ no solo el archivo que tocaste.
 
 ```
 login_asesor / login_empleado (Supabase)
-      ↓ devuelve store_id, nombre, gas_url, vendedores, gas_token
+      ↓ devuelve store_id, nombre, gas_url, vendedores, gas_token,
+        hoja_auth, sheet_url   ← si el SQL no lo da, no existe para nadie
 index.html arma cfg CAMPO POR CAMPO  ← si no lo nombras, se pierde
       ↓ localStorage.hes_store
 tablero · captura · admin · actualizar_datos · comisiones
@@ -42,8 +43,22 @@ campo nuevo en los **dos** `cfg` de `index.html` y en `COLS` del select de
 gerente. Se arma campo por campo, así que lo que no nombres se tira en silencio.
 *(1-ago-2026: pasó con `gas_token`; el tablero quedó en "Sin conexión".)*
 
+**Esta cadena tiene dos puntas, y la de arriba se nos olvidó.** Que
+`index.html` nombre el campo no sirve de nada si `login_asesor` no lo devuelve:
+llega `undefined`, se guarda como `''`, y cualquier comparación contra él es
+falsa para siempre. Nada truena, simplemente nadie ve la función.
+*(2-ago-2026: `hoja_auth` decide quién ve las ventas del día en Captura de
+Series. El 1-ago se corrigió el nombre del campo en el cliente y se dio por
+cerrado, pero el SQL nunca lo entregó — el botón llevaba un día oculto para
+todos, incluida Laura, que es la única que lo usa. Lo cierra
+`supabase_hoja_auth.sql`.)*
+
+`verificar.py` ahora compara las dos listas: cada `data.X` que lee `index.html`
+tiene que aparecer en algún `RETURNS TABLE` de `login_asesor`.
+
 **Si cambias el token:** todos deben cerrar sesión y volver a entrar. Lo
-guardado en `hes_store` no se actualiza solo.
+guardado en `hes_store` no se actualiza solo. Lo mismo al correr el SQL de
+arriba: la sesión vieja no trae los campos nuevos.
 
 ---
 
