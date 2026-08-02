@@ -243,6 +243,26 @@ def r_cadenas():
     if tab and 'const vigenteHoy' in tab and '!!x.d2' not in tab:
         falla('cadena', 'tablero: vigenteHoy ya no exige fecha de fin (MAPA cadena 3)')
 
+    # 7b-bis · La fecha que manda la app y la que compara el GAS son la misma.
+    # La hoja guarda "2/8/2026" sin ceros a la izquierda, y leerVentasDetalle_
+    # compara ese texto letra por letra. Si alguien "arregla" fechaGas con
+    # padStart para que se vea 02/08/2026, deja de encontrar y no falla: devuelve
+    # lista vacía, que en pantalla parece "no hubo ventas ese día".
+    if cap and 'fechaGas' in cap:
+        m = re.search(r'const fechaGas\s*=\s*([^;]+);', cap)
+        if m and ('padStart' in m.group(1) or 'toISOString' in m.group(1)):
+            falla('cadena', 'captura_series: fechaGas está rellenando con ceros o '
+                            'usando ISO. La hoja guarda "2/8/2026" y el Apps Script '
+                            'compara ese texto: no encontraría nada y se vería como '
+                            '"sin ventas" (MAPA cadena 3)')
+        gs = leer('GAS_Codigo.gs')
+        if gs and m:
+            # ambos lados tienen que construirla igual: getDate()/getMonth()+1/getFullYear()
+            patron = r"getDate\(\)\s*\+\s*'/'\s*\+\s*\(\s*\w+\.getMonth\(\)\s*\+\s*1\s*\)\s*\+\s*'/'"
+            if re.search(patron, gs) and not re.search(patron, m.group(1)):
+                falla('cadena', 'captura_series: fechaGas ya no arma la fecha como '
+                                'fmtFecha_ del Apps Script; dejarían de coincidir')
+
     # 7c · Escanear y teclear deben llenar igual.
     if cap and 'CAT_POR_SKU' in cap:
         if cap.count('aplicarProducto(') < 3:
