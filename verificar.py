@@ -207,6 +207,34 @@ def r_cadenas():
         if m and 'gas_token' not in m.group(1):
             falla('cadena', 'index.html: COLS no pide gas_token, el gerente entra sin token')
 
+    # 7a-bis · Lo que el cliente lee de la sesión, el login lo tiene que dar.
+    # 2-ago-2026: index.html leía data.hoja_auth y login_asesor no lo devolvía.
+    # Quedaba '' y `currentVend === DESCARGA_AUTORIZADA` era falso siempre, así
+    # que el botón de las ventas del día estuvo oculto para todos —incluida
+    # Laura, la única que lo usa— sin que nada fallara a la vista. El 1-ago se
+    # arregló el nombre del campo en el cliente y se dio por cerrado; el lado
+    # del servidor nunca se tocó.
+    if idx:
+        m = re.search(r'const cfg\s*=\s*\{([^}]*)\}', idx)
+        pedidos = set(re.findall(r'data\.(\w+)', m.group(1))) if m else set()
+        entregados, hay_sql = set(), False
+        for d in (BASE, os.path.dirname(BASE)):
+            try: archivos = [x for x in os.listdir(d) if x.endswith('.sql')]
+            except OSError: continue
+            for f in archivos:
+                try: s = io.open(os.path.join(d, f), encoding='utf-8').read()
+                except OSError: continue
+                for ret in re.findall(r'login_asesor\s*\([^)]*\)\s*\n?\s*RETURNS TABLE\s*\(((?:[^()]|\([^()]*\))*)\)',
+                                      s, re.I):
+                    hay_sql = True
+                    entregados |= set(re.findall(r'(\w+)\s+(?:text|jsonb|boolean|int)', ret))
+        faltan = pedidos - entregados - {'vendedores'}
+        if hay_sql and faltan:
+            falla('cadena', 'index.html lee de la sesión %s, y login_asesor no lo(s) '
+                            'devuelve en ningún .sql. Llega vacío y quien dependa de '
+                            'eso se queda sin ver nada (MAPA cadena 1)'
+                  % ', '.join('"%s"' % x for x in sorted(faltan)))
+
     # 7b · El precio que se cobra y el que se muestra usan la misma prioridad.
     cap, tab = leer('captura_series.html'), leer('tablero.html')
     if cap and 'promoActiva' in cap and 'if(!pr.d2) return null;' not in cap:
