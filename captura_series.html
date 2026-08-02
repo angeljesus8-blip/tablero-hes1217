@@ -280,6 +280,25 @@ async function compressImage(file, maxDim=1280, quality=0.6){
   return cv.toDataURL('image/jpeg', quality);
 }
 
+/* Aviso visible de que hay capturas sin subir.
+   El 1-ago-2026 se perdió un día de ventas porque el guardado usaba
+   mode:'no-cors' —que impide leer la respuesta— y el catch tomaba cualquier
+   error por falta de señal. La app decía "guardado" y no había llegado nada. */
+function avisoPendientes(msg){
+  let el = document.getElementById('avisoPend');
+  if(!msg){ if(el) el.remove(); return; }
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'avisoPend';
+    el.style.cssText = 'position:fixed;left:10px;right:10px;bottom:10px;z-index:60;'
+      + 'background:#fdf3dc;border-left:4px solid #F37021;color:#7a5200;'
+      + 'padding:11px 13px;border-radius:10px;font-size:13px;font-weight:700;'
+      + 'line-height:1.4;box-shadow:0 4px 14px rgba(0,0,0,.16)';
+    document.body.appendChild(el);
+  }
+  el.textContent = '⚠ ' + msg;
+}
+
 // Envía al concentrado las capturas pendientes (reintenta si no hay señal)
 async function flushCloud(){
   if(!CLOUD_URL || flushing || !pending.length) return;
@@ -289,12 +308,28 @@ async function flushCloud(){
       const row = pending[0];
       const body = Object.assign({}, row);
       if(row.foto && photoMap[row.id]) body.img = photoMap[row.id];   // adjunta la foto
-      await fetch(gasPost(), { method:'POST', mode:'no-cors',
+      // Sin no-cors: el Apps Script responde con Access-Control-Allow-Origin:*,
+      // así que SÍ se puede leer si guardó. Solo se saca de la cola cuando el
+      // servidor confirma; si no, la captura se queda y se reintenta.
+      const res = await fetch(gasPost(), { method:'POST',
         headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify(body) });
+      let r = null;
+      try{ r = JSON.parse(await res.text()); }catch(e){}
+      if(!res.ok || !r || r.ok === false){
+        const causa = (r && r.error) ? r.error : ('HTTP ' + res.status);
+        avisoPendientes(pending.length + ' captura(s) sin subir — ' + causa
+          + '. No se han perdido: se reintentan al reabrir la app.');
+        break;                                   // no vaciar la cola a ciegas
+      }
       if(row.foto) delete photoMap[row.id];
-      pending.shift(); savePending();   // la red aceptó el envío
+      pending.shift(); savePending();            // el servidor confirmó
+      avisoPendientes(pending.length ? pending.length + ' captura(s) por subir…' : '');
     }
-  }catch(e){ /* sin conexión: se reintenta luego */ }
+  }catch(e){
+    // Aquí sí suele ser falta de señal: la cola se conserva y se reintenta.
+    avisoPendientes(pending.length + ' captura(s) sin subir (sin conexión). '
+      + 'Se reintentan solas; no cierres sesión.');
+  }
   finally{ flushing = false; }
 }
 window.addEventListener('online', flushCloud);
