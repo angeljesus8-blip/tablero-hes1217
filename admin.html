@@ -1935,7 +1935,7 @@ function campoDeEncabezado(h){
 function pareceDato(l){
   const s = String(l||'').trim();
   return /^\d+\.$/.test(s)                      // "1." (numeración de Attach)
-      || /^\d{3,6}\s*-\s*\d{4,7}\s*-/.test(s)   // "1217-<empno>-NOMBRE"
+      || /^\d{3,6}\s*-\s*\d{4,7}\s*-/.test(s)   // "TIENDA-EMPLEADO-NOMBRE"
       || /^\$\s*\d/.test(s)                     // "$232.245,13" (pero NO "$ Garantía")
       || /^-?[\d.,]+\s*%?$/.test(s);            // "1217", "58.91%", "40,54 %"
 }
