@@ -12,6 +12,10 @@ import io, json, os, re, subprocess, sys, tempfile
 BASE = os.path.dirname(os.path.abspath(__file__))
 HTML = ['index.html', 'tablero.html', 'captura_series.html', 'admin.html',
         'comisiones.html', 'actualizar_datos.html']
+# Copias del Apps Script. No se ejecutan aquí, pero se publican igual que lo
+# demás: si traen una llave, queda expuesta lo mismo que en un .html.
+GS = ['GAS_Codigo.gs', 'GAS_ventas_detalle.gs', 'GAS_arreglo_apartados.gs',
+      'GAS_fechas.gs', 'GAS_guardian.gs']
 
 fallas, avisos = [], []
 def falla(regla, msg): fallas.append((regla, msg))
@@ -127,12 +131,19 @@ def r_personales():
 
 
 # ── 5 · Secretos ────────────────────────────────────────────
+# 2-ago-2026: al respaldar el Apps Script se vio que configurarOneSignal() traía
+# la App ID y la API key escritas en el código. Nunca llegó a este repo —que es
+# público— porque el GAS no estaba versionado, pero al versionarlo habría
+# entrado con todo y llave. De ahí los dos últimos patrones.
 def r_secretos():
     patrones = [(r'sb_secret_[A-Za-z0-9_-]{8,}', 'llave secreta de Supabase'),
                 (r'service_role', 'service_role'),
                 (r'eyJ[A-Za-z0-9_-]{20,}\.eyJ[A-Za-z0-9_-]{20,}', 'JWT'),
-                (r"GAS_TOKEN\s*=\s*['\"][A-Za-z0-9]{16,}", 'token escrito a mano')]
-    for p in HTML + ['sw.js', 'datos.js']:
+                (r"GAS_TOKEN\s*=\s*['\"][A-Za-z0-9]{16,}", 'token escrito a mano'),
+                (r'os_v2_app_[A-Za-z0-9]{16,}', 'API key de OneSignal'),
+                (r"ONESIGNAL_(?:KEY|APP_ID)['\"]?\s*:\s*['\"][A-Za-z0-9-]{8,}",
+                 'credencial de OneSignal escrita en el código')]
+    for p in HTML + ['sw.js', 'datos.js'] + GS:
         s = leer(p)
         if s is None: continue
         for rx, que in patrones:
