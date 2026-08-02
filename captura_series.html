@@ -148,6 +148,14 @@
   .vd.show{ display:flex; }
   .vd-box{ background:#fff; width:100%; max-width:560px; max-height:86vh;
     border-radius:20px 20px 0 0; display:flex; flex-direction:column; }
+  /* Laura las copia desde su laptop: en pantalla grande el panel se centra y
+     se ve completo, en vez de quedar pegado abajo como hoja de celular. */
+  @media (min-width:760px){
+    .vd{ align-items:center; }
+    .vd-box{ border-radius:18px; max-height:82vh; }
+    .vd-fila{ padding:11px 20px; }
+    .vd-serie{ font-size:15px; }
+  }
   .vd-top{ padding:16px 18px 12px; border-bottom:1px solid var(--linea);
     display:flex; align-items:center; gap:10px; }
   .vd-top h2{ font-size:16px; font-weight:800; flex:1; }
@@ -155,7 +163,18 @@
   .vd-cerrar{ background:none; border:none; font-size:26px; color:#bbb;
     cursor:pointer; line-height:1; padding:0 4px; }
   .vd-lista{ overflow-y:auto; padding:6px 0; flex:1; }
-  .vd-fila{ padding:10px 18px; border-bottom:1px solid #f4f4f4; }
+  .vd-fila{ padding:12px 18px; border-bottom:1px solid #f4f4f4; cursor:pointer;
+    display:flex; align-items:center; gap:12px; -webkit-tap-highlight-color:transparent; }
+  .vd-fila:active{ background:#f7f7f8; }
+  .vd-fila .txt{ flex:1; min-width:0; }
+  /* Ya copiada: se marca para no perder el hilo cuando son muchas y se suben
+     de una en una a la otra plataforma. */
+  .vd-fila.hecha .vd-serie{ color:#b9b9b9; text-decoration:line-through; }
+  .vd-fila.hecha .vd-det{ color:#cfcfcf; }
+  .vd-check{ width:26px; height:26px; border-radius:50%; flex:none; display:flex;
+    align-items:center; justify-content:center; font-size:14px; font-weight:800;
+    border:2px solid var(--linea); color:transparent; }
+  .vd-fila.hecha .vd-check{ background:var(--verde); border-color:var(--verde); color:#fff; }
   .vd-serie{ font-size:14px; font-weight:800; font-family:ui-monospace,monospace;
     letter-spacing:.3px; word-break:break-all; }
   .vd-det{ font-size:11.5px; color:var(--gris); margin-top:3px;
@@ -790,38 +809,61 @@ $('btnCsv').onclick = async () => {
 
 function pintarVentasDia(fecha){
   $('vdN').textContent = _vdVentas.length + (_vdVentas.length === 1 ? ' equipo' : ' equipos');
-  $('vdCopiar').style.display = _vdVentas.length ? '' : 'none';
+  $('vdAyuda').textContent = _vdVentas.length
+    ? 'Haz clic en una serie para copiarla' : '';
   $('vdLista').innerHTML = _vdVentas.length
-    ? _vdVentas.map(v => `<div class="vd-fila">
-        <div class="vd-serie">${v.serie}</div>
-        <div class="vd-det">
-          <span>${v.desc || 'SKU ' + (v.sku||'—')}</span>
-          <span class="precio">$${Number(String(v.precio).replace(/[^0-9.]/g,'')||0).toLocaleString('es-MX')}</span>
-          ${v.vend ? '<span>· ' + v.vend + '</span>' : ''}
+    ? _vdVentas.map((v, i) => `<div class="vd-fila" id="vdf${i}" onclick="copiarSerie(${i})">
+        <div class="txt">
+          <div class="vd-serie">${v.serie}</div>
+          <div class="vd-det">
+            <span>${v.desc || 'SKU ' + (v.sku||'—')}</span>
+            <span class="precio">$${Number(String(v.precio).replace(/[^0-9.]/g,'')||0).toLocaleString('es-MX')}</span>
+            ${v.vend ? '<span>· ' + v.vend + '</span>' : ''}
+          </div>
         </div>
+        <div class="vd-check">✓</div>
       </div>`).join('')
     : `<div class="vd-vacio">Sin ventas registradas el ${fecha || 'día de hoy'}.</div>`;
 }
 
 function cerrarVentasDia(){ $('vdPanel').classList.remove('show'); }
 
-async function copiarSeries(){
-  if(!_vdVentas.length) return;
-  const texto = _vdVentas.map(v => v.serie).join('\n');   // una por renglón
+/* Se copia UNA serie por toque: Laura las sube de una en una a la otra
+   plataforma, así que copiar todas juntas no le sirve. La fila copiada se marca
+   para no perder el hilo cuando son muchas. */
+async function copiarSerie(i){
+  const v = _vdVentas[i];
+  if(!v) return;
+  const fila = document.getElementById('vdf' + i);
+  let ok = false;
   try{
-    await navigator.clipboard.writeText(texto);
-    toast('✓ ' + _vdVentas.length + ' series copiadas', 'ok');
+    await navigator.clipboard.writeText(v.serie);
+    ok = true;
   }catch(e){
-    // Sin permiso de portapapeles (pasa en algunos navegadores): se deja
-    // seleccionable para copiar a mano, en vez de fallar en silencio.
+    /* navigator.clipboard falla si el documento no tiene foco o el navegador no
+       da permiso. El camino viejo SÍ funciona, pero el textarea tiene que poder
+       seleccionarse: con opacity:0 o pointer-events:none el navegador se niega.
+       Se saca de pantalla con left:-9999px y se usa setSelectionRange, que es lo
+       único que respeta iOS. */
     const ta = document.createElement('textarea');
-    ta.value = texto;
-    ta.style.cssText = 'position:fixed;left:10px;right:10px;bottom:80px;height:120px;z-index:80;font-size:13px';
+    ta.value = v.serie;
+    ta.setAttribute('readonly', '');
+    ta.style.cssText = 'position:absolute;left:-9999px;top:0;font-size:16px';
     document.body.appendChild(ta);
     ta.select();
-    try{ document.execCommand('copy'); toast('✓ Series copiadas', 'ok'); }
-    catch(e2){ toast('Selecciona y copia a mano', 'warn'); }
-    setTimeout(()=>ta.remove(), 6000);
+    try{ ta.setSelectionRange(0, v.serie.length); }catch(e2){}   // solo iOS lo necesita; si no existe, select() basta
+    try{ ok = document.execCommand('copy'); }catch(e2){}          // ok queda false y abajo se avisa que no se copio
+    ta.remove();
+  }
+  if(ok){
+    if(fila) fila.classList.add('hecha');
+    const faltan = _vdVentas.length - document.querySelectorAll('.vd-fila.hecha').length;
+    $('vdAyuda').textContent = faltan
+      ? faltan + (faltan === 1 ? ' serie por copiar' : ' series por copiar')
+      : '✓ Todas copiadas';
+    toast('✓ Copiada · ' + v.serie, 'ok');
+  }else{
+    toast('No se pudo copiar; selecciónala y cópiala a mano', 'warn');
   }
 }
 
@@ -923,7 +965,9 @@ refreshGid();      // obtiene el GID de la hoja Ventas para el link directo
     </div>
     <div class="vd-lista" id="vdLista"></div>
     <div class="vd-pie">
-      <button class="btn btn-go" id="vdCopiar" onclick="copiarSeries()">📋 Copiar números de serie</button>
+      <div id="vdAyuda" style="font-size:12.5px;color:var(--gris);text-align:center;line-height:1.45">
+        Haz clic en una serie para copiarla
+      </div>
     </div>
   </div>
 </div>
