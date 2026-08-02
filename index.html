@@ -365,7 +365,7 @@ async function pinCheck(auto) {
   // gas_token: sin esto el Apps Script rechaza cada llamada del tablero. Lo
   // devuelven login_asesor y login_empleado; se arma el objeto campo por campo,
   // asi que hay que nombrarlo o se pierde en silencio.
-  const cfg = { store_id:data.store_id, nombre:data.nombre, ciudad:data.ciudad||'', gas_url:data.gas_url||'', gas_token:data.gas_token||'', vendedores:Array.isArray(data.vendedores)?data.vendedores:[] };
+  const cfg = { store_id:data.store_id, nombre:data.nombre, ciudad:data.ciudad||'', gas_url:data.gas_url||'', gas_token:data.gas_token||'', hoja_auth:data.hoja_auth||'', sheet_url:data.sheet_url||'', vendedores:Array.isArray(data.vendedores)?data.vendedores:[] };
   localStorage.setItem('hes_store', JSON.stringify(cfg));
   localStorage.setItem('hes_role', 'asesor');
   // Quién entró: lo usan el tablero y Captura de Series para no preguntar el nombre
