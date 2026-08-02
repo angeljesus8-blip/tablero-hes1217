@@ -15,7 +15,7 @@ HTML = ['index.html', 'tablero.html', 'captura_series.html', 'admin.html',
 # Copias del Apps Script. No se ejecutan aquí, pero se publican igual que lo
 # demás: si traen una llave, queda expuesta lo mismo que en un .html.
 GS = ['GAS_Codigo.gs', 'GAS_ventas_detalle.gs', 'GAS_arreglo_apartados.gs',
-      'GAS_fechas.gs', 'GAS_guardian.gs']
+      'GAS_fechas.gs', 'GAS_guardian.gs', 'GAS_exportar.gs']
 
 fallas, avisos = [], []
 def falla(regla, msg): fallas.append((regla, msg))
