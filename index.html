@@ -231,6 +231,7 @@ function renderMenuCards(role) {
   // La tarjeta de Admin la ven el gerente (con su correo) y quien tenga el
   // permiso marcado en la base — hoy Ángel y Miguel, el subgerente.
   let emp = null;
+  // Ficha ilegible: se sigue sin nombre; el login la vuelve a guardar.
   try { emp = JSON.parse(localStorage.getItem('hes_empleado')||'null'); } catch(e) {}
   const puedeAdmin = role === 'gerente' || !!(emp && emp.admin);
   const html = CARDS
@@ -247,6 +248,7 @@ function applyStoreConfig(cfg, role) {
   document.getElementById('storeLabel').textContent = 'HES ' + cfg.store_id + ' · ' + cfg.nombre;
   // Si entró con su número de empleado, se le saluda por su nombre
   let emp = null;
+  // Ficha ilegible: se sigue sin nombre; el login la vuelve a guardar.
   try { emp = JSON.parse(localStorage.getItem('hes_empleado')||'null'); } catch(e) {}
   // Dos palabras, pero sin cortar en una partícula ("Ángel de Jesús" -> "Ángel",
   // no "Ángel de").

@@ -100,6 +100,8 @@ const CLOUD_URL = _storeConfig.gas_url || '';
 const GAS_TOKEN = _storeConfig.gas_token || '';
 const COMISKEY = 'hes' + _storeId + '_comisiones';
 let D = { empleados: [] };
+// Cache ilegible: se arranca vacio y la nube lo llena; si tampoco responde,
+// avisoNube() lo dice en pantalla.
 try{ const c = JSON.parse(localStorage.getItem(COMISKEY)||'null'); if(c && Array.isArray(c.empleados)) D = c; }catch(e){}
 
 function pintarPeriodos(){
