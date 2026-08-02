@@ -121,6 +121,17 @@ divergían y teclear no llenaba nada.
 
 ## Cadena 5 · Inventario
 
+**El error de conteo no se acumula entre días.** El On Hand no se ajusta: se
+*reemplaza* completo cada mañana con el número del sistema, y el baseline se
+vuelve a tomar ahí mismo. Una venta que no descuente bien desajusta el stock
+solo hasta la siguiente subida. Es diseño deliberado — por eso el tablero puede
+calcular en vivo sin miedo a la deriva.
+
+*(2-ago-2026: al cotejar los datos para migrar se reportaron cinco ventas sin SKU
+como "inventario inflado desde julio". Falso: llevaba casi treinta subidas de On
+Hand encima. Antes de llamar histórico a un descuadre, contar cuántas subidas han
+pasado.)*
+
 ```
 Artículos Totales      → onhand   (equipo cerrado; NO incluye exhibición)
 Inventario No Disponible → exhibe (piezas en aparador)
