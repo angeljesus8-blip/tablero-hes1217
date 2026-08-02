@@ -162,6 +162,20 @@
   .vd-top .n{ font-size:12px; color:var(--gris); font-weight:700; }
   .vd-cerrar{ background:none; border:none; font-size:26px; color:#bbb;
     cursor:pointer; line-height:1; padding:0 4px; }
+  /* Barra de días: Laura no siempre sube las series el mismo día que se venden,
+     así que tiene que poder regresarse. Adelante de hoy no hay nada que ver. */
+  .vd-nav{ display:flex; align-items:center; gap:8px; padding:9px 12px;
+    border-bottom:1px solid var(--linea); background:#fafafa; }
+  .vd-nav > button{ background:#fff; border:1px solid var(--linea); border-radius:9px;
+    width:38px; height:34px; font-size:19px; line-height:1; color:var(--azul);
+    cursor:pointer; flex:none; }
+  .vd-nav > button:disabled{ color:#dadada; cursor:default; background:#f7f7f8; }
+  .vd-dia{ flex:1; text-align:center; display:flex; flex-direction:column;
+    align-items:center; gap:1px; min-width:0; }
+  .vd-dia > span{ font-size:13.5px; font-weight:700; text-transform:capitalize;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+  #vdHoy{ background:none; border:none; color:var(--azul); font-size:11px;
+    font-weight:700; cursor:pointer; padding:0; font-family:inherit; }
   .vd-lista{ overflow-y:auto; padding:6px 0; flex:1; }
   .vd-fila{ padding:12px 18px; border-bottom:1px solid #f4f4f4; cursor:pointer;
     display:flex; align-items:center; gap:12px; -webkit-tap-highlight-color:transparent; }
@@ -782,37 +796,97 @@ $('fileGal').onchange = e => {
    aquí (con descripción y precio, para revisar) y el botón copia SOLO los
    números de serie, que es lo que se pega en la otra plataforma. */
 let _vdVentas = [];
+let _vdFecha  = null;    // el día que se está viendo, como Date
+let _vdCargando = false;
+
+/* La hoja guarda la fecha como texto "2/8/2026", SIN ceros a la izquierda, y el
+   Apps Script filtra comparando ese texto. Un <input type="date"> daría
+   "2026-08-02" y no encontraría nada: devolvería lista vacía, que en pantalla
+   parece "no hubo ventas ese día" en vez de "la pregunta iba mal". Mismo tropiezo
+   que con las promos el 1-ago. */
+const fechaGas = d => d.getDate() + '/' + (d.getMonth()+1) + '/' + d.getFullYear();
+const _VD_DIAS  = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+const _VD_MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto',
+                   'septiembre','octubre','noviembre','diciembre'];
+const _aMedianoche = d => { const x = new Date(d); x.setHours(0,0,0,0); return x; };
+
+function fechaBonita(d){
+  const dif = Math.round((_aMedianoche(new Date()) - _aMedianoche(d)) / 86400000);
+  if(dif === 0) return 'hoy';
+  if(dif === 1) return 'ayer';
+  return _VD_DIAS[d.getDay()] + ' ' + d.getDate() + ' de ' + _VD_MESES[d.getMonth()];
+}
+
+/* Qué series ya copió, por día. Vive en este aparato: si Laura se distrae, cambia
+   de día y regresa, no pierde el hilo de dónde iba. Es una ayuda, no un registro:
+   si se borra, se vuelven a ver todas — nunca se pierde una venta por esto. */
+const VDKEY = 'hes' + (_cfgCS && _cfgCS.store_id || '') + '_vd_copiadas';
+function _vdLeerMarcas(){
+  try{ return JSON.parse(localStorage.getItem(VDKEY) || '{}') || {}; }
+  catch(e){ return {}; }        // ilegible: se arranca sin marcas, no estorba
+}
+function copiadasDe(fechaTxt){
+  const t = _vdLeerMarcas();
+  return Array.isArray(t[fechaTxt]) ? t[fechaTxt] : [];
+}
+function marcarCopiada(fechaTxt, serie){
+  const t = _vdLeerMarcas();
+  if(!Array.isArray(t[fechaTxt])) t[fechaTxt] = [];
+  if(t[fechaTxt].indexOf(serie) < 0) t[fechaTxt].push(serie);
+  const dias = Object.keys(t);   // sin historia infinita: 30 días sobran
+  if(dias.length > 30) dias.slice(0, dias.length - 30).forEach(k => delete t[k]);
+  try{ localStorage.setItem(VDKEY, JSON.stringify(t)); }
+  catch(e){}                     // sin espacio: se pierde la marca, no la venta
+}
 
 $('btnCsv').onclick = async () => {
   if(currentVend !== DESCARGA_AUTORIZADA){ toast('No tienes permiso para ver las ventas', 'warn'); return; }
   await flushCloud();                       // primero sube lo que falte de este teléfono
-  $('btnCsv').disabled = true;
-  const txtPrev = $('btnCsv').textContent;
-  $('btnCsv').textContent = 'Cargando…';
+  $('vdPanel').classList.add('show');
+  cargarVentasDia(new Date());
+};
+
+async function cargarVentasDia(dia){
+  if(_vdCargando) return;                   // el GAS descarta las llamadas encimadas
+  _vdCargando = true;
+  vdBotonesNav(false);
+  $('vdLista').innerHTML = '<div class="vd-vacio">Cargando…</div>';
+  $('vdFechaTxt').textContent = fechaBonita(dia);
   try{
-    const r = await catJsonp(gasQS('modo=ventas_detalle'));
+    const r = await catJsonp(gasQS('modo=ventas_detalle&fecha=' + encodeURIComponent(fechaGas(dia))));
     if(!r || !Array.isArray(r.ventas)){
       // El modo todavía no existe en el Apps Script: se dice, no se calla.
       toast('Falta actualizar el Apps Script (modo ventas_detalle)', 'warn');
+      $('vdLista').innerHTML = '<div class="vd-vacio">No se pudo consultar la nube.</div>';
       return;
     }
     _vdVentas = r.ventas;
-    pintarVentasDia(r.fecha);
-    $('vdPanel').classList.add('show');
+    _vdFecha  = dia;
+    pintarVentasDia();
   }catch(e){
     toast('No se pudieron traer las ventas · ' + (e && e.message ? e.message : 'sin conexión'), 'warn');
+    $('vdLista').innerHTML = '<div class="vd-vacio">Sin conexión con la nube.</div>';
   }finally{
-    $('btnCsv').disabled = false;
-    $('btnCsv').textContent = txtPrev;
+    _vdCargando = false;
+    vdBotonesNav(true);
   }
-};
+}
 
-function pintarVentasDia(fecha){
+function vdBotonesNav(activos){
+  const hoy = _aMedianoche(new Date());
+  const vien = _aMedianoche(_vdFecha || new Date());
+  $('vdPrev').disabled = !activos;
+  $('vdNext').disabled = !activos || vien >= hoy;     // no hay ventas del futuro
+  $('vdHoy').style.visibility = vien < hoy ? 'visible' : 'hidden';
+}
+
+function pintarVentasDia(){
+  const dia = _vdFecha || new Date();
+  const ya  = copiadasDe(fechaGas(dia));
+  $('vdFechaTxt').textContent = fechaBonita(dia);
   $('vdN').textContent = _vdVentas.length + (_vdVentas.length === 1 ? ' equipo' : ' equipos');
-  $('vdAyuda').textContent = _vdVentas.length
-    ? 'Haz clic en una serie para copiarla' : '';
   $('vdLista').innerHTML = _vdVentas.length
-    ? _vdVentas.map((v, i) => `<div class="vd-fila" id="vdf${i}" onclick="copiarSerie(${i})">
+    ? _vdVentas.map((v, i) => `<div class="vd-fila${ya.indexOf(v.serie) >= 0 ? ' hecha' : ''}" id="vdf${i}" onclick="copiarSerie(${i})">
         <div class="txt">
           <div class="vd-serie">${v.serie}</div>
           <div class="vd-det">
@@ -823,8 +897,30 @@ function pintarVentasDia(fecha){
         </div>
         <div class="vd-check">✓</div>
       </div>`).join('')
-    : `<div class="vd-vacio">Sin ventas registradas el ${fecha || 'día de hoy'}.</div>`;
+    : `<div class="vd-vacio">Sin ventas registradas ${fechaBonita(dia) === 'hoy' ? 'hoy' : 'el ' + fechaBonita(dia)}.</div>`;
+  vdBotonesNav(true);
+  vdContar();
 }
+
+// Cuántas quedan del día que se está viendo. Se cuenta sobre las marcas, no sobre
+// el DOM, para que al volver a un día ya trabajado siga cuadrando.
+function vdContar(){
+  if(!_vdVentas.length){ $('vdAyuda').textContent = ''; return; }
+  const ya = copiadasDe(fechaGas(_vdFecha || new Date()));
+  const faltan = _vdVentas.filter(v => ya.indexOf(v.serie) < 0).length;
+  $('vdAyuda').textContent = faltan === _vdVentas.length
+    ? 'Haz clic en una serie para copiarla'
+    : faltan ? faltan + (faltan === 1 ? ' serie por copiar' : ' series por copiar')
+             : '✓ Todas copiadas';
+}
+
+function vdMover(dias){
+  const d = new Date(_vdFecha || new Date());
+  d.setDate(d.getDate() + dias);
+  if(_aMedianoche(d) > _aMedianoche(new Date())) return;
+  cargarVentasDia(d);
+}
+function vdIrHoy(){ cargarVentasDia(new Date()); }
 
 function cerrarVentasDia(){ $('vdPanel').classList.remove('show'); }
 
@@ -857,10 +953,8 @@ async function copiarSerie(i){
   }
   if(ok){
     if(fila) fila.classList.add('hecha');
-    const faltan = _vdVentas.length - document.querySelectorAll('.vd-fila.hecha').length;
-    $('vdAyuda').textContent = faltan
-      ? faltan + (faltan === 1 ? ' serie por copiar' : ' series por copiar')
-      : '✓ Todas copiadas';
+    marcarCopiada(fechaGas(_vdFecha || new Date()), v.serie);
+    vdContar();
     toast('✓ Copiada · ' + v.serie, 'ok');
   }else{
     toast('No se pudo copiar; selecciónala y cópiala a mano', 'warn');
@@ -962,6 +1056,14 @@ refreshGid();      // obtiene el GID de la hoja Ventas para el link directo
       <h2>Ventas del día</h2>
       <span class="n" id="vdN">—</span>
       <button class="vd-cerrar" onclick="cerrarVentasDia()" aria-label="Cerrar">×</button>
+    </div>
+    <div class="vd-nav">
+      <button id="vdPrev" onclick="vdMover(-1)" aria-label="Día anterior">‹</button>
+      <div class="vd-dia">
+        <span id="vdFechaTxt">—</span>
+        <button id="vdHoy" onclick="vdIrHoy()">Hoy</button>
+      </div>
+      <button id="vdNext" onclick="vdMover(1)" aria-label="Día siguiente">›</button>
     </div>
     <div class="vd-lista" id="vdLista"></div>
     <div class="vd-pie">
