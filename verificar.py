@@ -155,10 +155,55 @@ def r_silencios():
                               'nadie se entera' % (p, vacios))
 
 
+# ── 7 · Cadenas que se rompen juntas ────────────────────────
+# Ver MAPA.md. Cada una tumbó algo en producción el 1-ago-2026.
+def r_cadenas():
+    # 7a · La sesión se arma campo por campo: lo que devuelve login_asesor
+    # tiene que estar nombrado en index.html o se pierde en silencio.
+    idx = leer('index.html')
+    if idx:
+        # Hay DOS cfg (login por PIN y login por sesión de gerente) y los dos
+        # tienen que llevar los mismos campos: se arman uno por uno, así que
+        # basta olvidarlo en uno para que esa vía quede sin token.
+        cfgs = re.findall(r'const cfg\s*=\s*\{[^}]*\}', idx)
+        if len(cfgs) < 2:
+            aviso('cadena', 'index.html: esperaba dos "const cfg"; revisa a mano '
+                            'que ambos caminos de login guarden lo mismo')
+        for n, bloque in enumerate(cfgs, 1):
+            for campo in ('store_id', 'gas_url', 'gas_token', 'vendedores'):
+                if campo not in bloque:
+                    falla('cadena', 'index.html: el cfg #%d no guarda "%s"; quien '
+                                    'entre por ahí se queda sin él (MAPA cadena 1)'
+                                    % (n, campo))
+        m = re.search(r"const COLS\s*=\s*'([^']+)'", idx)
+        if m and 'gas_token' not in m.group(1):
+            falla('cadena', 'index.html: COLS no pide gas_token, el gerente entra sin token')
+
+    # 7b · El precio que se cobra y el que se muestra usan la misma prioridad.
+    cap, tab = leer('captura_series.html'), leer('tablero.html')
+    if cap and 'promoActiva' in cap and 'if(!pr.d2) return null;' not in cap:
+        falla('cadena', 'captura_series: promoActiva ya no exige fecha de fin; '
+                        'volvería a cobrar promociones vencidas (MAPA cadena 3)')
+    if tab and 'const vigenteHoy' in tab and '!!x.d2' not in tab:
+        falla('cadena', 'tablero: vigenteHoy ya no exige fecha de fin (MAPA cadena 3)')
+
+    # 7c · Escanear y teclear deben llenar igual.
+    if cap and 'CAT_POR_SKU' in cap:
+        if cap.count('aplicarProducto(') < 3:
+            falla('cadena', 'captura_series: escanear y teclear ya no comparten '
+                            'aplicarProducto; van a divergir (MAPA cadena 4)')
+
+    # 7d · La fórmula del stock. Se verificó en piso: On Hand NO incluye exhibición.
+    if tab and re.search(r'item\.stock\s*=\s*Math\.max\(0,\s*o\s*-\s*e\b', tab):
+        falla('cadena', 'tablero: finalizarStock está restando la exhibición del '
+                        'On Hand. Se comprobó en piso que NO se solapan: mostraría '
+                        'menos stock del real (MAPA cadena 5)')
+
+
 def main():
     staged = '--staged' in sys.argv
     r_sintaxis(); r_helpers(); r_version(staged)
-    r_personales(); r_secretos(); r_silencios()
+    r_personales(); r_secretos(); r_silencios(); r_cadenas()
 
     for regla, msg in avisos:
         print('  aviso  [%s] %s' % (regla, msg))
