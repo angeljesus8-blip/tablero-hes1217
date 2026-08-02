@@ -141,6 +141,29 @@
     font-weight:700; padding:6px 12px; border-radius:8px; cursor:pointer; }
 
   /* ---- Modal seguro Assurant ---- */
+  /* Ventas del día: la lista es para revisar (descripción y precio a la vista),
+     y el botón copia SOLO las series, que es lo que se pega en la plataforma. */
+  .vd{ display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:70;
+    align-items:flex-end; justify-content:center; }
+  .vd.show{ display:flex; }
+  .vd-box{ background:#fff; width:100%; max-width:560px; max-height:86vh;
+    border-radius:20px 20px 0 0; display:flex; flex-direction:column; }
+  .vd-top{ padding:16px 18px 12px; border-bottom:1px solid var(--linea);
+    display:flex; align-items:center; gap:10px; }
+  .vd-top h2{ font-size:16px; font-weight:800; flex:1; }
+  .vd-top .n{ font-size:12px; color:var(--gris); font-weight:700; }
+  .vd-cerrar{ background:none; border:none; font-size:26px; color:#bbb;
+    cursor:pointer; line-height:1; padding:0 4px; }
+  .vd-lista{ overflow-y:auto; padding:6px 0; flex:1; }
+  .vd-fila{ padding:10px 18px; border-bottom:1px solid #f4f4f4; }
+  .vd-serie{ font-size:14px; font-weight:800; font-family:ui-monospace,monospace;
+    letter-spacing:.3px; word-break:break-all; }
+  .vd-det{ font-size:11.5px; color:var(--gris); margin-top:3px;
+    display:flex; gap:8px; flex-wrap:wrap; align-items:baseline; }
+  .vd-det .precio{ font-weight:800; color:var(--verde); }
+  .vd-pie{ padding:12px 18px 16px; border-top:1px solid var(--linea); }
+  .vd-vacio{ padding:28px 18px; text-align:center; color:#aaa; font-size:13px; }
+
   .modal-seg{ display:none; position:fixed; inset:0; background:rgba(0,0,0,.65);
     z-index:200; align-items:center; justify-content:center; padding:20px; }
   .modal-seg.show{ display:flex; }
@@ -230,7 +253,7 @@
 </main>
 
 <div class="footbar">
-  <button class="btn btn-csv" id="btnCsv">📊 Abrir hoja de ventas</button>
+  <button class="btn btn-csv" id="btnCsv">📋 Ventas del día</button>
   <div class="lock-msg" id="lockMsg">🔒 Solo <b>Laura</b> abre la hoja de ventas</div>
 </div>
 
@@ -734,13 +757,73 @@ $('fileGal').onchange = e => {
   e.target.value = '';
 };
 
-/* ---------- Abrir la hoja de ventas (Google Sheets) ---------- */
+/* ---------- Ventas del día ----------
+   Antes esto abría Google Sheets, donde había que buscar el día, seleccionar
+   la columna y copiar — desde el celular, impracticable. Ahora la lista se ve
+   aquí (con descripción y precio, para revisar) y el botón copia SOLO los
+   números de serie, que es lo que se pega en la otra plataforma. */
+let _vdVentas = [];
+
 $('btnCsv').onclick = async () => {
-  if(currentVend !== DESCARGA_AUTORIZADA){ toast('Solo Laura puede abrir la hoja', 'warn'); return; }
-  await flushCloud();   // primero sube lo que falte de este teléfono
-  window.open(SHEET_URL(), '_blank');
-  toast('Abriendo hoja de ventas…', 'ok');
+  if(currentVend !== DESCARGA_AUTORIZADA){ toast('No tienes permiso para ver las ventas', 'warn'); return; }
+  await flushCloud();                       // primero sube lo que falte de este teléfono
+  $('btnCsv').disabled = true;
+  const txtPrev = $('btnCsv').textContent;
+  $('btnCsv').textContent = 'Cargando…';
+  try{
+    const r = await catJsonp(gasQS('modo=ventas_detalle'));
+    if(!r || !Array.isArray(r.ventas)){
+      // El modo todavía no existe en el Apps Script: se dice, no se calla.
+      toast('Falta actualizar el Apps Script (modo ventas_detalle)', 'warn');
+      return;
+    }
+    _vdVentas = r.ventas;
+    pintarVentasDia(r.fecha);
+    $('vdPanel').classList.add('show');
+  }catch(e){
+    toast('No se pudieron traer las ventas · ' + (e && e.message ? e.message : 'sin conexión'), 'warn');
+  }finally{
+    $('btnCsv').disabled = false;
+    $('btnCsv').textContent = txtPrev;
+  }
 };
+
+function pintarVentasDia(fecha){
+  $('vdN').textContent = _vdVentas.length + (_vdVentas.length === 1 ? ' equipo' : ' equipos');
+  $('vdCopiar').style.display = _vdVentas.length ? '' : 'none';
+  $('vdLista').innerHTML = _vdVentas.length
+    ? _vdVentas.map(v => `<div class="vd-fila">
+        <div class="vd-serie">${v.serie}</div>
+        <div class="vd-det">
+          <span>${v.desc || 'SKU ' + (v.sku||'—')}</span>
+          <span class="precio">$${Number(String(v.precio).replace(/[^0-9.]/g,'')||0).toLocaleString('es-MX')}</span>
+          ${v.vend ? '<span>· ' + v.vend + '</span>' : ''}
+        </div>
+      </div>`).join('')
+    : `<div class="vd-vacio">Sin ventas registradas el ${fecha || 'día de hoy'}.</div>`;
+}
+
+function cerrarVentasDia(){ $('vdPanel').classList.remove('show'); }
+
+async function copiarSeries(){
+  if(!_vdVentas.length) return;
+  const texto = _vdVentas.map(v => v.serie).join('\n');   // una por renglón
+  try{
+    await navigator.clipboard.writeText(texto);
+    toast('✓ ' + _vdVentas.length + ' series copiadas', 'ok');
+  }catch(e){
+    // Sin permiso de portapapeles (pasa en algunos navegadores): se deja
+    // seleccionable para copiar a mano, en vez de fallar en silencio.
+    const ta = document.createElement('textarea');
+    ta.value = texto;
+    ta.style.cssText = 'position:fixed;left:10px;right:10px;bottom:80px;height:120px;z-index:80;font-size:13px';
+    document.body.appendChild(ta);
+    ta.select();
+    try{ document.execCommand('copy'); toast('✓ Series copiadas', 'ok'); }
+    catch(e2){ toast('Selecciona y copia a mano', 'warn'); }
+    setTimeout(()=>ta.remove(), 6000);
+  }
+}
 
 // Enter en serie = agregar rápido
 $('serie').addEventListener('keydown', e => { if(e.key==='Enter') $('btnAdd').click(); });
@@ -831,6 +914,20 @@ refreshPromos();   // trae las promociones vigentes
 refreshEolVenta(); // trae los EOL con 50% activo (solo exhibición)
 refreshGid();      // obtiene el GID de la hoja Ventas para el link directo
 </script>
+<div id="vdPanel" class="vd">
+  <div class="vd-box">
+    <div class="vd-top">
+      <h2>Ventas del día</h2>
+      <span class="n" id="vdN">—</span>
+      <button class="vd-cerrar" onclick="cerrarVentasDia()" aria-label="Cerrar">×</button>
+    </div>
+    <div class="vd-lista" id="vdLista"></div>
+    <div class="vd-pie">
+      <button class="btn btn-go" id="vdCopiar" onclick="copiarSeries()">📋 Copiar números de serie</button>
+    </div>
+  </div>
+</div>
+
 <div id="modalSeguro" class="modal-seg">
   <div class="modal-seg-box">
     <p class="modal-seg-q">¿El equipo va</p>
