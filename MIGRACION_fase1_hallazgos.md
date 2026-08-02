@@ -12,7 +12,7 @@ que ya existen hoy y que la hoja nunca señaló.
 
 ---
 
-## 1 · Cinco ventas sin SKU — el inventario está inflado
+## 1 · Cinco ventas sin SKU
 
 | Fila | Fecha |
 |---|---|
@@ -22,14 +22,25 @@ que ya existen hoy y que la hoja nunca señaló.
 | 114 | 12/7/2026 |
 | 178 | 25/7/2026 |
 
-`leerInventario_` descuenta contando ventas **por SKU**. Sin SKU, esas cinco
-ventas no descuentan nada: **el tablero muestra 5 piezas más de las que hay.**
+`leerInventario_` descuenta contando ventas **por SKU**, así que sin SKU no
+descuentan nada.
 
-Llevan así desde julio. No lo causa la migración; la migración lo destapó
-porque `ventas.sku` es `NOT NULL`.
+**Esto NO significa que el inventario esté descuadrado.** El On Hand no se
+ajusta: se *reemplaza* completo cada mañana con el número real del sistema, y
+el `ventaBaseline` se vuelve a tomar en ese momento. El desajuste dura como
+mucho hasta la siguiente subida — el sistema se autocorrige a diario, y está
+diseñado así a propósito. (Una primera versión de este documento decía que el
+tablero llevaba "inflado desde julio". Era falso.)
 
-Para arreglarlo hay que ponerles el SKU a mano, mirando la serie o la foto —
-177 de las 223 ventas tienen foto, así que probablemente se pueda.
+Lo que sí importa, y por eso siguen en la lista:
+
+- `ventas.sku` es `NOT NULL` en el esquema nuevo: sin SKU no entran.
+- Sin SKU no se pueden atribuir a un producto, así que quedan fuera de
+  cualquier análisis histórico de qué se vendió.
+
+Se arregla poniéndoles el SKU a mano: 177 de las 223 ventas tienen foto, y al
+escribir el SKU en la columna D el `autollenarSku_` completa descripción y
+precio solo.
 
 ## 2 · Dos series repetidas, y no son el mismo caso
 
@@ -46,8 +57,9 @@ precio y vendedor.
 Esto parece **doble captura del mismo equipo**, no dos ventas. Y el 1-ago fue
 justo el día en que la app decía que guardaba sin guardar y se recapturó a mano.
 
-Si es doble captura, hoy el inventario está descontando 2 piezas donde se vendió
-1 — al revés del punto anterior.
+Si es doble captura, sobra una venta en el histórico. Para el stock del día a
+día da igual —el On Hand se reemplaza cada mañana— pero para el conteo de lo
+vendido y para el leaderboard de Assurant, no: esa venta se contó dos veces.
 
 **Hay que decidir dos cosas:**
 - Si la del 1-ago es duplicado, se borra una y el inventario se corrige.
