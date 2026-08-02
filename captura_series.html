@@ -311,6 +311,28 @@ const gasQS = qs => CLOUD_URL + '?' + qs + (GAS_TOKEN ? '&t=' + encodeURICompone
 // de un try/catch que lo tomaba por "sin conexion". Las ventas del 1-ago-2026
 // no llegaron a la hoja por esto.
 const gasPost = () => CLOUD_URL + (GAS_TOKEN ? '?t=' + encodeURIComponent(GAS_TOKEN) : '');
+
+/* Sube al Apps Script y DICE si funcionó. Antes iba con mode:'no-cors', que deja
+   la respuesta opaca: el navegador no permite leerla, así que la app daba por
+   bueno cualquier envío — incluso uno rechazado. Así se perdieron ventas el
+   1-ago-2026 sin que nadie lo notara hasta el día siguiente.
+   El Apps Script responde con Access-Control-Allow-Origin:*, o sea que no-cors
+   nunca hizo falta: solo nos dejaba ciegos. Lanza si algo salió mal; quien llama
+   ya tiene su try/catch y lo muestra en pantalla. */
+async function gasEnviar(payload){
+  const res = await fetch(gasPost(), { method:'POST',
+    headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body: JSON.stringify(payload) });
+  let r = null;
+  try{ r = JSON.parse(await res.text()); }catch(e){}   // no-JSON: cae en los if de abajo
+  if(!res.ok) throw new Error('la nube respondió ' + res.status);
+  if(r && r.error === 'no_autorizado')
+    throw new Error('la nube rechazó la sesión — sal y vuelve a entrar desde el menú');
+  if(!r || r.ok === false)
+    throw new Error((r && r.error) ? String(r.error) : 'la nube no confirmó el guardado');
+  return r;
+}
+
 // Link de la Hoja de Google (concentrado de ventas) que abre Laura:
 const SHEET_BASE = 'https://docs.google.com/spreadsheets/d/1rcHq6XdJ8K2fSDQkVQf5agbCLG4zD3c4b58mF90oBq0/edit';
 const GKEY = 'hes1217_ventas_gid';
@@ -532,12 +554,12 @@ function eliminarDeNube(id){
   // Cancela la subida si aún está en cola
   pending = pending.filter(p => p.id !== id);
   savePending();
-  // Siempre avisa al servidor: si la fila ya subió la borra, si no existe no hace nada
-  fetch(gasPost(), {
-    method:'POST', mode:'no-cors',
-    headers:{'Content-Type':'text/plain;charset=utf-8'},
-    body: JSON.stringify({tipo:'eliminar', id})
-  }).catch(()=>{});
+  // Siempre avisa al servidor: si la fila ya subió la borra, si no existe no hace nada.
+  // Si esto falla, la captura desaparece de aquí pero SIGUE en la hoja: hay que
+  // decirlo, o el conteo del día queda descuadrado sin que nadie sepa por qué.
+  gasEnviar({tipo:'eliminar', id}).catch(e => {
+    toast('Se borró aquí, pero sigue en la hoja · ' + (e && e.message ? e.message : 'sin conexión'), 'warn');
+  });
 }
 
 window.del = i => {
