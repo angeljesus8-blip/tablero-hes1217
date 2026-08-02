@@ -478,7 +478,7 @@ let _invEdadHoras = null;
     _invEdadHoras = horas;
     D.inventario = c.inventario;
     if(Array.isArray(c.eol) && c.eol.length) D.eol = c.eol;
-  }catch(e){}
+  }catch(e){}   // cache ilegible: se arranca sin inventario y la nube lo trae
 })();
 
 const invBySku = {};
@@ -503,7 +503,7 @@ let BUNDLES = [];
   try{
     const c=JSON.parse(localStorage.getItem(BUNDLES_KEY)||'null');
     if(Array.isArray(c)) BUNDLES=c.filter(vigenteHoy);
-  }catch(e){}
+  }catch(e){}   // sin cache de combos se muestran cuando responda la nube
 })();   // promociones vigentes — se cargan de la nube y se cachean en localStorage
 
 // Carga cache guardado para mostrar promos al instante aunque no haya red
@@ -511,12 +511,13 @@ let BUNDLES = [];
   try{
     const c = JSON.parse(localStorage.getItem(PROMOS_KEY)||'null');
     if(Array.isArray(c) && c.length) PROMOS = c.filter(vigenteHoy);
-  }catch(e){}
+  }catch(e){}   // sin cache de promos se muestran cuando responda la nube
 })();
 
 
 // Si hay inventario guardado, decirlo desde el arranque en vez de dejar
 // "Sin confirmar" hasta que responda la nube.
+// El try es por si el DOM aun no tiene el nodo; el aviso se repinta al llegar la nube.
 if(_invEdadHoras != null) setTimeout(function(){ try{ pintarUpdated(); }catch(e){} }, 0);
 
 function guardarInvCache(){
@@ -1669,13 +1670,13 @@ function aplicarPromos(data){
   });
   // Se cachea la lista COMPLETA (no la filtrada): así, al cambiar el día, las
   // vigencias se recalculan desde el caché aunque el celular esté sin red.
-  try{ localStorage.setItem(PROMOS_KEY, JSON.stringify(todas)); }catch(e){}
+  try{ localStorage.setItem(PROMOS_KEY, JSON.stringify(todas)); }catch(e){}   // cuota llena: se sigue con lo que hay en memoria
   PROMOS = todas.filter(vigenteHoy)
                 .sort(function(a,b){ return a.producto.localeCompare(b.producto); });
 }
 
 function aplicarBundles(data){
-  try{ localStorage.setItem(BUNDLES_KEY, JSON.stringify(data)); }catch(e){}
+  try{ localStorage.setItem(BUNDLES_KEY, JSON.stringify(data)); }catch(e){}   // cuota llena: se sigue con lo que hay en memoria
   BUNDLES = data.filter(vigenteHoy);
 }
 
@@ -1686,11 +1687,11 @@ function refiltrarCaches(){
     const c = JSON.parse(localStorage.getItem(PROMOS_KEY)||'null');
     if(Array.isArray(c)) PROMOS = c.filter(vigenteHoy)
       .sort(function(a,b){ return a.producto.localeCompare(b.producto); });
-  }catch(e){}
+  }catch(e){}   // si el cache no se puede releer, quedan las promos ya filtradas
   try{
     const b = JSON.parse(localStorage.getItem(BUNDLES_KEY)||'null');
     if(Array.isArray(b)) BUNDLES = b.filter(vigenteHoy);
-  }catch(e){}
+  }catch(e){}   // idem: quedan los combos ya filtrados
 }
 
 function aplicarAvisos(data){

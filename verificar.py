@@ -144,15 +144,32 @@ def r_secretos():
 # Todos los fallos de hoy tardaron horas en verse porque nadie los pintaba:
 # el catch asumía "sin conexión" y la app seguía como si nada.
 def r_silencios():
+    """Un catch vacío solo se acepta con el motivo escrito.
+
+    Los 26 que había se revisaron uno por uno el 2-ago-2026: 19 eran legítimos
+    (cachés de localStorage, el beep de la captura) y llevan su comentario; los
+    otros tapaban fallas reales y ahora avisan. La regla es que cualquiera nuevo
+    tenga explicación al lado o arriba, para no volver a acumularlos sin querer.
+    """
     for p in HTML:
         s = leer(p)
         if s is None: continue
-        js = scripts_de(s)
-        # catch que no hace absolutamente nada, ni siquiera un comentario
-        vacios = len(re.findall(r'catch\s*\([^)]*\)\s*\{\s*\}', js))
-        if vacios:
-            aviso('silencio', '%s tiene %d catch vacío(s): si algo falla ahí, '
-                              'nadie se entera' % (p, vacios))
+        L = scripts_de(s).split('\n')
+        sin_motivo = []
+        for i, l in enumerate(L):
+            if not re.search(r'catch\s*\([^)]*\)\s*\{\s*\}', l):
+                continue
+            # cuenta como justificado un // en la misma línea, o encima del try
+            resto = l.split('catch', 1)[1]
+            if '//' in resto: continue
+            arriba = '\n'.join(L[max(0, i - 4):i])
+            if '//' in arriba: continue
+            sin_motivo.append(i + 1)
+        if sin_motivo:
+            falla('silencio', '%s: catch vacío sin explicar en línea(s) %s. '
+                              'Si callar es correcto, escribe por qué al lado; '
+                              'si no, que avise.'
+                  % (p, ', '.join(map(str, sin_motivo[:6]))))
 
 
 # ── 7 · Cadenas que se rompen juntas ────────────────────────

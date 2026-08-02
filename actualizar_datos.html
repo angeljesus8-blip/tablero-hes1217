@@ -198,7 +198,7 @@ $('btnGo').onclick = async () => {
     // confirma leyendo el estado del catálogo
     await new Promise(r => setTimeout(r, 2500));
     let estado = null;
-    try{ estado = await jsonp(gasQS('modo=estado')); }catch(e){}
+    try{ estado = await jsonp(gasQS('modo=estado')); }catch(e){}   // sin estado se muestra 'Enviado, revisa' en vez de confirmar en falso
     if(estado && Number(estado.catCount) > 0){
       showResult(true, `✅ Catálogo e inventario actualizados: <b>${estado.catCount}</b> productos.<br>Por ${estado.catBy||quien}. Los teléfonos tomarán el catálogo nuevo al abrir la app.`);
     } else {
@@ -329,7 +329,7 @@ $('btnPromo').onclick = async () => {
     await fetch(gasPost(), { method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain;charset=utf-8'},
       body: JSON.stringify({ tipo:'promos', by:quien, vig:parsedPromo.vig, rows:parsedPromo.rows }) });
     await new Promise(r=>setTimeout(r,2500));
-    let est=null; try{ est=await jsonp(gasQS('modo=estado')); }catch(e){}
+    let est=null; try{ est=await jsonp(gasQS('modo=estado')); }catch(e){}   // idem: no confirma lo que no pudo verificar
     if(est && Number(est.promoCount)>0){
       showResultP(true, `✅ Promociones actualizadas: <b>${est.promoCount}</b> · vigencia ${est.promoVig||parsedPromo.vig}.<br>Por ${est.promoBy||quien}. La captura aplicará el precio promo vigente.`);
     } else {
