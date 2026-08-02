@@ -365,6 +365,7 @@ function refreshCatalogo(){
     if(esCatalogoValido(c)){
       CATALOGO = Object.assign({}, CATALOGO, c);   // la nube manda; el de la app rellena huecos
       localStorage.setItem(CATKEY, JSON.stringify(c));
+      reindexarPorSku();                           // el índice por SKU también
     }
   }).catch(()=>{});
 }
@@ -557,6 +558,43 @@ function setPromo(on, promo){
     b.classList.add('show');
   } else { b.classList.remove('show'); }
 }
+/* Llena SKU, descripción y precio a partir de una ficha del catálogo, aplicando
+   la misma prioridad de precio que el resto del sistema: EOL al 50% manda sobre
+   promoción, y la promoción sobre el precio regular.
+   Se extrajo de routeCode para poder usarla también cuando el asesor teclea el
+   SKU a mano, que antes no autollenaba nada. */
+function aplicarProducto(hit){
+  $('sku').value  = hit.s || '';
+  $('desc').value = hit.d || '';
+  if(hit.p) $('precio').value = String(hit.p).replace(/[^0-9.]/g,'');   // editable
+  const eol50 = EOL_VENTA[hit.s];
+  const promo = promoActiva(hit.s);
+  if(eol50){
+    $('precio').value = String(eol50);                                  // solo exhibición
+    setPromo(true, {pr: hit.p, __eol:true});
+    toast('🏷️ EOL −50% · $' + eol50, 'ok');
+  } else if(promo){
+    $('precio').value = String(promo.pp).replace(/[^0-9.]/g,'');
+    setPromo(true, promo);
+    toast('🏷️ PROMO ' + (hit.s||''), 'ok');
+  } else {
+    setPromo(false);
+    toast('Producto reconocido ✓ ' + (hit.s||''), 'ok');
+  }
+  setRecon(true);
+}
+
+/* El catálogo llega indexado por UPC —es lo que trae el código de barras—, pero
+   el asesor a veces teclea el SKU. Este índice permite buscarlo igual. */
+let CAT_POR_SKU = {};
+function reindexarPorSku(){
+  CAT_POR_SKU = {};
+  Object.keys(CATALOGO || {}).forEach(function(upc){
+    const it = CATALOGO[upc];
+    if(it && it.s) CAT_POR_SKU[String(it.s).trim()] = it;
+  });
+}
+
 // Solo códigos de barras 1D: producto (EAN/UPC) y serie (Code 128/39). NADA de QR/2D.
 const FORMATOS = ['code_128','code_39','ean_13','ean_8','upc_a','upc_e'];
 function routeCode(text, fmt){
@@ -568,24 +606,7 @@ function routeCode(text, fmt){
   if(esProducto){
     const hit = CATALOGO[val] || CATALOGO[val.replace(/^0+/, '')];
     if(hit){
-      $('sku').value = hit.s || '';
-      $('desc').value = hit.d || '';
-      if(hit.p) $('precio').value = String(hit.p).replace(/[^0-9.]/g,'');   // autollena precio (editable)
-      const eol50 = EOL_VENTA[hit.s];
-      const promo = promoActiva(hit.s);
-      if(eol50){
-        $('precio').value = String(eol50);                                  // EOL: 50% activo (solo exhibición)
-        setPromo(true, {pr: hit.p, __eol:true});
-        toast('🏷️ EOL −50% · $' + eol50, 'ok');
-      } else if(promo){
-        $('precio').value = String(promo.pp).replace(/[^0-9.]/g,'');         // precio promo vigente
-        setPromo(true, promo);
-        toast('🏷️ PROMO ' + (hit.s||''), 'ok');
-      } else {
-        setPromo(false);
-        toast('Producto reconocido ✓ ' + (hit.s||''), 'ok');
-      }
-      setRecon(true);
+      aplicarProducto(hit);
     } else {
       $('sku').value = val;   // deja el EAN como referencia
       setRecon(false);        // marca "no reconocido" (posible mala lectura)
@@ -775,6 +796,31 @@ function refreshGid(){
 }
 
 flushCloud();      // sube al concentrado lo que haya quedado pendiente
+reindexarPorSku(); // con lo que haya en caché, antes de que responda la nube
+
+/* Teclear el SKU autollena descripción y precio, igual que escanear el código.
+   Antes solo funcionaba escaneando: el catálogo está indexado por UPC y al
+   teclear un SKU no había dónde buscarlo, así que el asesor escribía el nombre
+   a mano. Se dispara al salir del campo y al teclear 9 dígitos (largo de SKU). */
+(function(){
+  const inp = $('sku');
+  if(!inp) return;
+  let ultimo = '';
+  function intentar(){
+    const val = (inp.value || '').trim();
+    if(!val || val === ultimo) return;
+    const hit = CAT_POR_SKU[val] || CAT_POR_SKU[val.replace(/^0+/, '')];
+    if(!hit) return;                       // sin coincidencia se queda lo tecleado
+    ultimo = val;
+    aplicarProducto(hit);
+  }
+  inp.addEventListener('blur', intentar);
+  inp.addEventListener('input', function(){
+    const v = (inp.value || '').trim();
+    if(v.length >= 9) intentar();          // los SKU de Huawei son de 9 dígitos
+  });
+})();
+
 refreshCatalogo(); // trae el catálogo más reciente de la nube
 refreshPromos();   // trae las promociones vigentes
 refreshEolVenta(); // trae los EOL con 50% activo (solo exhibición)
