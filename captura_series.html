@@ -250,6 +250,11 @@ const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbwbZFsiDqZrNitPKNLqr4
 const _cfgCS = (function(){ try{ return JSON.parse(localStorage.getItem('hes_store')||'null'); }catch(e){ return null; } })();
 const GAS_TOKEN = (_cfgCS && _cfgCS.gas_token) || '';
 const gasQS = qs => CLOUD_URL + '?' + qs + (GAS_TOKEN ? '&t=' + encodeURIComponent(GAS_TOKEN) : '');
+// Para los POST (guardar y eliminar venta). FALTABA: se usaba gasPost() en dos
+// lugares sin haberlo definido, y cada guardado moria con ReferenceError dentro
+// de un try/catch que lo tomaba por "sin conexion". Las ventas del 1-ago-2026
+// no llegaron a la hoja por esto.
+const gasPost = () => CLOUD_URL + (GAS_TOKEN ? '?t=' + encodeURIComponent(GAS_TOKEN) : '');
 // Link de la Hoja de Google (concentrado de ventas) que abre Laura:
 const SHEET_BASE = 'https://docs.google.com/spreadsheets/d/1rcHq6XdJ8K2fSDQkVQf5agbCLG4zD3c4b58mF90oBq0/edit';
 const GKEY = 'hes1217_ventas_gid';
