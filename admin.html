@@ -501,6 +501,28 @@ const API   = (_cfg && _cfg.gas_url) ? _cfg.gas_url : 'https://script.google.com
 const GAS_TOKEN = (_cfg && _cfg.gas_token) || '';
 const gasQS   = qs => API + '?' + qs + (GAS_TOKEN ? '&t=' + encodeURIComponent(GAS_TOKEN) : '');
 const gasPost = () => API + (GAS_TOKEN ? '?t=' + encodeURIComponent(GAS_TOKEN) : '');
+
+/* Sube al Apps Script y DICE si funcionó. Antes iba con mode:'no-cors', que deja
+   la respuesta opaca: el navegador no permite leerla, así que la app daba por
+   bueno cualquier envío — incluso uno rechazado. Así se perdieron ventas el
+   1-ago-2026 sin que nadie lo notara hasta el día siguiente.
+   El Apps Script responde con Access-Control-Allow-Origin:*, o sea que no-cors
+   nunca hizo falta: solo nos dejaba ciegos. Lanza si algo salió mal; quien llama
+   ya tiene su try/catch y lo muestra en pantalla. */
+async function gasEnviar(payload){
+  const res = await fetch(gasPost(), { method:'POST',
+    headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body: JSON.stringify(payload) });
+  let r = null;
+  try{ r = JSON.parse(await res.text()); }catch(e){}   // no-JSON: cae en los if de abajo
+  if(!res.ok) throw new Error('la nube respondió ' + res.status);
+  if(r && r.error === 'no_autorizado')
+    throw new Error('la nube rechazó la sesión — sal y vuelve a entrar desde el menú');
+  if(!r || r.ok === false)
+    throw new Error((r && r.error) ? String(r.error) : 'la nube no confirmó el guardado');
+  return r;
+}
+
 const SB_URL = 'https://rjdrljtujbwooejrpyqv.supabase.co';
 const SB_KEY = 'sb_publishable_mELjDmCaFpNOxcwPi5MB2A_qSZ5ZA2z';
 let sb = null;
@@ -844,10 +866,7 @@ async function subirExhibicion(){
   btn.disabled=true; btn.innerHTML='<span class="spin"></span>Subiendo…';
   document.getElementById('resExhib').className='result';
   try{
-    await fetch(gasPost(),{method:'POST',mode:'no-cors',
-      headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body:JSON.stringify({tipo:'exhibicion',by:'Admin 1217',rows:parsedExhib})});
-    await new Promise(r=>setTimeout(r,2000));
+    await gasEnviar({tipo:'exhibicion',by:'Admin 1217',rows:parsedExhib});
     const conExhib = parsedExhib.filter(x=>x.exhibe>0).length;
     showResult('resExhib',true,`✅ ${parsedExhib.length} SKUs actualizados · ${conExhib} con piezas en exhibición.`);
   }catch(err){ showResult('resExhib',false,'Error al subir: '+err.message); }
@@ -919,10 +938,7 @@ async function subirCatalogoRef(){
   btn.disabled=true; btn.innerHTML='<span class="spin"></span>Subiendo…';
   document.getElementById('resCatRef').className='result';
   try{
-    await fetch(gasPost(),{method:'POST',mode:'no-cors',
-      headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body:JSON.stringify({tipo:'catalogo_ref',by:'Admin 1217',rows:parsedCatRef})});
-    await new Promise(r=>setTimeout(r,2000));
+    await gasEnviar({tipo:'catalogo_ref',by:'Admin 1217',rows:parsedCatRef});
     showResult('resCatRef',true,`✅ ${parsedCatRef.length} productos guardados en catálogo de referencia.`);
   }catch(err){ showResult('resCatRef',false,'Error al subir: '+err.message); }
   btn.textContent='Subir catálogo de referencia'; btn.disabled=false;
@@ -988,9 +1004,7 @@ async function subirCatalogo(){
   btn.disabled=true; btn.innerHTML='<span class="spin"></span>Subiendo…';
   document.getElementById('resCat').className='result';
   try{
-    await fetch(gasPost(),{method:'POST',mode:'no-cors',
-      headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body:JSON.stringify({tipo:'catalogo',by:'Admin 1217',rows:parsedCat})});
+    await gasEnviar({tipo:'catalogo',by:'Admin 1217',rows:parsedCat});
     await new Promise(r=>setTimeout(r,2500));
     let est=null; try{ est=await jsonp(gasQS('modo=estado')); }catch(e){}   // sin estado se muestra 'Enviado, revisa en unos segundos' en vez de confirmar en falso
     if(est&&Number(est.catCount)>0){
@@ -1196,9 +1210,7 @@ async function subirPromos(){
   btn.disabled=true; btn.innerHTML='<span class="spin"></span>Subiendo…';
   document.getElementById('resPromos').className='result';
   try{
-    await fetch(gasPost(),{method:'POST',mode:'no-cors',
-      headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body:JSON.stringify({tipo:'promos',by:'Admin 1217',vig:parsedPromos.vig,rows:parsedPromos.rows})});
+    await gasEnviar({tipo:'promos',by:'Admin 1217',vig:parsedPromos.vig,rows:parsedPromos.rows});
     await new Promise(r=>setTimeout(r,2500));
     let est=null; try{ est=await jsonp(gasQS('modo=estado')); }catch(e){}   // sin estado se muestra 'Enviado, revisa en unos segundos' en vez de confirmar en falso
     const eolCount=parsedPromos.rows.filter(r=>r.est==='EOL').length;
@@ -2582,10 +2594,9 @@ async function guardarComisiones(){
   btn.disabled = true; btn.innerHTML = '<span class="spin"></span>Guardando…';
   document.getElementById('resComis').className = 'result';
   try{
-    await fetch(gasPost(), {method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify({tipo:'comisiones', rows,
+    await gasEnviar({tipo:'comisiones', rows,
         periodoComisiones: document.getElementById('comisPeriodo').value.trim(),
-        periodoGarantias: document.getElementById('comisPeriodoGar').value.trim()})});
+        periodoGarantias: document.getElementById('comisPeriodoGar').value.trim()});
     await new Promise(r=>setTimeout(r,1500));
     showResult('resComis', true, '✅ Comisiones guardadas — el equipo ya las puede ver en su Tablero.');
     cargarComisionesCloud();
