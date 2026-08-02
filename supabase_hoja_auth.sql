@@ -1,23 +1,24 @@
 -- ============================================================
--- El login debe entregar hoja_auth y sheet_url — 2-ago-2026
--- Correr completo en Supabase → SQL Editor → Run.
+-- El login debe entregar hoja_auth y sheet_url
+-- APLICADO EN PRODUCCIÓN el 2-ago-2026. Ver "Lo que salió" abajo.
 -- ============================================================
 --
--- Qué está roto
--- -------------
+-- Qué estaba roto
+-- ---------------
 -- Captura de Series decide quién ve las ventas del día así:
 --
 --     const DESCARGA_AUTORIZADA = (_cfgCS && _cfgCS.hoja_auth) || '';
 --     const ok = currentVend === DESCARGA_AUTORIZADA;
 --
--- Pero login_asesor devuelve solo (store_id, nombre, ciudad, gas_url,
--- vendedores, gas_token). `hoja_auth` nunca llega, queda '', y la
--- comparación es falsa para todo el mundo: el botón está oculto para
--- todos, incluida Laura, que es la única que lo necesita.
+-- La columna `hoja_auth` existía y ya traía el nombre correcto, pero
+-- login_asesor devolvía solo (store_id, nombre, ciudad, gas_url,
+-- vendedores, gas_token). El dato estaba bien guardado y nunca salía:
+-- llegaba undefined, se guardaba como '', y la comparación era falsa
+-- para todos. El botón estuvo oculto para todo el mundo —incluida la
+-- única persona que lo usa— desde el 1-ago.
 --
 -- El 1-ago se corrigió el nombre del campo en el cliente y se dio por
--- resuelto. No lo estaba: el cliente pedía bien un dato que el servidor
--- nunca mandó. Esto cierra ese lado.
+-- cerrado. El cliente pedía bien un dato que el servidor nunca mandó.
 --
 -- Un cambio no termina hasta probarlo de punta a punta (MAPA.md).
 --
@@ -26,13 +27,12 @@
 -- ------------------------------------------------------------
 SELECT store_id, nombre,
        (hoja_auth IS NOT NULL AND hoja_auth <> '') AS tiene_hoja_auth,
-       coalesce(hoja_auth, '(vacío)')              AS hoja_auth_actual,
        (sheet_url IS NOT NULL AND sheet_url <> '') AS tiene_sheet_url
 FROM public.tiendas
 ORDER BY store_id;
 
 -- ------------------------------------------------------------
--- PASO 2 · Las columnas, por si alguna falta
+-- PASO 2 · Las columnas, por si alguna falta (otra tienda nueva)
 -- ------------------------------------------------------------
 ALTER TABLE public.tiendas
   ADD COLUMN IF NOT EXISTS hoja_auth text,
@@ -44,28 +44,32 @@ COMMENT ON COLUMN public.tiendas.hoja_auth IS
   'letra: una tilde o un espacio de más y deja de funcionar. Vacío = nadie.';
 
 -- ------------------------------------------------------------
--- PASO 3 · Poner el nombre de Laura
+-- PASO 3 · Comprobar que el nombre coincide con la lista
 -- ------------------------------------------------------------
--- Tomado de la propia lista de vendedores para que coincida exactamente
--- con lo que el cliente compara — así no depende de cómo se teclee aquí.
-UPDATE public.tiendas t
-SET hoja_auth = (
-      SELECT v FROM unnest(t.vendedores) AS v
-      WHERE lower(v) LIKE 'laura%' LIMIT 1
-    )
-WHERE t.store_id = '1217'
-  AND EXISTS (SELECT 1 FROM unnest(t.vendedores) AS v WHERE lower(v) LIKE 'laura%');
+-- Esto es lo que de verdad decide si el botón aparece. `currentVend` sale
+-- de la lista `vendedores`, y se compara con `===` contra `hoja_auth`: si
+-- difieren en una tilde, el botón no sale y nada avisa.
+--
+-- OJO: `vendedores` es jsonb, NO text[]. `unnest()` truena con
+-- "function unnest(jsonb) does not exist"; va jsonb_array_elements_text().
+SELECT store_id,
+       (SELECT count(*) FROM jsonb_array_elements_text(vendedores) v
+        WHERE v = hoja_auth)                            AS coincide_exacto,
+       (SELECT count(*) FROM jsonb_array_elements_text(vendedores) v) AS total_vendedores
+FROM public.tiendas
+WHERE store_id = '1217';
 
--- Si el UPDATE no encontró a nadie, el SELECT del paso 5 lo va a delatar.
--- En ese caso ponlo a mano con el nombre exacto de la lista:
---   UPDATE public.tiendas SET hoja_auth = 'Laura ...' WHERE store_id = '1217';
+-- coincide_exacto debe ser 1. Si es 0, el nombre de hoja_auth no está en la
+-- lista tal cual y hay que copiarlo de ahí, sin retocarlo a mano.
 
 -- ------------------------------------------------------------
--- PASO 4 · Que las funciones lo entreguen
+-- PASO 4 · Que las funciones lo entreguen  ← lo único que hacía falta
 -- ------------------------------------------------------------
 -- Cambia el tipo de retorno, así que CREATE OR REPLACE no basta: hay que
 -- DROP primero. El cuerpo es el mismo de GAS_guardian.sql; lo único nuevo
 -- son t.hoja_auth y t.sheet_url al final.
+--
+-- Entre el DROP y el CREATE nadie puede entrar a la app: correr de corrido.
 
 DROP FUNCTION IF EXISTS public.login_asesor(text);
 
@@ -117,17 +121,49 @@ GRANT EXECUTE ON FUNCTION public.login_asesor(text)   TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.login_empleado(text) TO anon, authenticated;
 
 -- ------------------------------------------------------------
--- PASO 5 · Comprobar que quedó
+-- PASO 5 · Comprobar que quedó, sin escribir el PIN aquí
 -- ------------------------------------------------------------
--- Cambia 1217 por el PIN real de asesor si no es ese.
-SELECT store_id,
-       coalesce(hoja_auth, '(vacío)') AS quien_ve_las_ventas,
-       (gas_token IS NOT NULL)        AS trae_token
-FROM public.login_asesor('1217');
+SELECT
+  (SELECT count(*) FROM public.login_asesor(coalesce(nullif(t.asesor_pin,''), t.store_id)))
+    AS el_login_responde,
+  (SELECT (l.hoja_auth IS NOT NULL) FROM public.login_asesor(coalesce(nullif(t.asesor_pin,''), t.store_id)) l)
+    AS ya_entrega_hoja_auth,
+  (SELECT (l.gas_token IS NOT NULL) FROM public.login_asesor(coalesce(nullif(t.asesor_pin,''), t.store_id)) l)
+    AS sigue_trayendo_token
+FROM public.tiendas t WHERE t.store_id = '1217';
 
--- Debe salir el nombre de Laura, no "(vacío)".
--- Si sale vacío, el botón seguirá oculto: revisa el paso 3.
---
--- Después de correr esto, Laura tiene que SALIR y volver a ENTRAR en
--- Captura de Series. La sesión se guarda en el teléfono/laptop al entrar;
--- si no vuelve a entrar, sigue con la vieja y sin hoja_auth.
+-- Y que el login del gerente tampoco se haya roto:
+SELECT count(*) AS empleados_que_entran,
+       count(*) FILTER (WHERE (SELECT l.hoja_auth FROM public.login_empleado(e.empno) l) IS NOT NULL)
+         AS con_hoja_auth,
+       count(*) FILTER (WHERE (SELECT l.gas_token FROM public.login_empleado(e.empno) l) IS NOT NULL)
+         AS con_token
+FROM public.empleados e
+WHERE e.activo = true
+  AND (SELECT count(*) FROM public.login_empleado(e.empno)) = 1;
+
+/* ============================================================
+   Lo que salió al aplicarlo — 2-ago-2026
+   ============================================================
+
+   PASO 1 · La columna hoja_auth YA existía y YA traía el nombre correcto,
+            y sheet_url también. O sea que nunca hubo que tocar datos: el
+            único hueco era que las funciones no lo devolvían.
+
+   PASO 3 · coincide_exacto = 1 de 5 vendedores. El nombre calza letra por
+            letra con la lista, que es lo que compara el cliente.
+
+            Aquí salió el error del propio archivo: la primera versión usaba
+            unnest(vendedores) dando por hecho que era text[]. Es jsonb.
+            Se corrigió arriba.
+
+   PASO 4 · Success. No rows returned.
+
+   PASO 5 · login_asesor  → responde 1, entrega hoja_auth, sigue con token.
+            login_empleado → 5 empleados entran, los 5 con hoja_auth y token,
+                             2 admins. Nada se rompió.
+
+   FALTA: que Laura SALGA y vuelva a ENTRAR en Captura de Series. La sesión
+   se guarda en el aparato al entrar; con la vieja sigue sin hoja_auth y el
+   botón sigue oculto aunque aquí ya esté todo bien.
+   ============================================================ */
