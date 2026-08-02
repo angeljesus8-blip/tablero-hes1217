@@ -1,7 +1,8 @@
 # Modos del Apps Script que usa el tablero
 
 El GAS ("tablero 1217", vinculado a la hoja *ventas laura*) **no está en este
-repositorio** — vive en Google. Esta nota deja registro de qué le pide la app y de
+repositorio** — vive en Google, y ese es un riesgo abierto: si se borra, se pierde
+entero (923 líneas). No hay copia en ningún otro lado. Esta nota deja registro de qué le pide la app y de
 los dos modos añadidos el 28-jul-2026.
 
 URL base: `CLOUD_URL` en `tablero.html` · se consulta como `…/exec?modo=<nombre>`
@@ -18,6 +19,7 @@ URL base: `CLOUD_URL` en `tablero.html` · se consulta como `…/exec?modo=<nomb
 | `avisos_cloud` | `[{titulo,detalle,d2,…}]` | avisos |
 | `apartados` | `[{id,sku,cliente,…}]` | cupo de preventa |
 | `ventas_hoy` | `{fecha, vend:{nombre:{c,s}}}` | leaderboard Assurant |
+| `ventas_detalle` | `{fecha, ventas:[{serie,sku,desc,precio,vend,seguro}]}` | las series del dia, para copiarlas una por una |
 
 Los seis del medio siguen existiendo: son el **respaldo** si `modo=todo` no está
 disponible (otra tienda con un GAS más viejo).
@@ -31,6 +33,11 @@ capturas del propio celular.
 **`todo`** — junta las seis lecturas en una respuesta. Medido: **4 s y 42 KB**,
 contra ~20 s cuando van por separado (van de una en una porque Apps Script descarta
 en silencio las llamadas encimadas).
+
+**`ventas_detalle`** (2-ago-2026) — devuelve las series del dia con su
+descripcion y precio. Laura las sube una por una a otra plataforma; `ventas_hoy`
+no le sirve porque solo cuenta ventas por vendedor. Lo consume el panel "Ventas
+del dia" de Captura de Series.
 
 ## Tres detalles de la hoja `Ventas` que hay que respetar
 
