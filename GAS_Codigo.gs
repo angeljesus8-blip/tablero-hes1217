@@ -212,38 +212,42 @@ function actualizarCatalogo_(d) {
 function leerCatalogo_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const out = {};
-  // El objeto va indexado por UPC porque el escaner busca por codigo de barras.
-  // Pero los productos SIN codigo se caian del catalogo ENTERO: Captura de
-  // Series se alimenta de aqui, asi que al teclear ese SKU no se autollenaba ni
-  // la descripcion ni el precio, y no habia forma de saber por que.
-  // (2-ago-2026, encontrado al migrar a Supabase: le pasaba al MatePad 11.5
-  // 8/256GB, que esta en Catalogo_ref sin codigo de barras.)
+  // Cada SKU lleva SIEMPRE su propia entrada 'sku:XXXX'.
   //
-  // Se les da una clave sintetica 'sku:XXXX'. No choca con ningun codigo real,
-  // el escaneo nunca la encuentra —correcto, esos productos no tienen codigo— y
-  // reindexarPorSku() del cliente si los recoge, que es lo que hacia falta.
-  const clave = (upc, sku) => upc || ('sku:' + sku);
+  // Antes el catalogo se indexaba SOLO por codigo de barras, y resulta que hay
+  // codigos comodin compartidos por varios productos: 6942100000000 lo usan 6
+  // (un MatePad y cinco FreeBuds). Al indexar por UPC se pisaban entre si y
+  // sobrevivia uno solo; los demas desaparecian del catalogo entero y no se
+  // autollenaban al teclear su SKU, sin ningun aviso.
+  // (2-ago-2026, encontrado al migrar: le pasaba al MatePad 11.5 8/256GB, que
+  //  es el unico de los seis que no esta tambien en la hoja Catalogo.)
+  //
+  // La entrada por codigo se conserva para el escaner. Si dos productos
+  // comparten codigo el escaneo es ambiguo DE ORIGEN y no hay nada que hacer,
+  // pero al menos ninguno desaparece y el tecleo por SKU siempre funciona.
+  function guardar(upc, sku, datos, pisar) {
+    if (!sku) return;
+    out['sku:' + sku] = datos;
+    if (upc && (pisar || !out[upc])) out[upc] = datos;
+  }
 
   const ref = ss.getSheetByName('Catalogo_ref');
   if (ref && ref.getLastRow()>1) {
     const v = ref.getDataRange().getValues();
     for (let r=1; r<v.length; r++) {
       const sku = String(v[r][0]||'').trim(); if (!sku) continue;
-      const upc = String(v[r][2]||'').trim();
-      out[clave(upc, sku)] = { s:sku, d:String(v[r][1]||'').trim(), o:'', p:'' };
+      guardar(String(v[r][2]||'').trim(), sku,
+              { s:sku, d:String(v[r][1]||'').trim(), o:'', p:'' }, false);
     }
   }
   const sh = ss.getSheetByName('Catalogo');
   if (sh && sh.getLastRow()>1) {
     const v = sh.getDataRange().getValues();
     for (let r=1; r<v.length; r++) {
-      const upc = String(v[r][0]||'').trim();
-      const sku = String(v[r][1]||'').trim();
-      if (!upc && !sku) continue;
-      // Si ya habia entrado por Catalogo_ref sin codigo, se retira esa version:
-      // la de aqui trae On Hand y precio, y dejar ambas duplicaria el SKU.
-      if (upc && sku && out['sku:' + sku]) delete out['sku:' + sku];
-      out[clave(upc, sku)] = { s:sku, d:String(v[r][2]||''), o:String(v[r][3]||''), p:String(v[r][4]||'') };
+      const sku = String(v[r][1]||'').trim(); if (!sku) continue;
+      // El de Catalogo manda sobre el de Catalogo_ref: trae On Hand y precio.
+      guardar(String(v[r][0]||'').trim(), sku,
+              { s:sku, d:String(v[r][2]||''), o:String(v[r][3]||''), p:String(v[r][4]||'') }, true);
     }
   }
   return out;
