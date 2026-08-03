@@ -107,6 +107,20 @@ con `isoFecha_`; si lo quitas, ninguna promo pasa el filtro. *(1-ago-2026.)*
 
 ## Cadena 4 · Autollenado en captura
 
+**Los codigos de barras se leen del valor CRUDO del Excel, no del formateado.**
+SheetJS con `raw:false` devuelve lo que se VE en la celda: una con formato
+cientifico da `"6.94E+12"` aunque el numero de abajo este perfecto. Eso llega al
+Apps Script, que lo escribe sin comilla simple, y Sheets lo convierte a
+`6942100000000`. Seis productos acabaron con el mismo codigo.
+
+La tuberia entera tiene que respetarlo: `valorCrudo()` en admin.html al leer, y
+la comilla simple en `actualizarCatalogoRef_` al escribir. `actualizarCatalogo_`
+ya protegia; la de referencia no.
+
+*(2-ago-2026. El parser del catalogo principal ya habia topado con esto y lo
+"resolvia" con `if(/e\+/i.test(upc)) continue`, o sea descartando el producto en
+vez de leerlo bien. Ese continue se quito.)*
+
 **Hay codigos de barras comodin compartidos por varios productos.** `6942100000000` lo usan 6 (un MatePad y cinco FreeBuds). Como `leerCatalogo_` indexaba SOLO por UPC, se pisaban entre si y sobrevivia uno: los demas desaparecian del catalogo y al teclear su SKU no salia ni descripcion ni precio, sin ningun aviso.
 
 Ahora cada SKU lleva SIEMPRE su entrada `sku:XXXX`, ademas de la del codigo. El escaneo de un codigo compartido sigue siendo ambiguo —lo es en el dato de origen— pero ninguno desaparece y el tecleo nunca falla.

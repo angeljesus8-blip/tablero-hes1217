@@ -260,7 +260,11 @@ function actualizarCatalogoRef_(d) {
   if (sh) ss.deleteSheet(sh);
   sh = ss.insertSheet('Catalogo_ref');
   sh.appendRow(['SKU','Descripcion','UPC']);
-  const rows = (d.rows||[]).map(r => [r.sku||'', r.desc||'', r.upc||'']);
+  // La comilla simple obliga a Sheets a guardarlo como TEXTO. Sin ella convierte
+  // el codigo de barras a numero, y si viene en notacion cientifica lo redondea:
+  // asi acabaron seis productos con el mismo 6942100000000. actualizarCatalogo_
+  // ya lo hacia; esta funcion no. (2-ago-2026)
+  const rows = (d.rows||[]).map(r => ["'"+(r.sku||''), r.desc||'', "'"+(r.upc||'')]);
   if (rows.length) sh.getRange(2,1,rows.length,3).setValues(rows);
   PropertiesService.getScriptProperties().setProperty('catRefCount', String(rows.length));
   return ok_();
