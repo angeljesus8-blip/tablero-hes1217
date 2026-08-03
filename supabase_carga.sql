@@ -242,3 +242,39 @@ END $fn$;
 
    FALTA: apartados (9), comisiones (4), y comparar las otras seis funciones.
    ============================================================ */
+
+-- ------------------------------------------------------------
+-- 6 · APARTADOS Y COMISIONES  <-  modo=exportar
+-- ------------------------------------------------------------
+-- El esquema de apartados NO tenia color, precio ni transaccion, y la hoja si.
+-- Migrar asi habria perdido el numero de ticket del POS, que es el enlace entre
+-- el apartado y la venta. Se agregaron antes de cargar:
+--   ALTER TABLE public.apartados
+--     ADD COLUMN IF NOT EXISTS color text,
+--     ADD COLUMN IF NOT EXISTS precio numeric(12,2),
+--     ADD COLUMN IF NOT EXISTS transaccion text;
+--
+-- Leccion: consultar information_schema ANTES de escribir el INSERT. Asumir las
+-- columnas costo dos intentos y por poco cuesta datos.
+
+/* ============================================================
+   FASE 1 CERRADA — 2-ago-2026
+
+   Cargado:
+     catalogo 215 · inventario 214 · promos 117 · eol 133
+     ventas 220 · apartados 9 · comisiones 4
+     cortes onhand 215 · cortes exhibicion 215
+     bundles 0 y avisos 0 — el GAS tambien devuelve 0, estan vencidos
+
+   PARIDAD contra el Apps Script, funcion por funcion:
+
+     inventario_vivo   gas=215  mio=215  difieren=0  (onhand, vendido,
+                                                      exhibicion, exh_vendida)
+     eol_precio_venta  gas=3    mio=3    difieren=0
+     ventas_hoy        gas=3    mio=3    difieren=0
+     ventas_detalle    gas=4    mio=4    difieren=0
+     promos_vigentes   gas=117  mio=117
+
+   Las siete lecturas devuelven lo mismo que el Apps Script con los mismos
+   datos. Se puede pasar a la fase 2.
+   ============================================================ */
