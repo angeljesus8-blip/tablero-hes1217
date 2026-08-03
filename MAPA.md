@@ -107,6 +107,10 @@ con `isoFecha_`; si lo quitas, ninguna promo pasa el filtro. *(1-ago-2026.)*
 
 ## Cadena 4 · Autollenado en captura
 
+**Un producto sin codigo de barras tambien tiene que autollenarse.** `leerCatalogo_` devuelve el catalogo indexado por UPC, asi que hasta el 2-ago-2026 los SKU sin codigo se caian del catalogo entero y al teclearlos no salia ni descripcion ni precio — sin ningun aviso. Ahora entran con clave `sku:XXXX`, que el escaneo nunca encuentra (correcto) y `reindexarPorSku()` si.
+
+*(Lo destapo la migracion, no un reporte: el tablero y la hoja lo tenian bien y solo Captura de Series lo sufria. Le pasaba al MatePad 11.5 8/256GB.)*
+
 ```
 Catalogo (indexado por UPC) → CATALOGO
                             → reindexarPorSku() → CAT_POR_SKU
