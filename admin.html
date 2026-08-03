@@ -900,11 +900,31 @@ async function subirExhibicion(){
    ================================================================ */
 let parsedCatRef=null;
 
+/* Los codigos de barras y los SKU se leen del valor CRUDO del Excel, no del
+   formateado. SheetJS con raw:false devuelve lo que se VE en la celda, y una
+   con formato cientifico da "6.94E+12" en vez del numero — aunque en el Excel
+   el dato este perfecto. Asi se rompieron 6 UPC: llegaron como texto "6.94E+12"
+   y Google Sheets los convirtio a 6942100000000, los seis iguales.
+   (2-ago-2026. El parser del catalogo principal ya lo habia notado y lo
+   "arreglaba" descartando esas filas con `if(/e\+/i.test(upc)) continue`, o sea
+   perdiendo el producto en vez de leerlo bien.) */
+function valorCrudo(filaVista, filaCruda, i){
+  if (i < 0) return '';
+  const vista = String((filaVista||[])[i] == null ? '' : (filaVista||[])[i]).trim();
+  const real  = (filaCruda||[])[i];
+  // solo se recurre al crudo cuando lo mostrado viene en notacion cientifica
+  if (/e\+/i.test(vista) && real !== undefined && real !== null && real !== '') {
+    return String(typeof real === 'number' ? BigInt(Math.round(real)).toString() : real).trim();
+  }
+  return vista.replace(/\.0+$/, '');
+}
+
 async function parseCatalogoRef(file){
   const buf=await file.arrayBuffer();
   const wb=XLSX.read(buf,{type:'array'});
   const ws=wb.Sheets[wb.SheetNames[0]];
   const aoa=XLSX.utils.sheet_to_json(ws,{header:1,raw:false,defval:''});
+  const crudo=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:''});
 
   // Encuentra fila de encabezados
   let h=-1;
@@ -926,10 +946,10 @@ async function parseCatalogoRef(file){
   const seen={},rows=[];
   for(let r=h+1;r<aoa.length;r++){
     const row=aoa[r];
-    const sku=String(row[iSku]||'').trim().replace(/\.0+$/,'');
+    const sku=valorCrudo(row, crudo[r], iSku);
     if(!sku) continue;
     if(seen[sku]) continue; seen[sku]=1;
-    const upc=iUpc>=0?String(row[iUpc]||'').trim().replace(/\.0+$/,''):'';
+    const upc=valorCrudo(row, crudo[r], iUpc);
     const desc=iDesc>=0?String(row[iDesc]||'').trim():'';
     rows.push({sku, desc, upc});
   }
@@ -976,6 +996,7 @@ async function parseInforme(file){
   const wb=XLSX.read(buf,{type:'array'});
   const ws=wb.Sheets[wb.SheetNames[0]];
   const aoa=XLSX.utils.sheet_to_json(ws,{header:1,raw:false,defval:''});
+  const crudo=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:''});
   let h=-1;
   for(let i=0;i<aoa.length;i++){
     const up=aoa[i].map(c=>String(c||'').trim().toUpperCase());
@@ -990,11 +1011,11 @@ async function parseInforme(file){
   const seen={},rows=[];
   for(let r=h+1;r<aoa.length;r++){
     const row=aoa[r];
-    let upc=String(row[iUpc]||'').trim();
-    const sku=String(row[iSku]||'').trim();
+    const upc=valorCrudo(row, crudo[r], iUpc);
+    const sku=valorCrudo(row, crudo[r], iSku);
     if(!upc||!sku) continue;
-    if(/e\+/i.test(upc)) continue;
-    upc=upc.replace(/\.0$/,'');
+    // Ya NO se descartan las filas en notacion cientifica: valorCrudo las lee
+    // bien. Antes se saltaban, o sea que el producto se perdia del catalogo.
     if(seen[upc]) continue; seen[upc]=1;
     rows.push({upc,sku,desc:String(row[iDesc]||'').trim(),
       onhand:iOn>=0?String(row[iOn]||'').trim():'',
