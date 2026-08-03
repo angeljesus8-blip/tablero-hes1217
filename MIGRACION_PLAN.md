@@ -66,7 +66,7 @@ Hereda el riesgo 1.
 Ninguna fase avanza sin que la anterior esté comprobada. En todas, revertir es
 volver una variable a su valor: el Apps Script sigue vivo hasta la fase 5.
 
-### Fase 1 · Datos y paridad — sin tocar las apps
+### Fase 1 · Datos y paridad — sin tocar las apps ✅ CERRADA 2-ago-2026
 Cargar las ~838 filas a Supabase y escribir las funciones SQL equivalentes a
 cada modo del GAS.
 
