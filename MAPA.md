@@ -107,9 +107,11 @@ con `isoFecha_`; si lo quitas, ninguna promo pasa el filtro. *(1-ago-2026.)*
 
 ## Cadena 4 · Autollenado en captura
 
-**Un producto sin codigo de barras tambien tiene que autollenarse.** `leerCatalogo_` devuelve el catalogo indexado por UPC, asi que hasta el 2-ago-2026 los SKU sin codigo se caian del catalogo entero y al teclearlos no salia ni descripcion ni precio — sin ningun aviso. Ahora entran con clave `sku:XXXX`, que el escaneo nunca encuentra (correcto) y `reindexarPorSku()` si.
+**Hay codigos de barras comodin compartidos por varios productos.** `6942100000000` lo usan 6 (un MatePad y cinco FreeBuds). Como `leerCatalogo_` indexaba SOLO por UPC, se pisaban entre si y sobrevivia uno: los demas desaparecian del catalogo y al teclear su SKU no salia ni descripcion ni precio, sin ningun aviso.
 
-*(Lo destapo la migracion, no un reporte: el tablero y la hoja lo tenian bien y solo Captura de Series lo sufria. Le pasaba al MatePad 11.5 8/256GB.)*
+Ahora cada SKU lleva SIEMPRE su entrada `sku:XXXX`, ademas de la del codigo. El escaneo de un codigo compartido sigue siendo ambiguo —lo es en el dato de origen— pero ninguno desaparece y el tecleo nunca falla.
+
+*(2-ago-2026. Lo destapo la migracion al comparar 215 SKUs contra 215 y encontrar uno de diferencia. El primer intento de arreglo dio por hecho que el producto no tenia codigo; si lo tenia, y por eso no sirvio: hay que mirar el dato antes de arreglar.)*
 
 ```
 Catalogo (indexado por UPC) → CATALOGO
