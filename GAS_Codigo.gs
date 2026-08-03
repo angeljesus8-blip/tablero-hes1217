@@ -212,21 +212,38 @@ function actualizarCatalogo_(d) {
 function leerCatalogo_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const out = {};
+  // El objeto va indexado por UPC porque el escaner busca por codigo de barras.
+  // Pero los productos SIN codigo se caian del catalogo ENTERO: Captura de
+  // Series se alimenta de aqui, asi que al teclear ese SKU no se autollenaba ni
+  // la descripcion ni el precio, y no habia forma de saber por que.
+  // (2-ago-2026, encontrado al migrar a Supabase: le pasaba al MatePad 11.5
+  // 8/256GB, que esta en Catalogo_ref sin codigo de barras.)
+  //
+  // Se les da una clave sintetica 'sku:XXXX'. No choca con ningun codigo real,
+  // el escaneo nunca la encuentra —correcto, esos productos no tienen codigo— y
+  // reindexarPorSku() del cliente si los recoge, que es lo que hacia falta.
+  const clave = (upc, sku) => upc || ('sku:' + sku);
+
   const ref = ss.getSheetByName('Catalogo_ref');
   if (ref && ref.getLastRow()>1) {
     const v = ref.getDataRange().getValues();
     for (let r=1; r<v.length; r++) {
       const sku = String(v[r][0]||'').trim(); if (!sku) continue;
       const upc = String(v[r][2]||'').trim();
-      if (upc) out[upc] = { s:sku, d:String(v[r][1]||'').trim(), o:'', p:'' };
+      out[clave(upc, sku)] = { s:sku, d:String(v[r][1]||'').trim(), o:'', p:'' };
     }
   }
   const sh = ss.getSheetByName('Catalogo');
   if (sh && sh.getLastRow()>1) {
     const v = sh.getDataRange().getValues();
     for (let r=1; r<v.length; r++) {
-      const upc = String(v[r][0]||'').trim(); if (!upc) continue;
-      out[upc] = { s:String(v[r][1]||''), d:String(v[r][2]||''), o:String(v[r][3]||''), p:String(v[r][4]||'') };
+      const upc = String(v[r][0]||'').trim();
+      const sku = String(v[r][1]||'').trim();
+      if (!upc && !sku) continue;
+      // Si ya habia entrado por Catalogo_ref sin codigo, se retira esa version:
+      // la de aqui trae On Hand y precio, y dejar ambas duplicaria el SKU.
+      if (upc && sku && out['sku:' + sku]) delete out['sku:' + sku];
+      out[clave(upc, sku)] = { s:sku, d:String(v[r][2]||''), o:String(v[r][3]||''), p:String(v[r][4]||'') };
     }
   }
   return out;
