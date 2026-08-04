@@ -424,9 +424,15 @@ function tocarDia(){
    saltar entre pestañas para saber si de una promo quedaban piezas.
    El código de la sección 'inv' se conserva por si hay que devolverla: basta
    volver a agregar su renglón aquí. */
+/* Los bundles (paquetes) se retiraron el 4-ago-2026: la tienda dejó de
+   manejarlos. Se quitan de la vista del equipo y de Admin, pero NO se borra
+   nada del servidor: la hoja `Bundles`, la tabla de Supabase y los 20 combos
+   históricos siguen ahí. Si algún día vuelven, se reactiva devolviendo este
+   filtro, su línea en `seccionTieneItems`, la de `cuenta()` y la de `render()`.
+   `seccionBundles` y `aplicarBundles` se quedan sin usar a propósito, por lo
+   mismo. */
 const FILTROS = [
   { id:'inicio', label:'🏠 Inicio' },
-  { id:'bundle', label:'🎁 Bundles' },
   { id:'promo',  label:'🔥 Promos y precios' },
   { id:'preventa', label:'🚀 Preventa' },
   { id:'eol',   label:'🏷️ Vender 50%' },
@@ -847,7 +853,6 @@ calcDerivados();
 
 function cuenta(id){
   if(id==='inicio') return '';
-  if(id==='bundle') return BUNDLES.filter(x=>coincide(x.nombre,x.sku1,x.sku2)).length;
   if(id==='promo') return PROMOS.filter(x=>coincide(x.producto,x.sku) && tieneExistencia_(x.sku)).length;
   if(id==='preventa') return preventaTotalDisp();
   if(id==='eol')   return EOL.filter(e=>coincide(e.producto,e.sku) && e.estado==='listo').length;
@@ -862,7 +867,6 @@ function cuenta(id){
 // ¿la sección tiene algún dato? (ignora el buscador, para que las pestañas no salten al escribir)
 function seccionTieneItems(id){
   if(id==='inicio')   return true;
-  if(id==='bundle')   return BUNDLES.length>0;
   if(id==='promo')    return PROMOS.length>0;
   if(id==='preventa') return PREVENTA.length>0;
   if(id==='eol')      return EOL.length>0;
@@ -1415,7 +1419,6 @@ function render(){
     html += seccion('⏳ EOL próximos · agotar stock cerrado', eolPend, cardEol);
     html += seccion('Agotados', eolAgot, cardEol);
   }
-  if(f==='bundle') html += seccionBundles('🎁 Paquetes vigentes', bundles);
   if(f==='preventa') html += seccionPreventa();
   if(f==='promo'){
     const promoSkus = new Set(PROMOS.map(p => p.sku));
