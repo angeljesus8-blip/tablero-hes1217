@@ -397,11 +397,17 @@ Estado por fases, en `MIGRACION_PLAN.md`:
 
 | Fase | Estado |
 |---|---|
-| 1 · datos y paridad | 13 funciones aplicadas y comparadas; **falta resincronizar** |
-| 2 · lecturas | lista, en cuanto la 1 cierre con datos del mismo día |
+| 1 · datos y paridad | ✅ **cerrada** el 4-ago con datos del mismo momento |
+| 2 · lecturas | ← lo siguiente |
 | 3 · ventas, doble escritura | desbloqueada: la regla de la serie ya está aplicada |
 | 4 · fotos, autollenado, edición | — |
 | 5 · retirar el Apps Script | — |
+
+Las trece lecturas dan igual, **incluido `inventario`** (215/215, cero
+diferencias) que es la que se verificó contando cajas en piso. La única que
+difiere es `estado`, y ahí el que se equivoca es el Apps Script: reporta 141
+promos y su propio `modo=promos` devuelve 117 — el contador vive en Propiedades
+y se quedó viejo.
 
 **La comparación de paridad caduca.** Se comparó el 4-ago contra datos cargados
 el 2-ago: ocho lecturas dieron igual y cinco distinto, y las cinco eran el mismo
@@ -415,12 +421,12 @@ después de `cargar_ventas`, porque el corte se despeja como (total de ventas �
 vendido desde el corte) y sin ventas cargadas sale cero, o sea un tablero
 enseñando stock cero sobre mercancía que está en bodega.
 
-⚠️ **Supabase está a medias ahora mismo** *(4-ago, 02:20)*. La primera
-resincronización paró en el paso 4: al cambiar la regla de la serie se rompió
-el `ON CONFLICT` de `cargar_ventas`. Catálogo, inventario, promos y eol están al
-día; ventas, cortes, apartados y comisiones siguen del 2-ago. No afecta a la
-tienda —nadie lee de Supabase— pero **comparar en este estado no significa
-nada**. Lo desbloquea `supabase_cargar_ventas_fix.sql`.
+La primera resincronización paró en el paso 4 y **la parada valió la pena**: al
+cambiar la regla de la serie se había roto el `ON CONFLICT` de `cargar_ventas`
+(se revisó qué *lee* la restricción y no qué *escribe* contra ella). Sin
+detenerse, `cargar_cortes` habría corrido con las ventas a medias y eso no da
+error: da cortes en cero, o sea stock cero sobre mercancía que está en bodega.
+Arreglado y resincronizado: los seis pasos en verde.
 
 **Medido de paso, con datos reales:** `modo=todo` en el Apps Script tarda
 **8.255 ms**; `tablero_todo` en Supabase, **373 ms**.
