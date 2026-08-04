@@ -128,6 +128,29 @@ cualquier lectura nueva, sacar con `grep` qué campos consume de verdad.
 se sigue por el Apps Script. Probado rompiendo Supabase a propósito — el
 tablero quedó igual, solo más lento.
 
+### Lo que sostiene que el inventario cuadre *(léase antes de tocar nada de esto)*
+
+`inventario_vivo` descuenta lo vendido de la tabla `ventas` **de Supabase**. Así
+que el stock del tablero solo es correcto si TODAS las ventas llegan ahí.
+
+    captura → Sheet (confirma) → guardarEnSupabase() → tabla ventas
+                                        ↓ si falla
+                                  cola en localStorage
+                                  (se reintenta al abrir la app y al volver la red)
+
+El 4-ago esto estuvo mal montado durante unas horas: las lecturas se movieron a
+Supabase **antes** de que existiera la doble escritura, y el tablero mostraba una
+pieza de más por cada venta del día. No lo trae Supabase — lo trae leer de un
+lado lo que se escribe en el otro.
+
+**Si el inventario no cuadra, mirar en este orden:**
+1. `window._sbFallos` en la consola de Captura de Series
+2. `localStorage.hes1217_sb_pend` — si tiene cosas, esas ventas no llegaron
+3. `resincronizar('1217')`, que lo deja todo al día
+
+Reintentar es seguro: `venta_guardar` responde `ok+duplicada` ante una serie
+repetida el mismo día, así que nunca duplica una venta.
+
 ---
 
 ## Cadena 3 · Del Excel al precio que se cobra
@@ -454,8 +477,8 @@ Estado por fases, en `MIGRACION_PLAN.md`:
 | Fase | Estado |
 |---|---|
 | 1 · datos y paridad | ✅ cerrada el 4-ago con datos del mismo momento |
-| 2 · lecturas | ✅ **tablero y captura de series (v112)** · falta admin/comisiones |
-| 3 · ventas, doble escritura | ← lo siguiente. La regla de la serie ya está |
+| 2 · lecturas | ✅ tablero y captura (v115) · falta admin/comisiones |
+| 3 · ventas, doble escritura | ✅ **cada venta va a los dos lados (v115)** |
 | 4 · fotos, autollenado, edición | — |
 | 5 · retirar el Apps Script | — |
 
