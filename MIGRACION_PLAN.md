@@ -108,15 +108,51 @@ Queda **correr el comparador** (`MIGRACION_comparar.js`) y que las trece den
 igual. Va desde el navegador con la sesión abierta, porque desde el 4-ago el
 endpoint del GAS exige token.
 
-Dos cosas que la comparación tiene que aclarar, vistas al aplicar:
+### Resultado del comparador — 4-ago-2026, 01:40
 
-- **`bundles` y `avisos` dan 0 vigentes.** Puede ser correcto —vigencias
-  vencidas— o puede ser que no se cargaran. En la hoja había 20 combos y 1
-  aviso. Si el GAS muestra combos y Supabase no, es una diferencia real.
-- **Faltan 3 ventas.** La hoja tenía 223 y Supabase tiene 220. Una es la doble
-  captura del 1-ago, que sobra bien. Las otras dos hay que localizarlas: la
-  consulta dice que **no hay ninguna serie repetida en días distintos**, o sea
-  que la devolución del 8/19-jul entró una sola vez.
+Las trece, contra el GAS con la sesión abierta:
+
+| | Lecturas |
+|---|---|
+| **IGUAL (8)** | catálogo · eol_cloud · apartados · promos · eol_venta · bundles · avisos · `todo` |
+| **DISTINTO (5)** | inventario · ventas_hoy · ventas_detalle · comisiones · estado |
+
+**Ninguna de las cinco difiere por la lógica. Las cinco son el mismo desfase.**
+Supabase está congelado en el 2-ago y el GAS siguió recibiendo:
+
+    catálogo subido    GAS 3-ago 17:41   ·   SB 2-ago 23:52
+    SKUs vigentes      GAS 64            ·   SB 71
+    ventas del 3-ago   GAS 8             ·   SB 0
+    comisiones         GAS 4-ago         ·   SB 3-ago
+
+Lo prueba comisiones mejor que nada: el GAS trae venta 62.503 y alcance 9,62 %
+—agosto, cuatro días— y Supabase 474.255 y 68,74 % —julio cerrado—. **Cambió el
+mes.** Las 21 diferencias de inventario son lo mismo: un On Hand reemplazado y
+dos días de ventas que Supabase no vio.
+
+Y el número que justifica todo esto, ya medido con datos reales:
+
+**`todo`: Apps Script 8.255 ms · Supabase 373 ms. Veintidós veces.**
+
+### Lo que esto enseña: la comparación caduca
+
+Este plan decía "comparar cada modo hasta que den idéntico" y no decía lo más
+importante: **la comparación vale para el instante en que se hace.** Los datos
+se cargaron el 2-ago y se comparó el 4: cualquier diferencia se confunde con un
+error de traducción, y estuvo a punto de parecerlo justo en la parte más
+delicada, el inventario.
+
+Mientras la carga sea un evento único y manual, la fase 1 no se puede cerrar de
+forma estable: caduca en horas, en cuanto se sube el Excel del día.
+
+**Lo que hay que hacer antes de darla por cerrada:** que la carga sea
+repetible —volver a correrla cuando se quiera, sin romper nada— y comparar
+inmediatamente después, el mismo día. Sin eso, cerrar la fase 1 es cuestión de
+suerte con la hora a la que se mire.
+
+Las dudas que quedaban de la carga sí se resolvieron: `bundles` y `avisos` dan
+0 en los **dos** lados, así que las vigencias están vencidas y no era un fallo
+de carga.
 
 ### Fase 2 · Lecturas
 Las apps leen de Supabase. Si falla, caen al Apps Script solas.
