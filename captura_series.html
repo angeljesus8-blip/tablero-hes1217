@@ -437,10 +437,24 @@ window.addEventListener('online', flushCloud);
 /* Catálogo desde la nube (lo sube la página "Actualizar datos"); si no hay, usa el de la app */
 const CATKEY = 'hes1217_catalogo';
 // Solo aceptamos un catálogo válido: objeto (no array) con llaves tipo UPC numérico
+/* Antes esto miraba SOLO la primera clave y exigía un código de barras. Desde
+   el 2-ago-2026 `leerCatalogo_` guarda una entrada `sku:XXXX` por producto y la
+   inserta ANTES que la del código; como ningún UPC de 13 dígitos es índice de
+   array, manda el orden de inserción y la primera clave siempre acaba siendo
+   `sku:...`. Resultado: esta función devolvía false y **el catálogo de la nube
+   se descartaba entero**.
+
+   No se notó porque la app tira del caché y de datos.js, así que lo ya conocido
+   se seguía autollenando; lo que dejó de llegar fueron los productos NUEVOS.
+   Dos días así (4-ago-2026), sin un solo aviso.
+
+   Ahora se mira si hay ALGUNA clave con forma de catálogo, no la que caiga
+   primera — que dependía del orden de un objeto, que es justo lo que no hay
+   que dar por supuesto. */
 function esCatalogoValido(c){
   if(!c || typeof c!=='object' || Array.isArray(c)) return false;
   const k = Object.keys(c); if(!k.length) return false;
-  return /^[0-9]{6,14}$/.test(k[0]);
+  return k.some(function(x){ return /^[0-9]{6,14}$/.test(x) || /^sku:\w/.test(x); });
 }
 // Cache corrupto: se ignora y se arranca con el catalogo de la app. La nube
 // lo reemplaza en cuanto responde, asi que callar aqui es correcto.
