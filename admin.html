@@ -176,7 +176,12 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
   <div class="tab-bar">
     <button class="on" onclick="tab('cat',this)">📦 Catálogo</button>
     <button onclick="tab('promos',this)">🔥 Promos</button>
-    <button onclick="tab('bundles',this)">🎁 Bundles</button>
+    <!-- Bundles retirado el 4-ago-2026: la tienda dejó de manejar paquetes.
+         Sin este botón no hay forma de llegar a #pane-bundles, así que ya no se
+         pueden crear ni borrar. El panel y su código se quedan abajo, sin uso,
+         y en el servidor no se ha tocado nada: la hoja `Bundles`, la tabla de
+         Supabase y los 20 combos históricos siguen intactos. Para reactivarlo,
+         devolver este botón. -->
     <button onclick="tab('eol',this)">🏷️ EOL</button>
     <button onclick="tab('avisos',this);cargarListaAvisos()">📢 Avisos</button>
     <button onclick="tab('comis',this);cargarComisionesCloud()">💰 Comisiones</button>
@@ -559,7 +564,9 @@ function initSB(){ try{ if(!window.supabase) return false; sb=window.supabase.cr
 function abrirAdmin(){
   document.getElementById('pinWrap').style.display = 'none';
   document.getElementById('app').style.display = 'block';
-  loadBundles(); loadEol();
+  // loadBundles() se quitó con la pestaña (4-ago-2026): era un viaje al Apps
+  // Script en cada apertura de Admin para pintar un panel al que ya no se llega.
+  loadEol();
 }
 
 // El admin_pin ya no se usa ni se guarda: si quedó de antes en el dispositivo,
