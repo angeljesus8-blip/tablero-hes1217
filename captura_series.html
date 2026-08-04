@@ -610,14 +610,17 @@ function esObjValido(o){ return o && typeof o==='object' && !Array.isArray(o); }
 try{ localStorage.removeItem(EOLVKEY); }catch(e){}   // si no se puede borrar, da igual: no se lee
 /* Se mantiene la regla de arriba: el 50% NO se persiste, venga de donde venga.
    Si ninguna de las dos nubes contesta, EOL_VENTA queda vacío y se cobra el
-   precio normal — nunca un 50% de una copia vieja. */
+   precio normal — nunca un 50% de una copia vieja.
+
+   SUPABASE DESACTIVADO AQUÍ HASTA LA FASE 3 — 4-ago-2026. `eol_precio_venta`
+   se apoya en `inventario_vivo`, que descuenta lo vendido de la tabla `ventas`;
+   y las ventas todavía se escriben solo en el Sheet. Con las ventas del día sin
+   llegar, el stock parece mayor del real y un producto que YA se quedó solo con
+   la pieza de exhibición no se marcaría al 50%. Aquí eso es cobrarle de más a
+   un cliente. Vuelve cuando exista la doble escritura.
+   El catálogo y las promos sí siguen saliendo de Supabase: no dependen de las
+   ventas. */
 async function refreshEolVenta(){
-  const filas = await sbRpcCS('eol_precio_venta');
-  if(filas){
-    const e = {};
-    filas.forEach(function(x){ e[x.sku] = x.precio50; });
-    if(esObjValido(e)){ EOL_VENTA = e; return; }
-  }
   if(!CLOUD_URL) return;
   catJsonp(gasQS('modo=eol_venta')).then(e=>{
     if(esObjValido(e)){ EOL_VENTA = e; }   // solo de la nube en vivo, sin persistir
