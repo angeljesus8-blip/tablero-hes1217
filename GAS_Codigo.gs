@@ -3,19 +3,25 @@
  * Pestañas: Ventas | Catalogo | Catalogo_ref | Catalogo_bak | Promos | Promos_bak | Bundles | EOL_cloud | Exhibicion
  *
  * ─────────────────────────────────────────────────────────────────────────
- * COPIA DE RESPALDO — proyecto "tablero 1217", 2-ago-2026
+ * COPIA DE RESPALDO — proyecto "tablero 1217", al día 4-ago-2026
  *
  * Este archivo NO se ejecuta: es el espejo de lo que vive en Google, para que
- * exista en algún lado más. Hasta hoy esas 923 líneas solo existían en el
- * editor de Apps Script; si alguien lo borraba, se perdían el tablero,
- * Captura de Series y Admin de un golpe.
+ * exista en algún lado más. Si alguien borra el proyecto de Apps Script, sin
+ * esto se perderían el tablero, Captura de Series y Admin de un golpe.
  *
  * Al cambiar el GAS, actualiza también este archivo. Si divergen, manda el
- * de Google — es el que corre.
+ * de Google — es el que corre. Y divergen con facilidad: entre el 2 y el
+ * 4-ago se quedó 90 líneas por detrás sin que nada avisara, justo mientras se
+ * le cambiaba la autenticación entera. La única señal fue contar las líneas.
+ *
+ * Mantenerlo al día es manual y tiene truco: la extensión de Chrome deja
+ * ESCRIBIR en el editor pero no leer de él, así que el código no puede salir
+ * solo. Hay que abrir el editor, Ctrl+A, Ctrl+C y pegarlo aquí.
  *
  * OJO: este repositorio es PÚBLICO. Ninguna llave va aquí adentro. Todas
  * viven en Configuración del proyecto → Propiedades del script:
  *   GAS_TOKEN · GAS_ESTRICTO · ADMIN_PIN · ONESIGNAL_APP_ID · ONESIGNAL_KEY
+ * Las dos claves SINTOK_HOY y SINTOK_AYER las escribe solo el guardián.
  * ─────────────────────────────────────────────────────────────────────────
  */
 
@@ -475,8 +481,18 @@ function leerComisiones_() {
 
 /* ===================== ADMIN — PIN ===================== */
 function checkPin_(e) {
+  // El token ya autentica la llamada (ver accesoPermitido_), y es lo unico que
+  // el tablero puede mandar: el asesor no tiene --ni debe tener-- el PIN de
+  // admin. Mas estricto que antes, no menos: antes bastaba con mandar pin=1217
+  // y el numero de tienda esta en el nombre del repo, en el titulo de la app y
+  // en el QR. El token solo lo recibe quien paso por el login.
+  var tok = PropertiesService.getScriptProperties().getProperty('GAS_TOKEN') || '';
+  var recibido = (e && e.parameter && e.parameter.t) || '';
+  if (tok && recibido === tok) return true;
+
+  // Se conserva el PIN para llamadas hechas fuera del tablero.
   var esperado = adminPin_();
-  return !!esperado && e && e.parameter && String(e.parameter.pin||'') === esperado;
+  return !!esperado && e && e.parameter && String(e.parameter.pin || '') === esperado;
 }
 
 /* ===================== BUNDLES ===================== */
@@ -681,16 +697,10 @@ function notificar_(p) {
   return { ok: !r.errors, id: r.id };
 }
 
-// 2-ago-2026: esta función traía la App ID y la API key de OneSignal escritas
-// aquí adentro. Ya corrió y las propiedades quedaron puestas, así que los
-// valores no hacen falta en el código — y este repositorio es público.
-// Para reconfigurar: escribe los valores, corre la función UNA vez, y bórralos
-// antes de volver a guardar. O ponlos a mano en Configuración del proyecto →
-// Propiedades del script, que es más seguro y no deja rastro en el código.
 function configurarOneSignal() {
   PropertiesService.getScriptProperties().setProperties({
-    'ONESIGNAL_APP_ID': '',   // ← solo al reconfigurar; vaciar antes de guardar
-    'ONESIGNAL_KEY':    ''
+    'ONESIGNAL_APP_ID': '',   // <- vaciado 2-ago-2026; ya vive en Propiedades del script
+    'ONESIGNAL_KEY':    ''   // <- vaciado 2-ago-2026; ya vive en Propiedades del script
   });
   Logger.log('OneSignal configurado ✓');
 }
@@ -845,6 +855,8 @@ function doGet(e) {
                 promoVig:p.getProperty('promoVig')||'', ventasGid:String(sheet_().getSheetId()) };
   } else if (modo === 'ventas_detalle') {
     payload = leerVentasDetalle_(e.parameter.fecha || '');
+  } else if (modo === 'exportar') {
+    payload = exportarHoja_(e.parameter.hoja || '');
   } else {
     // Antes devolvia la hoja Ventas completa ante cualquier modo desconocido.
     return rechazar_(e);
@@ -897,11 +909,52 @@ function accesoPermitido_(e) {
   if (esperado && recibido === esperado) return true;
   var modo = (e && e.parameter && e.parameter.modo) || '(sin modo)';
   Logger.log('SIN TOKEN VALIDO - modo=' + modo + ' estricto=' + estricto);
+  contarSinToken_(props, modo);
   if (!esperado) {
     Logger.log('GAS_TOKEN no esta configurado en Propiedades del script.');
     return true;
   }
   return !estricto;
+}
+
+/** Cuenta las llamadas sin token donde si se puedan leer despues.
+ *
+ *  Por que no basta el Logger.log de arriba (3-ago-2026): el proyecto usa el
+ *  GCP Predeterminado, asi que los registros de una aplicacion web se retienen
+ *  muy poco. Al ir a comprobar la condicion para cerrar el candado, las 50
+ *  ejecuciones del dia decian "No hay ningun registro disponible". Buscar la
+ *  marca ahi devuelve cero, que es lo mismo que se ve cuando todo esta bien:
+ *  la senal desaparecia antes de servir para decidir.
+ *
+ *  Propiedades del script no caduca y se lee desde Configuracion del proyecto.
+ *
+ *  Son dos claves fijas y no crecen: al cambiar el dia, lo de ayer se archiva
+ *  en SINTOK_AYER y hoy empieza de cero.
+ *
+ *  El conteo puede quedarse corto si dos llamadas caen en el mismo instante
+ *  (se pisan al escribir). No importa para lo que decide: interesa si hay
+ *  alguna, no cuantas exactamente.
+ *
+ *  COMO SE LEE, que tiene trampa: un dia sin llamadas malas no escribe nada,
+ *  asi que SINTOK_HOY se queda con la fecha del ultimo dia que si las tuvo.
+ *  Lo que dice "hoy, cero" es que la fecha de dentro NO sea la de hoy. Mirar
+ *  siempre el campo `dia` antes que los numeros.
+ */
+function contarSinToken_(props, modo) {
+  try {
+    var hoy = Utilities.formatDate(new Date(), 'GMT-6', 'yyyy-MM-dd');
+    var d = {};
+    try { d = JSON.parse(props.getProperty('SINTOK_HOY') || '{}'); } catch (err) { d = {}; }
+    if (d.dia !== hoy) {
+      if (d.dia) props.setProperty('SINTOK_AYER', JSON.stringify(d));
+      d = { dia: hoy };
+    }
+    d[modo] = (d[modo] || 0) + 1;
+    props.setProperty('SINTOK_HOY', JSON.stringify(d));
+  } catch (err) {
+    // Contar es diagnostico: si falla, la peticion tiene que seguir su curso
+    // igual. Perder la cuenta no puede costarle una venta a nadie.
+  }
 }
 
 function rechazar_(e) {
@@ -966,4 +1019,63 @@ function leerVentasDetalle_(fecha) {
     });
   }
   return { fecha: objetivo, ventas: out };
+}
+
+
+/* ===================== EXPORTACION PARA MIGRAR ===================== */
+// 2-ago-2026. TEMPORAL: existe solo para volcar las hojas a Supabase y se
+// quita cuando termine la migracion.
+//
+// Devuelve filas como objetos usando la primera fila como nombres de columna,
+// asi que si se agrega una columna a la hoja no hay que tocar esto.
+//
+// Lista blanca a proposito: este modo entrega TODO el historico, incluidos
+// numeros de serie. Aunque el guardian ya exige token, no se deja abierto a
+// cualquier hoja.
+function exportarHoja_(nombre) {
+  var PERMITIDAS = ['Ventas', 'Apartados', 'Comisiones'];
+  if (PERMITIDAS.indexOf(nombre) < 0) {
+    return { error: 'hoja no permitida', permitidas: PERMITIDAS };
+  }
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(nombre);
+  if (!sh || sh.getLastRow() < 2) return { hoja: nombre, filas: [] };
+
+  var v   = sh.getDataRange().getValues();
+  var cab = v[0].map(function (c) { return String(c || '').trim(); });
+  var out = [];
+  for (var r = 1; r < v.length; r++) {
+    var o = {}, vacia = true;
+    for (var c = 0; c < cab.length; c++) {
+      if (!cab[c]) continue;
+      var val = v[r][c];
+      // Sheets convierte a Date lo que le parece fecha; fmtFecha_ lo devuelve
+      // al texto d/M/yyyy que es como lo guarda la app.
+      o[cab[c]] = (val instanceof Date) ? fmtFecha_(val)
+                : String(val === null || val === undefined ? '' : val);
+      if (o[cab[c]] !== '') vacia = false;
+    }
+    if (vacia) continue;                      // filas en blanco al final
+    // Fecha y hora van en columnas distintas y como texto. Se juntan aqui, del
+    // lado que SI sabe la zona horaria: si esto se armara en la base, una venta
+    // de las 8 pm se guardaria con la fecha del dia siguiente.
+    if (nombre === 'Ventas') o._iso = isoVenta_(o['Fecha'], o['Hora']);
+    out.push(o);
+  }
+  return { hoja: nombre, filas: out };
+}
+
+// '2/8/2026' + '03:16 p.m.'  ->  '2026-08-02T15:16:00-06:00'
+// Sin hora reconocible cae a mediodia, que no se pasa de dia en ninguna zona.
+function isoVenta_(fecha, hora) {
+  var f = String(fecha || '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!f) return '';
+  var h = 12, mi = 0;
+  var mh = String(hora || '').match(/(\d{1,2}):(\d{2})\s*([ap])/i);
+  if (mh) {
+    h  = parseInt(mh[1], 10) % 12;
+    if (/p/i.test(mh[3])) h += 12;
+    mi = parseInt(mh[2], 10);
+  }
+  var d = new Date(Number(f[3]), Number(f[2]) - 1, Number(f[1]), h, mi);
+  return Utilities.formatDate(d, 'America/Mexico_City', "yyyy-MM-dd'T'HH:mm:ssXXX");
 }
