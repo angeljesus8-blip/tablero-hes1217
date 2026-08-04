@@ -399,6 +399,49 @@ function avisoPendientes(msg){
   el.textContent = '⚠ ' + msg;
 }
 
+/* ---------- FASE 3 · doble escritura de ventas ----------
+   4-ago-2026. La venta se guarda en el Sheet como siempre y ADEMÁS aquí.
+
+   Lo que esta función NO puede hacer, y por eso está escrita así:
+     · no puede lanzar — un error suyo no puede tocar la cola de capturas
+     · no puede retrasar — se llama sin await, después de que el Sheet confirme
+     · no puede reintentar sola — si falla, la venta YA está en el Sheet, que es
+       la fuente de verdad; resincronizar() la traerá después
+
+   Las diferencias entre los dos lados se miran comparando, no confiando en que
+   esto siempre funcione. Mientras dure la fase 3 esa comparación es el trabajo:
+   cuando cuadren varios días seguidos, se apaga la escritura al Sheet.
+
+   `_sbFallos` deja la cuenta a mano para poder mirarla desde la consola sin
+   tener que instrumentar nada. */
+window._sbFallos = [];
+async function guardarEnSupabase(row){
+  try{
+    if(!SB_STORE) return;
+    const r = await fetch(SB_URL_CS + '/rest/v1/rpc/venta_guardar', {
+      method:'POST',
+      headers:{ apikey:SB_KEY_CS, Authorization:'Bearer '+SB_KEY_CS, 'Content-Type':'application/json' },
+      body: JSON.stringify({
+        p_store: String(SB_STORE),
+        p_serie: String(row.serie || ''),
+        p_sku:   String(row.sku || ''),
+        p_desc:  String(row.desc || ''),
+        p_precio: (row.precio === '' || row.precio == null) ? null : Number(String(row.precio).replace(/[^0-9.]/g,'')),
+        p_vendedor: String(row.vend || ''),
+        // seguro puede venir true/false o vacío en capturas viejas: NULL no es
+        // lo mismo que "sin seguro" y hundiría el attach rate si se confunden.
+        p_seguro: (row.seguro === true || row.seguro === false) ? row.seguro : null,
+        p_fecha: String(row.fecha || ''),
+        p_hora:  String(row.hora || '')
+      })
+    });
+    const d = await r.json();
+    if(!d || d.ok !== true) window._sbFallos.push({ serie: row.serie, motivo: (d && d.error) || ('HTTP '+r.status) });
+  }catch(e){
+    window._sbFallos.push({ serie: row && row.serie, motivo: 'red' });
+  }
+}
+
 // Envía al concentrado las capturas pendientes (reintenta si no hay señal)
 async function flushCloud(){
   if(!CLOUD_URL || flushing || !pending.length) return;
@@ -423,6 +466,10 @@ async function flushCloud(){
       }
       if(row.foto) delete photoMap[row.id];
       pending.shift(); savePending();            // el servidor confirmó
+      // FASE 3 · la misma venta, además, a Supabase. Va DESPUÉS de que el Sheet
+      // confirme y sin await: el Sheet es la fuente de verdad y esto no puede
+      // retrasar ni condicionar la cola. Si falla, la venta ya está guardada.
+      guardarEnSupabase(row);
       avisoPendientes(pending.length ? pending.length + ' captura(s) por subir…' : '');
     }
   }catch(e){
