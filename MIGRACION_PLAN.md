@@ -134,6 +134,31 @@ Y el número que justifica todo esto, ya medido con datos reales:
 
 **`todo`: Apps Script 8.255 ms · Supabase 373 ms. Veintidós veces.**
 
+### FASE 1 CERRADA — 4-ago-2026, 03:10, con datos del mismo momento
+
+Resincronizado con `resincronizar('1217')` y comparado enseguida:
+
+| Lectura | |
+|---|---|
+| inventario | **IGUAL** · 215/215, cero diferencias de stock |
+| catálogo · eol_cloud · eol_venta · promos | IGUAL |
+| apartados · comisiones · ventas_hoy · ventas_detalle | IGUAL |
+| bundles · avisos · `todo` | IGUAL |
+| estado | difiere en promoCount — **y el que se equivoca es el GAS** |
+
+Que **inventario dé idéntico** es lo que importaba: es la función que se
+verificó contando cajas en piso y la que, mal traducida, haría que el tablero
+mienta sobre el stock. 215 SKUs, ni una diferencia en onhand, vendido, stock ni
+exhibición.
+
+**Lo de `estado` no es un fallo de la migración, es uno que la migración
+destapa.** El GAS reporta `promoCount = 141`, pero su propio `modo=promos`
+devuelve **117**: el contador vive en Propiedades del script, se escribe a mano
+en cada subida y se quedó viejo. Supabase cuenta las filas, así que el número
+no puede desincronizarse de los datos porque *es* los datos.
+
+**El viaje único, otra vez medido:** GAS 5.075 ms · Supabase 182 ms.
+
 ### Lo que esto enseña: la comparación caduca
 
 Este plan decía "comparar cada modo hasta que den idéntico" y no decía lo más

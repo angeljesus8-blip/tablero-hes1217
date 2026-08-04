@@ -68,7 +68,14 @@ BEGIN
     SET descripcion = excluded.descripcion,
         upc         = coalesce(excluded.upc, public.catalogo.upc),
         precio      = coalesce(excluded.precio, public.catalogo.precio),
-        vigente     = public.catalogo.vigente OR excluded.vigente,
+        -- 4-ago-2026: aquí decía `public.catalogo.vigente OR excluded.vigente`,
+        -- y con ese OR un SKU marcado vigente NO volvía a false nunca. Al
+        -- agotarse un producto y salir del Excel del día, en Supabase seguía
+        -- "vigente" para siempre: la carga solo podía sumar vigentes, jamás
+        -- quitarlos. Se vio al resincronizar — 71 aquí contra 64 en el GAS.
+        -- El DISTINCT ON de arriba ya ordena por vigente DESC, así que la fila
+        -- que llega es la correcta para ese SKU en esta carga: debe MANDAR.
+        vigente     = excluded.vigente,
         updated_at  = now();
 
   GET DIAGNOSTICS n = ROW_COUNT;
