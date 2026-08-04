@@ -1,6 +1,16 @@
 -- ============================================================
 -- Una serie SÍ se puede vender dos veces: devolución y reventa
--- 4-ago-2026 · correr ANTES de la fase 3 (doble escritura)
+-- 4-ago-2026 · APLICADO y probado el mismo día
+-- ============================================================
+--
+-- Probado en la base, no sobre el papel:
+--   · misma serie el 4 y el 5 de agosto  → las dos entran (devolución)
+--   · otra vez el 5 de agosto            → ERROR 23505,
+--     "duplicate key value violates unique constraint ventas_serie_por_dia"
+--   · las filas de prueba, borradas; 220 ventas antes y después
+--
+-- **El código de error es 23505.** Es el que la captura tiene que reconocer en
+-- la fase 3 para decir "esa serie ya se capturó hoy" en vez de tragárselo.
 -- ============================================================
 --
 -- Qué estaba mal
