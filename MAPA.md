@@ -97,6 +97,39 @@ antes de tiempo y se perdió un día de ventas sin que nadie se enterara.
 
 ---
 
+## Cadena 2-bis · El tablero lee de Supabase *(desde el 4-ago-2026, v110)*
+
+```
+refrescarNube()
+   1º cargarTodoSupabase()  → tablero_todo (Supabase)   ~0,25 s
+   2º cargarTodoNube()      → modo=todo   (Apps Script) ~7 s
+   3º las siete sueltas, espaciadas
+         ↓  las tres pasan por
+   aplicarTodo()  →  aplicarInventario · aplicarPromos · aplicarEol · …
+```
+
+**Supabase devuelve filas; las funciones `aplicar*` esperan los objetos
+indexados del GAS.** Entre medias está `_deSupabase`, que traduce. Si se toca
+una de las dos formas hay que tocar el traductor, y **volver a comparar contra
+`modo=todo`** — es lo que se hizo antes de escribirlo: 215 SKUs sin diferencia
+en onhand, vendido, exhibición ni exh_vendida.
+
+**Las tres rutas comparten `aplicarTodo` a propósito.** Si alguien duplica ese
+código "para el caso de Supabase", una de las ramas se quedará atrás y el
+tablero mostrará cosas distintas según qué nube contestó — y eso no da error.
+
+**Los campos que el tablero usa de cada estructura no son los obvios.** De los
+apartados usa `color`, `precio`, `transaccion`, `vend` y `seguro`.
+`apartados_lista` no devolvía los tres primeros y se amplió: `transaccion` es el
+ticket del POS, el enlace entre el apartado y la venta. Antes de dar por buena
+cualquier lectura nueva, sacar con `grep` qué campos consume de verdad.
+
+**Si Supabase cae, no pasa nada:** `sbRpc` corta a los 8 s y devuelve `null`, y
+se sigue por el Apps Script. Probado rompiendo Supabase a propósito — el
+tablero quedó igual, solo más lento.
+
+---
+
 ## Cadena 3 · Del Excel al precio que se cobra
 
 ```
@@ -397,11 +430,15 @@ Estado por fases, en `MIGRACION_PLAN.md`:
 
 | Fase | Estado |
 |---|---|
-| 1 · datos y paridad | ✅ **cerrada** el 4-ago con datos del mismo momento |
-| 2 · lecturas | ← lo siguiente |
-| 3 · ventas, doble escritura | desbloqueada: la regla de la serie ya está aplicada |
+| 1 · datos y paridad | ✅ cerrada el 4-ago con datos del mismo momento |
+| 2 · lecturas | ✅ **el tablero, en producción (v110)** · falta captura y admin |
+| 3 · ventas, doble escritura | ← lo siguiente. La regla de la serie ya está |
 | 4 · fotos, autollenado, edición | — |
 | 5 · retirar el Apps Script | — |
+
+**Medido en producción, en el mismo aparato y sesión: 257 ms contra 7.011 ms.**
+Y con Supabase roto a propósito, el tablero sigue funcionando por el Apps
+Script. Ver la cadena 2-bis.
 
 Las trece lecturas dan igual, **incluido `inventario`** (215/215, cero
 diferencias) que es la que se verificó contando cajas en piso. La única que
