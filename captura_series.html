@@ -415,32 +415,74 @@ function avisoPendientes(msg){
    `_sbFallos` deja la cuenta a mano para poder mirarla desde la consola sin
    tener que instrumentar nada. */
 window._sbFallos = [];
-async function guardarEnSupabase(row){
+
+/* Cola propia para lo que no llegó a Supabase.
+   Sin esto, una venta que fallara por red se quedaba solo en el Sheet, y como
+   el inventario de Supabase descuenta de SU tabla de ventas, el tablero
+   mostraría una pieza de más en ese SKU hasta la siguiente resincronización.
+   Reintentar es seguro porque `venta_guardar` es idempotente: una serie
+   repetida el mismo día responde ok+duplicada en vez de error. */
+const SBQKEY = 'hes1217_sb_pend';
+let sbPend = [];
+try{ sbPend = JSON.parse(localStorage.getItem(SBQKEY) || '[]') || []; }catch(e){ sbPend = []; }
+function saveSbPend(){ try{ localStorage.setItem(SBQKEY, JSON.stringify(sbPend)); }catch(e){} }   // cuota llena: se reintenta en esta sesión igual
+
+function _sbCuerpo(row){
+  return {
+    p_store: String(SB_STORE),
+    p_serie: String(row.serie || ''),
+    p_sku:   String(row.sku || ''),
+    p_desc:  String(row.desc || ''),
+    p_precio: (row.precio === '' || row.precio == null) ? null : Number(String(row.precio).replace(/[^0-9.]/g,'')),
+    p_vendedor: String(row.vend || ''),
+    // seguro puede venir true/false o vacío en capturas viejas: NULL no es
+    // lo mismo que "sin seguro" y hundiría el attach rate si se confunden.
+    p_seguro: (row.seguro === true || row.seguro === false) ? row.seguro : null,
+    p_fecha: String(row.fecha || ''),
+    p_hora:  String(row.hora || '')
+  };
+}
+
+/* true si quedó guardada (o ya estaba). false si hay que reintentarla. */
+async function _sbInsertar(cuerpo){
   try{
-    if(!SB_STORE) return;
+    if(!SB_STORE) return false;
     const r = await fetch(SB_URL_CS + '/rest/v1/rpc/venta_guardar', {
       method:'POST',
       headers:{ apikey:SB_KEY_CS, Authorization:'Bearer '+SB_KEY_CS, 'Content-Type':'application/json' },
-      body: JSON.stringify({
-        p_store: String(SB_STORE),
-        p_serie: String(row.serie || ''),
-        p_sku:   String(row.sku || ''),
-        p_desc:  String(row.desc || ''),
-        p_precio: (row.precio === '' || row.precio == null) ? null : Number(String(row.precio).replace(/[^0-9.]/g,'')),
-        p_vendedor: String(row.vend || ''),
-        // seguro puede venir true/false o vacío en capturas viejas: NULL no es
-        // lo mismo que "sin seguro" y hundiría el attach rate si se confunden.
-        p_seguro: (row.seguro === true || row.seguro === false) ? row.seguro : null,
-        p_fecha: String(row.fecha || ''),
-        p_hora:  String(row.hora || '')
-      })
+      body: JSON.stringify(cuerpo)
     });
     const d = await r.json();
-    if(!d || d.ok !== true) window._sbFallos.push({ serie: row.serie, motivo: (d && d.error) || ('HTTP '+r.status) });
+    if(d && d.ok === true) return true;
+    // 'sin serie' no se arregla reintentando: se anota y se deja ir.
+    if(d && d.error === 'sin serie'){ window._sbFallos.push({ serie:cuerpo.p_serie, motivo:'sin serie' }); return true; }
+    window._sbFallos.push({ serie:cuerpo.p_serie, motivo:(d && d.error) || ('HTTP '+r.status) });
+    return false;
   }catch(e){
-    window._sbFallos.push({ serie: row && row.serie, motivo: 'red' });
+    window._sbFallos.push({ serie:cuerpo && cuerpo.p_serie, motivo:'red' });
+    return false;
   }
 }
+
+async function guardarEnSupabase(row){
+  const cuerpo = _sbCuerpo(row);
+  if(await _sbInsertar(cuerpo)) return;
+  sbPend.push(cuerpo); saveSbPend();
+}
+
+/* Se vacía al abrir la app y cuando vuelve la señal, igual que la del Sheet. */
+let _sbFlushing = false;
+async function flushSupabase(){
+  if(_sbFlushing || !sbPend.length) return;
+  _sbFlushing = true;
+  try{
+    while(sbPend.length){
+      if(!(await _sbInsertar(sbPend[0]))) break;   // sigue sin poder: se conserva
+      sbPend.shift(); saveSbPend();
+    }
+  } finally { _sbFlushing = false; }
+}
+window.addEventListener('online', flushSupabase);
 
 // Envía al concentrado las capturas pendientes (reintenta si no hay señal)
 async function flushCloud(){
@@ -659,15 +701,19 @@ try{ localStorage.removeItem(EOLVKEY); }catch(e){}   // si no se puede borrar, d
    Si ninguna de las dos nubes contesta, EOL_VENTA queda vacío y se cobra el
    precio normal — nunca un 50% de una copia vieja.
 
-   SUPABASE DESACTIVADO AQUÍ HASTA LA FASE 3 — 4-ago-2026. `eol_precio_venta`
-   se apoya en `inventario_vivo`, que descuenta lo vendido de la tabla `ventas`;
-   y las ventas todavía se escriben solo en el Sheet. Con las ventas del día sin
-   llegar, el stock parece mayor del real y un producto que YA se quedó solo con
-   la pieza de exhibición no se marcaría al 50%. Aquí eso es cobrarle de más a
-   un cliente. Vuelve cuando exista la doble escritura.
-   El catálogo y las promos sí siguen saliendo de Supabase: no dependen de las
-   ventas. */
+   Estuvo apagado unas horas el 4-ago: `eol_precio_venta` se apoya en
+   `inventario_vivo`, que descuenta lo vendido de la tabla `ventas`, y con las
+   ventas escribiéndose solo en el Sheet el stock parecía mayor del real — un
+   producto que ya se quedó solo con la pieza de exhibición no se marcaba al
+   50%, o sea cobrarle de más a un cliente. Con la doble escritura de la fase 3
+   ya no aplica y vuelve a Supabase. */
 async function refreshEolVenta(){
+  const filas = await sbRpcCS('eol_precio_venta');
+  if(filas){
+    const e = {};
+    filas.forEach(function(x){ e[x.sku] = x.precio50; });
+    if(esObjValido(e)){ EOL_VENTA = e; return; }
+  }
   if(!CLOUD_URL) return;
   catJsonp(gasQS('modo=eol_venta')).then(e=>{
     if(esObjValido(e)){ EOL_VENTA = e; }   // solo de la nube en vivo, sin persistir
@@ -1216,6 +1262,7 @@ function refreshGid(){
 }
 
 flushCloud();      // sube al concentrado lo que haya quedado pendiente
+flushSupabase();   // y lo que no llegó a Supabase, para que el stock cuadre
 reindexarPorSku(); // con lo que haya en caché, antes de que responda la nube
 
 /* Teclear el SKU autollena descripción y precio, igual que escanear el código.
