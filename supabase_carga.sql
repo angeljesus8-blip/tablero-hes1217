@@ -2,6 +2,34 @@
 -- Fase 1 · Carga de datos — APLICADO el 2-ago-2026
 -- ============================================================
 --
+-- ⚠️ CUATRO DE LAS SEIS FUNCIONES NO ESTÁN AQUÍ (pendiente, 4-ago-2026)
+--
+-- En Supabase viven seis: cargar_catalogo, cargar_resto, cargar_ventas,
+-- cargar_cortes, cargar_apartados_comisiones y rescatar_sin_upc. En este
+-- archivo solo están completas las dos primeras; de las otras hay comentarios
+-- que describen qué hacen y un "ver historial de git para el cuerpo completo"
+-- que no lleva a ninguna parte.
+--
+-- Es el mismo agujero que tenía el respaldo del Apps Script, y ya costó caro:
+-- el 4-ago hubo que parchear `cargar_ventas` leyéndola de la base y
+-- reemplazando un fragmento de texto, porque no había copia que editar.
+-- Si alguien borra esas funciones, no hay de dónde restaurarlas.
+--
+-- **Cómo completarlo** (dos minutos, en el editor SQL de Supabase):
+--
+--     select pg_get_functiondef(p.oid)
+--     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+--     where n.nspname = 'public'
+--       and p.proname in ('cargar_ventas','cargar_cortes',
+--                         'cargar_apartados_comisiones','rescatar_sin_upc')
+--     order by p.proname;
+--
+-- Y pegar cada definición al final de este archivo, tal cual, bajo su título.
+-- No hace falta entenderlas para copiarlas: lo que importa es que exista la
+-- copia. El 4-ago no se pudo hacer porque el dashboard de Supabase se quedó
+-- cargando sin responder.
+-- ============================================================
+--
 -- Cómo se mueven los datos, y por qué así
 -- ---------------------------------------
 -- La hoja está en Google y Supabase no puede leerla. Exportar a CSV y volver a
