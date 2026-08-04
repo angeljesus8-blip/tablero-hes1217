@@ -1,6 +1,14 @@
 -- ============================================================
 -- Fase 3 · Guardar una venta en Supabase (doble escritura)
--- 4-ago-2026
+-- 4-ago-2026 · APLICADO y probado el mismo día
+--
+-- Probado contra la base antes de conectar el cliente:
+--   alta          -> {"ok":true,"id":692}
+--   la misma otra vez -> {"ok":true,"duplicada":true}   (no error: reintento)
+--   sin serie     -> {"ok":false,"error":"sin serie"}
+--   una de las 8:30 p.m. -> dia_venta 2026-08-04 y hora 20:30 en México,
+--                           NO el día siguiente, que era el riesgo real
+--   filas de prueba borradas: 231 ventas antes y después
 -- ============================================================
 --
 -- Regla que manda sobre todo lo demás
