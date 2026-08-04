@@ -1,6 +1,10 @@
 /* ============================================================
    ARREGLO URGENTE — no se puede guardar en Preventa
    1-ago-2026. Reemplazar la función checkPin_ del Apps Script.
+
+   APLICADO el 4-ago-2026. Escrito en el editor y guardado; queda
+   desplegar. Lo de `PIN_OK` que se menciona abajo ya estaba resuelto
+   antes: las 12 rutas de escritura llaman a `checkPin_(e)`.
    ============================================================
 
    Qué pasó
@@ -61,7 +65,20 @@ function checkPin_(e) {
      function probarCheckPin() {
        var tok = PropertiesService.getScriptProperties().getProperty('GAS_TOKEN');
        Logger.log('con token bueno -> %s', checkPin_({parameter:{t:tok}}));   // true
-       Logger.log('con pin 1217    -> %s', checkPin_({parameter:{pin:'1217'}})); // false
+       Logger.log('con pin de admin-> %s', checkPin_({parameter:{pin:'1217'}}));
        Logger.log('sin nada        -> %s', checkPin_({parameter:{}}));        // false
      }
+
+   Ojo con la segunda: aquí decía "// false" dando por hecho que ADMIN_PIN ya
+   tendría un valor nuevo. **Hoy ADMIN_PIN sigue siendo `1217`**, así que da
+   `true` por la vía de respaldo, y eso es lo correcto. Ese es justo el punto
+   del arreglo: ahora que el token basta, se puede cambiar ADMIN_PIN por algo
+   que no esté publicado sin tumbar la preventa ni marcar EOL (MAPA cadena 2).
+
+   Probado el 4-ago-2026 antes de guardar, ejecutando la función contra dobles:
+   token bueno → true · token malo → false · sin nada → false · solo PIN →
+   true · PIN malo → false · token bueno con PIN malo → true. Y comparada
+   contra la versión anterior caso por caso: en el camino del PIN devuelve
+   exactamente lo mismo, así que no hay regresión; lo único que cambia es que
+   ahora existe la vía del token.
    ------------------------------------------------------------ */
