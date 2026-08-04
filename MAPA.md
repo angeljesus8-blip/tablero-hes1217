@@ -185,6 +185,29 @@ teclear SKU      → listener   → aplicarProducto()   ← misma función a pro
 **Si tocas `aplicarProducto`, cambian los dos caminos.** Es deliberado: antes
 divergían y teclear no llenaba nada.
 
+**El catálogo de la nube se descartó entero durante dos días** *(2 al 4-ago-2026)*.
+`esCatalogoValido` miraba **solo la primera clave** del objeto y exigía un código
+de barras. Al empezar a guardar una entrada `sku:XXXX` por producto —insertada
+antes que la del código, y como ningún UPC de 13 dígitos es índice de array
+manda el orden de inserción— la primera clave pasó a ser siempre `sku:...`, la
+validación dio `false` y se tiró todo.
+
+No lo notó nadie porque la app tira del caché y de `datos.js`: lo ya conocido se
+seguía autollenando. **Lo que dejó de llegar fueron los productos nuevos**, que
+es justo para lo que sirve pedirle el catálogo a la nube.
+
+Dos lecciones, y la segunda es la que importa:
+- No validar por «la clave que caiga primera»: el orden de enumeración de un
+  objeto depende de si las claves parecen enteros. Ahora se mira si existe
+  **alguna** clave con forma de catálogo.
+- **Un caché que tapa el fallo lo vuelve invisible.** Cuando algo se refresca
+  desde la nube pero también tiene copia local, hay que comprobar que el
+  refresco entra de verdad — no que la pantalla se vea bien.
+
+Salió al probar el respaldo de la fase 2 rompiendo Supabase a propósito. Con la
+migración funcionando no se veía, porque el adaptador nuevo mete los UPC
+primero y por eso sí validaba: estaba tapado por partida doble.
+
 ---
 
 ## Cadena 5 · Inventario
@@ -431,7 +454,7 @@ Estado por fases, en `MIGRACION_PLAN.md`:
 | Fase | Estado |
 |---|---|
 | 1 · datos y paridad | ✅ cerrada el 4-ago con datos del mismo momento |
-| 2 · lecturas | ✅ **el tablero, en producción (v110)** · falta captura y admin |
+| 2 · lecturas | ✅ **tablero y captura de series (v112)** · falta admin/comisiones |
 | 3 · ventas, doble escritura | ← lo siguiente. La regla de la serie ya está |
 | 4 · fotos, autollenado, edición | — |
 | 5 · retirar el Apps Script | — |
