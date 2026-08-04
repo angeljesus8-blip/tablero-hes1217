@@ -1945,9 +1945,24 @@ async function refrescarNube(){
   _refrescando = true;
   _ultimoIntento = Date.now();
   try{
-    // 1º Supabase: un viaje y sin cola. 2º el Apps Script, que sigue vivo y
-    // sirve de red mientras dure la migración. 3º las sueltas.
-    if(await cargarTodoSupabase()) return;
+    /* SUPABASE DESACTIVADO AQUÍ HASTA LA FASE 3 — 4-ago-2026
+       Se activó unas horas y se quitó el mismo día, en operación, al ver esto:
+
+       `inventario_vivo` calcula lo vendido a partir de la tabla `ventas`, y las
+       ventas TODAVÍA se escriben solo en el Sheet (la doble escritura es la
+       fase 3). Así que Supabase solo conoce las ventas hasta la última
+       `resincronizar()`, y el tablero mostraba **una pieza de más** por cada
+       venta capturada desde entonces. Comprobado con una venta real: Sheet 2,
+       Supabase 1.
+
+       Es el riesgo número 1 del plan —el tablero mintiendo sobre el stock— y no
+       lo trae Supabase: lo trae leer de un lado lo que se escribe en el otro.
+       Lo mismo afecta a `ventas_hoy` (el leaderboard de Assurant) y a
+       `eol_precio_venta`, que hereda el inventario.
+
+       Cuándo se vuelve a encender: cuando cada venta se guarde en los dos
+       lados. Entonces esta línea vuelve, y no antes. Lo que NO depende de
+       ventas —catálogo y promos— sí sigue saliendo de Supabase en captura. */
     if(await cargarTodoNube()) return;
     // Respaldo: de una en una y espaciadas, porque juntas se pierden en silencio.
     // Orden por criticidad: primero lo que decide un precio o un cupo frente al
