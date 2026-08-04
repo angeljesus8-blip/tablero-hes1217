@@ -2,30 +2,25 @@
 -- Fase 1 · Carga de datos — APLICADO el 2-ago-2026
 -- ============================================================
 --
--- ⚠️ FALTAN DOS DE LAS SEIS (4-ago-2026)
+-- ✅ LAS SEIS ESTÁN AQUÍ (completado el 4-ago-2026)
 --
--- En Supabase viven seis: cargar_catalogo, cargar_resto, cargar_ventas,
--- cargar_cortes, cargar_apartados_comisiones y rescatar_sin_upc.
--- Aquí están **cuatro**; al final del archivo se añadieron `rescatar_sin_upc` y
--- `cargar_ventas`, sacadas de la base con `pg_get_functiondef`.
+-- cargar_catalogo · cargar_resto · cargar_ventas · cargar_cortes ·
+-- cargar_apartados_comisiones · rescatar_sin_upc
 --
--- Siguen sin copia: **cargar_cortes** y **cargar_apartados_comisiones**.
+-- Las cuatro últimas se sacaron de la base con `pg_get_functiondef` y están al
+-- final del archivo, tal cual corren. Hasta hoy solo existían dentro de
+-- Supabase: el mismo agujero que tenía el respaldo del Apps Script, y ya había
+-- costado caro — el 4-ago hubo que parchear `cargar_ventas` leyéndola de la
+-- base y reemplazando texto, porque no había copia que editar.
 --
--- Es el mismo agujero que tenía el respaldo del Apps Script, y ya costó caro:
--- el 4-ago hubo que parchear `cargar_ventas` leyéndola de la base y
--- reemplazando un fragmento de texto, porque no había copia que editar.
---
--- **Cómo completarlo** (dos minutos, en el editor SQL de Supabase):
+-- **Si se cambia una en el editor, hay que traerla aquí.** Para eso:
 --
 --     select pg_get_functiondef(p.oid)
 --     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
---     where n.nspname = 'public'
---       and p.proname in ('cargar_cortes','cargar_apartados_comisiones')
---     order by p.proname;
+--     where n.nspname = 'public' and p.proname like 'cargar%';
 --
--- Y pegar cada definición al final de este archivo, tal cual, bajo su título.
--- No hace falta entenderlas para copiarlas: lo que importa es que exista la
--- copia.
+-- `cargar_ventas` ya incluye el arreglo del ON CONFLICT del 4-ago, y
+-- `cargar_catalogo` el de `vigente`.
 -- ============================================================
 --
 -- Cómo se mueven los datos, y por qué así
@@ -400,5 +395,121 @@ EXCEPTION WHEN OTHERS THEN
 END $function$;
 
 
--- PENDIENTES: cargar_cortes y cargar_apartados_comisiones.
--- Ver la consulta de la cabecera de este archivo para sacarlas.
+
+CREATE OR REPLACE FUNCTION public.cargar_cortes(p_store text)
+ RETURNS text
+ LANGUAGE plpgsql
+AS $function$
+DECLARE d jsonb; a int; b int;
+BEGIN
+  SELECT r.content::jsonb INTO d
+  FROM public.tiendas t,
+       LATERAL extensions.http_get(t.gas_url || '?modo=inventario&t=' || t.gas_token) r
+  WHERE t.store_id = p_store;
+  IF d IS NULL OR d ? 'error' THEN RETURN 'la nube no devolvio inventario'; END IF;
+
+  -- El GAS no guarda el corte: guarda cuantas ventas habia CUANDO se tomo, y
+  -- reporta v = (ventas totales de ahora) - corte. Aqui se despeja al reves,
+  -- con las ventas ya cargadas:  corte = total - v.
+  -- Por eso este paso va DESPUES de cargar_ventas y no antes.
+  WITH totales AS (
+    SELECT v.sku, count(*)::int AS total
+    FROM public.ventas v
+    WHERE v.store_id = p_store AND v.sku IS NOT NULL AND v.sku <> ''
+    GROUP BY v.sku
+  ), reportado AS (
+    SELECT j.key AS sku,
+           coalesce((j.value->>'v')::int, 0)  AS v,
+           coalesce((j.value->>'ev')::int, 0) AS ev
+    FROM jsonb_each(d) j
+    WHERE trim(j.key) <> ''
+  )
+  INSERT INTO public.inventario_corte (store_id, tipo, sku, vendidas)
+  SELECT p_store, 'onhand', r.sku, greatest(0, coalesce(t.total,0) - r.v)
+  FROM reportado r LEFT JOIN totales t ON t.sku = r.sku
+  ON CONFLICT (store_id, tipo, sku) DO UPDATE
+    SET vendidas = excluded.vendidas, tomado_en = now();
+  GET DIAGNOSTICS a = ROW_COUNT;
+
+  WITH totales AS (
+    SELECT v.sku, count(*)::int AS total
+    FROM public.ventas v
+    WHERE v.store_id = p_store AND v.sku IS NOT NULL AND v.sku <> ''
+    GROUP BY v.sku
+  ), reportado AS (
+    SELECT j.key AS sku, coalesce((j.value->>'ev')::int, 0) AS ev
+    FROM jsonb_each(d) j WHERE trim(j.key) <> ''
+  )
+  INSERT INTO public.inventario_corte (store_id, tipo, sku, vendidas)
+  SELECT p_store, 'exhibicion', r.sku, greatest(0, coalesce(t.total,0) - r.ev)
+  FROM reportado r LEFT JOIN totales t ON t.sku = r.sku
+  ON CONFLICT (store_id, tipo, sku) DO UPDATE
+    SET vendidas = excluded.vendidas, tomado_en = now();
+  GET DIAGNOSTICS b = ROW_COUNT;
+
+  RETURN 'corte onhand=' || a || ' · corte exhibicion=' || b;
+EXCEPTION WHEN OTHERS THEN
+  RETURN 'ERROR ' || SQLSTATE || ': ' || left(regexp_replace(SQLERRM,'https?://[^ ]+','<url>','g'), 170);
+END $function$;
+
+
+CREATE OR REPLACE FUNCTION public.cargar_apartados_comisiones(p_store text)
+ RETURNS text
+ LANGUAGE plpgsql
+AS $function$
+DECLARE d jsonb; a int; c int;
+BEGIN
+  SELECT r.content::jsonb INTO d
+  FROM public.tiendas t,
+       LATERAL extensions.http_get(t.gas_url || '?modo=exportar&hoja=Apartados&t=' || t.gas_token) r
+  WHERE t.store_id = p_store;
+  IF d IS NULL OR d ? 'error' THEN RETURN 'la nube no devolvio apartados'; END IF;
+
+  DELETE FROM public.apartados WHERE store_id = p_store;
+  INSERT INTO public.apartados (store_id, sku, color, cliente, telefono, precio, con_seguro,
+                                vendedor, estatus, transaccion, piezas, creado_en)
+  SELECT p_store,
+         trim(coalesce(x->>'SKU','')),
+         nullif(trim(coalesce(x->>'Color','')),''),
+         trim(coalesce(x->>'Cliente','')),
+         nullif(trim(coalesce(x->>'Telefono','')),''),
+         nullif(regexp_replace(coalesce(x->>'Precio',''),'[^0-9.]','','g'),'')::numeric,
+         CASE lower(trim(coalesce(x->>'Seguro',''))) WHEN 'si' THEN true WHEN 'no' THEN false ELSE NULL END,
+         trim(coalesce(x->>'Vendedor','')),
+         coalesce(nullif(trim(x->>'Estatus'),''),'Apartado'),
+         nullif(trim(coalesce(x->>'Transaccion','')),''),
+         1,
+         -- la hoja guarda 'yyyy-MM-dd HH:mm', ya en hora de Mexico
+         (nullif(trim(x->>'Fecha'),'') || ' America/Mexico_City')::timestamptz
+  FROM jsonb_array_elements(d->'filas') x
+  WHERE trim(coalesce(x->>'SKU','')) <> '';
+  GET DIAGNOSTICS a = ROW_COUNT;
+
+  SELECT r.content::jsonb INTO d
+  FROM public.tiendas t,
+       LATERAL extensions.http_get(t.gas_url || '?modo=exportar&hoja=Comisiones&t=' || t.gas_token) r
+  WHERE t.store_id = p_store;
+  IF d IS NULL OR d ? 'error' THEN RETURN 'apartados=' || a || ' pero comisiones fallo'; END IF;
+
+  DELETE FROM public.comisiones WHERE store_id = p_store;
+  INSERT INTO public.comisiones (store_id, empno, nombre, puesto, venta, ppto_pct, alcance,
+                                 gar_pct, gar_pzas, gar_elegible, gar_monto)
+  SELECT p_store,
+         nullif(trim(coalesce(x->>'EmpNo','')),''),
+         trim(coalesce(x->>'Nombre','')),
+         nullif(trim(coalesce(x->>'Puesto','')),''),
+         coalesce(nullif(regexp_replace(coalesce(x->>'Venta',''),'[^0-9.]','','g'),'')::numeric, 0),
+         coalesce(nullif(regexp_replace(coalesce(x->>'PptoPct',''),'[^0-9.]','','g'),'')::numeric, 0),
+         coalesce(nullif(regexp_replace(coalesce(x->>'Alcance',''),'[^0-9.]','','g'),'')::numeric, 0),
+         nullif(regexp_replace(coalesce(x->>'GarantiaPct',''),'[^0-9.]','','g'),'')::numeric,
+         nullif(regexp_replace(coalesce(x->>'GarantiaPzas',''),'[^0-9.]','','g'),'')::int,
+         nullif(regexp_replace(coalesce(x->>'GarantiaElegible',''),'[^0-9.]','','g'),'')::int,
+         nullif(regexp_replace(coalesce(x->>'GarantiaMonto',''),'[^0-9.]','','g'),'')::numeric
+  FROM jsonb_array_elements(d->'filas') x
+  WHERE trim(coalesce(x->>'Nombre','')) <> '';
+  GET DIAGNOSTICS c = ROW_COUNT;
+
+  RETURN 'apartados=' || a || ' comisiones=' || c;
+EXCEPTION WHEN OTHERS THEN
+  RETURN 'ERROR ' || SQLSTATE || ': ' || left(regexp_replace(SQLERRM,'https?://[^ ]+','<url>','g'), 170);
+END $function$;
