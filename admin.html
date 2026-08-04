@@ -173,6 +173,12 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
     <h1>Admin · HES 1217</h1>
   </header>
 
+  <!-- Solo aparece si el Sheet y Supabase NO cuadran. Un aviso que sale siempre
+       se deja de leer a la semana; este, si sale, es que hay algo. -->
+  <div id="avisoCuadre" style="display:none;margin:12px 16px;padding:12px 14px;
+       border-radius:10px;border-left:4px solid #D12026;background:#fdeaea;
+       font-size:13px;line-height:1.5;color:#8a1f1f"></div>
+
   <div class="tab-bar">
     <button class="on" onclick="tab('cat',this)">📦 Catálogo</button>
     <button onclick="tab('promos',this)">🔥 Promos</button>
@@ -567,6 +573,54 @@ function abrirAdmin(){
   // loadBundles() se quitó con la pestaña (4-ago-2026): era un viaje al Apps
   // Script en cada apertura de Admin para pintar un panel al que ya no se llega.
   loadEol();
+  revisarCuadre();
+}
+
+/* ¿Cuadran el Sheet y Supabase? — 4-ago-2026
+   Desde la fase 3 cada venta se guarda en los dos lados, y la escritura al
+   Sheet no se apaga hasta que cuadren varios días seguidos. Comparar eso a mano
+   significa no compararlo: por eso lo pregunta Admin sola, cada vez que se abre.
+
+   `comparar_ventas` le pide al Apps Script las ventas del día y las compara
+   contra la tabla. La cuenta se hace en un solo sitio —la función SQL— para que
+   no haya dos ideas distintas de "cuadrar" que puedan divergir.
+
+   Solo se pinta si hay diferencia. Si todo va bien, Admin se ve como siempre. */
+async function revisarCuadre(){
+  const el = document.getElementById('avisoCuadre');
+  if(!el) return;
+  const store = (_cfg && _cfg.store_id) || '';
+  if(!store) return;
+  let d = null;
+  try{
+    const r = await fetch(SB_URL + '/rest/v1/rpc/comparar_ventas', {
+      method:'POST',
+      headers:{ apikey:SB_KEY, Authorization:'Bearer '+SB_KEY, 'Content-Type':'application/json' },
+      body: JSON.stringify({ p_store: String(store) })
+    });
+    d = await r.json();
+  }catch(e){ return; }   // sin red no se dice nada: no hay noticia que dar
+  if(!d || d.ok !== true || d.cuadra === true) return;
+
+  const faltan = (d.faltan_en_supabase || []);
+  const sobran = (d.sobran_en_supabase || []);
+  let txt = '<b>Las ventas de hoy no cuadran entre la hoja y Supabase.</b><br>'
+          + 'Hoja: ' + d.en_sheet + ' · Supabase: ' + d.en_supabase + '.<br>';
+  if(faltan.length){
+    // No se ha perdido nada: el Sheet es la fuente de verdad. Lo que pasa es
+    // que el inventario del tablero muestra de más hasta que se resincronice.
+    txt += 'No llegaron a Supabase ' + faltan.length + ': '
+        +  faltan.slice(0,4).map(s=>'…'+String(s).slice(-4)).join(', ')
+        +  (faltan.length>4 ? '…' : '') + '.<br>'
+        +  'La venta NO se perdió: está en la hoja. Pero el stock del tablero '
+        +  'muestra de más hasta arreglarlo. Mira <code>hes1217_sb_pend</code> '
+        +  'en Captura de Series, o corre <code>resincronizar</code>.';
+  }
+  if(sobran.length){
+    txt += '<br>Sobran en Supabase ' + sobran.length + ' (suele ser una prueba sin borrar).';
+  }
+  el.innerHTML = txt;
+  el.style.display = 'block';
 }
 
 // El admin_pin ya no se usa ni se guarda: si quedó de antes en el dispositivo,
