@@ -318,10 +318,39 @@ escritura entera pasó el guardián.
 
 Nadie se quedó fuera, así que no había ninguna sesión anterior al 1-ago viva.
 
-### Lo que falta de B
+### El arreglo de apartados — ✅ desplegado y probado el 4-ago-2026
 
-- **`GAS_arreglo_apartados.gs`**, para que el token valga por sí solo y el
-  `ADMIN_PIN` quede solo de respaldo.
+`checkPin_` acepta ahora el token y deja el `ADMIN_PIN` de respaldo. Es
+**aditivo**: el camino del PIN devuelve exactamente lo mismo que antes —se
+comparó caso por caso contra la versión anterior—, así que nada de lo que hoy
+funciona puede dejar de hacerlo. De ahí cuelgan **12 rutas de escritura**:
+bundles, EOL, apartados, avisos y notificar.
+
+Es **más** estricto que antes, no menos: antes bastaba con mandar `pin=1217`, y
+el número de tienda está en el nombre del repo, en el título de la app y en el
+QR. El token solo lo tiene quien pasó por el login.
+
+Lo que desbloquea: **ya se puede cambiar `ADMIN_PIN`** por algo que no esté
+publicado. Hasta ahora estaba clavado en `1217` porque el tablero lo manda como
+PIN, y tocarlo tumbaba la preventa y marcar EOL.
+
+Lo que **no** hace: distinguir gerente de asesor. Con el candado cerrado,
+cualquiera con sesión pasa `checkPin_`, igual que antes cualquiera con la URL
+pasaba con `pin=1217`. Si algún día hace falta esa distinción, es otro trabajo.
+
+Comprobado en la **versión 39**, y por la cadena entera, no por el archivo:
+
+- Apartar una pieza de prueba en el tablero y borrarla → **guarda**. Ahí se
+  demuestra lo único que importaba: `checkPin_` acepta el token en la ruta real.
+- `?modo=apartado_add&pin=1217` **sin** token → `no_autorizado`. La vía que
+  antes estaba abierta a cualquiera con la URL ya no escribe nada; el guardián
+  la corta antes de llegar a `checkPin_`.
+- Durante la prueba del apartado no se registró **ni un rechazo** en
+  `SINTOK_HOY`, así que esas llamadas iban bien autenticadas.
+
+Siguiente paso natural, ya sin riesgo: **cambiar `ADMIN_PIN`** por algo que no
+esté publicado. Al hacerlo, volver a apartar una pieza y borrarla — el PIN
+dejaría de ser el camino, y hay que ver que el token sí lo es.
 
 Reversión, si hiciera falta: `GAS_ESTRICTO` a `false`. Inmediato, sin desplegar
 y sin datos que deshacer.
