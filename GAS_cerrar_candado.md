@@ -45,15 +45,46 @@ EOL a media jornada — y hasta hoy, sin enterarse de por qué.
 **Los cinco del equipo tienen que salir y volver a entrar.** El aviso de la v108
 se los pide solo, pero hay que darles tiempo de abrir la app al menos una vez.
 
-Comprobarlo así, y no de memoria: en el editor →
+### El registro de ejecuciones no sirve para comprobarlo (3-ago-2026)
 
-    https://script.google.com/home/projects/<id>/executions
+Este documento decía que se mirara en el editor →
+`https://script.google.com/home/projects/<id>/executions`, expandiendo las filas
+del día para buscar `SIN TOKEN VALIDO`. **Se intentó y no se puede.**
 
-expandir las filas del día y buscar `SIN TOKEN VALIDO`.
+Las 50 ejecuciones del día, expandidas una por una y esperando a que cargaran,
+dicen todas *"No hay ningún registro disponible de esta ejecución"*. El motivo
+está en Configuración del proyecto: **GCP Predeterminado**. Con el proyecto de
+Cloud por defecto los `Logger.log` de una aplicación web se retienen muy poco.
+El dato del 2-ago se pudo ver porque se miró el mismo día.
 
-**Si sale cero, se puede cerrar. Si sale aunque sea uno, todavía no.**
+Lo peligroso es cómo se ve el fallo: buscar en un registro vacío devuelve cero
+coincidencias, **que es idéntico a que todo esté bien**. Siguiendo el
+procedimiento al pie de la letra se habría cerrado el candado creyendo haberlo
+comprobado. Es el mismo patrón del `catch` vacío, esta vez en el Apps Script.
 
-## El cierre
+### El procedimiento que sí sirve
+
+`accesoPermitido_` ahora llama a `contarSinToken_` (en `GAS_guardian.gs`), que
+lleva la cuenta en **Propiedades del script**: no caduca y se lee cuando sea.
+
+1. Instalar `contarSinToken_` y la línea que la llama. Desplegar **editando la
+   implementación que ya existe**, nunca creando una nueva.
+2. Dejar pasar una jornada completa de tienda.
+3. Configuración del proyecto → Propiedades de script → mirar `SINTOK_HOY`.
+
+**Cómo se lee, que tiene trampa:** un día limpio no escribe nada, así que la
+clave conserva la fecha del último día con llamadas malas. Mirar primero el
+campo `dia`:
+
+| Lo que se ve en `SINTOK_HOY` | Qué significa |
+|---|---|
+| el campo `dia` **no** es el de hoy | hoy, cero. **Se puede cerrar** |
+| `dia` es hoy, con modos y números | alguien sigue entrando sin token. **Todavía no** |
+| la clave no existe | nunca ha habido ninguna desde que se instaló |
+
+`SINTOK_AYER` guarda la jornada anterior, para comparar.
+
+## El cierre — hecho el 4-ago-2026, 00:30
 
 Configuración del proyecto → Propiedades del script → `GAS_ESTRICTO` = `true`.
 
@@ -62,6 +93,13 @@ llamada, así que aplica al instante.
 
 Hacerlo **fuera del horario de tienda**. Si algo se escapó, deja de funcionar
 en el acto.
+
+**Verificar recargando la página**, nunca por lo que se vea en el campo. Al
+cerrarlo, el valor se quedó en `false` dos veces seguidas pareciendo guardado.
+
+Comprobado tras cerrar, contra el `/exec` sin token: `?modo=estado` y
+`?modo=zzz_inventado` devuelven los dos `{"error":"no_autorizado"}`. El segundo
+importa tanto como el primero — era el que entregaba la hoja Ventas entera.
 
 ## Si algo sale mal
 
