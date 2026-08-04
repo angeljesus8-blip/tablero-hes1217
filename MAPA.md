@@ -409,8 +409,18 @@ desfase —un catálogo nuevo, un On Hand reemplazado, dos días de ventas y un
 cambio de mes en comisiones—, no un error de traducción. Estuvo a punto de
 parecerlo en la parte más delicada, el inventario.
 
-Mientras la carga sea manual y única, la fase 1 caduca en cuanto se sube el
-Excel del día. Hay que hacerla repetible y comparar el mismo día.
+Por eso existe `resincronizar()`: trae todo de la hoja **en el orden correcto**
+y **se detiene si un paso falla**. El orden no es un detalle — `cargar_cortes`
+después de `cargar_ventas`, porque el corte se despeja como (total de ventas −
+vendido desde el corte) y sin ventas cargadas sale cero, o sea un tablero
+enseñando stock cero sobre mercancía que está en bodega.
+
+⚠️ **Supabase está a medias ahora mismo** *(4-ago, 02:20)*. La primera
+resincronización paró en el paso 4: al cambiar la regla de la serie se rompió
+el `ON CONFLICT` de `cargar_ventas`. Catálogo, inventario, promos y eol están al
+día; ventas, cortes, apartados y comisiones siguen del 2-ago. No afecta a la
+tienda —nadie lee de Supabase— pero **comparar en este estado no significa
+nada**. Lo desbloquea `supabase_cargar_ventas_fix.sql`.
 
 **Medido de paso, con datos reales:** `modo=todo` en el Apps Script tarda
 **8.255 ms**; `tablero_todo` en Supabase, **373 ms**.
