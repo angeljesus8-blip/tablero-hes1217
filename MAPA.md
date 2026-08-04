@@ -71,14 +71,29 @@ admin.html        → comisiones, bundles, avisos, notificar
 actualizar_datos  → catalogo, catalogo_ref, exhibicion, promos
 ```
 
-**`ADMIN_PIN` en Propiedades del script DEBE ser `1217`.** El tablero manda el
-número de tienda como PIN. Cambiarlo tumba **guardar en preventa** y marcar EOL.
-No es inseguro: `accesoPermitido_(token)` corre **antes** que `checkPin_`.
-*(1-ago-2026: se cambió y se cayó la preventa.)*
+**`ADMIN_PIN` ya no tiene que valer `1217`** *(desde el 4-ago-2026)*. Antes sí:
+`tablero.html` manda el número de tienda como PIN en `apartado_add` (l. 1030) y
+`eol_add` (l. 1269), así que cambiarlo tumbaba **guardar en preventa** y marcar
+EOL. *(1-ago-2026: se cambió y se cayó la preventa.)*
+
+Lo que lo soltó fue el arreglo de `checkPin_`: **mira el token antes que el
+PIN**, y el token lo manda toda llamada del tablero. Las dos rutas de arriba
+siguen enviando `pin=1217`, que ya no coincide con nada — pasan por el token.
+El 4-ago se cambió el PIN por uno que no está publicado, y se comprobó en piso
+que **las dos** rutas siguen escribiendo: apartar una pieza y borrarla, y marcar
+un SKU como EOL. Probar solo la primera habría dejado sin verificar justo la
+otra que se cayó el 1-ago. Durante las pruebas no se registró ningún rechazo en
+`SINTOK_HOY`, así que pasaron por el token y no de rebote.
+
+Si alguna vez la preventa o el EOL vuelven a fallar, **restaurar `ADMIN_PIN` a
+`1217` no es el arreglo**: sería volver a atar el permiso de escribir a un
+número que está en el nombre del repo, en el título de la app y en el QR. Mirar
+primero si la sesión trae token.
 
 **`GAS_ESTRICTO` solo se pone en `true` cuando:** todos volvieron a entrar (para
 tener token) **y** las apps saben avisar si las rechazan. *(1-ago-2026: se activó
-antes de tiempo y se perdió un día de ventas sin que nadie se enterara.)*
+antes de tiempo y se perdió un día de ventas sin que nadie se enterara.
+4-ago-2026: se cerró bien, ver el bloque B más abajo.)*
 
 ---
 
