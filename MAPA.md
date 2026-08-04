@@ -306,12 +306,20 @@ si aparece con la fecha de hoy, es tráfico real, no restos de las pruebas.
 `SINTOK_AYER` todavía guarda dos llamadas del 3-ago que fueron de prueba; se
 pisa solo en cuanto haya un día con llamadas de verdad.
 
+### Las cuatro apps, comprobadas
+
+Tablero, Captura de Series, Admin y Comisiones funcionan con el candado
+cerrado. Y no solo por lo que se ve en pantalla: **`SINTOK_HOY` no llegó a
+existir** durante las pruebas, o sea que ninguna de las cuatro hizo una sola
+llamada sin token. La revisión a mano de las cinco apps era correcta.
+
+`comisAt` quedó en `2026-08-04`: comisiones **escribió**, no solo leyó. Una
+escritura entera pasó el guardián.
+
+Nadie se quedó fuera, así que no había ninguna sesión anterior al 1-ago viva.
+
 ### Lo que falta de B
 
-- **Comprobar las cuatro apps** con sesión buena, según la lista de
-  `GAS_cerrar_candado.md`. Si alguien quedó con sesión vieja, verá *"la nube
-  rechazó la sesión"* y se arregla saliendo y volviendo a entrar, no
-  revirtiendo. Para saber si le pasó a alguien: mirar `SINTOK_HOY` mañana.
 - **`GAS_arreglo_apartados.gs`**, para que el token valga por sí solo y el
   `ADMIN_PIN` quede solo de respaldo.
 
