@@ -381,11 +381,28 @@ salga del editor hacia Claude (solo escribir). Lo tiene que pegar Ángel en el
 chat para volver a dejarlos iguales. Mientras tanto, **el respaldo no sirve
 para restaurar**.
 
-**C · Migración a Supabase** *(el esquema ya está creado y vacío)*
-Depende de B: no tiene sentido migrar sobre una base todavía abierta.
-Paso 2 (copiar las 838 filas) → paso 3 (funciones de lectura por PIN) → paso 4
-(escribir en los dos lados un par de semanas) → paso 5 (leer de Supabase) →
-paso 6 (apagar el Apps Script).
+**C · Migración a Supabase** ← *en marcha*
+
+**El esquema NO está vacío**, aunque este mapa lo dijera hasta el 4-ago. Las
+diez tablas están creadas **y cargadas**: 215 SKUs, 117 promos y las ventas
+históricas responden desde Supabase. Se comprobó preguntándole a la base, no
+leyendo documentos —los tres que había se contradecían entre sí—.
+
+Ojo al comprobarlo: consultar las tablas por REST devuelve **0 filas aunque
+haya datos**, porque RLS las tapa. `tiendas` y `empleados` también dan 0 y
+obviamente tienen datos, si no nadie entraría. Hay que llamar a las funciones
+`SECURITY DEFINER`, que sí ven.
+
+Estado por fases, en `MIGRACION_PLAN.md`:
+
+| Fase | Estado |
+|---|---|
+| 1 · datos y paridad | datos cargados; 13 funciones escritas, **falta comparar** |
+| 2 · lecturas | lista para empezar en cuanto la 1 dé igual |
+| 3 · ventas, doble escritura | **bloqueada** por `supabase_ventas_devolucion.sql` |
+| 4 · fotos, autollenado, edición | — |
+| 5 · retirar el Apps Script | — |
+
 Lo que se gana: montar una tienda pasa de cuatro pasos manuales a un `INSERT`.
 
 **D · Limpieza pendiente** *(independiente, se puede hacer cuando sea)*
