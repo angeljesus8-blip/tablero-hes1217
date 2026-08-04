@@ -1031,8 +1031,19 @@ function guardarApartado(){
   if(!cliente){ alert('Escribe el nombre del cliente.'); return; }
   const p=preventaBySku[sku];
   const btn=document.getElementById('apGuardar'); btn.disabled=true; btn.textContent='Guardando…';
+  /* En `color` va el producto ENTERO, no solo el color: "Pura 90S Pro Max
+     12/512GB · Negro". Antes se guardaba solo "Negro" y, al abrir la hoja o
+     Supabase, no había forma de saber si era Pro o Pro Max — se deducía por el
+     precio, que es justo lo que no debe hacer quien entrega el equipo.
+
+     Decidido así el 4-ago-2026 para tenerlo hoy mismo: la alternativa era un
+     campo propio, y eso obliga a tocar el Apps Script, la hoja y Supabase.
+     El precio de esta vía: el campo Color ya no contiene solo el color, así que
+     si algún día alguien quiere filtrar o contar por color, tendrá que partir
+     el texto por el "·". Está aquí escrito para que no le pille por sorpresa. */
+  const producto = 'Pura 90S ' + (p.ver||'') + ' ' + (p.cap||'') + ' · ' + (p.color||'');
   const qs='modo=apartado_add&pin='+encodeURIComponent(TIENDA_ID)
-    +'&sku='+encodeURIComponent(sku)+'&color='+encodeURIComponent(p.color)
+    +'&sku='+encodeURIComponent(sku)+'&color='+encodeURIComponent(producto)
     +'&cliente='+encodeURIComponent(cliente)+'&telefono='+encodeURIComponent(tel)
     +'&precio='+encodeURIComponent(p.precio)+'&seguro='+encodeURIComponent(seguro)
     +'&vend='+encodeURIComponent(vend)+'&transaccion='+encodeURIComponent(transaccion);
@@ -1041,7 +1052,9 @@ function guardarApartado(){
   gasPedir(qs, { prioritario:true }).then(function(data){
     btn.disabled=false; btn.textContent='Guardar apartado';
     if(data && data.ok!==false){
-      APARTADOS.push({id:data.id||('A'+Date.now()), sku:sku, color:p.color, cliente:cliente,
+      // el mismo texto que se acaba de mandar, para que la lista local y la
+      // nube no digan cosas distintas hasta el próximo refresco
+      APARTADOS.push({id:data.id||('A'+Date.now()), sku:sku, color:producto, cliente:cliente,
         telefono:tel, precio:String(p.precio), seguro:seguro, vend:vend, estatus:'Apartado', transaccion:transaccion});
       cerrarApartado(); render(); cargarApartadosNube();
     } else { alert('No se pudo guardar el apartado. Revisa tu conexión.'); }
