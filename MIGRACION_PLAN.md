@@ -89,9 +89,34 @@ Faltaban: `todo` (el viaje único, que es de donde sale la velocidad),
 `comisiones` y `estado`. Escritas el 4-ago en
 `supabase_funciones_lectura_resto.sql`.
 
+**Aplicado en Supabase el 4-ago-2026**, y comprobado ahí mismo:
+
+| Función | Devuelve | Cuadra con la fase 1 |
+|---|---|---|
+| `catalogo_completo` | 215 filas | 215 SKUs unificados ✓ |
+| `eol_lista` | 133 | 133 EOL ✓ |
+| `apartados_lista` | 9 | 9 apartados ✓ |
+| `comisiones_lista` | 4 | 4 personas ✓ |
+| `estado_datos` | 1 | — |
+| `tablero_todo` | las 8 claves | — |
+
+**El viaje único, medido: 0.32 s.** Contra los ~4 s del `modo=todo` del Apps
+Script, que van casi enteros en la cola de 1.5 s que hace falta porque el GAS
+descarta las llamadas encimadas. Ese número es la razón de la fase 2.
+
 Queda **correr el comparador** (`MIGRACION_comparar.js`) y que las trece den
 igual. Va desde el navegador con la sesión abierta, porque desde el 4-ago el
 endpoint del GAS exige token.
+
+Dos cosas que la comparación tiene que aclarar, vistas al aplicar:
+
+- **`bundles` y `avisos` dan 0 vigentes.** Puede ser correcto —vigencias
+  vencidas— o puede ser que no se cargaran. En la hoja había 20 combos y 1
+  aviso. Si el GAS muestra combos y Supabase no, es una diferencia real.
+- **Faltan 3 ventas.** La hoja tenía 223 y Supabase tiene 220. Una es la doble
+  captura del 1-ago, que sobra bien. Las otras dos hay que localizarlas: la
+  consulta dice que **no hay ninguna serie repetida en días distintos**, o sea
+  que la devolución del 8/19-jul entró una sola vez.
 
 ### Fase 2 · Lecturas
 Las apps leen de Supabase. Si falla, caen al Apps Script solas.
