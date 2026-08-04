@@ -1945,24 +1945,24 @@ async function refrescarNube(){
   _refrescando = true;
   _ultimoIntento = Date.now();
   try{
-    /* SUPABASE DESACTIVADO AQUÍ HASTA LA FASE 3 — 4-ago-2026
-       Se activó unas horas y se quitó el mismo día, en operación, al ver esto:
+    /* Supabase primero: un viaje y sin cola (~0,25 s contra ~7 s).
+       El Apps Script queda de respaldo mientras dure la migración.
 
-       `inventario_vivo` calcula lo vendido a partir de la tabla `ventas`, y las
-       ventas TODAVÍA se escriben solo en el Sheet (la doble escritura es la
-       fase 3). Así que Supabase solo conoce las ventas hasta la última
-       `resincronizar()`, y el tablero mostraba **una pieza de más** por cada
-       venta capturada desde entonces. Comprobado con una venta real: Sheet 2,
-       Supabase 1.
+       Esto estuvo apagado unas horas el 4-ago y se volvió a encender el mismo
+       día, cuando la fase 3 lo hizo correcto. Merece la pena recordar por qué,
+       porque es el error más fácil de repetir:
 
-       Es el riesgo número 1 del plan —el tablero mintiendo sobre el stock— y no
-       lo trae Supabase: lo trae leer de un lado lo que se escribe en el otro.
-       Lo mismo afecta a `ventas_hoy` (el leaderboard de Assurant) y a
-       `eol_precio_venta`, que hereda el inventario.
+       `inventario_vivo` calcula lo vendido a partir de la tabla `ventas`. Con
+       las ventas escribiéndose SOLO en el Sheet, Supabase únicamente conocía
+       las de la última `resincronizar()`, y el tablero mostraba **una pieza de
+       más** por cada venta del día. No lo traía Supabase: lo traía leer de un
+       lado lo que se escribe en el otro.
 
-       Cuándo se vuelve a encender: cuando cada venta se guarde en los dos
-       lados. Entonces esta línea vuelve, y no antes. Lo que NO depende de
-       ventas —catálogo y promos— sí sigue saliendo de Supabase en captura. */
+       Ahora cada venta va a los dos lados en cuanto el Sheet confirma, y lo que
+       falle por red se reintenta desde la cola de Captura de Series. Si esa
+       cola se quedara atascada, esto volvería a inflar el stock — es lo primero
+       que hay que mirar si el inventario no cuadra. */
+    if(await cargarTodoSupabase()) return;
     if(await cargarTodoNube()) return;
     // Respaldo: de una en una y espaciadas, porque juntas se pierden en silencio.
     // Orden por criticidad: primero lo que decide un precio o un cupo frente al
