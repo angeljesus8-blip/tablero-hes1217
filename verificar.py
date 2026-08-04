@@ -29,6 +29,147 @@ def scripts_de(html):
     return '\n;\n'.join(re.findall(r'<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>', html, re.S))
 
 
+def zonas_script(html):
+    """(inicio, fin) de cada bloque de JS embebido, en offsets del ARCHIVO.
+
+    scripts_de() concatena y pierde la posición original, así que lo que se
+    reporte con sus números manda a la línea equivocada del .html. Para avisar
+    de algo hay que poder decir dónde está.
+    """
+    return [(m.start(1), m.end(1)) for m in
+            re.finditer(r'<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>', html, re.S)]
+
+
+def _fin_cadena(s, j):
+    """Posición justo después de la comilla que cierra la cadena abierta en j."""
+    q, k = s[j], j + 1
+    while k < len(s):
+        if s[k] == '\\':
+            k += 2; continue
+        if s[k] == q:
+            return k + 1
+        if s[k] == '\n':          # cadena sin cerrar: no nos tragamos el resto
+            return k
+        k += 1
+    return len(s)
+
+
+def _fin_template(s, j):
+    """Igual para `plantillas`, saltando el código de cada ${...}."""
+    k = j + 1
+    while k < len(s):
+        c = s[k]
+        if c == '\\':
+            k += 2; continue
+        if c == '`':
+            return k + 1
+        if c == '$' and k + 1 < len(s) and s[k + 1] == '{':
+            prof, m = 0, k + 1
+            while m < len(s):
+                if s[m] == '{':
+                    prof += 1
+                elif s[m] == '}':
+                    prof -= 1
+                    if prof == 0:
+                        break
+                elif s[m] in '"\'':
+                    m = _fin_cadena(s, m); continue
+                elif s[m] == '`':
+                    m = _fin_template(s, m); continue
+                m += 1
+            k = m + 1; continue
+        k += 1
+    return len(s)
+
+
+# Tras uno de estos, una "/" abre una expresión regular; tras un identificador,
+# un número o un ")", es una división.
+_ANTES_DE_REGEX = set('(,=:[!&|?{};+-*%~^<>')
+_PALABRAS_REGEX = ('return', 'typeof', 'instanceof', 'in', 'of', 'new', 'delete',
+                   'void', 'throw', 'case', 'do', 'else', 'yield', 'await')
+
+
+def _abre_regex(s, j, anterior):
+    if anterior == '' or anterior in _ANTES_DE_REGEX:
+        return True
+    izq = s[:j].rstrip()
+    for w in _PALABRAS_REGEX:
+        if izq.endswith(w):
+            antes = izq[:-len(w)]
+            if not antes or not (antes[-1].isalnum() or antes[-1] in '_$'):
+                return True
+    return False
+
+
+def _fin_regex(s, j):
+    k, en_clase = j + 1, False
+    while k < len(s):
+        c = s[k]
+        if c == '\\':
+            k += 2; continue
+        if c == '\n':                 # no era una regex después de todo
+            return j + 1
+        if c == '[':
+            en_clase = True
+        elif c == ']':
+            en_clase = False
+        elif c == '/' and not en_clase:
+            k += 1
+            while k < len(s) and s[k].isalpha():   # banderas: gimsuy
+                k += 1
+            return k
+        k += 1
+    return len(s)
+
+
+def cierre_de_bloque(s, i):
+    """Contenido del bloque {...} que abre en s[i]. Devuelve (cuerpo, pos_cierre).
+
+    Cuenta solo las llaves que son código: se salta las de dentro de cadenas,
+    plantillas, comentarios y expresiones regulares. Contarlas a secas parece
+    que funciona hasta que aparece un `catch(e){ log('}') }`, donde el bloque
+    cerraría en la llave del texto y el cuerpo quedaría partido a la mitad —y
+    esta función decide si un catch está vacío, así que equivocarse ahí es
+    dejar pasar justo lo que se está buscando.
+    """
+    prof, j, anterior = 0, i, ''
+    n = len(s)
+    while j < n:
+        c = s[j]
+
+        if c == '/' and j + 1 < n and s[j + 1] == '/':
+            k = s.find('\n', j)
+            if k < 0:
+                break
+            j = k; continue
+
+        if c == '/' and j + 1 < n and s[j + 1] == '*':
+            k = s.find('*/', j + 2)
+            j = n if k < 0 else k + 2
+            continue
+
+        if c in '"\'':
+            j = _fin_cadena(s, j); anterior = c; continue
+
+        if c == '`':
+            j = _fin_template(s, j); anterior = c; continue
+
+        if c == '/' and _abre_regex(s, j, anterior):
+            j = _fin_regex(s, j); anterior = '/'; continue
+
+        if c == '{':
+            prof += 1
+        elif c == '}':
+            prof -= 1
+            if prof == 0:
+                return s[i + 1:j], j
+
+        if not c.isspace():
+            anterior = c
+        j += 1
+    return s[i + 1:], n
+
+
 # ── 1 · Sintaxis ────────────────────────────────────────────
 def r_sintaxis():
     node = None
@@ -161,26 +302,45 @@ def r_silencios():
     (cachés de localStorage, el beep de la captura) y llevan su comentario; los
     otros tapaban fallas reales y ahora avisan. La regla es que cualquiera nuevo
     tenga explicación al lado o arriba, para no volver a acumularlos sin querer.
+
+    3-ago-2026: la regla tenía dos puntos ciegos y por eso decía "todo en orden"
+    sin haber mirado de verdad.
+
+      · Solo veía `catch(e){}` con las llaves en la MISMA línea. Uno escrito en
+        varias líneas —que es como se escriben los que llevan algo dentro y
+        luego se vacían— pasaba entero sin que nadie lo mirara.
+      · Daba por justificado cualquier `//` en las cuatro líneas de arriba. Un
+        `// ---- sección ----` que no habla del catch valía como explicación.
+        Los 7 legítimos que dependen del comentario de arriba lo tienen en la
+        línea inmediatamente anterior, así que estrecharlo a una no molesta a
+        ninguno y cierra la puerta.
     """
     for p in HTML:
         s = leer(p)
         if s is None: continue
-        L = scripts_de(s).split('\n')
+        L = s.split('\n')
         sin_motivo = []
-        for i, l in enumerate(L):
-            if not re.search(r'catch\s*\([^)]*\)\s*\{\s*\}', l):
-                continue
-            # cuenta como justificado un // en la misma línea, o encima del try
-            resto = l.split('catch', 1)[1]
-            if '//' in resto: continue
-            arriba = '\n'.join(L[max(0, i - 4):i])
-            if '//' in arriba: continue
-            sin_motivo.append(i + 1)
+        for ini, fin in zonas_script(s):
+            for m in re.finditer(r'catch\s*(?:\([^)]*\))?\s*\{', s[ini:fin]):
+                abre = ini + m.end() - 1
+                cuerpo, cierra = cierre_de_bloque(s, abre)
+                # ¿queda algo si se le quitan los comentarios?
+                vivo = re.sub(r'/\*.*?\*/', '',
+                              re.sub(r'//[^\n]*', '', cuerpo), flags=re.S).strip()
+                if vivo: continue                       # hace algo: no es un silencio
+                if '//' in cuerpo or '/*' in cuerpo: continue   # explicado por dentro
+                n = s[:abre].count('\n')                # 0-based, línea del ARCHIVO
+                # explicación al lado: lo que sigue al } de cierre, misma línea
+                al_lado = s[cierra + 1:].split('\n')[0]
+                if '//' in al_lado: continue
+                # o justo encima: la línea inmediatamente anterior, no cuatro
+                if n > 0 and '//' in L[n - 1]: continue
+                sin_motivo.append(n + 1)
         if sin_motivo:
             falla('silencio', '%s: catch vacío sin explicar en línea(s) %s. '
-                              'Si callar es correcto, escribe por qué al lado; '
-                              'si no, que avise.'
-                  % (p, ', '.join(map(str, sin_motivo[:6]))))
+                              'Si callar es correcto, escribe por qué al lado o '
+                              'en la línea de arriba; si no, que avise.'
+                  % (p, ', '.join(map(str, sorted(sin_motivo)[:6]))))
 
 
 # ── 7 · Cadenas que se rompen juntas ────────────────────────

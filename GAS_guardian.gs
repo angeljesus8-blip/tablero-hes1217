@@ -61,6 +61,7 @@ function accesoPermitido_(e) {
   // saber qué falta actualizar antes de cerrar la puerta.
   var modo = (e && e.parameter && e.parameter.modo) || '(sin modo)';
   Logger.log('SIN TOKEN VALIDO — modo=%s estricto=%s', modo, estricto);
+  contarSinToken_(props, modo);
 
   if (!esperado) {
     // Falta configurar GAS_TOKEN: no cerramos, porque cerraríamos a todos.
@@ -68,6 +69,49 @@ function accesoPermitido_(e) {
     return true;
   }
   return !estricto;
+}
+
+
+/** Cuenta las llamadas sin token donde sí se puedan leer después.
+ *
+ *  Por qué no basta el Logger.log de arriba (3-ago-2026): el proyecto usa el
+ *  GCP Predeterminado, así que los registros de una aplicación web se retienen
+ *  muy poco. Al ir a comprobar la condición para cerrar el candado, las 50
+ *  ejecuciones del día decían "No hay ningún registro disponible". Buscar
+ *  `SIN TOKEN VALIDO` ahí devuelve cero, que es lo mismo que se ve cuando todo
+ *  está bien: la señal desaparecía antes de servir para decidir.
+ *
+ *  Propiedades del script no caduca y se lee desde Configuración del proyecto.
+ *
+ *  Son dos claves fijas y no crecen: al cambiar el día, lo de ayer se archiva
+ *  en SINTOK_AYER y hoy empieza de cero. Así se puede comparar una jornada
+ *  completa contra la anterior sin acumular basura.
+ *
+ *  El conteo puede quedarse corto si dos llamadas caen en el mismo instante
+ *  (se pisan al escribir). No importa para lo que decide: interesa si hay
+ *  alguna, no cuántas exactamente. Para que marque cero tendrían que no haber
+ *  existido.
+ *
+ *  CÓMO SE LEE, que tiene trampa: un día sin llamadas malas no escribe nada,
+ *  así que SINTOK_HOY se queda con la fecha del último día que sí las tuvo.
+ *  Lo que dice "hoy, cero" es que la fecha de dentro NO sea la de hoy. Mirar
+ *  siempre el campo `dia` antes que los números.
+ */
+function contarSinToken_(props, modo) {
+  try {
+    var hoy = Utilities.formatDate(new Date(), 'GMT-6', 'yyyy-MM-dd');
+    var d = {};
+    try { d = JSON.parse(props.getProperty('SINTOK_HOY') || '{}'); } catch (err) { d = {}; }
+    if (d.dia !== hoy) {
+      if (d.dia) props.setProperty('SINTOK_AYER', JSON.stringify(d));
+      d = { dia: hoy };
+    }
+    d[modo] = (d[modo] || 0) + 1;
+    props.setProperty('SINTOK_HOY', JSON.stringify(d));
+  } catch (err) {
+    // Contar es diagnóstico: si falla, la petición tiene que seguir su curso
+    // igual. Perder la cuenta no puede costarle una venta a nadie.
+  }
 }
 
 

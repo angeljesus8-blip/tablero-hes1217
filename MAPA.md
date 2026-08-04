@@ -243,18 +243,94 @@ No se cierra hasta que ese contador esté en cero. Procedimiento y reversión en
 
 Esto es el panorama completo, no una lista de pendientes sueltos.
 
-**A · Que nada falle callando** *(bloquea todo lo demás)*
-Los 26 `catch` vacíos que lista `verificar.py`. Mientras existan, cualquier
-cambio siguiente puede romper algo sin que nadie se entere. Empezar por
-`tablero.html` (9) y `admin.html` (6), que tocan datos.
+**A · Que nada falle callando** — ✅ **hecho** *(3-ago-2026)*
+Los 31 `catch` vacíos que quedan están todos explicados: 24 con el motivo al
+lado y 7 con el comentario en la línea de arriba (todos lecturas de caché de
+`localStorage`, donde callar es correcto). Ninguno tapa una falla.
 
-**B · Cerrar el Apps Script, bien esta vez**
-Depende de A. Orden: confirmar en el registro que ninguna llamada llega sin
-token → `GAS_ESTRICTO=true` fuera de horario → aplicar `GAS_arreglo_apartados.gs`
-para que el token valga por sí solo y el PIN quede de respaldo.
+Lo que sí estaba roto era el vigilante. `verificar.py` decía "todo en orden"
+con dos puntos ciegos: solo miraba `catch(e){}` con las llaves en la misma
+línea, y aceptaba cualquier `//` de las cuatro líneas de arriba como
+explicación. Además numeraba sobre el JS extraído, así que mandaba a una línea
+que no era. Los tres quedaron arreglados y **probados con casos falsos**: un
+`catch` vacío nuevo, en una línea o en varias, ahora sí detiene el commit.
+
+**B · Cerrar el Apps Script, bien esta vez** ← *lo siguiente*
+Ya no depende de A. Estado comprobado el 3-ago: `GAS_ESTRICTO=false`,
+`GAS_TOKEN` puesto (64 caracteres), `ADMIN_PIN=1217`, y el guardián llamado
+desde `doGet` **y** `doPost`. Falta la condición de cero llamadas sin token —
+y ahí está el problema, ver abajo. Después: `GAS_ESTRICTO=true` fuera de
+horario → aplicar `GAS_arreglo_apartados.gs` para que el token valga por sí
+solo y el PIN quede de respaldo.
+
+### El registro no se puede leer (3-ago-2026)
+
+`GAS_cerrar_candado.md` manda comprobar la condición expandiendo las filas de
+Ejecuciones y buscando `SIN TOKEN VALIDO`. **Ese procedimiento no es
+ejecutable.** Todas las filas del día, expandidas una por una y con espera,
+dicen *"No hay ningún registro disponible de esta ejecución"*.
+
+El motivo está en Configuración del proyecto: **GCP Predeterminado**. Con el
+proyecto de Cloud por defecto, los `Logger.log` de una aplicación web se
+retienen muy poco y el panel se queda vacío a las pocas horas. El dato del
+2-ago se pudo ver porque se miró el mismo día, casi enseguida.
+
+Buscar en un registro vacío devuelve cero coincidencias, que es exactamente lo
+que se vería si todo estuviera bien. **Un cero de esos no es evidencia de
+nada** — es el mismo caso que un `catch` vacío, un fallo que se ve como éxito.
+
+Para cerrar hace falta un contador que no dependa de Cloud Logging:
+`accesoPermitido_` tiene que dejar el rastro en Propiedades del script, que se
+leen cuando sea desde Configuración del proyecto.
+
+### ✅ CERRADO el 4-ago-2026, 00:30
+
+`GAS_ESTRICTO = true`, comprobado recargando la página (no por lo que se veía
+en el campo: aquí un guardado que no se guarda tiene el mismo aspecto que uno
+que sí — pasó dos veces antes de conseguirlo).
+
+**El endpoint ya no es público.** Contra el `/exec`, sin token:
+
+| Petición | Antes | Ahora |
+|---|---|---|
+| `?modo=estado` | devolvía el estado | `{"error":"no_autorizado"}` |
+| `?modo=zzz_inventado` | **200 filas de Ventas con número de serie** | `{"error":"no_autorizado"}` |
+
+**El contador quedó probado de punta a punta**, y con él la rotación por día:
+`SINTOK_AYER` se archivó solo al pasar la medianoche, y `SINTOK_HOY` registró
+los rechazos ya con el candado cerrado —incluido `zzz_inventado`, que no existe
+como modo y es el que demuestra que el `else` final ya no devuelve la hoja—.
+
+`SINTOK_HOY` se borró después de probar, así que **la medición arranca limpia**:
+si aparece con la fecha de hoy, es tráfico real, no restos de las pruebas.
+`SINTOK_AYER` todavía guarda dos llamadas del 3-ago que fueron de prueba; se
+pisa solo en cuanto haya un día con llamadas de verdad.
+
+### Lo que falta de B
+
+- **Comprobar las cuatro apps** con sesión buena, según la lista de
+  `GAS_cerrar_candado.md`. Si alguien quedó con sesión vieja, verá *"la nube
+  rechazó la sesión"* y se arregla saliendo y volviendo a entrar, no
+  revirtiendo. Para saber si le pasó a alguien: mirar `SINTOK_HOY` mañana.
+- **`GAS_arreglo_apartados.gs`**, para que el token valga por sí solo y el
+  `ADMIN_PIN` quede solo de respaldo.
+
+Reversión, si hiciera falta: `GAS_ESTRICTO` a `false`. Inmediato, sin desplegar
+y sin datos que deshacer.
+
+### El respaldo del Apps Script ya no coincide
+
+`GAS_Codigo.gs` tiene 970 líneas y el script vivo tenía 1009 **antes** de tocar
+nada. O sea que el respaldo del 2-ago se quedó atrás y hay ~39 líneas en
+producción que no están versionadas en ningún lado.
+
+No se puede arreglar desde aquí: la extensión de Chrome no deja que el código
+salga del editor hacia Claude (solo escribir). Lo tiene que pegar Ángel en el
+chat para volver a dejarlos iguales. Mientras tanto, **el respaldo no sirve
+para restaurar**.
 
 **C · Migración a Supabase** *(el esquema ya está creado y vacío)*
-Depende de B: no tiene sentido migrar sobre una base que todavía falla callando.
+Depende de B: no tiene sentido migrar sobre una base todavía abierta.
 Paso 2 (copiar las 838 filas) → paso 3 (funciones de lectura por PIN) → paso 4
 (escribir en los dos lados un par de semanas) → paso 5 (leer de Supabase) →
 paso 6 (apagar el Apps Script).
@@ -267,6 +343,13 @@ ventas y comisiones) · ticket a GitHub por los commits huérfanos del planeador
 
 ## Lo que todavía puede fallar callando
 
-26 `catch` vacíos repartidos en los seis html — `verificar.py` los lista. Son
-los lugares donde la app puede fallar sin decir nada, que es lo que hizo que
-todos los errores del 1-ago tardaran horas en verse en vez de minutos.
+En el cliente, nada conocido: los 31 `catch` vacíos que quedan están revisados
+uno por uno y explicados, y `verificar.py` ya detiene cualquiera nuevo (A).
+
+Queda uno, y es del lado de la nube: **el guardián avisa por un canal que no se
+puede leer**. `accesoPermitido_` deja el rastro con `Logger.log` y ese registro
+se borra solo a las pocas horas, así que la única señal de que alguien está
+entrando sin token desaparece antes de que nadie la mire. Es el mismo patrón de
+siempre —falla que se ve igual que un éxito— movido al Apps Script.
+
+Se cierra con el contador en Propiedades del script descrito en B.
