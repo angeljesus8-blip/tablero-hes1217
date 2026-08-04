@@ -1828,6 +1828,88 @@ async function cargarVentasNube(){
   if(aplicarVentas(data)) render();
 }
 
+/* ---------- FASE 2 · leer de Supabase, con el Apps Script de respaldo ----------
+   4-ago-2026. Medido en este mismo tablero: `modo=todo` tarda entre 5 y 8
+   segundos y `tablero_todo` entre 0.18 y 0.37. La diferencia no es la base de
+   datos: es que el Apps Script descarta las llamadas encimadas respondiendo
+   200, y por eso hay una cola con 1.5 s de separación.
+
+   Supabase devuelve filas y las funciones aplicar* de aquí abajo esperan los
+   objetos indexados del GAS. Se traduce en `_deSupabase` en vez de tocarlas:
+   son las que pintan el stock y ya están probadas en piso.
+
+   El adaptador se comparó contra `modo=todo` con los mismos datos antes de
+   escribir una sola línea aquí: 215 SKUs sin diferencia en onhand, vendido,
+   exhibición ni exh_vendida; 117 promos; los 9 apartados con su número de
+   ticket. Si algo de esto se toca, se vuelve a comparar. */
+const SB_URL = 'https://rjdrljtujbwooejrpyqv.supabase.co';
+const SB_KEY = 'sb_publishable_mELjDmCaFpNOxcwPi5MB2A_qSZ5ZA2z';
+
+async function sbRpc(fn, ms){
+  const ctl = new AbortController();
+  const t = setTimeout(function(){ ctl.abort(); }, ms || 8000);
+  try{
+    const r = await fetch(SB_URL + '/rest/v1/rpc/' + fn, {
+      method:'POST', signal: ctl.signal,
+      headers:{ apikey:SB_KEY, Authorization:'Bearer '+SB_KEY, 'Content-Type':'application/json' },
+      body: JSON.stringify({ p_store: String(TIENDA_ID || '') })
+    });
+    if(!r.ok) return null;
+    return await r.json();
+  }catch(e){ return null; }        // sin red, timeout o rechazo: se cae al GAS
+  finally{ clearTimeout(t); }
+}
+
+/* Supabase → la forma que ya consumen aplicarInventario, aplicarPromos, etc. */
+function _deSupabase(d){
+  const inv = {};
+  (d.inventario||[]).forEach(function(x){
+    inv[x.sku] = { d:x.descripcion, o:x.onhand, v:x.vendido,
+                   e:x.exhibicion, ev:x.exh_vendida, p:x.precio };
+  });
+  const pro = {};
+  (d.promos||[]).forEach(function(p){
+    pro[p.sku] = { d:p.producto, pr:p.precio_reg, pp:p.precio_pro,
+                   est:p.estatus, msi:p.msi, d1:p.vigente_desde, d2:p.vigente_hasta };
+  });
+  const vend = {};
+  (d.ventas_hoy||[]).forEach(function(v){
+    vend[v.vendedor] = { c:Number(v.con_seguro)||0, s:Number(v.sin_seguro)||0 };
+  });
+  return {
+    inventario: inv,
+    promos: pro,
+    eol: (d.eol||[]).map(function(e){
+      return { sku:e.sku, precio: e.precio!=null ? e.precio : e.precio_efectivo }; }),
+    bundles: (d.bundles||[]).map(function(b){
+      return { id:String(b.id), nombre:b.nombre,
+               // en Supabase skus es un array de verdad; aquí se espera "a,b,c"
+               skus: Array.isArray(b.skus) ? b.skus.join(',') : String(b.skus||''),
+               precio:b.precio, d1:b.vigente_desde, d2:b.vigente_hasta }; }),
+    avisos: (d.avisos||[]).map(function(a){
+      return { id:String(a.id), titulo:a.titulo, detalle:a.detalle||'',
+               fecha: a.creado_en ? String(a.creado_en).slice(0,10) : '',
+               d2:a.vigente_hasta, prioridad:a.prioridad||'normal', tipo:'manual' }; }),
+    apartados: (d.apartados||[]).map(function(a){
+      // `transaccion` es el ticket del POS: el enlace entre el apartado y la
+      // venta. Si se cae de aquí, se pierde sin que nada avise.
+      return { id:String(a.id), sku:a.sku, color:a.color||'', cliente:a.cliente,
+               telefono:a.telefono||'', precio: a.precio!=null ? String(a.precio) : '',
+               seguro: a.con_seguro ? 'Si' : '', vend:a.vendedor||'',
+               estatus:a.estatus||'Apartado', transaccion:a.transaccion||'',
+               fecha: a.creado_en ? String(a.creado_en).slice(0,16).replace('T',' ') : '' }; }),
+    ventas_hoy: { vend: vend }
+  };
+}
+
+async function cargarTodoSupabase(){
+  const bruto = await sbRpc('tablero_todo');
+  // Se revisa la FORMA, no solo que llegue: una respuesta rara vale menos que
+  // ninguna, porque pintaría un tablero vacío como si fuera bueno.
+  if(!_esObj(bruto) || !Array.isArray(bruto.inventario) || !bruto.inventario.length) return false;
+  return aplicarTodo(_deSupabase(bruto));
+}
+
 /* Todo en un solo viaje (~4 s contra ~20 s de las seis llamadas). Si este GAS
    no tiene el modo, contesta con la lista de ventas —su else final— así que hay
    que revisar la FORMA de lo que llega, no solo que llegue. */
@@ -1837,7 +1919,14 @@ async function cargarTodoNube(){
     d = await gasPedir('modo=todo', { reintentos:1 });
     if(!_esObj(d) || !_esObj(d.inventario)) throw new Error('sin modo=todo');
   }catch(e){ return false; }
+  return aplicarTodo(d);
+}
 
+/* Lo comparten las dos rutas a propósito: el que pinta el stock es el mismo
+   código venga de donde venga el dato. Si se duplicara, tarde o temprano una
+   de las dos ramas se quedaría atrás y el tablero mostraría cosas distintas
+   según qué nube haya contestado. */
+function aplicarTodo(d){
   aplicarInventario(d.inventario);                             marcarCarga('inventario', true);
   if(Array.isArray(d.eol))       { aplicarEol(d.eol);          marcarCarga('eol', true); }
   if(_esObj(d.promos))           { aplicarPromos(d.promos);    marcarCarga('promos', true); }
@@ -1856,6 +1945,9 @@ async function refrescarNube(){
   _refrescando = true;
   _ultimoIntento = Date.now();
   try{
+    // 1º Supabase: un viaje y sin cola. 2º el Apps Script, que sigue vivo y
+    // sirve de red mientras dure la migración. 3º las sueltas.
+    if(await cargarTodoSupabase()) return;
     if(await cargarTodoNube()) return;
     // Respaldo: de una en una y espaciadas, porque juntas se pierden en silencio.
     // Orden por criticidad: primero lo que decide un precio o un cupo frente al
