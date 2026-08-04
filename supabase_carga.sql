@@ -2,32 +2,30 @@
 -- Fase 1 · Carga de datos — APLICADO el 2-ago-2026
 -- ============================================================
 --
--- ⚠️ CUATRO DE LAS SEIS FUNCIONES NO ESTÁN AQUÍ (pendiente, 4-ago-2026)
+-- ⚠️ FALTAN DOS DE LAS SEIS (4-ago-2026)
 --
 -- En Supabase viven seis: cargar_catalogo, cargar_resto, cargar_ventas,
--- cargar_cortes, cargar_apartados_comisiones y rescatar_sin_upc. En este
--- archivo solo están completas las dos primeras; de las otras hay comentarios
--- que describen qué hacen y un "ver historial de git para el cuerpo completo"
--- que no lleva a ninguna parte.
+-- cargar_cortes, cargar_apartados_comisiones y rescatar_sin_upc.
+-- Aquí están **cuatro**; al final del archivo se añadieron `rescatar_sin_upc` y
+-- `cargar_ventas`, sacadas de la base con `pg_get_functiondef`.
+--
+-- Siguen sin copia: **cargar_cortes** y **cargar_apartados_comisiones**.
 --
 -- Es el mismo agujero que tenía el respaldo del Apps Script, y ya costó caro:
 -- el 4-ago hubo que parchear `cargar_ventas` leyéndola de la base y
 -- reemplazando un fragmento de texto, porque no había copia que editar.
--- Si alguien borra esas funciones, no hay de dónde restaurarlas.
 --
 -- **Cómo completarlo** (dos minutos, en el editor SQL de Supabase):
 --
 --     select pg_get_functiondef(p.oid)
 --     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
 --     where n.nspname = 'public'
---       and p.proname in ('cargar_ventas','cargar_cortes',
---                         'cargar_apartados_comisiones','rescatar_sin_upc')
+--       and p.proname in ('cargar_cortes','cargar_apartados_comisiones')
 --     order by p.proname;
 --
 -- Y pegar cada definición al final de este archivo, tal cual, bajo su título.
 -- No hace falta entenderlas para copiarlas: lo que importa es que exista la
--- copia. El 4-ago no se pudo hacer porque el dashboard de Supabase se quedó
--- cargando sin responder.
+-- copia.
 -- ============================================================
 --
 -- Cómo se mueven los datos, y por qué así
@@ -313,3 +311,94 @@ END $fn$;
    Las siete lecturas devuelven lo mismo que el Apps Script con los mismos
    datos. Se puede pasar a la fase 2.
    ============================================================ */
+
+
+-- ============================================================
+-- Definiciones extraídas de Supabase el 4-ago-2026
+-- ============================================================
+-- Sacadas con pg_get_functiondef y pegadas tal cual. Son las que estaban
+-- corriendo sin copia en ningún lado; ese fue el agujero que obligó a parchear
+-- `cargar_ventas` leyéndola de la base cuando se rompió su ON CONFLICT.
+--
+-- Ojo: `cargar_ventas` YA lleva aquí el arreglo del 4-ago
+-- (ON CONFLICT (store_id, serie, dia_venta), antes solo store_id+serie).
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION public.rescatar_sin_upc(p_store text)
+ RETURNS text
+ LANGUAGE plpgsql
+AS $function$
+DECLARE d jsonb; n int; faltan int;
+BEGIN
+  SELECT r.content::jsonb INTO d
+  FROM public.tiendas t,
+       LATERAL extensions.http_get(t.gas_url || '?modo=inventario&t=' || t.gas_token) r
+  WHERE t.store_id = p_store;
+  IF d IS NULL THEN RETURN 'sin respuesta'; END IF;
+
+  SELECT count(*) INTO faltan
+  FROM jsonb_each(d) j
+  WHERE trim(j.key) <> ''
+    AND NOT EXISTS (SELECT 1 FROM public.catalogo c WHERE c.store_id=p_store AND c.sku=j.key);
+
+  INSERT INTO public.catalogo (store_id, sku, descripcion, upc, precio, vigente)
+  SELECT p_store, j.key, coalesce(j.value->>'d',''), NULL,
+         nullif(regexp_replace(coalesce(j.value->>'p',''),'[^0-9.]','','g'),'')::numeric,
+         (coalesce(nullif(trim(j.value->>'o'),''),'0') <> '0')
+  FROM jsonb_each(d) j
+  WHERE trim(j.key) <> ''
+    AND NOT EXISTS (SELECT 1 FROM public.catalogo c WHERE c.store_id=p_store AND c.sku=j.key)
+  ON CONFLICT (store_id, sku) DO NOTHING;
+  GET DIAGNOSTICS n = ROW_COUNT;
+
+  RETURN 'faltaban ' || faltan || ' · insertados ' || n;
+EXCEPTION WHEN OTHERS THEN
+  RETURN 'ERROR ' || SQLSTATE || ': ' || left(regexp_replace(SQLERRM,'https?://[^ ]+','<url>','g'), 170);
+END $function$;
+
+
+CREATE OR REPLACE FUNCTION public.cargar_ventas(p_store text)
+ RETURNS text
+ LANGUAGE plpgsql
+AS $function$
+DECLARE d jsonb; n int; sin_fecha int; sin_sku int;
+BEGIN
+  SELECT r.content::jsonb INTO d
+  FROM public.tiendas t,
+       LATERAL extensions.http_get(t.gas_url || '?modo=exportar&hoja=Ventas&t=' || t.gas_token) r
+  WHERE t.store_id = p_store;
+  IF d IS NULL OR d ? 'error' THEN RETURN 'la nube no devolvio ventas'; END IF;
+
+  SELECT count(*) FILTER (WHERE coalesce(x->>'_iso','') = ''),
+         count(*) FILTER (WHERE trim(coalesce(x->>'SKU','')) = '')
+    INTO sin_fecha, sin_sku
+  FROM jsonb_array_elements(d->'filas') x;
+
+  INSERT INTO public.ventas (store_id, vendida_en, serie, sku, descripcion, precio, vendedor, con_seguro, foto_url)
+  SELECT p_store,
+         (x->>'_iso')::timestamptz,
+         trim(x->>'Numero de serie'),
+         nullif(trim(coalesce(x->>'SKU','')), ''),
+         nullif(trim(coalesce(x->>'Descripcion','')), ''),
+         nullif(regexp_replace(coalesce(x->>'Precio',''),'[^0-9.]','','g'),'')::numeric,
+         trim(coalesce(x->>'Vendedor','')),
+         -- vacio = venta anterior a julio-2026, cuando el campo no existia.
+         -- NULL a proposito: contarlas como "sin seguro" hundiria el attach.
+         CASE lower(trim(coalesce(x->>'Seguro','')))
+           WHEN 'si' THEN true WHEN 'no' THEN false ELSE NULL END,
+         nullif(trim(coalesce(x->>'Foto','')), '')
+  FROM jsonb_array_elements(d->'filas') x
+  WHERE trim(coalesce(x->>'Numero de serie','')) <> ''
+    AND coalesce(x->>'_iso','') <> ''
+    AND trim(coalesce(x->>'Vendedor','')) <> ''
+  ON CONFLICT (store_id, serie, dia_venta) DO NOTHING;
+
+  GET DIAGNOSTICS n = ROW_COUNT;
+  RETURN n || ' ventas cargadas · ' || sin_fecha || ' sin fecha usable · ' || sin_sku || ' sin SKU';
+EXCEPTION WHEN OTHERS THEN
+  RETURN 'ERROR ' || SQLSTATE || ': ' || left(regexp_replace(SQLERRM,'https?://[^ ]+','<url>','g'), 170);
+END $function$;
+
+
+-- PENDIENTES: cargar_cortes y cargar_apartados_comisiones.
+-- Ver la consulta de la cabecera de este archivo para sacarlas.
