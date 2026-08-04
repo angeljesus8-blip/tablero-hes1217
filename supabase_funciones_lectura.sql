@@ -1,6 +1,14 @@
 -- ============================================================
 -- Fase 1 · Las lecturas del Apps Script, traducidas a SQL
--- 2-ago-2026 · NO APLICADO TODAVÍA
+-- 2-ago-2026 · APLICADO (comprobado el 4-ago: las siete responden en Supabase
+--              con datos reales — 215 SKUs, 117 promos, las ventas históricas)
+--
+-- Decía "NO APLICADO TODAVÍA" dos días después de estar corriendo. Si la
+-- cabecera de un archivo no se puede creer, no sirve de nada: comprobar contra
+-- la base antes de fiarse.
+--
+-- Faltaban SEIS lecturas más que las apps sí usan. Están en
+-- `supabase_funciones_lectura_resto.sql`.
 -- ============================================================
 --
 -- Cada función de aquí tiene que devolver EXACTAMENTE lo mismo que su modo del
