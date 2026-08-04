@@ -461,7 +461,72 @@ function catJsonp(url){
     document.head.appendChild(s);
   });
 }
-function refreshCatalogo(){
+/* ---------- FASE 2 · Supabase primero, Apps Script de respaldo ----------
+   4-ago-2026. Aquí se es más conservador que en el tablero, porque esto decide
+   el precio que se le cobra a un cliente: lo que llega de Supabase pasa por las
+   MISMAS validaciones de siempre (esCatalogoValido, esPromosValido…) y si no
+   las pasa, se ignora y se pide al Apps Script como toda la vida. Ante la duda,
+   el camino viejo. */
+const SB_URL_CS = 'https://rjdrljtujbwooejrpyqv.supabase.co';
+const SB_KEY_CS = 'sb_publishable_mELjDmCaFpNOxcwPi5MB2A_qSZ5ZA2z';
+const SB_STORE  = (_cfgCS && _cfgCS.store_id) || '';
+
+async function sbRpcCS(fn, ms){
+  if(!SB_STORE) return null;
+  const ctl = new AbortController();
+  const t = setTimeout(function(){ ctl.abort(); }, ms || 8000);
+  try{
+    const r = await fetch(SB_URL_CS + '/rest/v1/rpc/' + fn, {
+      method:'POST', signal: ctl.signal,
+      headers:{ apikey:SB_KEY_CS, Authorization:'Bearer '+SB_KEY_CS, 'Content-Type':'application/json' },
+      body: JSON.stringify({ p_store: String(SB_STORE) })
+    });
+    if(!r.ok) return null;
+    const d = await r.json();
+    return Array.isArray(d) ? d : null;
+  }catch(e){ return null; }
+  finally{ clearTimeout(t); }
+}
+
+/* Filas de catalogo_completo → el objeto indexado que espera CATALOGO.
+   Los UPC se meten ANTES que las claves `sku:` a propósito: esCatalogoValido
+   mira la PRIMERA clave y exige un código de barras. Si entraran antes las
+   `sku:`, el catálogo entero se descartaría por inválido.
+   `o` y `p` van vacíos cuando el SKU no es vigente, igual que hace el GAS con
+   los de Catalogo_ref: son los agotados que el cliente sigue pidiendo y se
+   traen de otra tienda.
+
+   Lo de `p` no es capricho. Supabase SÍ conserva el último precio conocido de
+   esos agotados, y al comparar salieron 7 SKUs donde el GAS da vacío y Supabase
+   un precio (WATCH GT6, FreeBuds Pro 5, Band 11, MatePad Mini…). Autollenarlo
+   parece una mejora y no lo es: ese precio puede ser viejo, y un campo vacío
+   obliga al asesor a mirarlo mientras que uno lleno invita a confiar. Cambiar
+   de dónde vienen los datos y a la vez cambiar qué precio se propone son dos
+   cosas distintas; la segunda es una decisión de tienda, no un efecto
+   secundario de la migración. */
+function _catDeSupabase(filas){
+  const out = {};
+  function fila(x){
+    return { s:x.sku, d:x.descripcion||'',
+             o: (x.vigente && x.onhand!=null) ? String(x.onhand) : '',
+             p: (x.vigente && x.precio!=null) ? String(x.precio) : '' };
+  }
+  filas.forEach(function(x){ if(x.upc) out[x.upc] = fila(x); });
+  filas.forEach(function(x){ out['sku:'+x.sku] = fila(x); });
+  return out;
+}
+
+async function refreshCatalogo(){
+  const filas = await sbRpcCS('catalogo_completo');
+  if(filas && filas.length){
+    const c = _catDeSupabase(filas);
+    if(esCatalogoValido(c)){
+      CATALOGO = Object.assign({}, CATALOGO, c);
+      localStorage.setItem(CATKEY, JSON.stringify(c));
+      reindexarPorSku();
+      return;
+    }
+  }
   if(!CLOUD_URL) return;
   catJsonp(gasQS('modo=catalogo')).then(c=>{
     if(esCatalogoValido(c)){
@@ -478,7 +543,21 @@ let PROMOS = {};
 function esPromosValido(p){ return p && typeof p==='object' && !Array.isArray(p); }
 // Igual que el catalogo: sin cache se sigue sin promos hasta que llegue la nube.
 try{ const p = JSON.parse(localStorage.getItem(PROMOKEY) || 'null'); if(esPromosValido(p)) PROMOS = p; }catch(e){}
-function refreshPromos(){
+/* promos_vigentes ya filtra por fecha en el servidor, pero se conservan d1 y d2
+   para que promoActiva vuelva a comprobarlo aquí. Es doble validación a
+   propósito: el filtro del servidor usa hora de México y el teléfono la suya,
+   así que en el cambio de día podrían no coincidir — y lo que está en juego es
+   el precio que se cobra. */
+async function refreshPromos(){
+  const filas = await sbRpcCS('promos_vigentes');
+  if(filas && filas.length){
+    const p = {};
+    filas.forEach(function(x){
+      p[x.sku] = { d:x.producto||'', pr:x.precio_reg, pp:x.precio_pro,
+                   est:x.estatus, msi:x.msi, d1:x.vigente_desde, d2:x.vigente_hasta };
+    });
+    if(esPromosValido(p)){ PROMOS = p; localStorage.setItem(PROMOKEY, JSON.stringify(p)); return; }
+  }
   if(!CLOUD_URL) return;
   catJsonp(gasQS('modo=promos')).then(p=>{
     if(esPromosValido(p)){ PROMOS = p; localStorage.setItem(PROMOKEY, JSON.stringify(p)); }
@@ -515,7 +594,16 @@ const EOLVKEY = 'hes1217_eol_venta';
 let EOL_VENTA = {};
 function esObjValido(o){ return o && typeof o==='object' && !Array.isArray(o); }
 try{ localStorage.removeItem(EOLVKEY); }catch(e){}   // si no se puede borrar, da igual: no se lee
-function refreshEolVenta(){
+/* Se mantiene la regla de arriba: el 50% NO se persiste, venga de donde venga.
+   Si ninguna de las dos nubes contesta, EOL_VENTA queda vacío y se cobra el
+   precio normal — nunca un 50% de una copia vieja. */
+async function refreshEolVenta(){
+  const filas = await sbRpcCS('eol_precio_venta');
+  if(filas){
+    const e = {};
+    filas.forEach(function(x){ e[x.sku] = x.precio50; });
+    if(esObjValido(e)){ EOL_VENTA = e; return; }
+  }
   if(!CLOUD_URL) return;
   catJsonp(gasQS('modo=eol_venta')).then(e=>{
     if(esObjValido(e)){ EOL_VENTA = e; }   // solo de la nube en vivo, sin persistir
