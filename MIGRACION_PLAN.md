@@ -66,7 +66,7 @@ Hereda el riesgo 1.
 Ninguna fase avanza sin que la anterior esté comprobada. En todas, revertir es
 volver una variable a su valor: el Apps Script sigue vivo hasta la fase 5.
 
-### Fase 1 · Datos y paridad — sin tocar las apps ✅ CERRADA 2-ago-2026
+### Fase 1 · Datos y paridad — sin tocar las apps
 Cargar las ~838 filas a Supabase y escribir las funciones SQL equivalentes a
 cada modo del GAS.
 
@@ -74,6 +74,24 @@ cada modo del GAS.
 respuestas. Mientras no sean idénticas, no se sigue.
 
 Riesgo: ninguno. Las apps no se enteran.
+
+**Se dio por cerrada el 2-ago y no lo estaba** *(revisado el 4-ago-2026)*.
+
+Los datos sí quedaron cargados y responden: 215 SKUs, 117 promos, las ventas
+históricas. Eso está bien. Lo que falló fue el criterio para darla por cerrada:
+el commit dice *"las siete lecturas dan idéntico al Apps Script"*, y es verdad
+—pero **las apps usan trece**. Se contaron las que se habían escrito, no las
+que hacían falta. El inventario sale con un `grep` de los seis html en un
+minuto; nadie lo hizo.
+
+Faltaban: `todo` (el viaje único, que es de donde sale la velocidad),
+`catalogo` (el autollenado de captura), `apartados` (la preventa), `eol_cloud`,
+`comisiones` y `estado`. Escritas el 4-ago en
+`supabase_funciones_lectura_resto.sql`.
+
+Queda **correr el comparador** (`MIGRACION_comparar.js`) y que las trece den
+igual. Va desde el navegador con la sesión abierta, porque desde el 4-ago el
+endpoint del GAS exige token.
 
 ### Fase 2 · Lecturas
 Las apps leen de Supabase. Si falla, caen al Apps Script solas.
@@ -85,6 +103,21 @@ Cada venta se guarda en los dos lados. Se comparan un par de días. Cuando
 cuadren sin diferencias, se apaga la escritura al GAS.
 
 Es la fase larga a propósito. No se acorta.
+
+**Bloqueante, correr antes:** `supabase_ventas_devolucion.sql`. El esquema traía
+`UNIQUE (store_id, serie)` — "una serie no se vende dos veces" — y es falso: si
+un cliente devuelve un equipo y se revende, sale dos veces. Pasó el 8-jul y el
+19-jul. Confirmado con Ángel el 4-ago que es normal.
+
+Con la restricción vieja, la primera reventa haría fallar el `INSERT` **con el
+cliente delante**, y los dos lados dejarían de cuadrar justo en la comparación
+que decide si se apaga el GAS. La regla nueva —misma serie sí en días
+distintos, no dos veces el mismo día— separa esa devolución de la doble captura
+del 1-ago, que sí era un error.
+
+Y en la app: cuando ese `INSERT` falle, la captura tiene que **decirlo**. Un
+error que se calla ahí es una venta que nadie sabe si entró, que es exactamente
+lo que costó un día de ventas el 1-ago.
 
 ### Fase 4 · Fotos, autollenado y edición
 Storage para las nuevas fotos; el autollenado y la edición de ventas se
