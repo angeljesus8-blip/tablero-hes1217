@@ -42,6 +42,39 @@ Se arregla poniéndoles el SKU a mano: 177 de las 223 ventas tienen foto, y al
 escribir el SKU en la columna D el `autollenarSku_` completa descripción y
 precio solo.
 
+### Revisado el 4-ago-2026 — y la vía de la foto está caducando
+
+Quedan **cuatro** sin SKU (una se resolvió al migrar). Ninguna tiene tampoco
+descripción ni precio: solo serie y vendedor.
+
+| id | día | serie | vendedor |
+|---|---|---|---|
+| 58 | 4-jul | 8609720807… | Arnulfo |
+| 88 | 9-jul | 6UTBB264300… | Arnulfo |
+| 112 | 12-jul | 4SMBB255261… | Arnulfo |
+| 176 | 25-jul | 55KXC263190… | Miguel |
+
+**El número de serie da el modelo, pero no el color — y el SKU distingue color.**
+Cruzando el prefijo contra las ventas que sí tienen SKU:
+
+- `86097…` → WATCH KIDS X1, pero azul (3 ventas) o rosa (2)
+- `6UTBB` → NOVA 15 MAX 8/256, negro (5), verde (5) o dorado (2)
+- `55KXC` → FREEBUDS PRO 5, blanco / azul / negro (1 cada uno)
+- `4SMBB` → ningún otro producto vendido comparte prefijo: no hay pista
+
+Sirve para acotar, no para escribir el SKU.
+
+**Lo urgente:** las cuatro tienen `foto_url`, pero `limpiarFotosViejas` manda a
+la papelera de Drive todo lo de más de 7 días (`DIAS_RETENCION = 7`), y estas
+ventas tienen entre 10 y 31 días. Es `setTrashed(true)`, o sea **papelera, no
+borrado definitivo** — pero Drive la vacía sola a los 30 días. La del 4-jul ya
+lleva 31; las demás están dentro de plazo, por poco.
+
+Quien quiera recuperarlas por foto tiene que ir a la papelera de Drive **ya**.
+
+**La otra vía, sin prisa:** buscar las cuatro series en el POS. El ticket dice
+qué se vendió, y no caduca. Es lo que hay que hacer si las fotos ya no están.
+
 ## 2 · Dos series repetidas, y no son el mismo caso
 
 El esquema nuevo tiene `UNIQUE (store_id, serie)`: una serie no se vende dos
