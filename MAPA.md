@@ -397,11 +397,23 @@ Estado por fases, en `MIGRACION_PLAN.md`:
 
 | Fase | Estado |
 |---|---|
-| 1 · datos y paridad | datos cargados; 13 funciones escritas, **falta comparar** |
-| 2 · lecturas | lista para empezar en cuanto la 1 dé igual |
-| 3 · ventas, doble escritura | **bloqueada** por `supabase_ventas_devolucion.sql` |
+| 1 · datos y paridad | 13 funciones aplicadas y comparadas; **falta resincronizar** |
+| 2 · lecturas | lista, en cuanto la 1 cierre con datos del mismo día |
+| 3 · ventas, doble escritura | desbloqueada: la regla de la serie ya está aplicada |
 | 4 · fotos, autollenado, edición | — |
 | 5 · retirar el Apps Script | — |
+
+**La comparación de paridad caduca.** Se comparó el 4-ago contra datos cargados
+el 2-ago: ocho lecturas dieron igual y cinco distinto, y las cinco eran el mismo
+desfase —un catálogo nuevo, un On Hand reemplazado, dos días de ventas y un
+cambio de mes en comisiones—, no un error de traducción. Estuvo a punto de
+parecerlo en la parte más delicada, el inventario.
+
+Mientras la carga sea manual y única, la fase 1 caduca en cuanto se sube el
+Excel del día. Hay que hacerla repetible y comparar el mismo día.
+
+**Medido de paso, con datos reales:** `modo=todo` en el Apps Script tarda
+**8.255 ms**; `tablero_todo` en Supabase, **373 ms**.
 
 Lo que se gana: montar una tienda pasa de cuatro pasos manuales a un `INSERT`.
 
