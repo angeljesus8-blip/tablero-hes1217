@@ -300,6 +300,33 @@ apunta a un archivo que ya no existe.
 
 ---
 
+## Cadena 6-bis · El cupo de preventa *(5-ago-2026)*
+
+```
+tablero.html · const PREVENTA   → lo que ve el asesor
+        │  preventa_cupo_gen.py
+        ▼
+supabase_preventa_cupo.sql      → el tope que frena dos apartados a la vez
+```
+
+El cupo tiene que vivir en dos sitios: el número del navegador y el de la base.
+**Se escribe una sola vez, en `tablero.html`**; el SQL se genera con
+`python preventa_cupo_gen.py` y se pega en el SQL Editor. La regla `cupo` de
+`verificar.py` bloquea el commit si los dos dejan de coincidir.
+
+**Lo que se midió el 5-ago-2026:** `preventa_cupo` estaba VACÍA. El trigger
+`apartado_cabe` existía desde la migración, pero con el tope en NULL deja pasar
+todo ("sin cupo definido, sin límite"), así que el único freno era el número del
+navegador: **dos asesores apartando la última pieza a la vez podían guardarla los
+dos.** Al correr el SQL, el tope aplica de verdad y un apartado que se pase se
+rechaza con "Cupo agotado".
+
+De paso, el trigger sumaba `NEW.piezas` incluso al marcar un apartado como
+**Cancelado** —la pieza que se libera contaba como ocupada—, así que con el cupo
+lleno habría impedido cancelar. Corregido en el mismo archivo.
+
+---
+
 ## Cadena 7 · Horarios *(desde el 4-ago-2026, v119)*
 
 ```
