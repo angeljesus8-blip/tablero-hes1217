@@ -124,6 +124,22 @@ apartados usa `color`, `precio`, `transaccion`, `vend` y `seguro`.
 ticket del POS, el enlace entre el apartado y la venta. Antes de dar por buena
 cualquier lectura nueva, sacar con `grep` qué campos consume de verdad.
 
+**En `color` de los apartados va el producto entero** desde el 4-ago-2026:
+`Pura 90S Pro Max 12/512GB · Graphite Black`. Antes solo el color, y al abrir la
+hoja no se sabía si era Pro o Pro Max — se deducía por el precio, que no es
+forma de entregar un equipo. Los 9 apartados que ya existían se completaron a
+mano en la hoja.
+
+El campo Color ya **no** contiene solo el color: para contar o filtrar por
+color hay que partir por el `·`. Se eligió así para tenerlo el mismo día; el
+sitio natural de darle campo propio es la fase 4, cuando toque rehacer las
+escrituras.
+
+⚠️ *Pendiente menor:* Supabase todavía tiene los 9 viejos con el color a secas
+—el dashboard no respondía para resincronizar—. No se ve en el tablero, porque
+`cardApartado` saca el modelo del catálogo por SKU, no del texto guardado. Se
+arregla solo en la próxima `resincronizar('1217')`.
+
 **Si Supabase cae, no pasa nada:** `sbRpc` corta a los 8 s y devuelve `null`, y
 se sigue por el Apps Script. Probado rompiendo Supabase a propósito — el
 tablero quedó igual, solo más lento.
