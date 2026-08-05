@@ -27,6 +27,8 @@ jobs:
         with:
           python-version: "3.12"
 
+      # 4-ago-2026: aquí decía `working-directory: 09_Tablero`, pero la raíz del
+      # repo YA es esa carpeta — el job venía fallando en cada push con "No such
+      # file or directory" y nadie leía el rojo. verificar.py corre en la raíz.
       - name: Revisar
-        working-directory: 09_Tablero
         run: python verificar.py
