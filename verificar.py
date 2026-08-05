@@ -263,6 +263,32 @@ def r_copias():
                            'del tablero se queda atrás.' % (copia, origen))
 
 
+# ── 3c · El cupo de preventa, en sus dos sitios ─────────────
+# 5-ago-2026: el cupo vive en la const PREVENTA (lo que ve el asesor) y en la
+# tabla preventa_cupo de Supabase (el tope que frena dos apartados a la vez).
+# Subir uno y olvidar el otro deja al tablero ofreciendo una pieza que la base
+# va a rechazar —o peor, al revés—. El .sql se genera con preventa_cupo_gen.py.
+def r_cupo():
+    sql = leer('supabase_preventa_cupo.sql')
+    if sql is None: return            # todavía no se ha generado
+    html = leer('tablero.html')
+    if html is None: return
+    m = re.search(r'const PREVENTA = \[(.*?)\n\];', html, re.S)
+    if not m:
+        falla('cupo', 'no encontré la const PREVENTA en tablero.html'); return
+    enHtml = {sku: int(n) for sku, n in
+              re.findall(r"sku:'(\d+)'.*?cupo:(\d+)", m.group(1))}
+    enSql  = {sku: int(n) for sku, n in
+              re.findall(r"\(\s*'\d+',\s*'(\d+)',\s*(\d+)\s*\)", sql)}
+    if not enSql:
+        falla('cupo', 'supabase_preventa_cupo.sql no trae ningún cupo'); return
+    for sku in sorted(set(enHtml) | set(enSql)):
+        a, b = enHtml.get(sku), enSql.get(sku)
+        if a != b:
+            falla('cupo', 'SKU %s: tablero.html dice %s y el .sql dice %s. '
+                          'Corre preventa_cupo_gen.py' % (sku, a, b))
+
+
 def git_cambiados(staged):
     cmd = ['git', 'diff', '--name-only'] + (['--cached'] if staged else ['HEAD'])
     try:
@@ -460,7 +486,7 @@ def r_cadenas():
 
 def main():
     staged = '--staged' in sys.argv
-    r_sintaxis(); r_helpers(); r_version(staged); r_copias()
+    r_sintaxis(); r_helpers(); r_version(staged); r_copias(); r_cupo()
     r_personales(); r_secretos(); r_silencios(); r_cadenas()
 
     for regla, msg in avisos:
