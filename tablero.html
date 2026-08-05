@@ -450,7 +450,9 @@ const PREVENTA = [
   {sku:'100307448', ver:'Pro Max', cap:'12/512GB', color:'Graphite Black', precio:22999, reg:32999, msi:'18 MSI', cupo:4},
   {sku:'100307464', ver:'Pro Max', cap:'12/512GB', color:'Blush Gold',     precio:22999, reg:32999, msi:'18 MSI', cupo:5},
   {sku:'100307481', ver:'Pro Max', cap:'12/512GB', color:'Blaze Purple',   precio:22999, reg:32999, msi:'18 MSI', cupo:2},
-  {sku:'100307499', ver:'Pro Max', cap:'12/512GB', color:'Orange Ocean',   precio:22999, reg:32999, msi:'18 MSI', cupo:5},
+  // 5-ago-2026: una pieza más de Orange Ocean. Se agotó primero (5 de 5 vendidas
+  // entre el 23-jul y el 30-jul), y es el color que más sale.
+  {sku:'100307499', ver:'Pro Max', cap:'12/512GB', color:'Orange Ocean',   precio:22999, reg:32999, msi:'18 MSI', cupo:6},
   {sku:'100307501', ver:'Pro', cap:'12/512GB', color:'Coconut White', precio:18999, reg:27999, msi:'12 MSI', cupo:3},
   {sku:'100307510', ver:'Pro', cap:'12/512GB', color:'Mulberry Black', precio:18999, reg:27999, msi:'12 MSI', cupo:4},
   {sku:'100307536', ver:'Pro', cap:'12/512GB', color:'Guava Soda',     precio:18999, reg:27999, msi:'12 MSI', cupo:2},
@@ -465,6 +467,10 @@ const preventaBySku = {}; PREVENTA.forEach(p=>preventaBySku[p.sku]=p);
 function apartadosVivos(sku){ return APARTADOS.filter(a=>a.sku===sku && String(a.estatus||'').toLowerCase()!=='cancelado'); }
 function disponibles(sku){ const p=preventaBySku[sku]; if(!p) return 0; return Math.max(0, p.cupo - apartadosVivos(sku).length); }
 function preventaTotalDisp(){ return PREVENTA.reduce((s,p)=>s+disponibles(p.sku),0); }
+/* El total decía "de 36" escrito a mano. Al habilitar una pieza más en Orange
+   Ocean (5-ago-2026) el banner habría dicho "quedan 1 de 36" con 37 repartidas:
+   se suma de los cupos para que no vuelva a mentir. */
+function preventaCupoTotal(){ return PREVENTA.reduce((s,p)=>s+p.cupo,0); }
 
 function diasRestantes(fecha){
   const f = new Date(fecha+'T00:00:00');
@@ -987,7 +993,7 @@ function seccionPreventa(){
     <div class="pv-banner-t">🚀 Preventa HUAWEI Pura 90S</div>
     <div class="pv-banner-s">${preInicio?'Inicia el 22 de julio · ':''}El cliente paga completo y aparta su pieza. Entrega al llegar el stock.</div>
     <div class="pv-banner-n">${CARGAS.apartados==='ok'
-      ? `Quedan <b>${preventaTotalDisp()}</b> de 36 piezas de tu cupo`
+      ? `Quedan <b>${preventaTotalDisp()}</b> de ${preventaCupoTotal()} piezas de tu cupo`
       : '⏳ Confirmando cupo con la nube — no prometas la última pieza todavía'}</div>
   </div>`;
   const orden = ['Pro Max|12/512GB','Pro|12/512GB','Pro|12/256GB'];
