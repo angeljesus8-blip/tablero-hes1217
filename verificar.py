@@ -11,7 +11,10 @@ import io, json, os, re, subprocess, sys, tempfile
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 HTML = ['index.html', 'tablero.html', 'captura_series.html', 'admin.html',
-        'comisiones.html', 'actualizar_datos.html']
+        'comisiones.html', 'actualizar_datos.html', 'horarios.html']
+# horarios.html no se edita aquí: es copia de 02_Equipo/horario_semanal.html, que
+# se publica también en el repo planeador-odemas para las demás tiendas.
+COPIAS = {'horarios.html': os.path.join('..', '02_Equipo', 'horario_semanal.html')}
 # Copias del Apps Script. No se ejecutan aquí, pero se publican igual que lo
 # demás: si traen una llave, queda expuesta lo mismo que en un .html.
 GS = ['GAS_Codigo.gs', 'GAS_ventas_detalle.gs', 'GAS_arreglo_apartados.gs',
@@ -243,6 +246,23 @@ def r_version(staged):
             falla('sw', 'sw.js precachea "%s" y ese archivo no existe' % arch)
 
 
+# ── 3b · Copias de archivos que se editan en otro lado ──────
+# 4-ago-2026: el planeador de horarios pasó a abrirse dentro del tablero, así que
+# ahora existe en dos carpetas. Editar una y olvidar la otra deja al equipo viendo
+# un horario y al gerente otro, sin ninguna señal de que están desfasados.
+# Solo avisa: en GitHub Actions se clona un repo sin 02_Equipo al lado, y ahí no
+# hay contra qué comparar.
+def r_copias():
+    for copia, origen in COPIAS.items():
+        a, b = leer(copia), leer(origen)
+        if a is None:
+            falla('copia', 'falta %s (se copia de %s)' % (copia, origen)); continue
+        if b is None: continue   # la fuente no está en esta máquina
+        if a != b:
+            aviso('copia', '%s no es igual a %s. Vuelve a copiarla o el horario '
+                           'del tablero se queda atrás.' % (copia, origen))
+
+
 def git_cambiados(staged):
     cmd = ['git', 'diff', '--name-only'] + (['--cached'] if staged else ['HEAD'])
     try:
@@ -257,7 +277,9 @@ def git_cambiados(staged):
 # y —en comisiones_datos.js— venta individual y monto de comisión de cada quien.
 def r_personales():
     patrones = [
-        (r'\b\d{6}\b(?!\s*(?:pieza|pzas|MSI))', 'número de empleado'),
+        # El (?<![#\w]) es por los colores hex: horarios.html trae #777777 y
+        # #827717, que sin eso se reportaban como números de empleado.
+        (r'(?<![#\w])\d{6}\b(?!\s*(?:pieza|pzas|MSI))', 'número de empleado'),
         (r'(?i)\b(perea arias|garcia gutierrez|garcía gutiérrez|aguilar rosete|'
          r'gonzalez arrieta|gonzález arrieta|bonilla gal)', 'apellidos del equipo'),
     ]
@@ -438,7 +460,7 @@ def r_cadenas():
 
 def main():
     staged = '--staged' in sys.argv
-    r_sintaxis(); r_helpers(); r_version(staged)
+    r_sintaxis(); r_helpers(); r_version(staged); r_copias()
     r_personales(); r_secretos(); r_silencios(); r_cadenas()
 
     for regla, msg in avisos:

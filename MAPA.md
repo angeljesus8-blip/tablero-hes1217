@@ -18,7 +18,8 @@ no solo el archivo que tocaste.
 | `admin.html` | Sube comisiones, EOL, combos, avisos; gestiona equipo | Gerente y subgerente |
 | `actualizar_datos.html` | Sube el Excel de Sonar y el CEA | Gerente y subgerente |
 | `comisiones.html` | Muestra comisiones y attach | Todos |
-| `sw.js` | Service worker. **Aquí vive la versión de la app** | Los 6 html |
+| `horarios.html` | Planeador semanal. **Copia — no se edita aquí** (ver Cadena 7) | Gerente y equipo |
+| `sw.js` | Service worker. **Aquí vive la versión de la app** | Los 7 html |
 | `datos.js` | Vacío a propósito. Solo estructura | `tablero.html` |
 | Apps Script | 14 modos por `doGet` + guardar ventas por `doPost` | Todas |
 | Supabase | `tiendas`, `empleados` + 10 tablas nuevas sin usar aún | `index`, `admin` |
@@ -296,6 +297,66 @@ archivos sin subirla y se depuró horas sobre una versión que nadie tenía.)*
 
 `verificar.py` bloquea el commit si se te pasa. También avisa si el precache
 apunta a un archivo que ya no existe.
+
+---
+
+## Cadena 7 · Horarios *(desde el 4-ago-2026, v119)*
+
+```
+02_Equipo/horario_semanal.html   ← AQUÍ se edita (fuente única)
+        │
+        ├── push a planeador-odemas  → la copia multi-tienda, para las tiendas
+        │                              que aún no tienen tablero propio
+        └── copia a 09_Tablero/horarios.html → abre DENTRO de la app del 1217
+```
+
+Antes la tarjeta de Horarios salía del tablero a Chrome (`ext:true` + otro repo,
+o sea fuera del `scope` de la PWA). Ahora el tablero sirve su propia copia, así
+que se abre igual que Tablero o Comisiones.
+
+**El archivo se edita en `02_Equipo`, nunca en `09_Tablero`.** Para publicar los
+dos lados de una vez: `02_Equipo\deploy.ps1 "qué cambió"` — hace el push del
+planeador, copia al tablero, sube `VERSION` y corre el verificador.
+
+Lo que sostiene esto:
+- La regla `copia` de `verificar.py` avisa si las dos dejan de ser idénticas.
+  Solo avisa: en GitHub Actions no existe `02_Equipo` con qué comparar, así que
+  **el aviso solo aparece cuando corres el verificador en tu máquina.**
+- El botón `← Menú` se pinta solo si el archivo se llama `horarios.html`
+  (`mostrarVolverAlMenu()`). En `planeador-odemas` no aparece, porque ahí el
+  `index.html` es un redirect a este mismo archivo y sería un círculo.
+- `logo_huawei.jpg` va precacheado: es el logo del Excel que exporta el gerente.
+
+### Un solo login *(4-ago-2026)*
+
+El planeador tenía su PROPIO proyecto de Supabase (`lgnyqfstmcqpkbekspte`), con
+su padrón de cuentas y un PIN aparte: el equipo entraba dos veces. Ya no.
+`horarios_config` vive en el proyecto de HES Red, por `store_id`, y el acceso es
+el mismo del tablero (`supabase_horarios.sql`).
+
+```
+arrancar()
+ ├─ ¿sesión de Supabase?           -> gerente/subgerente: edita. RLS = admin_de(store_id)
+ ├─ ¿hes_empleado en localStorage? -> horario_equipo(store_id, empno): solo lectura
+ └─ nada que heredar               -> login (correo, o número de empleado)
+```
+
+- **El PIN del planeador ya no existe.** Para quitarle el acceso a alguien:
+  Admin → Equipo → darlo de baja. Antes había que cambiarle el PIN a todos.
+- **Quien no esté en `empleados` no ve el horario.** Es la misma puerta del
+  tablero; si alguien se queda fuera, hay que darlo de alta.
+- **El subgerente ya puede editar** (antes la tabla colgaba de `user_id`, así que
+  el horario solo existía para la cuenta que lo creó).
+- Se cayó el rodeo de `excepciones.__publicadas` — la foto duplicada que existía
+  porque el RPC viejo no devolvía `semanas_guardadas`. Se sigue *leyendo* como
+  respaldo, porque los respaldos viejos la traen.
+- `guardarConfig` ahora **avisa si la RLS rechaza**. Antes un guardado sin
+  permiso se veía exitoso y al recargar no había nada.
+- Respaldo: botones **🗄️ Respaldo / ↥ Restaurar** en la barra del gerente. Hasta
+  hoy el horario existía solo dentro de Supabase, sin copia en ningún lado.
+- La migración desde el proyecto viejo se hizo con
+  `HES-ANGELOPOLIS-1217/migrar_horarios.html`, **fuera de los repos** a propósito:
+  es lo único que sigue hablando con el proyecto viejo. Se puede borrar después.
 
 ---
 
