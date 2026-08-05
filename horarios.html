@@ -106,13 +106,83 @@ tr.sep-naranja td { background: var(--naranja); height: 3px; padding: 0; border:
 .nota-pie strong { color: var(--rojo); }
 .footer { font-size: 9px; color: #BBB; text-align: right; padding-top: 4px; }
 
-@media (max-width: 580px) {
+/* ── Vista de celular ──
+   La tabla mide ~1050 px: un celular tiene 400. Antes solo se encogía la letra
+   a 9 px, así que no cabía Y no se leía. En pantalla angosta se cambia por
+   tarjetas: primero TU semana (sabemos quién entró), luego el resto plegado.
+   La tabla sigue ahí para quien la quiera — botón "Ver tabla completa". */
+#vista-movil { display: none; }
+
+@media (max-width: 700px) {
   body { padding: 8px; }
   header { flex-wrap: wrap; gap: 10px; }
   .semana-badge { margin-left: 0; }
-  th, td { font-size: 9px; padding: 3px 2px; }
   .logo-odemas { height: 28px; }
+  h1 { font-size: 15px; }
+
+  #vista-movil { display: block; }
+  .wrapper-tabla, .leyenda, .nota-pie { display: none; }
+  /* Con la tabla a la vista se invierte: manda ella y se ocultan las tarjetas. */
+  body.ver-tabla #vista-movil { display: none; }
+  body.ver-tabla .wrapper-tabla,
+  body.ver-tabla .leyenda,
+  body.ver-tabla .nota-pie { display: block; }
+  body.ver-tabla .leyenda { display: flex; }
+  body.ver-tabla .wrapper-tabla { display: block; }
+  body.ver-tabla th, body.ver-tabla td { font-size: 9px; padding: 3px 2px; }
 }
+
+.mv-card {
+  background: #fff; border: 1px solid var(--borde); border-radius: 10px;
+  box-shadow: 0 1px 5px rgba(0,0,0,0.06); margin-bottom: 12px; overflow: hidden;
+}
+.mv-yo { border: 2px solid var(--rojo); }
+.mv-head {
+  background: var(--rojo); color: #fff; padding: 9px 12px;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.3px;
+}
+.mv-head small { display: block; font-weight: 500; opacity: 0.9; font-size: 10px; margin-top: 2px; }
+.mv-dia {
+  display: grid; grid-template-columns: 62px 1fr; align-items: center;
+  gap: 8px; padding: 8px 12px; border-top: 1px solid var(--borde);
+}
+.mv-dia:first-of-type { border-top: none; }
+.mv-hoy { background: #FFF9E6; }
+.mv-fecha { font-size: 11px; font-weight: 700; color: var(--gris-sub); line-height: 1.25; }
+.mv-fecha b { display: block; font-size: 13px; color: var(--gris-txt); }
+.mv-turno {
+  border-radius: 6px; padding: 7px 10px; font-size: 13px; font-weight: 700;
+  text-align: center; line-height: 1.3;
+}
+.mv-extra { font-size: 11px; color: var(--gris-sub); margin-top: 4px; text-align: center; }
+.mv-extra span { display: inline-block; margin: 0 5px; }
+
+/* El resto del equipo: plegado, se abre al tocar */
+.mv-sec { font-size: 11px; font-weight: 700; color: var(--gris-sub);
+          text-transform: uppercase; letter-spacing: 0.5px; margin: 16px 2px 8px; }
+.mv-det { background: #fff; border: 1px solid var(--borde); border-radius: 10px;
+          margin-bottom: 8px; overflow: hidden; }
+.mv-det > summary {
+  padding: 11px 12px; font-size: 12px; font-weight: 700; color: var(--gris-txt);
+  cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px;
+}
+.mv-det > summary::-webkit-details-marker { display: none; }
+.mv-det > summary::before { content: '▸'; color: var(--rojo); font-size: 13px; }
+.mv-det[open] > summary::before { content: '▾'; }
+.mv-det > summary small { font-weight: 500; color: var(--gris-sub); }
+
+.mv-btn-tabla {
+  width: 100%; padding: 12px; margin-top: 6px;
+  background: #fff; color: var(--gris-txt);
+  border: 1.5px solid var(--borde); border-radius: 8px;
+  font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.mv-btn-tabla:hover { background: var(--gris-fondo); }
+
+/* El "volver" se inyecta fuera de #vista-movil (va encima de la tabla), así que
+   se oculta a mano: en escritorio la tabla manda y no hay a dónde volver. */
+#mv-volver { display: none; }
+@media (max-width: 700px) { body.ver-tabla #mv-volver { display: block; } }
 
 /* ── Auth overlay ── */
 #overlay-login {
@@ -261,6 +331,13 @@ tr.sep-naranja td { background: var(--naranja); height: 3px; padding: 0; border:
   cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.18);
 }
 #volver-menu:hover { background: var(--rojo); color: #fff; border-color: var(--rojo); }
+
+/* En el celular, flotando se encimaba con el logo. Va en su propia línea, antes
+   del encabezado. Esta regla tiene que ir DESPUÉS del position:fixed de arriba:
+   misma especificidad, gana la última. */
+@media (max-width: 700px) {
+  #volver-menu { position: static; margin: 0 0 10px; }
+}
 </style>
 </head>
 <body>
@@ -365,6 +442,9 @@ tr.sep-naranja td { background: var(--naranja); height: 3px; padding: 0; border:
   <div style="font-size:16px;font-weight:700;color:var(--gris-txt);margin-bottom:8px;">Horario aún sin asignar</div>
   <div style="font-size:12px;">Configura las excepciones en <strong>📅 Próx. semana</strong> para generar este horario.</div>
 </div>
+
+<!-- Vista de celular: la llena renderMovil() con los MISMOS datos de la tabla -->
+<div id="vista-movil"></div>
 
 <div class="wrapper-tabla" id="wrapper-tabla">
 <table>
@@ -1402,6 +1482,98 @@ function td(v, cls) {
   return `<td class="${cls || ''}">${v || '—'}</td>`;
 }
 
+/* ── Vista de celular ──
+   Come de los MISMOS `dias` y `comidas` que la tabla, así que no hay una segunda
+   verdad que se pueda desincronizar: si cambia el motor de turnos, cambian las
+   dos. Se dibuja siempre; el CSS decide cuál se ve según el ancho. */
+const DIAS_CORTOS = ['DOM','LUN','MAR','MIÉ','JUE','VIE','SÁB'];
+
+function quienSoy() {
+  // El número con el que entró, contra el `emp` de la ficha del planeador.
+  if (!_empno) return null;
+  return PERSONAS.find(p => String(EQUIPO[p].emp || '').trim() === String(_empno).trim()) || null;
+}
+
+function mvDias(persona, dias, comidas, domingo, hoyISO) {
+  let out = '';
+  for (let d = 0; d < 7; d++) {
+    const f = new Date(domingo); f.setDate(f.getDate() + d);
+    const inf = infoTurno(persona, dias[d][persona], d);
+    const com = comidas[d][persona] || '';
+    const esHoy = f.toISOString().slice(0,10) === hoyISO;
+    const extras = [];
+    if (com)     extras.push(`<span>🍽 ${com}</span>`);
+    if (inf.ls1) extras.push(`<span>🪑 ${inf.ls1}</span>`);
+    if (inf.ls2) extras.push(`<span>🪑 ${inf.ls2}</span>`);
+    out += `<div class="mv-dia${esHoy ? ' mv-hoy' : ''}">
+      <div class="mv-fecha">${DIAS_CORTOS[d]}<b>${String(f.getDate()).padStart(2,'0')}</b></div>
+      <div>
+        <div class="mv-turno ${inf.cls || ''}">${inf.label || '—'}</div>
+        ${extras.length ? `<div class="mv-extra">${extras.join('')}</div>` : ''}
+      </div>
+    </div>`;
+  }
+  return out;
+}
+
+function renderMovil(dias, comidas, domingo) {
+  const cont = document.getElementById('vista-movil');
+  if (!cont) return;
+  const hoyISO = new Date().toISOString().slice(0,10);
+  const yo = quienSoy();
+  let html = '';
+
+  if (yo) {
+    const eq = EQUIPO[yo];
+    html += `<div class="mv-card mv-yo">
+      <div class="mv-head">TU SEMANA<small>${eq.nombre} — ${eq.cargo}</small></div>
+      ${mvDias(yo, dias, comidas, domingo, hoyISO)}
+    </div>`;
+  }
+
+  /* Sin `yo` —el gerente que entró por correo— no hay a quién destacar, así que
+     el equipo entero va desplegado en vez de plegado: si no, abriría a una
+     pantalla vacía. */
+  const resto = PERSONAS.filter(p => p !== yo && !EQUIPO[p].vacante);
+  if (resto.length) {
+    html += `<div class="mv-sec">${yo ? 'El equipo' : 'Horario de la semana'}</div>`;
+    resto.forEach(p => {
+      const eq = EQUIPO[p];
+      html += `<details class="mv-det"${yo ? '' : ' open'}>
+        <summary>${eq.nombre} <small>· ${eq.cargo}</small></summary>
+        ${mvDias(p, dias, comidas, domingo, hoyISO)}
+      </details>`;
+    });
+  }
+
+  html += `<button class="mv-btn-tabla" onclick="verTablaCompleta(true)">📊 Ver tabla completa</button>`;
+  cont.innerHTML = html;
+}
+
+function verTablaCompleta(si) {
+  document.body.classList.toggle('ver-tabla', si);
+  if (si) {
+    /* La tabla no cabe en un celular: se avisa que se arrastra, y se deja cómo
+       volver. Sin esto el botón parecía romper la pantalla. */
+    const w = document.getElementById('wrapper-tabla');
+    if (w && !document.getElementById('mv-volver')) {
+      const b = document.createElement('button');
+      b.id = 'mv-volver';
+      b.className = 'mv-btn-tabla';
+      b.textContent = '← Volver a mi horario';
+      b.onclick = () => verTablaCompleta(false);
+      b.style.marginBottom = '10px';
+      w.parentNode.insertBefore(b, w);
+    }
+    const b = document.getElementById('mv-volver');
+    if (b) b.style.display = '';
+    window.scrollTo(0, 0);
+  } else {
+    const b = document.getElementById('mv-volver');
+    if (b) b.style.display = 'none';
+  }
+}
+
 function renderTabla(semana, domingo, dias, comidas) {
   const fmt = d => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
 
@@ -1457,6 +1629,7 @@ function renderTabla(semana, domingo, dias, comidas) {
   ASESORES.forEach(bloquePersAs);
 
   document.getElementById('cuerpo').innerHTML = html;
+  renderMovil(dias, comidas, domingo);
 
   const fi = domingo;
   const ff = new Date(fi); ff.setDate(ff.getDate() + 6);
