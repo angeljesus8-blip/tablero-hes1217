@@ -359,6 +359,26 @@ tr.sep-naranja td { background: var(--naranja); height: 3px; padding: 0; border:
 }
 @keyframes girar { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
+
+/* ── Acciones del gerente ──
+   En escritorio, `contents` deja que los botones sigan siendo hijos directos de
+   la barra: el diseño de siempre, sin tocar nada. El botón "⚙ Acciones" sobra
+   ahí, así que se esconde. */
+#acciones-ger { display: contents; }
+#btn-acciones { display: none; }
+
+@media (max-width: 700px) {
+  #barra-usuario.activo { flex-direction: column; align-items: stretch; gap: 8px; }
+  #sesion-txt {
+    font-size: 10px; text-align: center;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  #btn-acciones { display: block; width: 100%; padding: 9px; font-size: 12px; }
+  #acciones-ger { display: none; }
+  #acciones-ger.abierto { display: flex; flex-direction: column; gap: 6px; }
+  /* Botones a lo ancho: en un teléfono se tocan con el pulgar, no con puntería */
+  #acciones-ger .btn-sm { width: 100%; padding: 11px; font-size: 13px; }
+}
 </style>
 </head>
 <body>
@@ -407,17 +427,23 @@ tr.sep-naranja td { background: var(--naranja); height: 3px; padding: 0; border:
   </div>
 </div>
 
-<!-- Barra de usuario -->
+<!-- Barra de usuario (gerente).
+     En el celular no caben siete botones en una línea: con flex-end los de la
+     izquierda —Editar datos y Guardar semana— quedaban cortados FUERA de la
+     pantalla, imposibles de tocar. Ahí se pliegan tras "⚙ Acciones". -->
 <div id="barra-usuario">
-  Sesión: <span id="usuario-email"></span>
-  <button class="btn-sm btn-admin" onclick="abrirAdmin()">✎ Editar datos</button>
-  <button class="btn-sm" id="btn-guardar-sem" onclick="guardarSemana()" style="background:var(--azul);color:#fff;border:none;display:none;">💾 Guardar semana</button>
-  <button class="btn-sm" id="btn-desbloquear-sem" onclick="desbloquearSemana()" style="background:#888;color:#fff;border:none;display:none;">🔓 Desbloquear</button>
-  <button class="btn-sm" id="btn-exportar" onclick="exportarExcel()" style="background:#1B5E20;color:#fff;border:none;display:none;">⬇ Excel</button>
-  <button class="btn-sm" onclick="respaldoBajar()" title="Descarga equipo, historial, excepciones y semanas guardadas en un archivo">🗄️ Respaldo</button>
-  <button class="btn-sm" onclick="document.getElementById('inp-respaldo').click()" title="Restaura un respaldo descargado antes">↥ Restaurar</button>
-  <input type="file" id="inp-respaldo" accept="application/json,.json" style="display:none" onchange="respaldoSubir(this)">
-  <button class="btn-sm btn-logout" onclick="doLogout()">Cerrar sesión</button>
+  <span id="sesion-txt">Sesión: <span id="usuario-email"></span></span>
+  <button class="btn-sm" id="btn-acciones" onclick="toggleAcciones()" aria-expanded="false">⚙ Acciones</button>
+  <div id="acciones-ger">
+    <button class="btn-sm btn-admin" onclick="abrirAdmin()">✎ Editar datos</button>
+    <button class="btn-sm" id="btn-guardar-sem" onclick="guardarSemana()" style="background:var(--azul);color:#fff;border:none;display:none;">💾 Guardar semana</button>
+    <button class="btn-sm" id="btn-desbloquear-sem" onclick="desbloquearSemana()" style="background:#888;color:#fff;border:none;display:none;">🔓 Desbloquear</button>
+    <button class="btn-sm" id="btn-exportar" onclick="exportarExcel()" style="background:#1B5E20;color:#fff;border:none;display:none;">⬇ Excel</button>
+    <button class="btn-sm" onclick="respaldoBajar()" title="Descarga equipo, historial, excepciones y semanas guardadas en un archivo">🗄️ Respaldo</button>
+    <button class="btn-sm" onclick="document.getElementById('inp-respaldo').click()" title="Restaura un respaldo descargado antes">↥ Restaurar</button>
+    <input type="file" id="inp-respaldo" accept="application/json,.json" style="display:none" onchange="respaldoSubir(this)">
+    <button class="btn-sm btn-logout" onclick="doLogout()">Cerrar sesión</button>
+  </div>
 </div>
 
 <!-- Modal Admin -->
@@ -1959,6 +1985,16 @@ function sesionDelTablero() {
     const emp = JSON.parse(localStorage.getItem('hes_empleado') || 'null');
     return { cfg, emp, rol: localStorage.getItem('hes_role') };
   } catch (e) { return null; }
+}
+
+/* El menú de acciones solo existe en el celular; en escritorio los botones
+   están siempre a la vista y este botón ni se pinta. */
+function toggleAcciones() {
+  const caja = document.getElementById('acciones-ger');
+  const btn  = document.getElementById('btn-acciones');
+  const abierto = caja.classList.toggle('abierto');
+  btn.setAttribute('aria-expanded', abierto ? 'true' : 'false');
+  btn.textContent = abierto ? '✕ Cerrar acciones' : '⚙ Acciones';
 }
 
 function pedirLogin() {
