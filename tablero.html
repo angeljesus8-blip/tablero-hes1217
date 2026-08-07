@@ -398,7 +398,31 @@ document.getElementById('updated').innerHTML = '<span style="color:var(--naranja
 document.getElementById('liveWarning').classList.add('visible');
 (function(){
   const el=document.getElementById('headerStoreSub'); if(el) el.textContent='HES '+TIENDA_ID+' · '+TIENDA_NOMBRE;
-  const ft=document.getElementById('tbFooter'); if(ft) ft.textContent='Odemás · Grupo Gigante — uso interno HES '+TIENDA_ID;
+  const ft=document.getElementById('tbFooter');
+  if(ft) ft.textContent='Odemás · Grupo Gigante — uso interno HES '+TIENDA_ID;
+
+  /* La versión, en el pie. Se le PREGUNTA al service worker en vez de escribirla
+     aquí: sw.js dice que es el único sitio donde vive el número, y repetirlo
+     crearía dos que se separan —que es exactamente el problema que se quiso
+     evitar—. Si el SW no contesta (primera carga, o navegador sin soporte) el
+     pie se queda como está: es un dato de diagnóstico, no puede estorbar.
+
+     Hace falta porque sin ella un "no me aparece el botón" es una adivinanza:
+     no hay forma de saber si el código está mal o si ese teléfono se quedó con
+     una copia vieja. Pasó el 7-ago-2026 con los botones de asignar serie. */
+  if(!ft || !('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.addEventListener('message', function(ev){
+    if(ev.data && ev.data.version) ft.textContent += ' · ' + ev.data.version;
+  });
+  navigator.serviceWorker.ready.then(function(reg){
+    const sw = navigator.serviceWorker.controller || reg.active;
+    if(sw) sw.postMessage('version');
+  }).catch(function(){
+    /* Callar es correcto aquí: `ready` no resuelve nunca si la página se abrió
+       sin service worker (file://, modo incógnito, o la primera visita antes de
+       registrarlo). El pie se queda sin el número y no pasa nada más — avisar
+       de esto sería alarmar por no poder mostrar un dato de diagnóstico. */
+  });
 })();
 
 /* ---- El día, en vivo ----
