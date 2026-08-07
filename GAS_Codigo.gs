@@ -1113,3 +1113,18 @@ function probarPreventaCerrada() {
   var r = doGet({ parameter: { modo:'apartado_add', t:tok, sku:'PRUEBA', cliente:'PRUEBA BORRAR' } });
   Logger.log(r.getContent());
 }
+
+/* Enseña la REST API Key de OneSignal en el registro, para poder copiarla.
+   Sin guion bajo A PROPÓSITO: con él no saldría en el desplegable de Ejecutar.
+
+   Existe porque las claves se sacaron del código el 2-ago y quedaron solo en
+   Propiedades del script; cuando hizo falta moverlas a Supabase, no había forma
+   cómoda de leerlas. NO compartas la salida ni una captura de ella: el app_id
+   es público, la key no. */
+function verClaveOneSignal() {
+  var p = PropertiesService.getScriptProperties();
+  var k = p.getProperty('ONESIGNAL_KEY') || '';
+  Logger.log('ONESIGNAL_APP_ID: %s', p.getProperty('ONESIGNAL_APP_ID') || '(vacío)');
+  Logger.log('ONESIGNAL_KEY:    %s', k || '(vacío)');
+  Logger.log('largo de la key: %s caracteres', k.length);
+}
