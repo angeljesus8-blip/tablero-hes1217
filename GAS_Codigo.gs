@@ -1078,3 +1078,18 @@ function isoVenta_(fecha, hora) {
   var d = new Date(Number(f[3]), Number(f[2]) - 1, Number(f[1]), h, mi);
   return Utilities.formatDate(d, 'America/Mexico_City', "yyyy-MM-dd'T'HH:mm:ssXXX");
 }
+
+
+/* Diagnóstico manual del candado. No la llama nadie: se ejecuta a mano desde el
+   editor (Ejecutar → probarGuardian_) y el resultado sale en el registro.
+   Vivía suelta en GAS_guardian.gs; se integra aquí el 7-ago-2026 para que este
+   archivo sea el proyecto ENTERO y se pueda pegar completo sin perder nada. */
+function probarGuardian_() {
+  var props = PropertiesService.getScriptProperties();
+  var tok = props.getProperty('GAS_TOKEN');
+  Logger.log('GAS_TOKEN configurado: %s', tok ? 'sí (' + tok.length + ' chars)' : 'NO');
+  Logger.log('GAS_ESTRICTO: %s', props.getProperty('GAS_ESTRICTO'));
+  Logger.log('con token bueno  → %s', accesoPermitido_({ parameter: { t: tok } }));
+  Logger.log('con token malo   → %s', accesoPermitido_({ parameter: { t: 'xx' } }));
+  Logger.log('sin token        → %s', accesoPermitido_({ parameter: {} }));
+}
