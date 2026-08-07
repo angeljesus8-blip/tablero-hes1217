@@ -416,6 +416,10 @@ BEGIN
     SELECT v.sku, count(*)::int AS total
     FROM public.ventas v
     WHERE v.store_id = p_store AND v.sku IS NOT NULL AND v.sku <> ''
+      -- MISMO filtro que inventario_vivo: las entregas de preventa no cuentan,
+      -- el POS ya desconto esas piezas. Si uno cambia, el otro tambien.
+      -- Ver supabase_inventario_preventa.sql (7-ago-2026).
+      AND NOT EXISTS (SELECT 1 FROM public.apartados a WHERE a.venta_id = v.id)
     GROUP BY v.sku
   ), reportado AS (
     SELECT j.key AS sku,
@@ -435,6 +439,10 @@ BEGIN
     SELECT v.sku, count(*)::int AS total
     FROM public.ventas v
     WHERE v.store_id = p_store AND v.sku IS NOT NULL AND v.sku <> ''
+      -- MISMO filtro que inventario_vivo: las entregas de preventa no cuentan,
+      -- el POS ya desconto esas piezas. Si uno cambia, el otro tambien.
+      -- Ver supabase_inventario_preventa.sql (7-ago-2026).
+      AND NOT EXISTS (SELECT 1 FROM public.apartados a WHERE a.venta_id = v.id)
     GROUP BY v.sku
   ), reportado AS (
     SELECT j.key AS sku, coalesce((j.value->>'ev')::int, 0) AS ev
