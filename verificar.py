@@ -326,6 +326,36 @@ def r_preventa_sb():
         falla('preventa', 'captura_series.html llama apartado_entregar sin p_token.')
 
 
+def r_cargas_sb():
+    """Las cargas del Excel dejaron la hoja el 7-ago-2026. Estas dos cosas, si
+    se deshacen, no dan error: dan datos viejos con cara de actuales."""
+    # 1 · Ninguna pantalla puede volver a mandar una carga al Apps Script. Si lo
+    #     hiciera, el Excel iría a una hoja que ya nadie lee y el tablero
+    #     seguiría con el inventario del día anterior — sin avisar de nada.
+    for archivo in ('actualizar_datos.html', 'admin.html'):
+        s = leer(archivo)
+        if s is None: continue
+        for tipo in ("tipo:'catalogo'", "tipo:'catalogo_ref'", "tipo:'exhibicion'",
+                     "tipo:'promos'", "tipo:'comisiones'"):
+            if tipo in s:
+                falla('cargas', '%s vuelve a mandar %s al Apps Script. Las cargas van '
+                                'a Supabase: usa carga_catalogo / carga_promos / …'
+                      % (archivo, tipo))
+
+    # 2 · El stock solo se acepta de Supabase. El `modo=todo` del Apps Script
+    #     también trae inventario, pero de una hoja que ya no recibe el Excel:
+    #     un stock viejo no es un dato incompleto, es uno falso.
+    html = leer('tablero.html')
+    if html is None: return
+    m = re.search(r'(.{0,30})aplicarInventario\(d\.inventario\)', html)
+    if not m:
+        falla('cargas', 'no encontré dónde aplicarTodo aplica el inventario en tablero.html')
+    elif '__sb' not in m.group(1):
+        falla('cargas', 'aplicarTodo acepta inventario sin comprobar d.__sb: el del '
+                        'Apps Script sale de una hoja que ya no recibe el Excel y '
+                        'diría que hay piezas que ya se vendieron.')
+
+
 def r_preventa_stock():
     """La lectura del inventario y el corte tienen que contar las ventas con el
     MISMO filtro. Si se separan no da error: da stock inventado.
@@ -549,7 +579,7 @@ def r_cadenas():
 def main():
     staged = '--staged' in sys.argv
     r_sintaxis(); r_helpers(); r_version(staged); r_copias(); r_cupo()
-    r_preventa_sb(); r_preventa_stock()
+    r_preventa_sb(); r_preventa_stock(); r_cargas_sb()
     r_personales(); r_secretos(); r_silencios(); r_cadenas()
 
     for regla, msg in avisos:
