@@ -1349,7 +1349,7 @@ async function subirPromos(){
   btn.disabled=true; btn.innerHTML='<span class="spin"></span>Subiendo…';
   document.getElementById('resPromos').className='result';
   try{
-    const rp = await sbCargaAdmin('carga_promos', { p_filas: parsedPromos.rows });
+    const rp = await sbCargaAdmin('carga_promos', { p_filas: parsedPromos.rows, p_by: 'Admin 1217' });
     const est = { promoCount: rp.promos, promoVig: parsedPromos.vig };
     const eolCount=parsedPromos.rows.filter(r=>r.est==='EOL').length;
     /* Las que la base no admite se cuentan y se dicen: sin fecha de vigencia, o
