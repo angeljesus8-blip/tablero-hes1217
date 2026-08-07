@@ -404,6 +404,53 @@ probaron rompiéndolas a propósito antes de darlas por buenas.
 **Índice `apartados_serie_unica`:** una serie no puede estar en dos apartados
 vivos. Es el error que se descubre con los dos clientes enfrente.
 
+### Las entregas de preventa NO descuentan stock *(7-ago-2026)*
+
+**Una preventa se cobra en el POS el día que el cliente aparta, no el día que se
+lleva el equipo.** Todo lo de abajo sale de ahí, y es la regla que hay que tener
+en la cabeza antes de tocar nada de este cruce.
+
+Consecuencia: cuando llega el embarque, el *Informe de Artículos Totales* ya
+trae esas piezas **fuera** del On Hand. Se vio así el 7-ago, al subir el informe
+con los diez apartados ya ligados:
+
+    100307499 Orange Ocean    On Hand 1  ·  apartados 6
+    100307448 Graphite Black  On Hand 1  ·  apartados 2
+
+Seis piezas apartadas de una sola en existencia es imposible: esa es la prueba
+de que el On Hand ya venía sin ellas.
+
+Con `apartado_entregar` registrando una venta, `inventario_vivo` las restaba
+otra vez. **No daba negativos —hay `greatest(0,…)`— y por eso no se habría visto
+como un error: daba CERO.** El tablero habría marcado agotados dos SKU de los
+que sí queda una pieza libre.
+
+Por eso `inventario_vivo` excluye las ventas ligadas a un apartado
+(`a.venta_id = v.id`). La venta sigue existiendo con su serie, su vendedor y su
+fecha: cuenta para comisiones y para el detalle del día. Lo único que no hace es
+mover el stock.
+
+**Y `cargar_cortes` tiene que excluir LO MISMO.** Esto es lo que casi se queda
+fuera. El corte no se guarda: se despeja como *(total en Supabase − lo que
+reporta el GAS)*. Las entregas de preventa **solo existen en Supabase**
+—`apartado_entregar` no escribe en la hoja—, así que el corte se inflaría con
+ellas y, a partir del informe siguiente, **cada entrega restaría una venta
+normal del conteo**: con 3 ventas del día y 6 entregas, `vendido` daría 0 en vez
+de 3 y el tablero enseñaría 3 piezas de más.
+
+Eso es peor que el problema original. Enseñar stock que no existe manda a un
+asesor a buscar una caja que no está, con el cliente delante.
+
+`verificar.py` (regla `preventa-stock`) cuenta que el filtro esté en los tres
+sitios: `inventario_vivo` y las dos mitades de `cargar_cortes`. Se probó
+quitando uno.
+
+**Cómo se comprobó que no rompió nada:** el día del cambio no había ninguna
+venta ligada a un apartado, así que el cambio **no podía** alterar un solo
+número. Se comparó SKU por SKU antes y después: 227 filas, cero diferencias. Y
+luego se confirmó aparte que las dos funciones traían el filtro — porque "cero
+diferencias" también es lo que sale si el cambio no se aplicó.
+
 ---
 
 ## Cadena 7 · Horarios *(desde el 4-ago-2026, v119)*
