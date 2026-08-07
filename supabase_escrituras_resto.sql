@@ -192,6 +192,15 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'error', 'sin sku');
   END IF;
 
+  -- Ya estaba: se responde `existe` y NO se toca. Es lo que hace `agregarEol_`
+  -- en el Apps Script, y Admin lo muestra como "Ya existe este SKU". Cambiarlo
+  -- por un upsert silencioso pisaría el precio que alguien puso a mano sin que
+  -- se viera, y el precio del EOL es lo que decide cuánto se cobra en piso.
+  IF EXISTS (SELECT 1 FROM public.eol e
+              WHERE e.store_id = p_store AND e.sku = trim(p_sku)) THEN
+    RETURN jsonb_build_object('ok', true, 'existe', true, 'sku', trim(p_sku));
+  END IF;
+
   v_precio := p_precio;
   IF v_precio IS NULL THEN
     SELECT c.precio INTO v_precio FROM public.catalogo c
@@ -199,11 +208,7 @@ BEGIN
   END IF;
 
   INSERT INTO public.eol (store_id, sku, precio, pausado)
-  VALUES (p_store, trim(p_sku), v_precio, false)
-  ON CONFLICT (store_id, sku) DO UPDATE
-    SET precio = coalesce(EXCLUDED.precio, public.eol.precio),
-        pausado = false,
-        updated_at = now();
+  VALUES (p_store, trim(p_sku), v_precio, false);
 
   RETURN jsonb_build_object('ok', true, 'sku', trim(p_sku), 'precio', v_precio);
 EXCEPTION
@@ -237,13 +242,47 @@ END $fn$;
 -- Sin fecha de fin, siete días: es lo que hace `guardarAviso_`. Un aviso sin
 -- caducidad se queda en la pantalla de todos hasta que alguien se acuerda de
 -- borrarlo, y nadie se acuerda.
+--
+-- LA COLUMNA `tipo` FALTABA, y no es cosmética: el tablero la pinta como
+-- etiqueta azul (cardAviso, tablero.html l. 1354) para distinguir un CEA/LEA
+-- oficial de un recado interno. La hoja la guardaba (columna 7) y
+-- `leerAvisos_` la devolvía; el esquema de Supabase se quedó sin ella.
+--
+-- O sea que esto ya estaba roto ANTES de esta etapa: desde que las lecturas se
+-- movieron a Supabase (fase 2), `_deSupabase` no tenía de dónde sacarla y
+-- ponía 'manual' fijo. Los avisos oficiales llevan desde entonces sin su
+-- etiqueta. Nadie lo reportó porque un aviso sin distintivo se sigue leyendo
+-- igual — solo pierde la señal de que viene de corporativo.
+ALTER TABLE public.avisos
+  ADD COLUMN IF NOT EXISTS tipo text NOT NULL DEFAULT 'manual';
+
+-- La lectura tiene que devolverla, o la columna nueva no llega a nadie.
+DROP FUNCTION IF EXISTS public.avisos_vigentes(text);
+
+CREATE FUNCTION public.avisos_vigentes(p_store text)
+RETURNS TABLE (id bigint, titulo text, detalle text, prioridad text,
+               vigente_hasta date, creado_en timestamptz, tipo text)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
+AS $$
+  SELECT a.id, a.titulo, a.detalle, a.prioridad, a.vigente_hasta, a.creado_en, a.tipo
+  FROM public.avisos a
+  WHERE a.store_id = p_store
+    AND (a.vigente_hasta IS NULL
+         OR a.vigente_hasta >= (now() AT TIME ZONE 'America/Mexico_City')::date)
+  ORDER BY a.creado_en DESC;
+$$;
+
+REVOKE ALL ON FUNCTION public.avisos_vigentes(text) FROM public;
+GRANT EXECUTE ON FUNCTION public.avisos_vigentes(text) TO anon, authenticated;
+
 CREATE OR REPLACE FUNCTION public.aviso_guardar(
   p_store     text,
   p_token     text,
   p_titulo    text,
   p_detalle   text DEFAULT NULL,
   p_prioridad text DEFAULT 'normal',
-  p_hasta     date DEFAULT NULL
+  p_hasta     date DEFAULT NULL,
+  p_tipo      text DEFAULT 'manual'
 ) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
 AS $fn$
@@ -256,10 +295,11 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'error', 'sin titulo');
   END IF;
 
-  INSERT INTO public.avisos (store_id, titulo, detalle, prioridad, vigente_hasta)
+  INSERT INTO public.avisos (store_id, titulo, detalle, prioridad, vigente_hasta, tipo)
   VALUES (p_store, trim(p_titulo), nullif(trim(coalesce(p_detalle,'')),''),
           coalesce(nullif(trim(coalesce(p_prioridad,'')),''), 'normal'),
-          coalesce(p_hasta, ((now() AT TIME ZONE 'America/Mexico_City')::date + 7)))
+          coalesce(p_hasta, ((now() AT TIME ZONE 'America/Mexico_City')::date + 7)),
+          coalesce(nullif(trim(coalesce(p_tipo,'')),''), 'manual'))
   RETURNING id INTO nuevo;
 
   RETURN jsonb_build_object('ok', true, 'id', nuevo);
@@ -384,7 +424,7 @@ END $fn$;
 REVOKE ALL ON FUNCTION public.venta_eliminar(text,text,text)                   FROM public;
 REVOKE ALL ON FUNCTION public.eol_guardar(text,text,text,numeric)              FROM public;
 REVOKE ALL ON FUNCTION public.eol_eliminar(text,text,text)                     FROM public;
-REVOKE ALL ON FUNCTION public.aviso_guardar(text,text,text,text,text,date)     FROM public;
+REVOKE ALL ON FUNCTION public.aviso_guardar(text,text,text,text,text,date,text) FROM public;
 REVOKE ALL ON FUNCTION public.aviso_eliminar(text,text,bigint)                 FROM public;
 REVOKE ALL ON FUNCTION public.bundle_guardar(text,text,text,text,numeric,date,date) FROM public;
 REVOKE ALL ON FUNCTION public.bundle_eliminar(text,text,bigint)                FROM public;
@@ -393,7 +433,7 @@ REVOKE ALL ON FUNCTION public.bundle_limpiar(text,text)                        F
 GRANT EXECUTE ON FUNCTION public.venta_eliminar(text,text,text)                   TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.eol_guardar(text,text,text,numeric)              TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.eol_eliminar(text,text,text)                     TO anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.aviso_guardar(text,text,text,text,text,date)     TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.aviso_guardar(text,text,text,text,text,date,text) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.aviso_eliminar(text,text,bigint)                 TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.bundle_guardar(text,text,text,text,numeric,date,date) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.bundle_eliminar(text,text,bigint)                TO anon, authenticated;
