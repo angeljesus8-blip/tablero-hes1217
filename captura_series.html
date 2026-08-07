@@ -457,7 +457,12 @@ function _sbCuerpo(row){
     // lo mismo que "sin seguro" y hundiría el attach rate si se confunden.
     p_seguro: (row.seguro === true || row.seguro === false) ? row.seguro : null,
     p_fecha: String(row.fecha || ''),
-    p_hora:  String(row.hora || '')
+    p_hora:  String(row.hora || ''),
+    /* El id de esta captura. Es lo único que permite volver a encontrar la fila
+       para borrarla: la serie no basta —una devolución la repite otro día— y la
+       fecha tampoco. Sin esto, `venta_eliminar` no tiene por dónde agarrarla y
+       una captura borrada se queda descontando stock para siempre. */
+    p_captura_id: String(row.id || '')
   };
 }
 
@@ -797,15 +802,35 @@ function render(){
 function esc(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 function eliminarDeNube(id){
-  // Cancela la subida si aún está en cola
+  // Cancela la subida si aún está en cola — en los DOS lados. La cola de
+  // Supabase se identifica por p_captura_id, no por el id suelto.
   pending = pending.filter(p => p.id !== id);
   savePending();
+  sbPend = sbPend.filter(c => c.p_captura_id !== id);
+  saveSbPend();
+
   // Siempre avisa al servidor: si la fila ya subió la borra, si no existe no hace nada.
   // Si esto falla, la captura desaparece de aquí pero SIGUE en la hoja: hay que
   // decirlo, o el conteo del día queda descuadrado sin que nadie sepa por qué.
   gasEnviar({tipo:'eliminar', id}).catch(e => {
     toast('Se borró aquí, pero sigue en la hoja · ' + (e && e.message ? e.message : 'sin conexión'), 'warn');
   });
+
+  /* Y a Supabase, que hasta el 7-ago-2026 no se enteraba.
+     El alta tenía doble escritura desde la fase 3 y el borrado no, así que una
+     captura borrada se iba de la hoja y se quedaba en la tabla. Como el tablero
+     lee `inventario_vivo`, que descuenta de la tabla `ventas` DE SUPABASE, esa
+     pieza seguía descontada para siempre: el tablero mostraba MENOS stock del
+     que había en bodega, en ese SKU, sin dar ningún error.
+     Es el reverso exacto del incidente del 4-ago —una pieza de más por venta— y
+     por la misma causa: leer de un lado lo que se escribe en el otro. */
+  sbCallCS('venta_eliminar', { p_token: GAS_TOKEN, p_captura_id: id }, 12000)
+    .then(function(d){
+      if(!d || d.ok !== true){
+        toast('Se borró aquí, pero sigue contando en el inventario · ' +
+              ((d && d.error) || 'sin conexión'), 'warn');
+      }
+    });
 }
 
 window.del = i => {

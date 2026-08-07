@@ -1401,15 +1401,19 @@ function resurtirWA(){
 function marcarNoResurtir(sku, producto, btn){
   if(!confirm('"' + producto + '"\n\n¿Ya no se va a resurtir? Se quitará del listado.')) return;
   if(btn){ btn.disabled=true; btn.textContent='…'; }
-  const qs = 'modo=eol_add&sku=' + encodeURIComponent(sku) + '&pin=' + encodeURIComponent(TIENDA_ID);
-  gasPedir(qs, { prioritario:true }).then(function(data){
-    if(data && data.ok !== false){
+  /* A Supabase desde el 7-ago-2026. Sin precio a propósito: la base lo busca en
+     el catálogo, igual que hacía `agregarEol_` recorriendo la hoja. Si se
+     guardara sin precio, `eol_precio_venta` no podría calcular el 50 % y el
+     producto saldría marcado como EOL pero sin precio de venta, que es peor
+     que no marcarlo. */
+  sbEscribir('eol_guardar', { p_sku: sku }).then(function(data){
+    if(data && data.ok === true){
       eolSkuSet.add(sku);
       calcDerivados();
       render();
     } else {
       if(btn){ btn.disabled=false; btn.textContent='✕ EOL'; }
-      alert('No se pudo guardar. Verifica tu conexión.');
+      alert('No se pudo guardar' + (data && data.error ? ': ' + data.error : '. Verifica tu conexión.'));
     }
   }).catch(function(){
     if(btn){ btn.disabled=false; btn.textContent='✕ EOL'; }
@@ -2053,9 +2057,17 @@ function _deSupabase(d){
                skus: Array.isArray(b.skus) ? b.skus.join(',') : String(b.skus||''),
                precio:b.precio, d1:b.vigente_desde, d2:b.vigente_hasta }; }),
     avisos: (d.avisos||[]).map(function(a){
+      /* `tipo` venía fijo en 'manual' desde la fase 2, y no por decisión: la
+         tabla de Supabase no tenía la columna, así que no había de dónde
+         sacarla. Efecto: los avisos de corporativo perdieron su etiqueta azul
+         CEA/LEA en el tablero —cardAviso, l. 1354— y quedaron indistinguibles
+         de un recado interno. Nadie lo reportó porque el aviso se sigue
+         leyendo; solo pierde la señal de quién lo manda.
+         Columna agregada en supabase_escrituras_resto.sql. */
       return { id:String(a.id), titulo:a.titulo, detalle:a.detalle||'',
                fecha: a.creado_en ? String(a.creado_en).slice(0,10) : '',
-               d2:a.vigente_hasta, prioridad:a.prioridad||'normal', tipo:'manual' }; }),
+               d2:a.vigente_hasta, prioridad:a.prioridad||'normal',
+               tipo:a.tipo||'manual' }; }),
     apartados: (d.apartados||[]).map(_apartadoDeSupabase),
     ventas_hoy: { vend: vend },
     // Marca de origen. La lee aplicarTodo para saber si puede confiar en los

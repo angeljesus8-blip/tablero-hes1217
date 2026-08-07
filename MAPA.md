@@ -672,12 +672,39 @@ llegó y había que ligar series. Lo que falta para que la hoja no haga falta:
 | Bloque | Modos que hay que reponer | Estado |
 |---|---|---|
 | Preventa | `apartado_add/estatus/del` | ✅ v124 |
-| EOL | `eol_add`, `eol_del` | — |
-| Avisos y combos | `aviso_add/del`, `bundle_add/del/clear` | — |
-| Borrar una venta | `tipo:'eliminar'` | — |
+| EOL | `eol_add`, `eol_del` | 🔨 código listo, SQL sin aplicar |
+| Avisos y combos | `aviso_add/del`, `bundle_add/del/clear` | 🔨 código listo, SQL sin aplicar |
+| Borrar una venta | `tipo:'eliminar'` | 🔨 código listo, SQL sin aplicar |
 | Cargas de Admin | catálogo+inventario, `catalogo_ref`, exhibición, comisiones, promos | — |
 | Fotos de venta | Drive → Storage (se borran solas a los 7 días, no hay histórico que mover) | — |
 | Notificaciones | `notificar_` → OneSignal | — · **el único nudo real** |
+
+### Dos fugas que destapó el bloque 2 *(las dos llevaban abiertas desde la fase 2)*
+
+**1 · Borrar una captura no borraba la venta en Supabase.** `eliminarDeNube`
+avisaba al Apps Script y a nadie más. Como `inventario_vivo` descuenta de la
+tabla `ventas` **de Supabase**, esa pieza seguía descontada para siempre: **el
+tablero mostraba menos stock del que había en bodega**, en ese SKU, sin dar
+ningún error — solo un producto agotado que sí estaba.
+
+Es el reverso exacto del incidente del 4-ago —una pieza de MÁS por cada venta—
+y por la misma causa: leer de un lado lo que se escribe en el otro. La doble
+escritura de la fase 3 cerró el alta y **el borrado se quedó fuera**. Al cerrar
+media puerta conviene preguntar cuál es la otra media.
+
+Para poder borrar hacía falta saber qué fila borrar, y no se podía: la app
+identifica cada captura con su `id` y la tabla no lo guardaba. De ahí la
+columna `captura_id`.
+
+**2 · Los avisos de corporativo perdieron su etiqueta.** El tablero pinta un
+distintivo azul CEA/LEA (`cardAviso`, l. 1354) leyendo `tipo`. La tabla de
+Supabase nunca tuvo esa columna, así que `_deSupabase` ponía `'manual'` fijo y
+todos los avisos se veían iguales. Nadie lo reportó porque el aviso se sigue
+leyendo — solo pierde la señal de que viene de arriba. Es el tipo de fallo que
+no se nota: no rompe nada, solo borra información.
+
+Las dos aparecieron por lo mismo: al migrar una lectura se comprobó que
+devolviera **filas**, no que devolviera **los mismos campos**.
 
 El de notificaciones no es traducir código: la API key de OneSignal vive en
 Propiedades del script porque es secreta, y la anon key es pública. Pide una

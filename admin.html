@@ -874,6 +874,29 @@ function apiUrl(modo,extra){
   if (GAS_TOKEN) p.t = GAS_TOKEN;
   return API+'?'+new URLSearchParams(p).toString();
 }
+
+/* Escrituras a Supabase (etapa 2 de apagar la hoja, 7-ago-2026).
+   Reutiliza el cliente `sb` que ya monta initSB para los empleados, en vez de
+   abrir otro camino: dos clientes contra la misma base terminan divergiendo en
+   cabeceras o en manejo de errores, y el fallo aparece en el que menos se usa.
+
+   `p_store` y `p_token` van siempre: la base rechaza con `no_autorizado` si el
+   token no cuadra, igual que hacía el Apps Script. Devuelve el objeto de la
+   función, o algo con `ok:false` si ni siquiera se pudo llamar — así quien la
+   usa solo tiene que mirar `ok`. */
+async function sbEscribir(fn, params){
+  try{
+    if(!sb && !initSB()) return { ok:false, error:'Supabase no cargó' };
+    const { data, error } = await sb.rpc(fn, Object.assign({
+      p_store: String((_cfg && _cfg.store_id) || ''),
+      p_token: GAS_TOKEN
+    }, params || {}));
+    if(error) return { ok:false, error: error.message || 'error de red' };
+    return data || { ok:false, error:'respuesta vacía' };
+  }catch(e){
+    return { ok:false, error: (e && e.message) || 'sin conexión' };
+  }
+}
 const money=n=>'$'+Number(n||0).toLocaleString('es-MX');
 function toast(msg,ok){
   const el=document.getElementById('toast');
@@ -1519,9 +1542,16 @@ async function saveBundlesFromPdf(){
     const b=bundles[i];
     btn.textContent=`Guardando ${i+1}/${bundles.length}…`;
     try{
-      const r=await jsonp(apiUrl('bundle_add',{nombre:encodeURIComponent(b.nombre),skus:b.skus.replace(/,/g,'|'),precio:b.precio,d1:b.d1,d2:b.d2}));
+      /* Los SKUs van con coma, no con `|`: el `|` era para esquivar el parseo
+         de la URL del Apps Script y aquí ya no hay URL que esquivar —el cuerpo
+         va en JSON—. La base parte por coma y arma el array de verdad. */
+      const r=await sbEscribir('bundle_guardar',{p_nombre:b.nombre, p_skus:b.skus, p_precio:Number(b.precio)||0, p_desde:b.d1||null, p_hasta:b.d2||null});
       if(!r||!r.ok) failed.push(b.nombre);
     }catch(e){ failed.push(b.nombre); }
+    /* La espera de 500 ms era por la cola del Apps Script, que descarta las
+       llamadas encimadas. Supabase no tiene esa cola, pero se conserva: subir
+       veinte combos de golpe no es urgente y el ritmo lento no molesta a nadie.
+       Si algún día estorba, quitarla es seguro. */
     if(i<bundles.length-1) await new Promise(r=>setTimeout(r,500));
   }
   const ok=bundles.length-failed.length;
@@ -1572,7 +1602,8 @@ async function addBundle(){
   if(!skus.length){ toast('Ingresa al menos un SKU válido',false); return; }
   const btn=document.getElementById('btnB'); btn.disabled=true; btn.textContent='Guardando…';
   try{
-    await jsonp(apiUrl('bundle_add',{nombre:encodeURIComponent(nom),skus:skus.join('|'),precio:px,d1,d2}));
+    const r=await sbEscribir('bundle_guardar',{p_nombre:nom, p_skus:skus.join(','), p_precio:Number(px)||0, p_desde:d1||null, p_hasta:d2||null});
+    if(!r.ok){ toast(r.error||'Error al guardar',false); btn.disabled=false; btn.textContent='Agregar bundle'; return; }
     toast('Bundle agregado ✓');
     ['bNom','bPx','bD1','bD2'].forEach(id=>document.getElementById(id).value='');
     document.getElementById('bSkus').value='';
@@ -1582,28 +1613,25 @@ async function addBundle(){
 }
 async function delBundle(id){
   if(!confirm('¿Eliminar este bundle?')) return;
-  try{ await jsonp(apiUrl('bundle_del',{id})); toast('Eliminado'); loadBundles(); }
-  catch{ toast('Error',false); }
+  const r = await sbEscribir('bundle_eliminar', { p_id: Number(id) });
+  if(r.ok){ toast('Eliminado'); loadBundles(); }
+  else toast(r.error || 'Error', false);
 }
 async function clearBundles(){
   if(!confirm('¿Eliminar TODOS los bundles? Tendrás que volverlos a subir del PDF.')) return;
   const btn=document.querySelector('[onclick="clearBundles()"]');
   if(btn){ btn.disabled=true; btn.textContent='Limpiando…'; }
   try{
-    // Intentar endpoint directo (Apps Script actualizado)
-    const r=await jsonp(apiUrl('bundle_clear',{})).catch(()=>null);
-    if(r&&r.ok){
-      toast('Todos los bundles eliminados ✓');
-    } else {
-      // Fallback: cargar lista y borrar uno por uno con bundle_del
-      const lista=await jsonp(gasQS('modo=bundles'))||[];
-      let n=0;
-      for(const b of lista){
-        await jsonp(apiUrl('bundle_del',{id:b.id})).catch(()=>{});
-        n++;
-      }
-      toast(n+' bundle'+(n!==1?'s':'')+' eliminados ✓');
-    }
+    /* Se cayó el camino de respaldo que borraba uno por uno. Existía porque el
+       Apps Script podía no tener `bundle_clear` desplegado todavía, y entonces
+       había que recorrer la lista. En Supabase la función o está o no está: si
+       falta, el error lo dice, y borrar veinte veces "por si acaso" solo servía
+       para que un fallo a medias dejara la mitad de los combos vivos sin que
+       nadie supiera cuáles. */
+    const r = await sbEscribir('bundle_limpiar', {});
+    if(!r.ok){ toast(r.error || 'Error al limpiar', false); return; }
+    const n = Number(r.borradas) || 0;
+    toast(n + ' bundle' + (n!==1?'s':'') + ' eliminados ✓');
     loadBundles();
   }catch(e){ toast('Error: '+e.message,false); }
   finally{ if(btn){ btn.disabled=false; btn.textContent='🗑️ Limpiar todos'; } }
@@ -1727,12 +1755,17 @@ document.getElementById('filePdfEol').onchange=async function(e){
 };
 
 const _esperar=ms=>new Promise(r=>setTimeout(r,ms));
-// El límite de peticiones seguidas de Google a un mismo Apps Script es inconsistente
-// (a veces 1.5s entre llamadas alcanza, a veces se necesitan 5s) — se reintenta una
-// vez con más espera antes de darla por perdida, en vez de solo contar el error.
+/* El reintento existía por el límite de peticiones seguidas de Google a un
+   mismo Apps Script, que es inconsistente: a veces 1,5 s entre llamadas
+   alcanzan y a veces hacen falta 5. Supabase no tiene esa cola, pero el
+   reintento se queda: ahora cubre un corte de red a mitad de una subida de
+   veinte EOL del PDF, que es igual de real y peor de diagnosticar —quedarían
+   la mitad cargados y nadie sabría cuáles—. */
 async function _eolAddConReintento(sku,precio){
-  try{ return await jsonp(apiUrl('eol_add',{sku,precio})); }
-  catch(e){ await _esperar(4000); return await jsonp(apiUrl('eol_add',{sku,precio})); }
+  const args={ p_sku:String(sku), p_precio: precio===''||precio==null ? null : Number(String(precio).replace(/[^0-9.]/g,'')) };
+  let r=await sbEscribir('eol_guardar',args);
+  if(!r.ok){ await _esperar(4000); r=await sbEscribir('eol_guardar',args); }
+  return r;
 }
 async function saveEolFromPdf(){
   const btn=document.getElementById('btnSaveEol');
@@ -1847,8 +1880,9 @@ async function addEol(){
   if(!sku){ toast('Ingresa el SKU',false); return; }
   const btn=document.getElementById('btnE'); btn.disabled=true; btn.textContent='Guardando…';
   try{
-    const r=await jsonp(apiUrl('eol_add',{sku,precio:px}));
-    toast(r&&r.existe?'Ya existe este SKU':'EOL agregado ✓',!(r&&r.existe));
+    const r=await _eolAddConReintento(sku,px);
+    if(!r.ok){ toast(r.error||'Error al guardar',false); btn.disabled=false; btn.textContent='Agregar EOL'; return; }
+    toast(r.existe?'Ya existe este SKU':'EOL agregado ✓',!r.existe);
     document.getElementById('eSku').value=''; document.getElementById('ePx').value='';
     loadEol();
   }catch{ toast('Error al guardar',false); }
@@ -1856,8 +1890,9 @@ async function addEol(){
 }
 async function delEol(sku){
   if(!confirm('¿Eliminar SKU '+sku+' de EOL?')) return;
-  try{ await jsonp(apiUrl('eol_del',{sku})); toast('Eliminado'); loadEol(); }
-  catch{ toast('Error',false); }
+  const r = await sbEscribir('eol_eliminar', { p_sku: String(sku) });
+  if(r.ok){ toast('Eliminado'); loadEol(); }
+  else toast(r.error || 'Error', false);
 }
 
 /* ===== AVISOS CEA / LEA ===== */
@@ -1938,7 +1973,11 @@ async function guardarAviso(){
   const btn=document.getElementById('btnSaveAviso');
   btn.disabled=true; btn.textContent='⏳ Guardando…';
   try{
-    const j=await jsonp(apiUrl('aviso_add',{titulo,detalle:detalle.slice(0,800),d2,prioridad,tipo_doc:'CEA/LEA'}));
+    /* `p_tipo` NO es decorativo: el tablero lo pinta como etiqueta azul
+       (cardAviso, tablero.html l. 1354) para distinguir un CEA/LEA oficial de
+       un recado interno. La tabla de Supabase no tenía la columna; se agrega en
+       supabase_escrituras_resto.sql. */
+    const j=await sbEscribir('aviso_guardar',{p_titulo:titulo, p_detalle:detalle.slice(0,800), p_hasta:d2, p_prioridad:prioridad, p_tipo:'CEA/LEA'});
     if(j.ok){
       toast('Aviso guardado ✓',true);
       document.getElementById('ceaForm').style.display='none';
@@ -1958,7 +1997,7 @@ async function guardarAvisoManual(){
   const prioridad=document.getElementById('mP').value;
   if(!titulo){ toast('Falta el título',false); return; }
   try{
-    const j=await jsonp(apiUrl('aviso_add',{titulo,detalle:detalle.slice(0,800),d2,prioridad,tipo_doc:'manual'}));
+    const j=await sbEscribir('aviso_guardar',{p_titulo:titulo, p_detalle:detalle.slice(0,800), p_hasta:d2, p_prioridad:prioridad, p_tipo:'manual'});
     if(j.ok){
       toast('Aviso guardado ✓',true);
       document.getElementById('mT').value='';
@@ -1993,7 +2032,9 @@ async function cargarListaAvisos(){
 async function eliminarAviso(id){
   if(!confirm('¿Eliminar este aviso?')) return;
   try{
-    const j=await jsonp(apiUrl('aviso_del',{id}));
+    // El id de Supabase es numérico (bigserial); el de la hoja era un timestamp
+    // en texto. Number() aquí evita que PostgREST rechace el tipo.
+    const j=await sbEscribir('aviso_eliminar',{p_id:Number(id)});
     if(j.ok){ toast('Aviso eliminado',true); cargarListaAvisos(); }
     else toast(j.error||'Error',false);
   } catch(e){ toast('Error al eliminar',false); }
