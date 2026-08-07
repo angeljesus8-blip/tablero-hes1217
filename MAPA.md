@@ -630,10 +630,14 @@ ventas y comisiones) · ticket a GitHub por los commits huérfanos del planeador
 En el cliente, nada conocido: los 31 `catch` vacíos que quedan están revisados
 uno por uno y explicados, y `verificar.py` ya detiene cualquiera nuevo (A).
 
-Queda uno, y es del lado de la nube: **el guardián avisa por un canal que no se
-puede leer**. `accesoPermitido_` deja el rastro con `Logger.log` y ese registro
-se borra solo a las pocas horas, así que la única señal de que alguien está
-entrando sin token desaparece antes de que nadie la mire. Es el mismo patrón de
-siempre —falla que se ve igual que un éxito— movido al Apps Script.
+Del lado de la nube también quedó cerrado *(4-ago-2026)*. El guardián avisaba por
+un canal que no se podía leer —`Logger.log`, que se borra solo a las pocas horas,
+así que la única señal de que alguien entraba sin token desaparecía antes de que
+nadie la mirara—. Ahora `accesoPermitido_` llama a `contarSinToken_`
+(`GAS_Codigo.gs`, l. 922-953), que deja el rastro en **Propiedades del script**:
+`SINTOK_HOY`, y `SINTOK_AYER` al pasar la medianoche. Se leen desde Configuración
+del proyecto, sin depender de Cloud Logging, y la rotación por día quedó probada.
 
-Se cierra con el contador en Propiedades del script descrito en B.
+⚠️ Ojo al leerlo: `SINTOK_HOY` **solo se escribe cuando hay rechazos**, así que
+conserva la fecha del último día que sí los tuvo. Si la fecha no es la de hoy, no
+hubo llamadas sin token hoy — no es que el contador se haya parado.
