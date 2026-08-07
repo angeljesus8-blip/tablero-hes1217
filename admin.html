@@ -1610,7 +1610,14 @@ async function saveBundlesFromPdf(){
    nunca al navegador. */
 async function notificarEquipo(msg){
   const r = await sbEscribir('notificar', { p_msg: String(msg||'') });
-  if(r && r.ok === true) return;
+  if(r && r.ok === true){
+    /* Salió bien pero no había a quién mandarlo. Se dice UNA vez y sin alarma:
+       no hay nada roto, falta que el equipo active la campana del tablero.
+       El 7-ago-2026 los suscriptores eran cero — o sea que los avisos de combos
+       y promos llevaban tiempo sin llegarle a nadie. */
+    if(r.sin_suscriptores) toast('Guardado. Nadie tiene los avisos activados todavía', false);
+    return;
+  }
   /* Antes esto se tragaba el fallo con un console.warn y ya. El push es
      accesorio —lo importante ya se guardó— pero que NO llegue sí importa: el
      equipo se entera de los combos nuevos por esa notificación. Se dice en voz

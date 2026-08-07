@@ -128,6 +128,22 @@ BEGIN
     cuerpo := jsonb_build_object('respuesta_no_json', left(coalesce(resp.content,''), 200));
   END;
 
+  -- "All included players are not subscribed" NO es un fallo: la llamada llegó,
+  -- la llave es buena y OneSignal contestó 200. Lo que dice es que no hay NADIE
+  -- suscrito al push todavía.
+  --
+  -- Se separa a propósito. Tratarlo como error haría que Admin dijera "la
+  -- notificación no salió" cada vez que se sube un combo, y el gerente acabaría
+  -- ignorando un aviso que un día sí significará algo. Lo que hay que hacer con
+  -- esto no es arreglar código: es que el equipo toque la campana del tablero.
+  -- (Medido el 7-ago-2026: cero suscriptores. Las notificaciones que mandaba el
+  -- Apps Script no le llegaban a nadie, y nadie lo sabía porque
+  -- `notificarEquipo` se tragaba el resultado con un console.warn.)
+  IF resp.status = 200 AND cuerpo::text ILIKE '%not subscribed%' THEN
+    RETURN jsonb_build_object('ok', true, 'destinatarios', 0,
+                              'sin_suscriptores', true);
+  END IF;
+
   -- OneSignal responde 200 con un array `errors` cuando rechaza algo, así que
   -- mirar solo el código HTTP daría por buena una notificación que nunca salió.
   IF resp.status <> 200 OR cuerpo ? 'errors' THEN
