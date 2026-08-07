@@ -326,6 +326,31 @@ def r_preventa_sb():
         falla('preventa', 'captura_series.html llama apartado_entregar sin p_token.')
 
 
+def r_preventa_stock():
+    """La lectura del inventario y el corte tienen que contar las ventas con el
+    MISMO filtro. Si se separan no da error: da stock inventado.
+
+    `inventario_vivo` calcula `vendido = total - corte`. Las entregas de
+    preventa se excluyen porque el POS ya descontó esas piezas al cobrar el
+    apartado. Pero el corte se DESPEJA de ese mismo total, así que si uno
+    excluye y el otro no, cada entrega resta una venta normal del conteo y el
+    tablero enseña piezas que no están."""
+    FILTRO = 'a.venta_id = v.id'
+    archivos = {
+        'supabase_inventario_preventa.sql': 3,   # inventario_vivo + los 2 de cargar_cortes
+        'supabase_carga.sql': 2,                 # los 2 de cargar_cortes
+    }
+    for nombre, esperados in archivos.items():
+        sql = leer(nombre)
+        if sql is None: continue
+        n = sql.count(FILTRO)
+        if n != esperados:
+            falla('preventa-stock',
+                  '%s tiene %d filtros de entrega de preventa y deberían ser %d. '
+                  'inventario_vivo y cargar_cortes tienen que excluir lo MISMO, o el '
+                  'tablero enseña stock que no existe.' % (nombre, n, esperados))
+
+
 def git_cambiados(staged):
     cmd = ['git', 'diff', '--name-only'] + (['--cached'] if staged else ['HEAD'])
     try:
@@ -524,7 +549,7 @@ def r_cadenas():
 def main():
     staged = '--staged' in sys.argv
     r_sintaxis(); r_helpers(); r_version(staged); r_copias(); r_cupo()
-    r_preventa_sb()
+    r_preventa_sb(); r_preventa_stock()
     r_personales(); r_secretos(); r_silencios(); r_cadenas()
 
     for regla, msg in avisos:
