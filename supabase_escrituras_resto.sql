@@ -53,6 +53,24 @@ CREATE UNIQUE INDEX IF NOT EXISTS ventas_captura_unica
 -- que una app vieja que no lo mande sigue funcionando igual. Sin esa
 -- precaución, publicar esto rompería la captura de todos los celulares que aún
 -- no se hayan actualizado.
+--
+-- ⚠️ EL DROP DE ABAJO NO ES OPCIONAL, y esto se aprendió rompiéndolo.
+--
+-- `CREATE OR REPLACE` solo reemplaza si la lista de parámetros es IDÉNTICA. Al
+-- agregar uno, Postgres no sustituye: crea una SEGUNDA función con el mismo
+-- nombre. Y entonces PostgREST recibe una llamada de diez parámetros, ve dos
+-- candidatas y responde PGRST203 «could not choose the best candidate» — o sea
+-- que la captura deja de guardar en Supabase para TODOS los celulares que aún
+-- no se actualizaron, que son justo los que este DEFAULT venía a proteger.
+--
+-- Pasó de verdad el 7-ago-2026, entre que se aplicó este archivo y que se
+-- comprobó. Las ventas no se perdieron —la cola de Captura de Series las
+-- retuvo y las reintentó— pero durante ese rato el inventario de Supabase se
+-- quedó atrás, que es lo que infla el stock del tablero.
+--
+-- Regla: si cambia la firma, DROP explícito de la firma vieja. Siempre.
+DROP FUNCTION IF EXISTS public.venta_guardar(text,text,text,text,numeric,text,boolean,text,text,text);
+
 CREATE OR REPLACE FUNCTION public.venta_guardar(
   p_store      text,
   p_serie      text,
