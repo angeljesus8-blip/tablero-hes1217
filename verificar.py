@@ -356,6 +356,31 @@ def r_cargas_sb():
                         'diría que hay piezas que ya se vendieron.')
 
 
+def r_lectura_con_escritura():
+    """Si Admin ESCRIBE algo en Supabase, tiene que LEERLO de Supabase.
+
+    7-ago-2026: las escrituras de EOL, avisos, combos y comisiones se movieron en
+    v125 y las cuatro listas siguieron leyendo del Apps Script — o sea de la hoja
+    que ya no recibe nada. El gerente agregaba un EOL y la lista seguía enseñando
+    la de antes; lo borraba y seguía ahí. No da error: da una pantalla que miente
+    sobre lo que acabas de hacer.
+
+    Es el mismo fallo que costó las dos fugas de la fase 2, repetido. Por eso
+    ahora lo vigila una regla en vez de la memoria de nadie."""
+    s = leer('admin.html')
+    if s is None: return
+    # (modo del Apps Script, función de Supabase que ya escribe ese dato)
+    PARES = [('eol_cloud',    'eol_guardar'),
+             ('avisos_cloud', 'aviso_guardar'),
+             ('bundles',      'bundle_guardar'),
+             ('comisiones',   'carga_comisiones')]
+    for modo, escritura in PARES:
+        if escritura in s and ("gasQS('modo=%s'" % modo) in s:
+            falla('lectura', 'admin.html escribe %s en Supabase pero sigue leyendo '
+                             'modo=%s del Apps Script: la lista enseñaría lo de la hoja, '
+                             'que ya no recibe nada.' % (escritura, modo))
+
+
 def r_preventa_stock():
     """La lectura del inventario y el corte tienen que contar las ventas con el
     MISMO filtro. Si se separan no da error: da stock inventado.
@@ -579,7 +604,7 @@ def r_cadenas():
 def main():
     staged = '--staged' in sys.argv
     r_sintaxis(); r_helpers(); r_version(staged); r_copias(); r_cupo()
-    r_preventa_sb(); r_preventa_stock(); r_cargas_sb()
+    r_preventa_sb(); r_preventa_stock(); r_cargas_sb(); r_lectura_con_escritura()
     r_personales(); r_secretos(); r_silencios(); r_cadenas()
 
     for regla, msg in avisos:
