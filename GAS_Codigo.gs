@@ -1080,10 +1080,15 @@ function isoVenta_(fecha, hora) {
 }
 
 
-/* Diagnóstico manual del candado. No la llama nadie: se ejecuta a mano desde el
-   editor (Ejecutar → probarGuardian_) y el resultado sale en el registro.
-   Vivía suelta en GAS_guardian.gs; se integra aquí el 7-ago-2026 para que este
-   archivo sea el proyecto ENTERO y se pueda pegar completo sin perder nada. */
+/* Diagnóstico manual del candado. Vivía suelta en GAS_guardian.gs; se integra
+   aquí el 7-ago-2026 para que este archivo sea el proyecto ENTERO y se pueda
+   pegar completo sin perder nada.
+
+   OJO al ejecutarla: en Apps Script una función que termina en `_` es privada y
+   **no sale en el desplegable de Ejecutar**. Por eso existe el envoltorio
+   `probarGuardian` de abajo, que sí aparece. El comentario original de
+   `GAS_guardian.gs` decía "pruébalo desde el editor" sin avisar de esto, y
+   quien lo intentó no encontró la función. */
 function probarGuardian_() {
   var props = PropertiesService.getScriptProperties();
   var tok = props.getProperty('GAS_TOKEN');
@@ -1092,4 +1097,19 @@ function probarGuardian_() {
   Logger.log('con token bueno  → %s', accesoPermitido_({ parameter: { t: tok } }));
   Logger.log('con token malo   → %s', accesoPermitido_({ parameter: { t: 'xx' } }));
   Logger.log('sin token        → %s', accesoPermitido_({ parameter: {} }));
+}
+
+/* Envoltorio ejecutable de las pruebas manuales.
+   Sin guion bajo A PROPÓSITO: es la única forma de que salgan en el desplegable
+   de Ejecutar del editor. No las llama el router ni ningún cliente. */
+function probarGuardian() { probarGuardian_(); }
+
+/* Comprueba que la preventa quedó cerrada aquí (7-ago-2026). Debe registrar
+   ok:false con el mensaje de "ya no se guarda aquí". Si registra ok:true, el
+   bloqueo NO entró y además habrá dejado una fila 'PRUEBA BORRAR' en la hoja
+   Apartados que hay que quitar a mano. */
+function probarPreventaCerrada() {
+  var tok = PropertiesService.getScriptProperties().getProperty('GAS_TOKEN');
+  var r = doGet({ parameter: { modo:'apartado_add', t:tok, sku:'PRUEBA', cliente:'PRUEBA BORRAR' } });
+  Logger.log(r.getContent());
 }
