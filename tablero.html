@@ -275,7 +275,19 @@
   .btn-wa.pv-wa { width:auto; margin-top:0; padding:9px 14px; flex-shrink:0; }
   .ap-row { display:flex; align-items:center; gap:10px; padding:11px 14px; }
   .ap-est { font-size:10px; font-weight:800; text-transform:uppercase; padding:3px 8px; border-radius:6px; background:#f3effe; color:#7c3aed; flex-shrink:0; }
+  .ap-est.asg { background:#fff4e5; color:#c2700a; }
   .ap-est.ent { background:#eafaf1; color:var(--verde); }
+  .ap-est.can { background:#f4f4f4; color:#aaa; }
+  /* La serie en monoespaciada: se lee contra la etiqueta de la caja dígito a
+     dígito, y en tipografía proporcional el 0/O y el 1/I se confunden. */
+  .ap-serie { font-size:11px; font-weight:700; color:#444; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+              background:#f6f6f8; border-radius:5px; padding:2px 6px; display:inline-block; margin-top:4px; letter-spacing:.3px; }
+  .ap-acc { display:flex; gap:7px; margin-top:9px; }
+  .btn-ap { flex:1; border:none; border-radius:9px; padding:9px; font-family:inherit; font-size:12.5px; font-weight:700; cursor:pointer; }
+  .btn-ap.asignar { background:#fff4e5; color:#c2700a; }
+  .btn-ap.entregar { background:var(--verde); color:#fff; }
+  .btn-ap.gris { background:#f2f2f4; color:#888; flex:0 0 auto; padding:9px 12px; }
+  .btn-ap:disabled { background:#f2f2f4; color:#bbb; cursor:default; }
 
   /* ---- Modal apartado ---- */
   .ap-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:200; align-items:flex-end; justify-content:center; }
@@ -441,7 +453,13 @@ const FILTROS = [
   { id:'nov',   label:'📦 Novedades' },
   { id:'aviso', label:'📢 Avisos' },
 ];
-let filtroActivo = 'inicio';
+/* La pestaña se puede fijar desde fuera con #preventa. Lo usa Captura de Series
+   para devolver al asesor justo donde estaba después de escanear una serie: sin
+   esto vuelve al Inicio y tiene que buscar otra vez al cliente en la lista. */
+let filtroActivo = (function(){
+  const h = (location.hash || '').replace('#','');
+  return FILTROS.some(f => f.id === h) ? h : 'inicio';
+})();
 let busqueda = '';
 
 /* ====== Preventa Pura 90S (lanzamiento CEA 243 · inicia 22-jul-2026) ====== */
@@ -517,6 +535,10 @@ let _invEdadHoras = null;
 
 const invBySku = {};
 (D.inventario||[]).forEach(x=>{ invBySku[x.sku]=x; });
+/* Nombres y teléfonos de clientes se pintan con innerHTML. Son texto libre que
+   teclea el asesor, así que un apellido con `&` o un `<` cualquiera rompía la
+   tarjeta —y una serie es un dato que hay que poder leer entero—. */
+const esc = s => String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const money = n => '$'+Number(n||0).toLocaleString('es-MX');
 const money2 = n => '$'+Number(n||0).toLocaleString('es-MX',{minimumFractionDigits:2, maximumFractionDigits:2});
 const eolSkuSet = new Set((D.eol||[]).map(e=>e.sku));
@@ -978,14 +1000,69 @@ function cardPreventa(p){
 }
 function cardApartado(a){
   const p=preventaBySku[a.sku]||{};
-  const ent = String(a.estatus||'').toLowerCase()==='entregado';
-  return `<div class="card ap-row">
-    <div style="flex:1;min-width:0">
-      <h4 style="font-size:13.5px;font-weight:700">${a.cliente||'(sin nombre)'} ${a.seguro==='Si'?'🛡️':''}</h4>
-      <span style="font-size:11px;color:#999">${p.ver||''} ${p.color||''} ${p.cap?'· '+p.cap:''} · SKU ${a.sku} · ${a.telefono||'sin tel'} · ${money(Number(a.precio)||0)}${a.transaccion?' · Tx '+a.transaccion:''}</span>
+  const est = String(a.estatus||'Apartado');
+  const e   = est.toLowerCase();
+  const cls = e==='entregado' ? ' ent' : e==='asignado' ? ' asg' : e==='cancelado' ? ' can' : '';
+  const vivo = e!=='cancelado' && e!=='entregado';
+  /* Las acciones solo se pintan mientras el apartado siga vivo. Un entregado se
+     queda como registro de consulta: su serie ya no se toca porque el equipo
+     salió de la tienda y hay una venta apuntando a ella. */
+  const acciones = !vivo ? '' : `<div class="ap-acc">
+      <button class="btn-ap asignar" onclick="asignarSerie('${a.id}')">${a.serie?'🔁 Cambiar serie':'📷 Asignar serie'}</button>
+      <button class="btn-ap entregar" onclick="entregarApartado('${a.id}')" ${a.serie?'':'disabled'}>✅ Entregar</button>
+      <button class="btn-ap gris" onclick="cancelarApartado('${a.id}')" title="Cancelar apartado">✕</button>
+    </div>`;
+  return `<div class="card" style="padding:11px 14px">
+    <div class="ap-row" style="padding:0">
+      <div style="flex:1;min-width:0">
+        <h4 style="font-size:13.5px;font-weight:700">${esc(a.cliente||'(sin nombre)')} ${a.seguro==='Si'?'🛡️':''}</h4>
+        <span style="font-size:11px;color:#999">${p.ver||''} ${p.color||''} ${p.cap?'· '+p.cap:''} · SKU ${a.sku} · ${esc(a.telefono||'sin tel')} · ${money(Number(a.precio)||0)}${a.transaccion?' · Tx '+esc(a.transaccion):''}</span>
+        ${a.serie ? `<div><span class="ap-serie">N° ${esc(a.serie)}</span></div>` : ''}
+        ${a.entregado ? `<div style="font-size:10.5px;color:#aaa;margin-top:3px">Entregado el ${esc(a.entregado)}${a.entregadoPor?' por '+esc(a.entregadoPor):''}</div>` : ''}
+      </div>
+      <span class="ap-est${cls}">${esc(est)}</span>
     </div>
-    <span class="ap-est${ent?' ent':''}">${a.estatus||'Apartado'}</span>
+    ${acciones}
   </div>`;
+}
+
+/* ---- Ligar la pieza física al cliente ----
+   Dos momentos distintos y a propósito separados: ASIGNAR es apartar la caja
+   cuando llega el embarque —el equipo sigue en bodega—, ENTREGAR es que salió
+   con el cliente. Con un solo paso no habría forma de saber cuánta mercancía
+   está comprometida pero todavía en la tienda, que es lo que hay que saber el
+   día que llega el pedido.
+
+   El escaneo NO vive aquí: lo hace Captura de Series, que ya tiene cámara,
+   lector de código de barras y OCR de respaldo. Duplicar ese motor en el
+   tablero sería mantener dos lectores que se van a separar. */
+function _apPorId(id){ return APARTADOS.filter(function(a){ return String(a.id)===String(id); })[0]; }
+
+function asignarSerie(id){
+  const a = _apPorId(id); if(!a) return;
+  location.href = 'captura_series.html?apartado=' + encodeURIComponent(id) +
+                  '&accion=asignar&volver=tablero.html%23preventa';
+}
+
+function entregarApartado(id){
+  const a = _apPorId(id); if(!a) return;
+  if(!a.serie){ alert('Primero asigna la serie del equipo.'); return; }
+  /* Se manda a escanear otra vez en vez de confirmar con un botón: la
+     verificación no es que el asesor recuerde la serie, es que el aparato que
+     tiene en la mano SEA el de este cliente. Con cinco Orange Ocean iguales en
+     la bodega, confirmar de memoria es entregar la pieza de otro. */
+  location.href = 'captura_series.html?apartado=' + encodeURIComponent(id) +
+                  '&accion=entregar&volver=tablero.html%23preventa';
+}
+
+function cancelarApartado(id){
+  const a = _apPorId(id); if(!a) return;
+  if(!confirm('¿Cancelar el apartado de ' + (a.cliente||'') + '?\n\nLa pieza vuelve al cupo' +
+              (a.serie ? ' y la serie ' + a.serie + ' se libera para otro cliente.' : '.'))) return;
+  sbEscribir('apartado_estatus', { p_id: Number(id), p_estatus: 'Cancelado' }).then(function(d){
+    if(d && d.ok === true){ cargarApartadosNube(); }
+    else { alert('No se pudo cancelar: ' + ((d && d.error) || 'sin conexión')); }
+  });
 }
 function seccionPreventa(){
   const preInicio = HOY < new Date(PREVENTA_INICIA+'T00:00:00');
@@ -1006,10 +1083,33 @@ function seccionPreventa(){
     html += arr.map(cardPreventa).join('');
   });
   html += `<button class="btn-wa" style="margin-top:6px" onclick="preventaWA()">📲 Compartir preventa completa por WhatsApp</button>`;
+  /* Los apartados se separan por lo que HAY QUE HACER con cada uno, no por
+     fecha. El día que llega el embarque la pregunta es "¿a cuáles les falta
+     serie?", y en una lista plana de treinta esa respuesta no se ve. */
   const aps = APARTADOS.filter(a=>preventaBySku[a.sku]);
   if(aps.length){
-    html += `<div class="grupo-titulo" style="margin-top:20px">📋 Apartados registrados (${aps.length})</div>`;
-    html += aps.map(cardApartado).join('');
+    const es = a => String(a.estatus||'Apartado').toLowerCase();
+    const sinSerie  = aps.filter(a => es(a)!=='cancelado' && es(a)!=='entregado' && !a.serie);
+    const listos    = aps.filter(a => es(a)!=='cancelado' && es(a)!=='entregado' && a.serie);
+    const entregados= aps.filter(a => es(a)==='entregado');
+    const cancelados= aps.filter(a => es(a)==='cancelado');
+
+    if(sinSerie.length){
+      html += `<div class="grupo-titulo" style="margin-top:20px">📦 Falta ligar el equipo (${sinSerie.length})</div>`;
+      html += sinSerie.map(cardApartado).join('');
+    }
+    if(listos.length){
+      html += `<div class="grupo-titulo" style="margin-top:20px">✅ Listos para entregar (${listos.length})</div>`;
+      html += listos.map(cardApartado).join('');
+    }
+    if(entregados.length){
+      html += `<div class="grupo-titulo" style="margin-top:20px">🎉 Entregados (${entregados.length})</div>`;
+      html += entregados.map(cardApartado).join('');
+    }
+    if(cancelados.length){
+      html += `<div class="grupo-titulo" style="margin-top:20px">Cancelados (${cancelados.length})</div>`;
+      html += cancelados.map(cardApartado).join('');
+    }
   }
   return html;
 }
@@ -1048,22 +1148,32 @@ function guardarApartado(){
      si algún día alguien quiere filtrar o contar por color, tendrá que partir
      el texto por el "·". Está aquí escrito para que no le pille por sorpresa. */
   const producto = 'Pura 90S ' + (p.ver||'') + ' ' + (p.cap||'') + ' · ' + (p.color||'');
-  const qs='modo=apartado_add&pin='+encodeURIComponent(TIENDA_ID)
-    +'&sku='+encodeURIComponent(sku)+'&color='+encodeURIComponent(producto)
-    +'&cliente='+encodeURIComponent(cliente)+'&telefono='+encodeURIComponent(tel)
-    +'&precio='+encodeURIComponent(p.precio)+'&seguro='+encodeURIComponent(seguro)
-    +'&vend='+encodeURIComponent(vend)+'&transaccion='+encodeURIComponent(transaccion);
-  // prioritario: el vendedor está esperando con el cliente enfrente, no puede
-  // hacer fila detrás de las cargas de arranque.
-  gasPedir(qs, { prioritario:true }).then(function(data){
+  /* 7-ago-2026: va DIRECTO a Supabase; ya no pasa por la hoja.
+     Lo que se gana no es velocidad, es el cupo: el trigger `apartado_cabe`
+     vigila la tabla `apartados` y hasta hoy nadie insertaba ahí, así que nunca
+     se disparó. El único freno contra dos asesores apartando la última pieza a
+     la vez era el número de este navegador — y dos navegadores no se ven. */
+  sbEscribir('apartado_guardar', {
+    p_sku: sku, p_color: producto, p_cliente: cliente, p_telefono: tel,
+    p_precio: p.precio, p_seguro: (seguro === 'Si'),
+    p_vendedor: vend, p_transaccion: transaccion
+  }).then(function(data){
     btn.disabled=false; btn.textContent='Guardar apartado';
-    if(data && data.ok!==false){
+    if(data && data.ok === true){
       // el mismo texto que se acaba de mandar, para que la lista local y la
       // nube no digan cosas distintas hasta el próximo refresco
-      APARTADOS.push({id:data.id||('A'+Date.now()), sku:sku, color:producto, cliente:cliente,
-        telefono:tel, precio:String(p.precio), seguro:seguro, vend:vend, estatus:'Apartado', transaccion:transaccion});
+      APARTADOS.push({id:String(data.id), sku:sku, color:producto, cliente:cliente,
+        telefono:tel, precio:String(p.precio), seguro:seguro, vend:vend,
+        estatus:'Apartado', transaccion:transaccion, serie:''});
       cerrarApartado(); render(); cargarApartadosNube();
-    } else { alert('No se pudo guardar el apartado. Revisa tu conexión.'); }
+    } else if(data && data.error){
+      // "Cupo agotado: 4 de 4 piezas ya apartadas" llega tal cual desde la
+      // base. Se muestra: el asesor tiene al cliente enfrente y necesita saber
+      // que esa pieza ya no existe, no un "hubo un error".
+      alert('No se guardó: ' + data.error);
+    } else {
+      alert('Sin conexión — el apartado NO se guardó. Intenta de nuevo.');
+    }
   }).catch(function(){
     btn.disabled=false; btn.textContent='Guardar apartado';
     alert('Sin conexión — el apartado NO se guardó. Intenta de nuevo.');
@@ -1091,14 +1201,16 @@ function preventaWA(sku){
   }
   window.open('https://wa.me/?text='+encodeURIComponent(lines.join('\n')),'_blank');
 }
+/* Los apartados salen SOLO de Supabase desde el 7-ago-2026.
+   No hay caída al Apps Script a propósito: la hoja ya no recibe preventa, así
+   que responder desde ella sería servir una foto vieja SIN QUE NADA AVISE —y
+   una foto vieja de apartados es prometerle a un cliente una pieza que ya tiene
+   dueño—. Si Supabase no contesta, se marca la carga como fallida y el banner
+   dice "no prometas la última pieza todavía", que es la verdad. */
 async function cargarApartadosNube(){
-  if(!CLOUD_URL) return;
-  let data;
-  try{
-    data = await gasPedir('modo=apartados');
-    if(!Array.isArray(data)) throw new Error('respuesta inválida');
-  }catch(e){ marcarCarga('apartados', false); return; }
-  APARTADOS = data;
+  const filas = await sbCall('apartados_lista');
+  if(!Array.isArray(filas)){ marcarCarga('apartados', false); return; }
+  APARTADOS = filas.map(_apartadoDeSupabase);
   render();
   marcarCarga('apartados', true);
 }
@@ -1867,19 +1979,51 @@ async function cargarVentasNube(){
 const SB_URL = 'https://rjdrljtujbwooejrpyqv.supabase.co';
 const SB_KEY = 'sb_publishable_mELjDmCaFpNOxcwPi5MB2A_qSZ5ZA2z';
 
-async function sbRpc(fn, ms){
+/* Una llamada a Supabase con los parámetros que hagan falta. `p_store` va
+   siempre: ninguna función de la base contesta sin saber de qué tienda habla.
+   Devuelve null —nunca lanza— para que quien llama decida si cae al Apps
+   Script o si avisa; un throw aquí tumbaría el arranque del tablero. */
+async function sbCall(fn, params, ms){
   const ctl = new AbortController();
   const t = setTimeout(function(){ ctl.abort(); }, ms || 8000);
   try{
     const r = await fetch(SB_URL + '/rest/v1/rpc/' + fn, {
       method:'POST', signal: ctl.signal,
       headers:{ apikey:SB_KEY, Authorization:'Bearer '+SB_KEY, 'Content-Type':'application/json' },
-      body: JSON.stringify({ p_store: String(TIENDA_ID || '') })
+      body: JSON.stringify(Object.assign({ p_store: String(TIENDA_ID || '') }, params || {}))
     });
     if(!r.ok) return null;
     return await r.json();
   }catch(e){ return null; }        // sin red, timeout o rechazo: se cae al GAS
   finally{ clearTimeout(t); }
+}
+async function sbRpc(fn, ms){ return sbCall(fn, null, ms); }
+
+/* Las escrituras de preventa llevan el token de tienda, el mismo secreto que
+   ya protegía al Apps Script. Sale de la sesión (login_asesor lo devuelve), y
+   por eso NO está escrito en este archivo, que es público. Sin token la base
+   responde `no_autorizado` — a propósito: la anon key sola no debe escribir. */
+function sbEscribir(fn, params){
+  return sbCall(fn, Object.assign({ p_token: GAS_TOKEN }, params || {}), 12000);
+}
+
+/* Una fila de `apartados_lista` → la forma que usan cardApartado y el cupo.
+   Vive suelta porque la usan DOS caminos: el viaje único (`tablero_todo`) y la
+   recarga después de escribir (`cargarApartadosNube`). Si se copiara en cada
+   uno, el día que se agregue un campo se agregaría en uno solo y el otro lo
+   perdería en silencio — que es justo lo que pasó con `transaccion` en agosto. */
+function _apartadoDeSupabase(a){
+  // `transaccion` es el ticket del POS: el enlace entre el apartado y la
+  // venta. Si se cae de aquí, se pierde sin que nada avise.
+  return { id:String(a.id), sku:a.sku, color:a.color||'', cliente:a.cliente,
+           telefono:a.telefono||'', precio: a.precio!=null ? String(a.precio) : '',
+           seguro: a.con_seguro ? 'Si' : '', vend:a.vendedor||'',
+           estatus:a.estatus||'Apartado', transaccion:a.transaccion||'',
+           serie:a.serie||'',
+           asignado: a.asignado_en ? String(a.asignado_en).slice(0,10) : '',
+           entregado: a.entregado_en ? String(a.entregado_en).slice(0,10) : '',
+           entregadoPor: a.entregado_por||'',
+           fecha: a.creado_en ? String(a.creado_en).slice(0,16).replace('T',' ') : '' };
 }
 
 /* Supabase → la forma que ya consumen aplicarInventario, aplicarPromos, etc. */
@@ -1912,15 +2056,11 @@ function _deSupabase(d){
       return { id:String(a.id), titulo:a.titulo, detalle:a.detalle||'',
                fecha: a.creado_en ? String(a.creado_en).slice(0,10) : '',
                d2:a.vigente_hasta, prioridad:a.prioridad||'normal', tipo:'manual' }; }),
-    apartados: (d.apartados||[]).map(function(a){
-      // `transaccion` es el ticket del POS: el enlace entre el apartado y la
-      // venta. Si se cae de aquí, se pierde sin que nada avise.
-      return { id:String(a.id), sku:a.sku, color:a.color||'', cliente:a.cliente,
-               telefono:a.telefono||'', precio: a.precio!=null ? String(a.precio) : '',
-               seguro: a.con_seguro ? 'Si' : '', vend:a.vendedor||'',
-               estatus:a.estatus||'Apartado', transaccion:a.transaccion||'',
-               fecha: a.creado_en ? String(a.creado_en).slice(0,16).replace('T',' ') : '' }; }),
-    ventas_hoy: { vend: vend }
+    apartados: (d.apartados||[]).map(_apartadoDeSupabase),
+    ventas_hoy: { vend: vend },
+    // Marca de origen. La lee aplicarTodo para saber si puede confiar en los
+    // apartados: los del Apps Script vienen de una hoja que ya nadie escribe.
+    __sb: true
   };
 }
 
@@ -1954,7 +2094,13 @@ function aplicarTodo(d){
   if(_esObj(d.promos))           { aplicarPromos(d.promos);    marcarCarga('promos', true); }
   if(Array.isArray(d.bundles))   { aplicarBundles(d.bundles);  marcarCarga('bundles', true); }
   if(Array.isArray(d.avisos))    { aplicarAvisos(d.avisos);    marcarCarga('avisos', true); }
-  if(Array.isArray(d.apartados)) { APARTADOS = d.apartados;    marcarCarga('apartados', true); }
+  /* Los apartados SOLO se aplican si vienen de Supabase (`d.__sb`).
+     `modo=todo` del Apps Script también los trae, pero desde el 7-ago los lee
+     de una hoja que ya nadie escribe. Y llega ~7 s DESPUÉS que Supabase: sin
+     este candado, la respuesta lenta borraría de la pantalla el apartado que el
+     asesor acaba de guardar, o le devolvería la serie a un equipo ya entregado.
+     No da error, solo deshace trabajo — por eso se marca el origen. */
+  if(d.__sb && Array.isArray(d.apartados)) { APARTADOS = d.apartados; marcarCarga('apartados', true); }
   aplicarVentas(d.ventas_hoy);
   calcDerivados();
   render();
@@ -1985,7 +2131,13 @@ async function refrescarNube(){
        cola se quedara atascada, esto volvería a inflar el stock — es lo primero
        que hay que mirar si el inventario no cuadra. */
     if(await cargarTodoSupabase()) return;
-    if(await cargarTodoNube()) return;
+    /* Supabase no contestó. El Apps Script sirve para todo lo demás, pero YA NO
+       para los apartados: su `modo=todo` los saca de la hoja, que desde el
+       7-ago no recibe preventa. Así que se pide la preventa aparte —otra vez a
+       Supabase, por si fue un timeout suelto—, y si tampoco esta vez, la carga
+       queda marcada como fallida y el banner lo dice. Mejor "no prometas la
+       última pieza" que un cupo inventado. */
+    if(await cargarTodoNube()){ cargarApartadosNube(); return; }
     // Respaldo: de una en una y espaciadas, porque juntas se pierden en silencio.
     // Orden por criticidad: primero lo que decide un precio o un cupo frente al
     // cliente (stock, 50% de EOL, apartados de preventa); los avisos y el
