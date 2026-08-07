@@ -106,14 +106,20 @@ BEGIN
    WHERE c.store_id = p_store AND c.vigente
      AND NOT EXISTS (SELECT 1 FROM _carga g WHERE g.sku = c.sku AND g.onhand <> 0);
 
-  INSERT INTO public.catalogo (store_id, sku, descripcion, upc, precio, vigente)
-  SELECT p_store, g.sku, g.descripcion, g.upc, g.precio, (g.onhand <> 0)
+  -- `subido_por` alimenta el "Por Fulano" de la pantalla de estado. Se le
+  -- pasaba p_by y solo se devolvia en la respuesta: la columna se quedaba en
+  -- NULL y esa linea decia siempre un guion. Encontrado el 7-ago al comprobar
+  -- por que no se movia cat_at.
+  INSERT INTO public.catalogo (store_id, sku, descripcion, upc, precio, vigente, subido_por)
+  SELECT p_store, g.sku, g.descripcion, g.upc, g.precio, (g.onhand <> 0),
+         nullif(trim(coalesce(p_by,'')),'')
   FROM _carga g
   ON CONFLICT (store_id, sku) DO UPDATE
     SET descripcion = excluded.descripcion,
         upc         = coalesce(excluded.upc, public.catalogo.upc),
         precio      = coalesce(excluded.precio, public.catalogo.precio),
         vigente     = excluded.vigente,
+        subido_por  = coalesce(excluded.subido_por, public.catalogo.subido_por),
         updated_at  = now();
 
   -- On Hand. La exhibición NO se toca aquí: tiene su propia carga y su propio
@@ -260,7 +266,8 @@ END $fn$;
 CREATE OR REPLACE FUNCTION public.carga_promos(
   p_store text,
   p_token text,
-  p_filas jsonb
+  p_filas jsonb,
+  p_by    text DEFAULT NULL
 ) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
 AS $fn$
@@ -294,9 +301,10 @@ BEGIN
      AND precio_pro >= precio_reg;
 
   INSERT INTO public.promos (store_id, sku, producto, precio_reg, precio_pro,
-                             estatus, msi, vigente_desde, vigente_hasta)
+                             estatus, msi, vigente_desde, vigente_hasta, subido_por)
   SELECT p_store, sku, producto, precio_reg, precio_pro,
-         estatus, msi, vigente_desde, vigente_hasta
+         estatus, msi, vigente_desde, vigente_hasta,
+         nullif(trim(coalesce(p_by,'')),'')
   FROM _pro
   WHERE vigente_hasta IS NOT NULL
     AND (precio_pro IS NULL OR precio_reg IS NULL OR precio_pro < precio_reg)
@@ -309,7 +317,9 @@ BEGIN
         estatus       = excluded.estatus,
         msi           = excluded.msi,
         vigente_desde = excluded.vigente_desde,
-        vigente_hasta = excluded.vigente_hasta;
+        vigente_hasta = excluded.vigente_hasta,
+        subido_por    = coalesce(excluded.subido_por, public.promos.subido_por),
+        updated_at    = now();
   GET DIAGNOSTICS n = ROW_COUNT;
 
   RETURN jsonb_build_object('ok', true, 'promos', n,
@@ -380,13 +390,13 @@ END $fn$;
 REVOKE ALL ON FUNCTION public.carga_catalogo(text,text,jsonb,text)   FROM public;
 REVOKE ALL ON FUNCTION public.carga_exhibicion(text,text,jsonb)      FROM public;
 REVOKE ALL ON FUNCTION public.carga_catalogo_ref(text,text,jsonb)    FROM public;
-REVOKE ALL ON FUNCTION public.carga_promos(text,text,jsonb)          FROM public;
+REVOKE ALL ON FUNCTION public.carga_promos(text,text,jsonb,text)          FROM public;
 REVOKE ALL ON FUNCTION public.carga_comisiones(text,text,jsonb,text,text) FROM public;
 
 GRANT EXECUTE ON FUNCTION public.carga_catalogo(text,text,jsonb,text)   TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.carga_exhibicion(text,text,jsonb)      TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.carga_catalogo_ref(text,text,jsonb)    TO anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.carga_promos(text,text,jsonb)          TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.carga_promos(text,text,jsonb,text)          TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.carga_comisiones(text,text,jsonb,text,text) TO anon, authenticated;
 
 

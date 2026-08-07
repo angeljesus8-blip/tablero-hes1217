@@ -407,7 +407,7 @@ $('btnPromo').onclick = async () => {
   $('btnPromo').disabled=true; const prev=$('btnPromo').textContent;
   $('btnPromo').innerHTML='<span class="spin"></span> Subiendo…'; $('resultPromo').className='result';
   try{
-    const r = await sbCarga('carga_promos', { p_filas: parsedPromo.rows });
+    const r = await sbCarga('carga_promos', { p_filas: parsedPromo.rows, p_by: quien });
     /* Las promos que la base no admite se APARTAN y se cuentan, no se tiran en
        silencio: sin fecha de vigencia, o con precio promo mayor o igual que el
        regular. En la hoja entraban y luego no se veían — aquí se dicen, porque
