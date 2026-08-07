@@ -146,14 +146,25 @@ REVOKE ALL ON FUNCTION public.notificar(text,text,text,text) FROM public;
 GRANT EXECUTE ON FUNCTION public.notificar(text,text,text,text) TO anon, authenticated;
 
 
--- ── 3 · PEGAR AQUÍ LAS CLAVES ───────────────────────────────
--- Sácalas del Apps Script: ⚙ Configuración del proyecto → Propiedades del
--- script. Sustituye los dos textos y ejecuta SOLO estas líneas.
+-- ── 3 · PEGAR AQUÍ LA LLAVE ─────────────────────────────────
+-- El `app_id` ya va puesto: NO es secreto. Está en tablero.html (l. 2246)
+-- porque el navegador lo necesita para suscribirse al push, y ese archivo es
+-- público. Escribirlo aquí no añade riesgo ninguno.
 --
--- Van directas al SQL Editor y no a un archivo: este repositorio es público.
+-- La REST API Key SÍ es secreta y es lo único que hay que pegar. Se saca de:
+--
+--   a) Apps Script → ⚙ Configuración del proyecto → Propiedades del script,
+--      la fila `ONESIGNAL_KEY`. Si la interfaz no enseña el valor, ejecuta
+--      `verClaveOneSignal` desde el editor (está en GAS_Codigo.gs) y sale en
+--      el registro.
+--
+--   b) O de la fuente original: onesignal.com → tu app → Settings →
+--      Keys & IDs → "REST API Key".
+--
+-- Se pega DIRECTAMENTE en el SQL Editor, nunca en un archivo del repo.
 /*
 INSERT INTO public.notif_config (store_id, app_id, api_key)
-VALUES ('1217', 'PEGA_AQUI_EL_ONESIGNAL_APP_ID', 'PEGA_AQUI_EL_ONESIGNAL_KEY')
+VALUES ('1217', 'db32a1ef-d484-4be3-adfc-2a9e17f7e4f1', 'PEGA_AQUI_LA_REST_API_KEY')
 ON CONFLICT (store_id) DO UPDATE
   SET app_id = excluded.app_id, api_key = excluded.api_key, actualizado = now();
 */
