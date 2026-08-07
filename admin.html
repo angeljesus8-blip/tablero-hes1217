@@ -884,6 +884,17 @@ function apiUrl(modo,extra){
    token no cuadra, igual que hacía el Apps Script. Devuelve el objeto de la
    función, o algo con `ok:false` si ni siquiera se pudo llamar — así quien la
    usa solo tiene que mirar `ok`. */
+/* Igual que sbEscribir, pero LANZA en vez de devolver {ok:false}.
+   Las cargas del Excel ya venían envueltas en try/catch que enseñan
+   `err.message`; si devolviera el error en silencio, el botón diría
+   "actualizado ✓" sobre una carga que no entró — y el equipo trabajaría con los
+   precios de la semana pasada sin saberlo. */
+async function sbCargaAdmin(fn, params){
+  const r = await sbEscribir(fn, params);
+  if(!r || r.ok !== true) throw new Error((r && r.error) ? String(r.error) : 'la nube no confirmó el guardado');
+  return r;
+}
+
 async function sbEscribir(fn, params){
   try{
     if(!sb && !initSB()) return { ok:false, error:'Supabase no cargó' };
@@ -972,7 +983,10 @@ async function subirExhibicion(){
   btn.disabled=true; btn.innerHTML='<span class="spin"></span>Subiendo…';
   document.getElementById('resExhib').className='result';
   try{
-    await gasEnviar({tipo:'exhibicion',by:'Admin 1217',rows:parsedExhib});
+    /* A Supabase (7-ago-2026). La carga toma ADEMAS el corte de exhibicion,
+       que es propio y no el del On Hand diario: si se compartieran, una pieza
+       de piso ya vendida reaparecería con el informe del día siguiente. */
+    await sbCargaAdmin('carga_exhibicion', { p_filas: parsedExhib });
     const conExhib = parsedExhib.filter(x=>x.exhibe>0).length;
     showResult('resExhib',true,`✅ ${parsedExhib.length} SKUs actualizados · ${conExhib} con piezas en exhibición.`);
   }catch(err){ showResult('resExhib',false,'Error al subir: '+err.message); }
@@ -1064,7 +1078,7 @@ async function subirCatalogoRef(){
   btn.disabled=true; btn.innerHTML='<span class="spin"></span>Subiendo…';
   document.getElementById('resCatRef').className='result';
   try{
-    await gasEnviar({tipo:'catalogo_ref',by:'Admin 1217',rows:parsedCatRef});
+    await sbCargaAdmin('carga_catalogo_ref', { p_filas: parsedCatRef });
     showResult('resCatRef',true,`✅ ${parsedCatRef.length} productos guardados en catálogo de referencia.`);
   }catch(err){ showResult('resCatRef',false,'Error al subir: '+err.message); }
   btn.textContent='Subir catálogo de referencia'; btn.disabled=false;
@@ -1131,14 +1145,12 @@ async function subirCatalogo(){
   btn.disabled=true; btn.innerHTML='<span class="spin"></span>Subiendo…';
   document.getElementById('resCat').className='result';
   try{
-    await gasEnviar({tipo:'catalogo',by:'Admin 1217',rows:parsedCat});
-    await new Promise(r=>setTimeout(r,2500));
-    let est=null; try{ est=await jsonp(gasQS('modo=estado')); }catch(e){}   // sin estado se muestra 'Enviado, revisa en unos segundos' en vez de confirmar en falso
-    if(est&&Number(est.catCount)>0){
-      showResult('resCat',true,`✅ Catálogo actualizado: <b>${est.catCount}</b> productos. Los teléfonos tomarán el catálogo nuevo al abrir la app.`);
-    } else {
-      showResult('resCat',true,`Enviado (${parsedCat.length} productos). Revisa en unos segundos.`);
-    }
+    /* La respuesta trae el conteo, asi que se van la espera de 2,5 s y la
+       segunda llamada para "confirmar": existian porque el Apps Script contesta
+       antes de terminar de escribir. Aqui la funcion no vuelve hasta que la
+       transaccion cerro, y si algo falla, lanza. */
+    const rc = await sbCargaAdmin('carga_catalogo', { p_filas: parsedCat, p_by: 'Admin 1217' });
+    showResult('resCat',true,`✅ Catálogo actualizado: <b>${rc.skus}</b> productos. El tablero ya lo está viendo.`);
   }catch(err){ showResult('resCat',false,'Error al subir: '+err.message); }
   btn.textContent='Subir y actualizar'; btn.disabled=false;
 }
@@ -1337,10 +1349,14 @@ async function subirPromos(){
   btn.disabled=true; btn.innerHTML='<span class="spin"></span>Subiendo…';
   document.getElementById('resPromos').className='result';
   try{
-    await gasEnviar({tipo:'promos',by:'Admin 1217',vig:parsedPromos.vig,rows:parsedPromos.rows});
-    await new Promise(r=>setTimeout(r,2500));
-    let est=null; try{ est=await jsonp(gasQS('modo=estado')); }catch(e){}   // sin estado se muestra 'Enviado, revisa en unos segundos' en vez de confirmar en falso
+    const rp = await sbCargaAdmin('carga_promos', { p_filas: parsedPromos.rows });
+    const est = { promoCount: rp.promos, promoVig: parsedPromos.vig };
     const eolCount=parsedPromos.rows.filter(r=>r.est==='EOL').length;
+    /* Las que la base no admite se cuentan y se dicen: sin fecha de vigencia, o
+       con precio promo mayor o igual al regular. Una promo que falta es un
+       precio que el asesor no le cobra al cliente. */
+    if(rp.sin_fecha || rp.precio_invalido)
+      toast(`⚠️ ${(rp.sin_fecha||0)+(rp.precio_invalido||0)} promos no entraron (revisa vigencia y precios)`, false);
     if(est&&Number(est.promoCount)>0){
       showResult('resPromos',true,
         `✅ <b>${est.promoCount}</b> promos actualizadas · vigencia ${est.promoVig||parsedPromos.vig}.<br>`+
@@ -2739,10 +2755,11 @@ async function guardarComisiones(){
   btn.disabled = true; btn.innerHTML = '<span class="spin"></span>Guardando…';
   document.getElementById('resComis').className = 'result';
   try{
-    await gasEnviar({tipo:'comisiones', rows,
-        periodoComisiones: document.getElementById('comisPeriodo').value.trim(),
-        periodoGarantias: document.getElementById('comisPeriodoGar').value.trim()});
-    await new Promise(r=>setTimeout(r,1500));
+    await sbCargaAdmin('carga_comisiones', { p_filas: rows,
+        p_periodo: document.getElementById('comisPeriodo').value.trim(),
+        // El periodo de garantías es otro campo y otra ventana de fechas: lo
+        // pinta comisiones.html. Sin él esa pantalla muestra un guion.
+        p_periodo_gar: document.getElementById('comisPeriodoGar').value.trim() });
     showResult('resComis', true, '✅ Comisiones guardadas — el equipo ya las puede ver en su Tablero.');
     cargarComisionesCloud();
   }catch(e){ showResult('resComis', false, 'Error al guardar: '+e.message); }

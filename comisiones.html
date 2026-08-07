@@ -200,8 +200,60 @@ function avisoNube(msg){
   el.textContent = '⚠ ' + msg;
 }
 
+/* Desde el 7-ago-2026 las comisiones se suben directo a Supabase, así que hay
+   que LEERLAS de ahí: la hoja ya no las recibe y el Apps Script devolvería el
+   último reporte que se subió antes del cambio — un mes viejo, con aspecto de
+   actual. Esa pantalla la mira el equipo para saber cuánto lleva ganado.
+
+   Se intenta Supabase primero y, si no contesta, se cae al Apps Script: los
+   reportes anteriores siguen en la hoja y valen más que una pantalla vacía. */
+const SB_URL_CO = 'https://rjdrljtujbwooejrpyqv.supabase.co';
+const SB_KEY_CO = 'sb_publishable_mELjDmCaFpNOxcwPi5MB2A_qSZ5ZA2z';
+
+async function comisionesDeSupabase(){
+  if(!_storeId) return null;
+  const ctl = new AbortController();
+  const t = setTimeout(function(){ ctl.abort(); }, 8000);
+  try{
+    const r = await fetch(SB_URL_CO + '/rest/v1/rpc/comisiones_lista', {
+      method:'POST', signal: ctl.signal,
+      headers:{ apikey:SB_KEY_CO, Authorization:'Bearer '+SB_KEY_CO, 'Content-Type':'application/json' },
+      body: JSON.stringify({ p_store: String(_storeId) })
+    });
+    if(!r.ok) return null;
+    const filas = await r.json();
+    if(!Array.isArray(filas) || !filas.length) return null;
+    // Supabase devuelve filas; esta pantalla espera el objeto del Apps Script.
+    return {
+      actualizado: filas[0].actualizado ? String(filas[0].actualizado).slice(0,10) : '',
+      periodoComisiones: filas[0].periodo || '',
+      periodoGarantias:  filas[0].periodo_gar || '',
+      empleados: filas.map(function(k){
+        return { empNo:k.empno||'', nombre:k.nombre||'', puesto:k.puesto||'',
+                 venta:Number(k.venta)||0, pptoPct:Number(k.ppto_pct)||0,
+                 alcance:Number(k.alcance)||0,
+                 // null NO es 0: "sin dato" y "cero garantías" se ven igual en
+                 // pantalla pero significan cosas distintas para quien cobra.
+                 garantiaPct: k.gar_pct==null ? null : Number(k.gar_pct),
+                 garantiaPzas: k.gar_pzas==null ? null : Number(k.gar_pzas),
+                 garantiaElegible: k.gar_elegible==null ? null : Number(k.gar_elegible),
+                 garantiaMonto: k.gar_monto==null ? null : Number(k.gar_monto) };
+      })
+    };
+  }catch(e){ return null; }
+  finally{ clearTimeout(t); }
+}
+
 // Trae la versión más reciente desde la nube de esta tienda (si Admin ya la configuró)
-function refreshComisionesCloud(){
+async function refreshComisionesCloud(){
+  const sb = await comisionesDeSupabase();
+  if(sb){
+    D = sb;
+    localStorage.setItem(COMISKEY, JSON.stringify(D));
+    pintarPeriodos();
+    render();
+    return;
+  }
   if(!CLOUD_URL) return;
   const cb = '_cbComis' + Date.now();
   window[cb] = function(data){
