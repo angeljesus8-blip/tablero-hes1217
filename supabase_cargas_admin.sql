@@ -75,25 +75,30 @@ BEGIN
     sku text, descripcion text, upc text, precio numeric, onhand int
   ) ON COMMIT DROP;
 
+  -- La subconsulta NO es adorno: `DISTINCT ON` no puede referirse a los alias de
+  -- salida del propio SELECT —eso solo lo permite ORDER BY—, así que
+  -- `DISTINCT ON (sku)` sobre columnas sin nombre falla con
+  -- «42703: column "sku" does not exist». Pasó el 7-ago-2026 al subir el primer
+  -- informe de verdad. Se nombran los campos dentro y se filtra fuera.
   INSERT INTO _carga (sku, descripcion, upc, precio, onhand)
-  SELECT DISTINCT ON (sku)
-         trim(x->>'sku'),
-         coalesce(x->>'desc',''),
-         nullif(trim(coalesce(x->>'upc','')),''),
-         nullif(regexp_replace(coalesce(x->>'precio',''),'[^0-9.]','','g'),'')::numeric,
-         -- `inventario.onhand` tiene CHECK (onhand >= 0). Un negativo en el
-         -- Excel —pasa cuando el POS arrastra un ajuste— reventaría el INSERT y
-         -- tumbaría la carga ENTERA, con el gerente delante y sin saber por qué.
-         -- Un stock negativo no significa nada en piso: es cero.
-         greatest(0, coalesce(nullif(regexp_replace(coalesce(x->>'onhand',''),'[^0-9-]','','g'),'')::int, 0))
-  FROM jsonb_array_elements(p_filas) x
-  WHERE trim(coalesce(x->>'sku','')) <> ''
+  SELECT DISTINCT ON (sku) sku, descripcion, upc, precio, onhand
+  FROM (
+    SELECT trim(x->>'sku') AS sku,
+           coalesce(x->>'desc','') AS descripcion,
+           nullif(trim(coalesce(x->>'upc','')),'') AS upc,
+           nullif(regexp_replace(coalesce(x->>'precio',''),'[^0-9.]','','g'),'')::numeric AS precio,
+           -- `inventario.onhand` tiene CHECK (onhand >= 0). Un negativo en el
+           -- Excel —pasa cuando el POS arrastra un ajuste— reventaría el INSERT
+           -- y tumbaría la carga ENTERA, con el gerente delante y sin saber por
+           -- qué. Un stock negativo no significa nada en piso: es cero.
+           greatest(0, coalesce(nullif(regexp_replace(coalesce(x->>'onhand',''),'[^0-9-]','','g'),'')::int, 0)) AS onhand
+    FROM jsonb_array_elements(p_filas) x
+    WHERE trim(coalesce(x->>'sku','')) <> ''
+  ) p
   -- Un mismo SKU puede venir en varias filas del Excel (varios UPC). Gana la
   -- que trae On Hand, y entre esas la de precio más alto: es el criterio que ya
   -- usaba `cargar_catalogo` y evita quedarse con una fila vacía por azar.
-  ORDER BY sku,
-           (coalesce(nullif(regexp_replace(coalesce(x->>'onhand',''),'[^0-9-]','','g'),'')::int,0)) DESC,
-           precio DESC NULLS LAST;
+  ORDER BY sku, onhand DESC, precio DESC NULLS LAST;
 
   GET DIAGNOSTICS n = ROW_COUNT;
 
