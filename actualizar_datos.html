@@ -165,6 +165,45 @@ async function gasEnviar(payload){
   return r;
 }
 
+/* ---- Las cargas van a Supabase desde el 7-ago-2026 ----
+   Subir el Excel ya no pasa por la hoja. Lo que se gana no es velocidad: es que
+   el tablero LO VEA. Las lecturas están en Supabase desde la fase 2, así que
+   cada Excel que se subía a la hoja no llegaba al tablero hasta que alguien
+   corría `resincronizar()` a mano — y nadie lo corría. El inventario del
+   tablero podía llevar días viejo sin que nada lo dijera.
+
+   Lanza si algo va mal, igual que `gasEnviar`, para que el `catch` que ya
+   existe en cada botón enseñe el error tal cual. Una carga que falla en
+   silencio deja al equipo mirando precios de la semana pasada. */
+const SB_URL_AD = 'https://rjdrljtujbwooejrpyqv.supabase.co';
+const SB_KEY_AD = 'sb_publishable_mELjDmCaFpNOxcwPi5MB2A_qSZ5ZA2z';
+
+async function sbCarga(fn, params){
+  const store = (_cfgAD && _cfgAD.store_id) || '';
+  if(!store) throw new Error('no hay sesión — entra desde el menú');
+  if(!GAS_TOKEN) throw new Error('tu sesión es vieja — sal y vuelve a entrar desde el menú');
+
+  let res;
+  try{
+    res = await fetch(SB_URL_AD + '/rest/v1/rpc/' + fn, {
+      method:'POST',
+      headers:{ apikey:SB_KEY_AD, Authorization:'Bearer '+SB_KEY_AD, 'Content-Type':'application/json' },
+      body: JSON.stringify(Object.assign({ p_store:String(store), p_token:GAS_TOKEN }, params||{}))
+    });
+  }catch(e){ throw new Error('sin conexión — no se subió nada'); }
+
+  let r = null;
+  // Callar aquí es correcto: una respuesta que no es JSON (un 502 con HTML de
+  // por medio, por ejemplo) se trata en los dos `if` de abajo, que sí lanzan
+  // con el código de estado. Tragarse el error de parseo evita enseñar
+  // "Unexpected token <" en vez de "la nube respondió 502".
+  try{ r = await res.json(); }catch(e){}
+  if(!res.ok) throw new Error('la nube respondió ' + res.status + (r && r.message ? ' · '+r.message : ''));
+  if(!r || r.ok !== true)
+    throw new Error((r && r.error) ? String(r.error) : 'la nube no confirmó el guardado');
+  return r;
+}
+
 
 // Quien haya entrado; si no hay sesión, que lo diga en vez de dejar pasar.
 const AUTORIZADOS = (_cfgAD && _cfgAD.nombre) ? [_cfgAD.nombre] : [];
@@ -236,16 +275,16 @@ $('btnGo').onclick = async () => {
   $('btnGo').innerHTML = '<span class="spin"></span> Subiendo…';
   $('result').className = 'result';
   try{
-    await gasEnviar({ tipo:'catalogo', by: quien, rows: parsed });
-    // confirma leyendo el estado del catálogo
-    await new Promise(r => setTimeout(r, 2500));
-    let estado = null;
-    try{ estado = await jsonp(gasQS('modo=estado')); }catch(e){}   // sin estado se muestra 'Enviado, revisa' en vez de confirmar en falso
-    if(estado && Number(estado.catCount) > 0){
-      showResult(true, `✅ Catálogo e inventario actualizados: <b>${estado.catCount}</b> productos.<br>Por ${estado.catBy||quien}. Los teléfonos tomarán el catálogo nuevo al abrir la app.`);
-    } else {
-      showResult(true, `Enviado (${parsed.length} productos). Si no ves el conteo, revisa la hoja en unos segundos.`);
-    }
+    /* La respuesta ya trae el conteo, así que se acabaron la espera de 2,5 s y
+       la segunda llamada para "confirmar". Ese rodeo existía porque el Apps
+       Script contesta antes de terminar de escribir; aquí la función no vuelve
+       hasta que la transacción cerró — y si algo falla, lanza.
+
+       Con ello se va también el mensaje "Enviado, revisa la hoja en unos
+       segundos", que era la forma educada de decir "no sé si guardó". */
+    const r = await sbCarga('carga_catalogo', { p_filas: parsed, p_by: quien });
+    showResult(true, `✅ Catálogo e inventario actualizados: <b>${r.skus}</b> productos.<br>` +
+      `Por ${quien}. El tablero ya lo está viendo.`);
   }catch(err){
     showResult(false, 'No se pudo subir: ' + err.message + '. Revisa tu conexión e inténtalo de nuevo.');
   }
@@ -368,14 +407,16 @@ $('btnPromo').onclick = async () => {
   $('btnPromo').disabled=true; const prev=$('btnPromo').textContent;
   $('btnPromo').innerHTML='<span class="spin"></span> Subiendo…'; $('resultPromo').className='result';
   try{
-    await gasEnviar({ tipo:'promos', by:quien, vig:parsedPromo.vig, rows:parsedPromo.rows });
-    await new Promise(r=>setTimeout(r,2500));
-    let est=null; try{ est=await jsonp(gasQS('modo=estado')); }catch(e){}   // idem: no confirma lo que no pudo verificar
-    if(est && Number(est.promoCount)>0){
-      showResultP(true, `✅ Promociones actualizadas: <b>${est.promoCount}</b> · vigencia ${est.promoVig||parsedPromo.vig}.<br>Por ${est.promoBy||quien}. La captura aplicará el precio promo vigente.`);
-    } else {
-      showResultP(true, `Enviado (${parsedPromo.rows.length} promos). Revisa la pestaña "Promos" en unos segundos.`);
-    }
+    const r = await sbCarga('carga_promos', { p_filas: parsedPromo.rows });
+    /* Las promos que la base no admite se APARTAN y se cuentan, no se tiran en
+       silencio: sin fecha de vigencia, o con precio promo mayor o igual que el
+       regular. En la hoja entraban y luego no se veían — aquí se dicen, porque
+       una promo que falta es un precio que el asesor no le cobra al cliente. */
+    let extra = '';
+    if(r.sin_fecha)       extra += `<br>⚠️ ${r.sin_fecha} sin fecha de vigencia — NO entraron.`;
+    if(r.precio_invalido) extra += `<br>⚠️ ${r.precio_invalido} con precio promo mayor o igual al regular — NO entraron.`;
+    showResultP(true, `✅ Promociones actualizadas: <b>${r.promos}</b> · vigencia ${parsedPromo.vig}.<br>` +
+      `Por ${quien}. La captura ya aplica el precio promo vigente.` + extra);
   }catch(err){ showResultP(false, 'No se pudo subir: ' + err.message); }
   $('btnPromo').textContent=prev; $('btnPromo').disabled=false;
 };

@@ -1900,7 +1900,23 @@ function aplicarVentas(data){
 }
 
 /* ---- Cargas sueltas (respaldo si no hay modo=todo) ---- */
+/* El stock sale SOLO de Supabase (ver aplicarTodo). Esta vía suelta se queda
+   como último recurso pero pidiéndoselo también a Supabase, no al Apps Script:
+   la hoja ya no recibe el Excel del día. */
 async function cargarInventarioNube(){
+  const bruto = await sbRpc('tablero_todo');
+  if(_esObj(bruto) && Array.isArray(bruto.inventario) && bruto.inventario.length){
+    aplicarInventario(_deSupabase(bruto).inventario);
+    calcDerivados(); render();
+    marcarCarga('inventario', true);
+    return;
+  }
+  marcarCarga('inventario', false);
+}
+
+/* Se conserva sin usar a propósito, para la etapa 5: cuando se retire el Apps
+   Script hay que poder ver qué se estaba llamando y desde dónde. */
+async function _cargarInventarioGasViejo(){
   let data;
   try{
     data = await gasPedir('modo=inventario');
@@ -2125,7 +2141,20 @@ async function cargarTodoNube(){
    de las dos ramas se quedaría atrás y el tablero mostraría cosas distintas
    según qué nube haya contestado. */
 function aplicarTodo(d){
-  aplicarInventario(d.inventario);                             marcarCarga('inventario', true);
+  /* El STOCK solo se acepta de Supabase, desde el 7-ago-2026.
+     El Excel del día se sube directo a Supabase: la hoja dejó de recibirlo, así
+     que el `modo=todo` del Apps Script devuelve el On Hand del último informe
+     que pasó por ahí — que se va quedando más viejo cada día que pasa.
+
+     Y un stock viejo no es un dato incompleto: es un dato FALSO. Dice que hay
+     piezas que ya se vendieron, y el asesor le promete al cliente algo que no
+     está. Sin stock el tablero avisa (el banner naranja); con stock inventado,
+     no avisa nadie.
+
+     Los PRECIOS sí siguen cayendo al Apps Script: una promo de hace unos días
+     casi siempre sigue vigente, y quedarse sin precios deja al asesor sin poder
+     vender. El dato viejo hace daño en el stock, no en el precio. */
+  if(d.__sb){ aplicarInventario(d.inventario);                 marcarCarga('inventario', true); }
   if(Array.isArray(d.eol))       { aplicarEol(d.eol);          marcarCarga('eol', true); }
   if(_esObj(d.promos))           { aplicarPromos(d.promos);    marcarCarga('promos', true); }
   if(Array.isArray(d.bundles))   { aplicarBundles(d.bundles);  marcarCarga('bundles', true); }

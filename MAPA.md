@@ -453,6 +453,76 @@ diferencias" también es lo que sale si el cambio no se aplicó.
 
 ---
 
+## Cadena 6-quater · Las cargas dejan la hoja *(7-ago-2026, v127)*
+
+```
+actualizar_datos.html ─ carga_catalogo ──┐
+                      ─ carga_promos ────┤
+admin.html ─ carga_exhibicion ───────────┼──► Supabase
+           ─ carga_catalogo_ref ─────────┤
+           ─ carga_comisiones ───────────┘
+```
+
+**Esto arregla algo que se sufrió el 7-ago:** subir el Excel escribía en la hoja,
+y el tablero lee de Supabase desde la fase 2. Los dos lados solo se juntaban al
+correr `resincronizar()` **a mano**, y nadie lo corría. El inventario del tablero
+podía llevar días viejo sin que nada lo dijera. Se descubrió porque los 12 SKU de
+la Pura 90S no aparecían por ningún lado después de subir el informe.
+
+**Subir el catálogo no es guardar una tabla: es tomar el corte.**
+`actualizarCatalogo_` cuenta las ventas por SKU en ese instante y las guarda como
+`ventaBaseline`; de ahí sale todo el stock:
+
+    stock = On Hand del informe − (ventas de ahora − ventas al subirlo)
+
+Por eso el corte se toma **dentro de `carga_catalogo`**, en la misma transacción
+que escribe el On Hand. En dos llamadas, una venta que entre en medio se contaría
+dos veces. La exhibición lleva su **propio** corte, a propósito: es ocasional, no
+diaria, y con uno compartido una pieza de piso ya vendida reaparecería con el
+informe del día siguiente.
+
+### Lo que se cerró en el mismo movimiento
+
+**`resincronizar()` quedó desactivada.** Traía de la hoja el catálogo, el
+inventario, las promos y las comisiones. Con la hoja ya sin recibir cargas,
+correrla habría reemplazado los datos buenos por una foto vieja de 227 filas —y
+habría dicho "los seis pasos en verde". Es el tercer sitio donde aparece el mismo
+patrón, después de los apartados: **una función de sincronización sobrevive al
+motivo por el que existía, y entonces destruye en vez de reparar.**
+
+**El stock solo se acepta de Supabase** (`d.__sb` en `aplicarTodo`). El
+`modo=todo` del Apps Script también trae inventario, pero de la hoja congelada. Y
+un stock viejo no es un dato incompleto: es uno falso, que dice que hay piezas ya
+vendidas. Sin stock el tablero avisa; con stock inventado no avisa nadie.
+
+**Los precios SÍ siguen cayendo al Apps Script.** Una promo de hace unos días casi
+siempre sigue vigente, y quedarse sin precios deja al asesor sin poder vender. El
+dato viejo hace daño en el stock, no en el precio.
+
+**`comisiones.html` pasó a leer de Supabase.** Se habría quedado enseñando el
+último reporte subido a la hoja —un mes viejo con aspecto de actual— justo en la
+pantalla que el equipo mira para saber cuánto lleva ganado.
+
+### Lo que la base rechaza y la hoja aceptaba
+
+La hoja se tragaba cualquier fila; las tablas tienen candados. Si se les manda
+una fila que no cumplen, revientan la carga **entera**:
+
+- `inventario.onhand` no admite negativos → se meten como cero
+- `promos.vigente_hasta` es obligatorio, y `precio_pro < precio_reg` es un CHECK
+  → esas filas se **apartan y se cuentan**, y la pantalla dice cuántas quedaron
+  fuera. Descartarlas en silencio sería peor: una promo que falta es un precio
+  que el asesor no le cobra al cliente.
+
+Un archivo que se parseó mal llega como lista vacía. `carga_catalogo` la
+**rechaza**: aceptarla borraría el catálogo entero y el gerente vería
+"actualizado ✓".
+
+`verificar.py` (regla `cargas`) bloquea que una pantalla vuelva a mandar una
+carga al Apps Script, y que el inventario se aplique sin comprobar el origen.
+
+---
+
 ## Cadena 7 · Horarios *(desde el 4-ago-2026, v119)*
 
 ```
@@ -722,7 +792,7 @@ llegó y había que ligar series. Lo que falta para que la hoja no haga falta:
 | EOL | `eol_add`, `eol_del` | 🔨 código listo, SQL sin aplicar |
 | Avisos y combos | `aviso_add/del`, `bundle_add/del/clear` | 🔨 código listo, SQL sin aplicar |
 | Borrar una venta | `tipo:'eliminar'` | 🔨 código listo, SQL sin aplicar |
-| Cargas de Admin | catálogo+inventario, `catalogo_ref`, exhibición, comisiones, promos | — |
+| Cargas de Admin | catálogo+inventario, `catalogo_ref`, exhibición, comisiones, promos | 🔨 v127, SQL sin aplicar |
 | Fotos de venta | Drive → Storage (se borran solas a los 7 días, no hay histórico que mover) | — |
 | Notificaciones | `notificar_` → OneSignal | — · **el único nudo real** |
 
