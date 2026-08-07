@@ -2,7 +2,7 @@ importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
 // ÚNICO lugar donde vive la versión de la app. Las páginas ya no la repiten:
 // registran './sw.js' con updateViaCache:'none' y el navegador detecta el
 // cambio al ver que este archivo es distinto. Subir el número aquí y ya.
-const VERSION = 'v125';
+const VERSION = 'v126';
 const CACHE = 'hes1217-' + VERSION;
 const ARCHIVOS = [
   './index.html',
@@ -42,6 +42,14 @@ self.addEventListener('activate', e => {
     )
   );
   self.clients.claim();
+});
+
+/* Responde qué versión está sirviendo. Lo pregunta el pie del tablero.
+   Se hace así, y no escribiendo el número en cada página, porque este archivo es
+   el único sitio donde vive la versión: dos copias del mismo número acaban
+   separándose y entonces el indicador miente, que es peor que no tenerlo. */
+self.addEventListener('message', e => {
+  if (e.data === 'version' && e.source) e.source.postMessage({ version: VERSION });
 });
 
 // HTML: network-first (siempre la versión más reciente si hay red)
