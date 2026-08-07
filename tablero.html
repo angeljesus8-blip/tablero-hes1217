@@ -2245,38 +2245,95 @@ window.addEventListener('online', function(){ _ultimoIntento = 0; alVolver(); })
 // ── Push notifications (OneSignal) ──────────────────────────────
 const ONE_APP_ID = 'db32a1ef-d484-4be3-adfc-2a9e17f7e4f1';
 
+/* El sitio NO vive en la raíz del dominio: está en
+   github.io/tablero-hes1217/. Un service worker servido desde un subdirectorio
+   no puede reclamar `/` — el navegador lo rechaza por seguridad— y con el scope
+   mal `OneSignal.init()` falla entero.
+
+   Eso es lo que tenía la campana muerta, y explica los CERO suscriptores del
+   7-ago-2026: nadie pudo suscribirse nunca. El fallo no se veía porque lo
+   recogía un `catch` con `console.warn`, que en un celular no lo lee nadie.
+
+   Se deriva de la ruta en vez de escribirlo: así sigue funcionando si el repo
+   cambia de nombre o si algún día se sirve desde la raíz. */
+const ONE_BASE = location.pathname.replace(/[^/]*$/, '');   // '/tablero-hes1217/'
+let _oneListo = false;
+let _oneError = '';
+
 function actualizarCampana(){
   const btn=document.getElementById('btnBell');
   if(!btn) return;
-  const p=('Notification' in window)?Notification.permission:'default';
-  btn.style.color = p==='granted'?'var(--rojo)':'#ddd';
-  btn.title = p==='granted'?'Avisos push activados':'Activar avisos push';
+  /* Se mira la suscripción de OneSignal, NO `Notification.permission`.
+     Son cosas distintas: el permiso lo da el navegador, la suscripción la
+     registra OneSignal. Se puede tener permiso y no estar suscrito —justo lo
+     que pasaba aquí— y entonces la campana decía "ya están activadas" mientras
+     no llegaba ni un aviso. */
+  let suscrito = false;
+  try{
+    suscrito = !!(window.OneSignal && OneSignal.User && OneSignal.User.PushSubscription
+                  && OneSignal.User.PushSubscription.optedIn);
+  }catch(e){
+    /* El SDK aún no terminó de cargar: se pinta como no suscrito, que es la
+       lectura honesta hasta que conteste. */
+  }
+  btn.style.color = suscrito ? 'var(--rojo)' : '#ddd';
+  btn.title = suscrito ? 'Avisos activados' : 'Activar avisos push';
 }
 
 async function activarNotifs(){
-  if(ONE_APP_ID==='TU_APP_ID_AQUI'){
-    alert('⚠️ El admin aún no configuró las notificaciones push.'); return;
+  if(!('Notification' in window) || !('serviceWorker' in navigator)){
+    alert('Este navegador no soporta avisos push.\n\nEn iPhone hay que abrir el tablero desde el ícono de la pantalla de inicio, no desde Safari.');
+    return;
   }
-  if(!('Notification' in window)){ alert('Tu navegador no soporta notificaciones.'); return; }
-  if(Notification.permission==='granted'){
-    alert('Ya tienes las notificaciones activadas ✓'); return;
+  if(_oneError){
+    // Antes esto se quedaba en console.warn y la campana parecía un ícono
+    // muerto. Si algo falló, que se lea en el teléfono.
+    alert('No se pudieron activar los avisos.\n\n' + _oneError);
+    return;
   }
-  if(typeof OneSignal==='undefined'){ alert('Cargando SDK… intenta de nuevo.'); return; }
+  if(!_oneListo){
+    alert('Los avisos aún se están cargando. Espera unos segundos y vuelve a tocar la campana.');
+    return;
+  }
+  if(Notification.permission === 'denied'){
+    alert('Los avisos están BLOQUEADOS para esta página.\n\nHay que permitirlos desde los ajustes del navegador (candado junto a la dirección → Notificaciones → Permitir) y volver a tocar la campana.');
+    return;
+  }
   try{
     await OneSignal.Notifications.requestPermission();
+    // Pedir permiso NO suscribe: hay que darse de alta explícitamente. Sin esta
+    // línea el navegador dice "permitido" y OneSignal sigue sin destinatarios,
+    // que es exactamente el estado en el que estaba todo el equipo.
+    if(OneSignal.User && OneSignal.User.PushSubscription){
+      await OneSignal.User.PushSubscription.optIn();
+    }
     actualizarCampana();
-  }catch(e){ console.warn('Push error',e); }
+    const ok = !!(OneSignal.User && OneSignal.User.PushSubscription
+                  && OneSignal.User.PushSubscription.optedIn);
+    alert(ok ? '✅ Avisos activados. Ya te van a llegar las novedades del tablero.'
+             : 'No quedó activado. Revisa que el navegador tenga permitidas las notificaciones para esta página.');
+  }catch(e){
+    alert('No se pudieron activar los avisos.\n\n' + ((e && e.message) || e));
+  }
 }
 
 window.OneSignalDeferred = window.OneSignalDeferred || [];
 OneSignalDeferred.push(async function(OneSignal){
   if(ONE_APP_ID==='TU_APP_ID_AQUI') return;
-  await OneSignal.init({
-    appId: ONE_APP_ID,
-    serviceWorkerPath: 'sw.js',
-    serviceWorkerParam: { scope: '/' },
-    notifyButton: { enable: false }
-  });
+  try{
+    await OneSignal.init({
+      appId: ONE_APP_ID,
+      // Ruta DESDE LA RAÍZ del dominio, que es como la espera OneSignal, y
+      // scope limitado al subdirectorio donde de verdad vive el sitio.
+      serviceWorkerPath: (ONE_BASE + 'sw.js').replace(/^\//, ''),
+      serviceWorkerParam: { scope: ONE_BASE },
+      notifyButton: { enable: false }
+    });
+    _oneListo = true;
+  }catch(e){
+    _oneError = (e && e.message) || String(e);
+    console.warn('OneSignal init falló:', e);
+  }
   actualizarCampana();
 });
 
