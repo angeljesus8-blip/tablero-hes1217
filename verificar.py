@@ -289,6 +289,43 @@ def r_cupo():
                           'Corre preventa_cupo_gen.py' % (sku, a, b))
 
 
+def r_preventa_sb():
+    """La preventa dejó la hoja el 7-ago-2026. Estas tres cosas son las que, si
+    se deshacen por descuido, no dan error: dan apartados que desaparecen de la
+    pantalla o cupos contados sobre datos viejos."""
+    html = leer('tablero.html')
+    if html is None: return
+
+    # 1 · Nada de preventa puede volver a escribirse en la hoja. Un apartado que
+    #     entre por el Apps Script no lo lee nadie: no aparece en el tablero, no
+    #     cuenta para el cupo, y su pieza se vende dos veces.
+    for modo in ('apartado_add', 'apartado_estatus', 'apartado_del'):
+        if 'modo=' + modo in html:
+            falla('preventa', 'tablero.html vuelve a llamar modo=%s. La preventa '
+                              'va a Supabase: usa apartado_guardar / apartado_estatus.' % modo)
+
+    # 2 · aplicarTodo solo puede aceptar apartados de Supabase. Sin el candado
+    #     __sb, la respuesta del Apps Script llega ~7 s después y borra de la
+    #     pantalla el apartado recién guardado.
+    m = re.search(r'if\s*\((.{0,40}?)Array\.isArray\(d\.apartados\)\)', html)
+    if not m:
+        falla('preventa', 'no encontré dónde aplicarTodo aplica los apartados en tablero.html')
+    elif '__sb' not in m.group(1):
+        falla('preventa', 'aplicarTodo acepta apartados sin comprobar d.__sb: los del '
+                          'Apps Script salen de una hoja que ya nadie escribe y pisarían '
+                          'lo que el asesor acaba de guardar.')
+
+    # 3 · Las escrituras van firmadas. Sin p_token la base responde
+    #     no_autorizado, y eso sale como "no se pudo guardar" sin decir por qué.
+    if 'sbEscribir' in html and 'p_token: GAS_TOKEN' not in html:
+        falla('preventa', 'sbEscribir dejó de mandar p_token: toda escritura de '
+                          'preventa se va a rechazar con no_autorizado.')
+
+    cap = leer('captura_series.html')
+    if cap is not None and 'apartado_entregar' in cap and 'p_token' not in cap:
+        falla('preventa', 'captura_series.html llama apartado_entregar sin p_token.')
+
+
 def git_cambiados(staged):
     cmd = ['git', 'diff', '--name-only'] + (['--cached'] if staged else ['HEAD'])
     try:
@@ -487,6 +524,7 @@ def r_cadenas():
 def main():
     staged = '--staged' in sys.argv
     r_sintaxis(); r_helpers(); r_version(staged); r_copias(); r_cupo()
+    r_preventa_sb()
     r_personales(); r_secretos(); r_silencios(); r_cadenas()
 
     for regla, msg in avisos:
