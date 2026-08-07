@@ -21,8 +21,8 @@ no solo el archivo que tocaste.
 | `horarios.html` | Planeador semanal. **Copia — no se edita aquí** (ver Cadena 7) | Gerente y equipo |
 | `sw.js` | Service worker. **Aquí vive la versión de la app** | Los 7 html |
 | `datos.js` | Vacío a propósito. Solo estructura | `tablero.html` |
-| Apps Script | 14 modos por `doGet` + guardar ventas por `doPost` | Todas |
-| Supabase | `tiendas`, `empleados` + 10 tablas nuevas sin usar aún | `index`, `admin` |
+| Apps Script | 14 modos por `doGet` + guardar ventas por `doPost`. **Ya no la preventa** (cadena 6-ter) | Todas |
+| Supabase | Las 11 tablas. **Fuente única de apartados** desde el 7-ago | Todas |
 
 ---
 
@@ -66,11 +66,16 @@ arriba: la sesión vieja no trae los campos nuevos.
 ## Cadena 2 · Escrituras al Apps Script
 
 ```
-tablero.html      → apartado_add, eol_add      (mandan pin=TIENDA_ID)
+tablero.html      → eol_add                    (manda pin=TIENDA_ID)
 captura_series    → guardar y eliminar venta   (POST)
 admin.html        → comisiones, bundles, avisos, notificar
 actualizar_datos  → catalogo, catalogo_ref, exhibicion, promos
 ```
+
+⚠️ **`apartado_add` salió de esta lista el 7-ago-2026.** La preventa ya no pasa
+por aquí: ver la cadena 6-ter. Los tres modos de apartados siguen existiendo en
+el Apps Script pero **responden un error a propósito**, para que una app vieja
+en caché diga "no se guardó" en vez de escribir en una hoja que ya nadie lee.
 
 **`ADMIN_PIN` ya no tiene que valer `1217`** *(desde el 4-ago-2026)*. Antes sí:
 `tablero.html` manda el número de tienda como PIN en `apartado_add` (l. 1030) y
@@ -324,6 +329,80 @@ rechaza con "Cupo agotado".
 De paso, el trigger sumaba `NEW.piezas` incluso al marcar un apartado como
 **Cancelado** —la pieza que se libera contaba como ocupada—, así que con el cupo
 lleno habría impedido cancelar. Corregido en el mismo archivo.
+
+---
+
+## Cadena 6-ter · La preventa dejó la hoja *(7-ago-2026, v124)*
+
+```
+tablero.html  ── apartado_guardar ──┐
+              ── apartado_estatus ──┤
+                                    ├──►  Supabase · tabla `apartados`
+captura_series.html                 │      (la ÚNICA verdad)
+  ?apartado=<id>&accion=asignar  ───┤
+  ?apartado=<id>&accion=entregar ───┘  apartado_entregar ─► tabla `ventas`
+```
+
+**Lo que se midió antes de tocar nada:** el Apps Script NUNCA escribió en
+Supabase. `agregarApartado_` hace `appendRow` en la hoja y ya. Los 9 apartados
+que había en la tabla eran el volcado manual del 2-ago, congelados ahí.
+
+Eso destapó algo que llevaba dos días pareciendo resuelto: **el trigger
+`apartado_cabe` —el que se corrigió el 5-ago para frenar el doble apartado—
+nunca se había disparado**, porque vigila una tabla en la que nadie insertaba.
+El único freno real contra dos asesores apartando la última pieza seguía siendo
+el número del navegador, que es lo que la cadena 6-bis creía haber arreglado.
+Una corrección puede quedar perfecta y no servir de nada si el dato entra por
+otra puerta.
+
+**Tres estados, y la diferencia importa:**
+
+| | Qué significa | Dónde está el equipo |
+|---|---|---|
+| `Apartado` | el cliente pagó, no hay pieza física ligada | no ha llegado |
+| `Asignado` | tiene serie: esa caja es suya | en bodega |
+| `Entregado` | salió con el cliente + venta registrada | con el cliente |
+
+Separar `Asignado` de `Entregado` es lo que permite saber, el día que llega el
+embarque, cuánta mercancía está comprometida pero todavía en la tienda. Con un
+solo paso ese número no existe.
+
+**El escáner vive en `captura_series.html`, no en el tablero.** Cámara,
+BarcodeDetector, el respaldo de html5-qrcode y el OCR para códigos rayados ya
+están ahí. El tablero solo enlaza con `?apartado=&accion=&volver=`. Si algún día
+alguien copia el lector al tablero, serán dos lectores que mantener y una mala
+lectura se arreglará en uno solo.
+
+**La venta la crea la base, no la app** (`apartado_entregar`): registra en
+`ventas` y cierra el apartado en la misma transacción. Separarlo dejaría equipos
+entregados sin venta si la red se cae entre las dos llamadas — y eso no da
+error, da inventario que no baja.
+
+**A quién se le acredita:** al asesor que hizo la preventa (`vendedor`), con
+fecha de HOY. Quién entregó físicamente se guarda aparte, en `entregado_por`.
+Ojo al comparar con el POS: ahí el ticket se cobró semanas antes, así que estas
+piezas caen en meses distintos en un reporte y en el otro. Es esperado, no un
+descuadre.
+
+### Las tres cosas que, si se deshacen, no dan error
+
+1. **El candado `__sb` en `aplicarTodo`.** El Apps Script también devuelve
+   apartados en `modo=todo`, sacados de la hoja muerta, y llega ~7 s DESPUÉS que
+   Supabase. Sin el candado, la respuesta lenta borra de la pantalla el apartado
+   que el asesor acaba de guardar, o le devuelve la serie a un equipo entregado.
+2. **`cargar_apartados_comisiones` ya no carga apartados.** Hacía
+   `DELETE FROM apartados` y reinsertaba desde la hoja. Correr `resincronizar()`
+   después del corte habría borrado todas las series y entregas, y habría
+   reportado "los seis pasos en verde".
+3. **`p_token` en toda escritura.** Es el mismo secreto de tienda que ya
+   protegía al Apps Script, movido de puerta. La anon key es pública y por sí
+   sola no debe poder escribir.
+
+Las tres las vigila `verificar.py` (regla `preventa`), y las tres reglas se
+probaron rompiéndolas a propósito antes de darlas por buenas.
+
+**Índice `apartados_serie_unica`:** una serie no puede estar en dos apartados
+vivos. Es el error que se descubre con los dos clientes enfrente.
 
 ---
 
@@ -583,8 +662,26 @@ Estado por fases, en `MIGRACION_PLAN.md`:
 | 1 · datos y paridad | ✅ cerrada el 4-ago con datos del mismo momento |
 | 2 · lecturas | ✅ tablero y captura (v115) · falta admin/comisiones |
 | 3 · ventas, doble escritura | ✅ **cada venta va a los dos lados (v115)** |
-| 4 · fotos, autollenado, edición | — |
+| 4 · fotos, autollenado, edición | 🔨 en curso · **preventa cerrada (v124)**, ver cadena 6-ter |
 | 5 · retirar el Apps Script | — |
+
+**La fase 4 se está haciendo por bloques, no de un salto** *(decidido el
+7-ago-2026)*. El primero fue la preventa, porque el embarque de la Pura 90S
+llegó y había que ligar series. Lo que falta para que la hoja no haga falta:
+
+| Bloque | Modos que hay que reponer | Estado |
+|---|---|---|
+| Preventa | `apartado_add/estatus/del` | ✅ v124 |
+| EOL | `eol_add`, `eol_del` | — |
+| Avisos y combos | `aviso_add/del`, `bundle_add/del/clear` | — |
+| Borrar una venta | `tipo:'eliminar'` | — |
+| Cargas de Admin | catálogo+inventario, `catalogo_ref`, exhibición, comisiones, promos | — |
+| Fotos de venta | Drive → Storage (se borran solas a los 7 días, no hay histórico que mover) | — |
+| Notificaciones | `notificar_` → OneSignal | — · **el único nudo real** |
+
+El de notificaciones no es traducir código: la API key de OneSignal vive en
+Propiedades del script porque es secreta, y la anon key es pública. Pide una
+Edge Function. Va al final por eso, no por tamaño.
 
 **Medido en producción, en el mismo aparato y sesión: 257 ms contra 7.011 ms.**
 Y con Supabase roto a propósito, el tablero sigue funcionando por el Apps

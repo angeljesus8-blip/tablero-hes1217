@@ -93,6 +93,15 @@
   .promo-badge.show{ display:block; }
   .promo-badge s{ color:#999; font-weight:600; }
 
+  /* ---- Modo preventa (llega desde el tablero con ?apartado=) ---- */
+  .ap-modo{ border:2px solid #7c3aed; }
+  .ap-modo-t{ font-size:15px; font-weight:800; color:#7c3aed; line-height:1.3; }
+  .ap-modo-s{ font-size:12.5px; color:#666; font-weight:600; margin-top:4px; line-height:1.45; }
+  /* La serie asignada, monoespaciada: se compara dígito a dígito contra la
+     etiqueta de la caja, y en proporcional el 0/O y el 1/I se confunden. */
+  .ap-modo-serie{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:13px; font-weight:700;
+    background:#f3effe; color:#4c1d95; border-radius:8px; padding:8px 11px; margin-top:10px; letter-spacing:.4px; }
+
   .empty{ text-align:center; color:#bbb; font-size:13px; padding:30px 20px; }
   .hist-note{ text-align:center; font-size:11px; color:#aaa; margin:10px 4px 0; line-height:1.5; }
   .hist-note b{ color:var(--azul); }
@@ -273,6 +282,15 @@
     </div>
     <div class="recon-warn" id="reconWarn">⚠ Producto NO reconocido — pudo ser mala lectura. Revisa o re-toma la foto.</div>
     <button class="btn btn-add" id="btnAdd" style="margin-top:6px;">＋ Agregar al reporte</button>
+  </div>
+
+  <!-- Modo preventa: se enciende con ?apartado=<id>&accion=asignar|entregar -->
+  <div class="card ap-modo" id="apModo" style="display:none">
+    <div class="ap-modo-t" id="apModoT">Preventa</div>
+    <div class="ap-modo-s" id="apModoS"></div>
+    <div class="ap-modo-serie" id="apModoSerie" style="display:none"></div>
+    <button class="btn" id="apModoBtn" style="margin-top:12px;background:#7c3aed;color:#fff">Ligar serie</button>
+    <button class="btn" id="apModoCancel" style="margin-top:8px;background:#f2f2f4;color:#666">Cancelar y volver</button>
   </div>
 
   <div class="lista-head">
@@ -575,6 +593,15 @@ const SB_KEY_CS = 'sb_publishable_mELjDmCaFpNOxcwPi5MB2A_qSZ5ZA2z';
 const SB_STORE  = (_cfgCS && _cfgCS.store_id) || '';
 
 async function sbRpcCS(fn, ms){
+  const d = await sbCallCS(fn, null, ms);
+  return Array.isArray(d) ? d : null;
+}
+
+/* La versión general: acepta parámetros y devuelve lo que sea que conteste la
+   función (las de escritura responden un objeto, no una lista). `sbRpcCS` se
+   queda encima porque sus tres llamadas SÍ exigen lista —un objeto ahí sería
+   un catálogo corrupto pintado como bueno. */
+async function sbCallCS(fn, params, ms){
   if(!SB_STORE) return null;
   const ctl = new AbortController();
   const t = setTimeout(function(){ ctl.abort(); }, ms || 8000);
@@ -582,11 +609,10 @@ async function sbRpcCS(fn, ms){
     const r = await fetch(SB_URL_CS + '/rest/v1/rpc/' + fn, {
       method:'POST', signal: ctl.signal,
       headers:{ apikey:SB_KEY_CS, Authorization:'Bearer '+SB_KEY_CS, 'Content-Type':'application/json' },
-      body: JSON.stringify({ p_store: String(SB_STORE) })
+      body: JSON.stringify(Object.assign({ p_store: String(SB_STORE) }, params || {}))
     });
     if(!r.ok) return null;
-    const d = await r.json();
-    return Array.isArray(d) ? d : null;
+    return await r.json();
   }catch(e){ return null; }
   finally{ clearTimeout(t); }
 }
@@ -832,6 +858,121 @@ window.finalizarVenta = function(conSeguro){
   toast(conSeguro ? '🛡️ Con Assurant · Agregada ✓' : 'Agregada ✓ · sin seguro', 'ok');
   $('serie').focus();
 };
+
+/* ==========================================================
+   MODO PREVENTA — ligar el equipo físico a un apartado
+   ==========================================================
+   Se enciende con ?apartado=<id>&accion=asignar|entregar, y quien manda esos
+   parámetros es el tablero. Esta pantalla existe aquí, y no en el tablero,
+   porque el escáner ya está aquí: cámara, BarcodeDetector, el respaldo de
+   html5-qrcode y el OCR para cuando el código de barras está rayado. Un
+   segundo lector en el tablero sería otro que mantener, y el día que se
+   arregle una mala lectura se arreglaría solo en uno.
+
+   Con el modo encendido, el botón normal de captura se apaga: la venta de una
+   entrega NO la crea esta app. La crea `apartado_entregar` en la base, en la
+   misma transacción que cierra el apartado. Si se hicieran por separado, una
+   caída de red entre las dos dejaría un equipo entregado sin venta — y eso no
+   da error, da inventario que no baja.
+   ========================================================== */
+const AP_MODO = (function(){
+  const q = new URLSearchParams(location.search);
+  const id = (q.get('apartado') || '').trim();
+  if(!id) return null;
+  const acc = q.get('accion') === 'entregar' ? 'entregar' : 'asignar';
+  return { id: id, accion: acc, volver: q.get('volver') || 'tablero.html#preventa' };
+})();
+let _apDatos = null;
+
+function apVolver(){ location.href = AP_MODO ? AP_MODO.volver : 'tablero.html'; }
+
+async function apCargar(){
+  if(!AP_MODO) return;
+  $('apModo').style.display = 'block';
+  $('apModoT').textContent = 'Cargando apartado…';
+  $('apModoBtn').disabled = true;
+  // El botón de captura normal estorba aquí: se apaga para que no haya dos
+  // caminos abiertos con el cliente enfrente.
+  $('btnAdd').style.display = 'none';
+
+  const filas = await sbCallCS('apartados_lista');
+  const a = Array.isArray(filas)
+    ? filas.filter(x => String(x.id) === String(AP_MODO.id))[0] : null;
+  if(!a){
+    $('apModoT').textContent = '⚠ No se pudo cargar el apartado';
+    $('apModoS').textContent = 'Revisa tu conexión y vuelve a intentarlo desde el tablero.';
+    return;
+  }
+  _apDatos = a;
+
+  const quien = a.cliente || '(sin nombre)';
+  const qué   = a.color || ('SKU ' + a.sku);
+  if(AP_MODO.accion === 'entregar'){
+    $('apModoT').textContent = '✅ Entregar a ' + quien;
+    $('apModoS').innerHTML = esc(qué) + '<br>Escanea la serie del equipo que le vas a dar. ' +
+      'Tiene que ser <b>la que ya tiene asignada</b>.';
+    $('apModoBtn').textContent = '✅ Confirmar entrega';
+    $('apModoBtn').style.background = '#13703c';
+  } else {
+    $('apModoT').textContent = '📦 Ligar equipo a ' + quien;
+    $('apModoS').innerHTML = esc(qué) + '<br>Escanea el número de serie de la caja que le vas a apartar.';
+    $('apModoBtn').textContent = a.serie ? '🔁 Cambiar la serie' : '📦 Ligar esta serie';
+  }
+  if(a.serie){
+    $('apModoSerie').style.display = 'block';
+    $('apModoSerie').textContent = 'Serie asignada: ' + a.serie;
+    // En "entregar" se precarga para que el asesor la vea completa y pueda
+    // cotejarla a ojo si el código de barras de esa caja no lee.
+    if(AP_MODO.accion === 'entregar' && !$('serie').value.trim()) $('serie').value = a.serie;
+  }
+  $('apModoBtn').disabled = false;
+  $('apModo').scrollIntoView({ behavior:'smooth', block:'center' });
+}
+
+async function apEjecutar(){
+  if(!AP_MODO || !_apDatos) return;
+  const serie = $('serie').value.trim();
+  if(!serie){ toast('Falta el número de serie', 'warn'); $('serie').focus(); return; }
+
+  const btn = $('apModoBtn');
+  const textoPrevio = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Guardando…';
+
+  const fn = AP_MODO.accion === 'entregar' ? 'apartado_entregar' : 'apartado_serie';
+  const args = { p_token: GAS_TOKEN, p_id: Number(AP_MODO.id), p_serie: serie };
+  // Quién entrega ≠ a quién se le acredita la venta. La venta va al asesor que
+  // hizo la preventa; esto guarda quién puso el equipo en manos del cliente.
+  if(AP_MODO.accion === 'entregar') args.p_quien = currentVend || '';
+  const d = await sbCallCS(fn, args, 12000);
+
+  btn.disabled = false; btn.textContent = textoPrevio;
+
+  if(!d){
+    // Sin cola de reintento a propósito: a diferencia de una captura, esto no
+    // se puede guardar "para después". Entregar es un acto físico y el asesor
+    // tiene que saber AHORA si quedó registrado o si no debe soltar el equipo.
+    toast('Sin conexión — NO se guardó. No entregues el equipo todavía.', 'warn');
+    return;
+  }
+  if(d.ok !== true){
+    toast('⚠ ' + (d.error || 'no se pudo guardar'), 'warn');
+    return;
+  }
+
+  beep(); if('vibrate' in navigator) navigator.vibrate(60);
+  if(AP_MODO.accion === 'entregar'){
+    toast(d.ya_entregado ? 'Ya estaba entregado ✓' : '🎉 Entregado y registrado como venta', 'ok');
+  } else {
+    toast(d.repetida ? 'Ya estaba ligada ✓' : '📦 Serie ligada al cliente', 'ok');
+  }
+  setTimeout(apVolver, 1200);   // que alcance a leerse el mensaje
+}
+
+if(AP_MODO){
+  $('apModoBtn').onclick   = apEjecutar;
+  $('apModoCancel').onclick = apVolver;
+  apCargar();
+}
 
 $('btnClear').onclick = () => {
   const hoy = hoyStr();
