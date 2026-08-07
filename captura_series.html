@@ -93,6 +93,22 @@
   .promo-badge.show{ display:block; }
   .promo-badge s{ color:#999; font-weight:600; }
 
+  /* ---- Ver la foto de una captura ---- */
+  .vd-lupa{ background:none; border:none; font-size:17px; padding:0 8px; cursor:pointer;
+    line-height:1; flex-shrink:0; }
+  .foto-modal{ position:fixed; inset:0; z-index:300; background:rgba(0,0,0,.72);
+    display:flex; align-items:center; justify-content:center; padding:16px; }
+  .foto-box{ background:#fff; border-radius:14px; max-width:560px; width:100%;
+    max-height:88vh; display:flex; flex-direction:column; overflow:hidden; }
+  .foto-head{ display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:12px 14px; border-bottom:1px solid #eee; }
+  .foto-head b{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:13.5px; letter-spacing:.3px; }
+  .foto-head button{ background:none; border:none; font-size:19px; color:#aaa; cursor:pointer; line-height:1; }
+  .foto-cuerpo{ padding:12px; overflow:auto; text-align:center; font-size:13px; color:#777; }
+  /* La foto se mira para leer una serie: tiene que poder ampliarse, no caber
+     bonito. Por eso el contenedor hace scroll en vez de encogerla. */
+  .foto-cuerpo img{ max-width:100%; height:auto; border-radius:8px; display:block; margin:0 auto; }
+
   /* ---- Modo preventa (llega desde el tablero con ?apartado=) ---- */
   .ap-modo{ border:2px solid #7c3aed; }
   .ap-modo-t{ font-size:15px; font-weight:800; color:#7c3aed; line-height:1.3; }
@@ -493,6 +509,35 @@ async function guardarEnSupabase(row){
   sbPend.push(cuerpo); saveSbPend();
 }
 
+/* La foto, a la base (7-ago-2026). Antes iba a Drive dentro del POST al Apps
+   Script; ahora viaja aparte y a Supabase.
+
+   Va DESPUÉS de la venta y sin bloquearla: una foto que no sube es una molestia
+   —no se podrá cotejar esa caja— pero una venta que no sube es dinero que no se
+   cuenta. Nunca se hace esperar a la segunda por la primera.
+
+   Tampoco entra en la cola de reintentos: esa cola existe para que no se pierda
+   ninguna venta, y meterle fotos de 150 KB la engordaría hasta reventar la
+   cuota de localStorage, que es donde vive. Si una foto no sube, se pierde. */
+async function subirFoto(capturaId, dataUrl){
+  if(!capturaId || !dataUrl || !SB_STORE || !GAS_TOKEN) return;
+  // El prefijo `data:image/jpeg;base64,` NO se manda: `decode()` lo guardaría
+  // como parte del JPEG y la imagen no abriría — y eso solo se descubre el día
+  // que alguien intenta mirarla, que es justo el día que importa.
+  const coma = dataUrl.indexOf(',');
+  if(coma < 0) return;
+  const mime = (dataUrl.slice(5, dataUrl.indexOf(';')) || 'image/jpeg');
+  const d = await sbCallCS('venta_foto_guardar', {
+    p_token: GAS_TOKEN, p_captura_id: String(capturaId),
+    p_imagen_b64: dataUrl.slice(coma + 1), p_mime: mime
+  }, 20000);
+  if(!d || d.ok !== true){
+    // Se avisa en voz baja: la venta ya quedó guardada, esto solo significa que
+    // esa captura no se va a poder cotejar por foto.
+    toast('La venta se guardó, pero la foto no subió', 'warn');
+  }
+}
+
 /* Se vacía al abrir la app y cuando vuelve la señal, igual que la del Sheet. */
 let _sbFlushing = false;
 async function flushSupabase(){
@@ -515,7 +560,11 @@ async function flushCloud(){
     while(pending.length){
       const row = pending[0];
       const body = Object.assign({}, row);
-      if(row.foto && photoMap[row.id]) body.img = photoMap[row.id];   // adjunta la foto
+      /* La foto YA NO viaja al Apps Script (7-ago-2026). Iba en este mismo POST
+         y de ahí a Drive; ahora va aparte, a Supabase, donde además se puede
+         mirar. Quitarla de aquí adelgaza el POST en ~150 KB por venta, que es
+         lo que hacía lenta la cola con mala señal — justo cuando más importa
+         que la venta suba. */
       // Sin no-cors: el Apps Script responde con Access-Control-Allow-Origin:*,
       // así que SÍ se puede leer si guardó. Solo se saca de la cola cuando el
       // servidor confirma; si no, la captura se queda y se reintenta.
@@ -529,12 +578,18 @@ async function flushCloud(){
           + '. No se han perdido: se reintentan al reabrir la app.');
         break;                                   // no vaciar la cola a ciegas
       }
+      // Se guarda ANTES de vaciar photoMap: la foto se sube a Supabase abajo y
+      // para entonces ya no estaría.
+      const fotoDeEsta = (row.foto && photoMap[row.id]) ? photoMap[row.id] : null;
       if(row.foto) delete photoMap[row.id];
       pending.shift(); savePending();            // el servidor confirmó
       // FASE 3 · la misma venta, además, a Supabase. Va DESPUÉS de que el Sheet
       // confirme y sin await: el Sheet es la fuente de verdad y esto no puede
       // retrasar ni condicionar la cola. Si falla, la venta ya está guardada.
       guardarEnSupabase(row);
+      // Y la foto, con el mismo id de captura que liga la venta. Sin await: una
+      // foto no puede hacer esperar a la siguiente venta de la cola.
+      if(fotoDeEsta) subirFoto(row.id, fotoDeEsta);
       avisoPendientes(pending.length ? pending.length + ' captura(s) por subir…' : '');
     }
   }catch(e){
@@ -1261,14 +1316,27 @@ async function cargarVentasDia(dia){
   $('vdLista').innerHTML = '<div class="vd-vacio">Cargando…</div>';
   $('vdFechaTxt').textContent = fechaBonita(dia);
   try{
-    const r = await catJsonp(gasQS('modo=ventas_detalle&fecha=' + encodeURIComponent(fechaGas(dia))));
-    if(!r || !Array.isArray(r.ventas)){
-      // El modo todavía no existe en el Apps Script: se dice, no se calla.
-      toast('Falta actualizar el Apps Script (modo ventas_detalle)', 'warn');
+    /* A Supabase desde el 7-ago-2026. Antes salía del Apps Script, que lee la
+       hoja; la hoja sigue recibiendo ventas por la doble escritura, así que no
+       estaba roto — pero es la lectura que ahora trae `tiene_foto`, y la foto
+       solo existe en Supabase. Pedirla al GAS daría la lista sin lupas. */
+    const filas = await sbCallCS('ventas_detalle', {
+      p_fecha: dia.getFullYear() + '-' +
+               String(dia.getMonth()+1).padStart(2,'0') + '-' +
+               String(dia.getDate()).padStart(2,'0')
+    }, 12000);
+    if(!Array.isArray(filas)){
+      toast('No se pudieron traer las ventas de la nube', 'warn');
       $('vdLista').innerHTML = '<div class="vd-vacio">No se pudo consultar la nube.</div>';
       return;
     }
-    _vdVentas = r.ventas;
+    // Supabase devuelve filas; el panel espera las claves cortas del GAS.
+    _vdVentas = filas.map(function(v){
+      return { serie:v.serie||'', sku:v.sku||'', desc:v.descripcion||'',
+               precio: v.precio==null ? '' : String(v.precio),
+               vend:v.vendedor||'', hora: v.vendida_en ? String(v.vendida_en).slice(11,16) : '',
+               captura_id: v.captura_id||'', foto: !!v.tiene_foto };
+    });
     _vdFecha  = dia;
     pintarVentasDia();
   }catch(e){
@@ -1303,11 +1371,55 @@ function pintarVentasDia(){
             ${v.vend ? '<span>· ' + v.vend + '</span>' : ''}
           </div>
         </div>
+        ${v.foto ? `<button class="vd-lupa" title="Ver la foto de esta captura"
+             onclick="event.stopPropagation(); verFoto('${v.captura_id}','${(v.serie||'').replace(/'/g,'')}')">🔍</button>` : ''}
         <div class="vd-check">✓</div>
       </div>`).join('')
     : `<div class="vd-vacio">Sin ventas registradas ${fechaBonita(dia) === 'hoy' ? 'hoy' : 'el ' + fechaBonita(dia)}.</div>`;
   vdBotonesNav(true);
   vdContar();
+}
+
+/* ---------- Ver la foto de una captura ----------
+   Esto es lo que las fotos no tenían: una forma de mirarlas. Se subían a Drive,
+   se borraban a los 7 días y para ver una había que abrir la hoja de cálculo y
+   pinchar un enlace — o sea que en la práctica nunca se veían.
+
+   Sirve para lo que Ángel dijo el 7-ago: cuando una serie no cuadra o hay un
+   reclamo, poder ver la caja que se capturó. */
+function cerrarFoto(){
+  const m = document.getElementById('fotoModal');
+  if(m) m.remove();
+}
+
+async function verFoto(capturaId, serie){
+  let m = document.createElement('div');
+  m.id = 'fotoModal';
+  m.className = 'foto-modal';
+  m.innerHTML = '<div class="foto-box">' +
+    '<div class="foto-head"><b>' + esc(serie || '') + '</b>' +
+    '<button onclick="cerrarFoto()">✕</button></div>' +
+    '<div class="foto-cuerpo" id="fotoCuerpo">Cargando…</div></div>';
+  m.onclick = function(e){ if(e.target === m) cerrarFoto(); };
+  document.body.appendChild(m);
+
+  const d = await sbCallCS('venta_foto_leer',
+                           { p_token: GAS_TOKEN, p_captura_id: String(capturaId) }, 15000);
+  const c = document.getElementById('fotoCuerpo');
+  if(!c) return;                       // lo cerró antes de que llegara
+  if(!d || d.ok !== true){
+    // "sin foto" es un caso normal —captura sin foto, o de hace más de 7 días—
+    // y se dice con esas palabras, no como un fallo.
+    c.textContent = (d && d.error === 'sin foto')
+      ? 'Esta captura no tiene foto, o ya pasaron los 7 días que se guardan.'
+      : ('No se pudo cargar: ' + ((d && d.error) || 'sin conexión'));
+    return;
+  }
+  const img = document.createElement('img');
+  img.src = 'data:' + (d.mime || 'image/jpeg') + ';base64,' + d.b64;
+  img.alt = 'Foto de la captura ' + (serie || '');
+  c.innerHTML = '';
+  c.appendChild(img);
 }
 
 // Cuántas quedan del día que se está viendo. Se cuenta sobre las marcas, no sobre
