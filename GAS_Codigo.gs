@@ -826,17 +826,16 @@ function doGet(e) {
       : {ok:false, error:'PIN incorrecto'};
   } else if (modo === 'eol_del') {
     payload = checkPin_(e) ? eliminarEol_(e.parameter.sku||'') : {ok:false,error:'PIN incorrecto'};
-  } else if (modo === 'apartado_add') {
-    payload = checkPin_(e)
-      ? agregarApartado_({sku:e.parameter.sku||'', color:e.parameter.color||'',
-                          cliente:e.parameter.cliente||'', telefono:e.parameter.telefono||'',
-                          precio:e.parameter.precio||'', seguro:e.parameter.seguro||'',
-                          vend:e.parameter.vend||'', transaccion:e.parameter.transaccion||''})
-      : {ok:false, error:'PIN incorrecto'};
-  } else if (modo === 'apartado_estatus') {
-    payload = checkPin_(e) ? apartadoEstatus_(e.parameter.id||'', e.parameter.estatus||'Entregado') : {ok:false,error:'PIN incorrecto'};
-  } else if (modo === 'apartado_del') {
-    payload = checkPin_(e) ? eliminarApartado_(e.parameter.id||'') : {ok:false,error:'PIN incorrecto'};
+  /* PREVENTA — se mudó a Supabase el 7-ago-2026.
+     Estos tres modos NO se borran: se cierran con un mensaje. Un asesor con la
+     app vieja en la caché del service worker las sigue llamando, y si aquí se
+     aceptara el apartado, entraría en una hoja que ya nadie lee: no saldría en
+     el tablero, no contaría para el cupo y su pieza se vendería otra vez.
+     Devolver el error hace que la app diga "no se guardó" —que es la verdad— en
+     vez de guardarlo en el vacío.
+     Se retiran del todo junto con el resto del script, en la etapa 5. */
+  } else if (modo === 'apartado_add' || modo === 'apartado_estatus' || modo === 'apartado_del') {
+    payload = {ok:false, error:'La preventa ya no se guarda aquí. Cierra la app y vuelve a abrirla para actualizarla.'};
   } else if (modo === 'aviso_add') {
     payload = checkPin_(e)
       ? guardarAviso_({titulo:e.parameter.titulo||'', detalle:e.parameter.detalle||'',
