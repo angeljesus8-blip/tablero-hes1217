@@ -794,7 +794,33 @@ llegó y había que ligar series. Lo que falta para que la hoja no haga falta:
 | Borrar una venta | `tipo:'eliminar'` | 🔨 código listo, SQL sin aplicar |
 | Cargas de Admin | catálogo+inventario, `catalogo_ref`, exhibición, comisiones, promos | 🔨 v127, SQL sin aplicar |
 | Fotos de venta | Drive → Storage (se borran solas a los 7 días, no hay histórico que mover) | — |
-| Notificaciones | `notificar_` → OneSignal | — · **el único nudo real** |
+| Fotos de venta | Drive → tabla `venta_fotos`, con visor en Ventas del día | ✅ v129 |
+| Notificaciones | `notificar_` → OneSignal | 🔨 v130, SQL sin aplicar |
+
+### El "nudo" de las notificaciones no lo era *(7-ago-2026)*
+
+La REST API key de OneSignal es secreta y no puede ir en el HTML, así que la
+respuesta obvia era una Edge Function. Pero **la extensión `http` de Postgres ya
+estaba habilitada** —`cargar_catalogo` la usa con `extensions.http_get`—, así que
+la llamada se hace desde una función SQL `SECURITY DEFINER`: la llave vive en
+`notif_config`, una tabla con RLS y sin políticas (nadie llega por REST), y solo
+la lee la función, que corre como dueña. Sin CLI, sin despliegue y sin una pieza
+más que mantener.
+
+**Antes de inventar infraestructura, mirar qué hay instalado.**
+
+### Y el fallo que destapó cerrar esto
+
+Las escrituras de EOL, avisos, combos y comisiones se movieron a Supabase en
+v125 — y **las cuatro listas de Admin siguieron leyendo del Apps Script**, o sea
+de la hoja que ya no recibe nada. El gerente agregaba un EOL y la lista seguía
+enseñando la de antes; lo borraba y seguía ahí.
+
+Es el mismo error que costó las dos fugas de la fase 2, repetido: **migrar una
+escritura sin migrar la lectura que le corresponde.** Estuvo activo desde v125
+hasta v130. Ahora lo vigila `verificar.py` (regla `lectura`) en vez de la memoria
+de nadie: si Admin escribe algo en Supabase y sigue leyéndolo del GAS, el commit
+se detiene.
 
 ### Dos fugas que destapó el bloque 2 *(las dos llevaban abiertas desde la fase 2)*
 
