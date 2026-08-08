@@ -175,19 +175,6 @@
   .promo-toolbar button:disabled { background:#ccc; }
   @keyframes spin { to { transform:rotate(360deg); } }
   .promo-toolbar button.girando { animation:spin .7s linear infinite; }
-  /* ---- Slider promos ---- */
-  .promo-tabs { display:flex; gap:8px; padding:8px 16px 4px; }
-  .promo-tab { flex:1; padding:9px 10px; border:1.5px solid var(--linea); background:#fff;
-    border-radius:20px; font-family:'Montserrat',sans-serif; font-size:12px; font-weight:700;
-    cursor:pointer; color:#555; transition:.15s; }
-  .promo-tab.active { background:var(--azul); color:#fff; border-color:var(--azul); }
-  .promo-slider { display:flex; overflow-x:auto; scroll-snap-type:x mandatory;
-    -webkit-overflow-scrolling:touch; scrollbar-width:none; }
-  .promo-slider::-webkit-scrollbar { display:none; }
-  .promo-slide { min-width:100%; scroll-snap-align:start; box-sizing:border-box; }
-  .promo-dots { display:flex; justify-content:center; gap:8px; padding:6px 0 2px; }
-  .promo-dot { width:8px; height:8px; border-radius:50%; background:#e0e0e0; transition:.15s; }
-  .promo-dot.active { background:var(--azul); }
   /* ---- Dashboard ---- */
   .att-card { padding:18px 18px 14px; }
   .att-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; font-size:13px; font-weight:700; color:#555; }
@@ -469,7 +456,7 @@ function tocarDia(){
    mismo. */
 const FILTROS = [
   { id:'inicio', label:'🏠 Inicio' },
-  { id:'promo',  label:'🔥 Promos y precios' },
+  { id:'promo',  label:'💰 Precios' },
   { id:'preventa', label:'🚀 Preventa' },
   { id:'eol',   label:'🏷️ Vender 50%' },
   { id:'resurtir', label:'🔄 Resurtir' },
@@ -703,18 +690,10 @@ function selSeg(id, idx, p0, p1, p2, i1, i2) {
   wrap.querySelector('.seg-desglose').innerHTML = desgloseHtml(p0, total, segCosto);
   wrap.querySelector('.seg-msi').innerHTML = msiInfo(total);
 }
-function slidePromo(idx) {
-  const slider = document.getElementById('promoSlider');
-  if (!slider) return;
-  slider.scrollTo({ left: idx * slider.offsetWidth, behavior: 'smooth' });
-  document.querySelectorAll('.promo-tab').forEach((t,i) => t.classList.toggle('active', i===idx));
-  document.querySelectorAll('.promo-dot').forEach((d,i) => d.classList.toggle('active', i===idx));
-}
-function onPromoSliderScroll(el) {
-  const idx = Math.round(el.scrollLeft / el.offsetWidth);
-  document.querySelectorAll('.promo-tab').forEach((t,i) => t.classList.toggle('active', i===idx));
-  document.querySelectorAll('.promo-dot').forEach((d,i) => d.classList.toggle('active', i===idx));
-}
+/* slidePromo y onPromoSliderScroll se retiraron el 7-ago-2026 junto con las dos
+   pestañas deslizables de promos: ahora es una sola lista con encabezados.
+   Se borran en vez de dejarlas "por si acaso" — código que nadie llama es
+   código que nadie mantiene, y el CSS del slider se fue con ellas. */
 /* ---- Assurant attach rate ----
    El attach se DERIVA de las ventas capturadas en Captura de Series, que ya
    guarda cada venta como {vend, fecha, seguro:true/false}. Antes esta tarjeta
@@ -1612,22 +1591,38 @@ function render(){
                                           && !eolSkuSet.has(x.sku)).length;
     const traerTxt = porTraer > 0 ? ` · ${porTraer} agotado${porTraer!==1?'s':''} (se traen de otra tienda)` : '';
     html += `<div class="promo-toolbar"><span>${promos.length} promo${promos.length!==1?'s':''} con existencia${traerTxt}</span><button id="btnRefreshPromos" onclick="cargarPromosNube(true)">↻ Actualizar</button></div>`;
-    html += `<div class="promo-tabs">
-      <button class="promo-tab active" onclick="slidePromo(0)">🔥 Promos (${promos.length})</button>
-      <button class="promo-tab" onclick="slidePromo(1)">💰 Precio regular (${sinPromo.length})</button>
-    </div>
-    <div class="promo-slider" id="promoSlider" onscroll="onPromoSliderScroll(this)">
-      <div class="promo-slide">
-        ${promos.length ? promos.map(cardPromo).join('') : '<div class="empty">Sin promos vigentes con existencia.</div>'}
-      </div>
-      <div class="promo-slide">
-        ${sinPromo.length ? sinPromo.map(cardPrecioReg).join('') : '<div class="empty">Sin resultados.</div>'}
-      </div>
-    </div>
-    <div class="promo-dots">
-      <span class="promo-dot active"></span>
-      <span class="promo-dot"></span>
-    </div>`;
+
+    /* UNA sola lista, no dos pestañas deslizables (7-ago-2026).
+       Lo que se gana no es estética: **el buscador**. Con el slider, escribir
+       "matepad" filtraba las dos listas pero solo se veía la que estuviera
+       abierta, así que un producto podía existir, coincidir con la búsqueda y
+       no aparecer — sin ninguna señal de que había que deslizar. El asesor
+       concluía "no lo tenemos" con el cliente enfrente.
+
+       Se conserva la separación por bloques con encabezados: un producto con
+       promo y otro sin ella se cobran distinto, y mezclarlos sin marcar cuál es
+       cuál sería peor que dos pestañas. */
+    const sinPromoConPiezas = sinPromo.filter(conPiezas);
+    const sinPromoAgotados  = sinPromo.filter(x => !conPiezas(x));
+
+    if(promos.length){
+      html += `<div class="grupo-titulo">🔥 Con promoción (${promos.length})</div>`;
+      html += promos.map(cardPromo).join('');
+    }
+    if(sinPromoConPiezas.length){
+      html += `<div class="grupo-titulo" style="margin-top:18px">💰 Precio regular (${sinPromoConPiezas.length})</div>`;
+      html += sinPromoConPiezas.map(cardPrecioReg).join('');
+    }
+    /* Los agotados que SÍ se pueden traer, al final y bajo su propio título:
+       antes iban mezclados al fondo de la lista de precio regular, sin nada que
+       dijera que no hay piezas hasta leer la tarjeta entera. */
+    if(sinPromoAgotados.length){
+      html += `<div class="grupo-titulo" style="margin-top:18px">📭 Agotados · se traen de otra tienda (${sinPromoAgotados.length})</div>`;
+      html += sinPromoAgotados.map(cardPrecioReg).join('');
+    }
+    if(!promos.length && !sinPromo.length){
+      html += `<div class="empty">${busqueda ? 'Sin resultados para «'+esc(busqueda)+'».' : 'Sin promos ni precios que mostrar.'}</div>`;
+    }
   }
   if(f==='nov')   html += seccion('📦 Mercancía nueva', nov, cardNov);
   if(f==='resurtir'){
