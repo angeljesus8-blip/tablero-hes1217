@@ -1485,12 +1485,10 @@ function render(){
 
   const bundles = BUNDLES.filter(x=>coincide(x.nombre,x.sku1,x.sku2));
   const promosTodas = PROMOS.filter(x=>coincide(x.producto,x.sku));
-  /* Se listan TODAS, con las agotadas al final: una promo sin piezas se puede
-     vender igual trayendo el equipo de otra tienda, y antes se ocultaba —
-     el asesor no tenía dónde consultar el precio. */
-  const promos = promosTodas.slice().sort((a,b) =>
-    (tieneExistencia_(b.sku)?1:0) - (tieneExistencia_(a.sku)?1:0));
-  const promosSinStock = promosTodas.filter(x=>!tieneExistencia_(x.sku)).length;
+  /* Se listan TODAS, pero separadas en dos bloques —con piezas y agotadas— no
+     ordenadas dentro de uno solo: ver la sección `promo` más abajo. Una promo
+     sin piezas se puede vender igual trayendo el equipo de otra tienda, y antes
+     de agosto se ocultaba: el asesor no tenía dónde consultar el precio. */
   const eolAll = EOL.filter(e=>coincide(e.producto,e.sku));
   const eolListo = eolAll.filter(e=>e.estado==='listo');
   const eolPend  = eolAll.filter(e=>e.estado==='pendiente');
@@ -1589,8 +1587,19 @@ function render(){
     const porTraer = sinPromo.filter(x => !conPiezas(x)).length
                    + promosTodas.filter(x => !tieneExistencia_(x.sku)
                                           && !eolSkuSet.has(x.sku)).length;
+    /* Las promos se parten igual que el resto: lo que hay, y lo que se trae.
+       Antes iban todas en un bloque, ordenadas pero MEZCLADAS —una promo
+       agotada podía quedar entre dos con piezas si el orden cambiaba—, y el
+       texto de arriba decía "117 promos con existencia" cuando 37 de esas 117
+       estaban agotadas. Un contador que miente es peor que no tenerlo: el
+       gerente lo lee de un vistazo para saber qué puede empujar hoy. */
+    const promosConPiezas = promosTodas.filter(x => tieneExistencia_(x.sku));
+    // Una promo agotada Y marcada EOL no se trae de ningún lado: fuera, igual
+    // que en precio regular.
+    const promosAgotadas  = promosTodas.filter(x => !tieneExistencia_(x.sku)
+                                                 && !eolSkuSet.has(x.sku));
     const traerTxt = porTraer > 0 ? ` · ${porTraer} agotado${porTraer!==1?'s':''} (se traen de otra tienda)` : '';
-    html += `<div class="promo-toolbar"><span>${promos.length} promo${promos.length!==1?'s':''} con existencia${traerTxt}</span><button id="btnRefreshPromos" onclick="cargarPromosNube(true)">↻ Actualizar</button></div>`;
+    html += `<div class="promo-toolbar"><span>${promosConPiezas.length} promo${promosConPiezas.length!==1?'s':''} con existencia${traerTxt}</span><button id="btnRefreshPromos" onclick="cargarPromosNube(true)">↻ Actualizar</button></div>`;
 
     /* UNA sola lista, no dos pestañas deslizables (7-ago-2026).
        Lo que se gana no es estética: **el buscador**. Con el slider, escribir
@@ -1605,22 +1614,28 @@ function render(){
     const sinPromoConPiezas = sinPromo.filter(conPiezas);
     const sinPromoAgotados  = sinPromo.filter(x => !conPiezas(x));
 
-    if(promos.length){
-      html += `<div class="grupo-titulo">🔥 Con promoción (${promos.length})</div>`;
-      html += promos.map(cardPromo).join('');
+    /* PRIMERO todo lo que hay en tienda, DESPUÉS todo lo que hay que traer.
+       Nada de mezclar: el asesor que hojea esta pantalla está buscando qué
+       puede vender ahora mismo, y una tarjeta sin piezas entre dos que sí las
+       tienen le hace perder el tiempo o, peor, prometer algo que no está. */
+    if(promosConPiezas.length){
+      html += `<div class="grupo-titulo">🔥 Con promoción (${promosConPiezas.length})</div>`;
+      html += promosConPiezas.map(cardPromo).join('');
     }
     if(sinPromoConPiezas.length){
       html += `<div class="grupo-titulo" style="margin-top:18px">💰 Precio regular (${sinPromoConPiezas.length})</div>`;
       html += sinPromoConPiezas.map(cardPrecioReg).join('');
     }
-    /* Los agotados que SÍ se pueden traer, al final y bajo su propio título:
-       antes iban mezclados al fondo de la lista de precio regular, sin nada que
-       dijera que no hay piezas hasta leer la tarjeta entera. */
-    if(sinPromoAgotados.length){
-      html += `<div class="grupo-titulo" style="margin-top:18px">📭 Agotados · se traen de otra tienda (${sinPromoAgotados.length})</div>`;
+    /* Los agotados que SÍ se pueden traer, todos juntos al final y bajo su
+       propio título — con promo y sin ella. Cada uno conserva su tarjeta, que
+       es la que sabe enseñar el precio correcto. */
+    const agotadosTraibles = promosAgotadas.length + sinPromoAgotados.length;
+    if(agotadosTraibles){
+      html += `<div class="grupo-titulo" style="margin-top:18px">📭 Agotados · se traen de otra tienda (${agotadosTraibles})</div>`;
+      html += promosAgotadas.map(cardPromo).join('');
       html += sinPromoAgotados.map(cardPrecioReg).join('');
     }
-    if(!promos.length && !sinPromo.length){
+    if(!promosConPiezas.length && !sinPromoConPiezas.length && !agotadosTraibles){
       html += `<div class="empty">${busqueda ? 'Sin resultados para «'+esc(busqueda)+'».' : 'Sin promos ni precios que mostrar.'}</div>`;
     }
   }
