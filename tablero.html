@@ -273,6 +273,13 @@
     margin-top:11px; padding-top:10px; border-top:1px solid #f3efee;
     font-size:var(--t-xs); color:#a09895; }
 
+  /* Aviso único de vigencia, cuando todas las promos vencen el mismo día */
+  .vig-barra { padding:0 16px 6px; }
+  .vig-todas { display:inline-block; font-size:12px; font-weight:700; color:#8a827f;
+    background:var(--e-no-bg); padding:5px 11px; border-radius:var(--r-sm); }
+  .vig-todas.pronto { background:var(--e-piso-bg); color:var(--e-piso); }
+  .vig-todas.urge { background:#fdeaea; color:var(--rojo); }
+
   /* ---- Cabecera de sección (sustituye a la barra de chips, 8-ago-2026) ---- */
   .sec-bar { display:flex; align-items:center; gap:6px; padding:10px 16px 4px; }
   .sec-volver { background:none; border:none; color:var(--rojo); font-size:26px; line-height:1;
@@ -651,6 +658,8 @@ function diasRestantes(fecha){
 }
 const _MESES_CORTO = ['ene','feb','mar','abr','may','jun',
                      'jul','ago','sep','oct','nov','dic'];
+const _MESES_LARGO = ['enero','febrero','marzo','abril','mayo','junio','julio',
+                      'agosto','septiembre','octubre','noviembre','diciembre'];
 
 /* La vigencia se dice con FECHA y solo cuando queda poco (8-ago-2026).
 
@@ -666,8 +675,40 @@ const _MESES_CORTO = ['ene','feb','mar','abr','may','jun',
    robaba ancho a un badge estrecho. */
 const VIGENCIA_AVISAR_DESDE = 15;   // días
 
+/* Cuando TODAS las promos vigentes vencen el mismo día, el badge por tarjeta no
+   distingue nada: repetiría la misma fecha 117 veces para decir algo que es
+   igual en toda la pantalla. En ese caso se calla aquí y el aviso sale una sola
+   vez arriba, en la barra.
+
+   Pero no siempre es así —el CEA de agosto trae todo al 31 y otros meses mezcla
+   fechas—, así que no se puede decidir de antemano: se mira en cada render.
+   Lo pone `vigenciaComun()` justo antes de pintar la sección. */
+let _vigUnica = null;
+
+/* Devuelve la fecha si TODAS las promos con existencia vencen el mismo día;
+   null si hay mezcla. Solo mira las que se están mostrando: si el buscador
+   filtró a tres y las tres coinciden, el aviso único también vale. */
+function vigenciaComun(promos){
+  const fechas = new Set(promos.map(p => p.d2).filter(Boolean));
+  if(fechas.size !== 1) return null;
+  // Si alguna no tiene fecha, no se puede afirmar que todas venzan igual.
+  if(promos.some(p => !p.d2)) return null;
+  return [...fechas][0];
+}
+
+function avisoVigencia(fecha){
+  const d = diasRestantes(fecha);
+  const f = new Date(fecha+'T00:00:00');
+  const cuando = f.getDate() + ' de ' + _MESES_LARGO[f.getMonth()];
+  const cls = d <= 5 ? 'urge' : d <= VIGENCIA_AVISAR_DESDE ? 'pronto' : '';
+  const cola = d < 0 ? 'vencidas' : d === 0 ? 'hoy es el último día'
+             : d === 1 ? 'mañana es el último día' : `quedan ${d} días`;
+  return `<span class="vig-todas ${cls}">Promos hasta el ${cuando} · ${cola}</span>`;
+}
+
 function badgeVigencia(fecha){
   const d = diasRestantes(fecha);
+  if(_vigUnica) return '';                        // ya lo dice la barra de arriba
   if(d > VIGENCIA_AVISAR_DESDE) return '';        // aún queda mucho: no estorba
   const f = new Date(fecha+'T00:00:00');
   const cuando = f.getDate() + ' ' + _MESES_CORTO[f.getMonth()];
@@ -1911,7 +1952,13 @@ function render(){
     const promosAgotadas  = promosTodas.filter(x => !tieneExistencia_(x.sku)
                                                  && !eolSkuSet.has(x.sku));
     const traerTxt = porTraer > 0 ? ` · ${porTraer} agotado${porTraer!==1?'s':''} (se traen de otra tienda)` : '';
+    /* Si todas las promos vencen el mismo día, se dice UNA vez aquí arriba y las
+       tarjetas se callan. `_vigUnica` lo lee badgeVigencia mientras se pinta la
+       sección; se limpia al terminar para no arrastrarlo al buscador ni a otra
+       pantalla, donde el conjunto de promos es distinto. */
+    _vigUnica = vigenciaComun(promosTodas);
     html += `<div class="promo-toolbar"><span>${promosConPiezas.length} promo${promosConPiezas.length!==1?'s':''} con existencia${traerTxt}</span><button id="btnRefreshPromos" onclick="cargarPromosNube(true)">↻ Actualizar</button></div>`;
+    if(_vigUnica) html += `<div class="vig-barra">${avisoVigencia(_vigUnica)}</div>`;
 
     /* UNA sola lista, no dos pestañas deslizables (7-ago-2026).
        Lo que se gana no es estética: **el buscador**. Con el slider, escribir
@@ -1947,6 +1994,7 @@ function render(){
       html += promosAgotadas.map(cardPromo).join('');
       html += sinPromoAgotados.map(cardPrecioReg).join('');
     }
+    _vigUnica = null;   // fuera de esta sección, cada tarjeta decide por su cuenta
     if(!promosConPiezas.length && !sinPromoConPiezas.length && !agotadosTraibles){
       html += `<div class="empty">${busqueda ? 'Sin resultados para «'+esc(busqueda)+'».' : 'Sin promos ni precios que mostrar.'}</div>`;
     }
