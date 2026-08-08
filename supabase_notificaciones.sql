@@ -123,8 +123,15 @@ BEGIN
       -- suscriptores. (7-ago-2026)
       'target_channel',    'push',
       'included_segments', jsonb_build_array('All'),
-      'headings',          jsonb_build_object('es', v_titulo),
-      'contents',          jsonb_build_object('es', trim(p_msg)),
+      -- `en` es OBLIGATORIO: OneSignal lo usa como idioma de respaldo y sin él
+      -- responde 400 «Message Notifications must have Any/English language».
+      -- Va el mismo texto en español en las dos claves: el equipo lee español y
+      -- traducir de verdad no aportaría nada. `es` se queda para que a quien
+      -- tenga el teléfono en español le llegue por su idioma, no por el
+      -- respaldo. (El Apps Script mandaba solo `es`, así que también habría
+      -- fallado con este mismo 400.)
+      'headings',          jsonb_build_object('en', v_titulo, 'es', v_titulo),
+      'contents',          jsonb_build_object('en', trim(p_msg), 'es', trim(p_msg)),
       'url',               v_url
     )::text
   )::extensions.http_request);
