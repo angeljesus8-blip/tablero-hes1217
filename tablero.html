@@ -437,6 +437,9 @@
   .ap-lbl { display:block; font-size:11px; font-weight:700; color:#888; text-transform:uppercase; letter-spacing:.4px; margin:10px 2px 5px; }
   .ap-inp { width:100%; border:1.5px solid var(--linea); border-radius:11px; padding:12px 14px; font-family:inherit; font-size:15px; outline:none; }
   .ap-inp:focus { border-color:#7c3aed; }
+  /* Quién aparta: se muestra, no se edita */
+  .ap-quien { border:1.5px solid var(--linea); border-radius:11px; padding:12px 14px;
+    font-size:15px; font-weight:700; background:#faf8f8; color:#555; }
   .ap-toggle { display:flex; align-items:center; gap:9px; font-size:13.5px; margin:16px 2px 4px; cursor:pointer; }
   .ap-toggle input { width:20px; height:20px; accent-color:var(--verde); }
   .ap-guardar { width:100%; background:#7c3aed; color:#fff; border:none; border-radius:12px; padding:14px; font-family:inherit; font-size:15px; font-weight:800; cursor:pointer; margin-top:18px; }
@@ -487,8 +490,8 @@
     <input id="apCliente" class="ap-inp" type="text" placeholder="Nombre del cliente" autocomplete="off">
     <label class="ap-lbl">Teléfono</label>
     <input id="apTel" class="ap-inp" type="tel" inputmode="numeric" placeholder="10 dígitos" autocomplete="off">
-    <label class="ap-lbl">Vendedor</label>
-    <input id="apVend" class="ap-inp" type="text" placeholder="Quién apartó" autocomplete="off">
+    <label class="ap-lbl">Lo aparta</label>
+    <div id="apVend" class="ap-quien"></div>
     <label class="ap-lbl">N° de transacción</label>
     <input id="apTransaccion" class="ap-inp" type="text" inputmode="numeric" placeholder="Folio del ticket de pago" autocomplete="off">
     <label class="ap-toggle"><input id="apSeguro" type="checkbox"> 🛡️ El cliente se llevó <b>Seguro</b></label>
@@ -531,6 +534,12 @@ const GAS_TOKEN = (_cfg && _cfg.gas_token) || '';
 const TIENDA_ID     = (_cfg && _cfg.store_id) || '1217';
 const TIENDA_NOMBRE = (_cfg && _cfg.nombre)   || 'Angelópolis';
 const ROLE          = localStorage.getItem('hes_role') || 'asesor';
+/* Quién entró. Desde que se retiró el PIN de tienda, cada quien accede con su
+   número de empleado, así que esto SIEMPRE existe y el tablero no tiene que
+   preguntar quién es. Antes el vendedor de un apartado se tecleaba a mano y
+   salían "Arturo" y "Arturo Aguilar rosette" como si fueran dos personas. */
+const YO = (function(){ try{ return JSON.parse(localStorage.getItem('hes_empleado')||'null'); }
+                        catch(e){ return null; } })();
 document.getElementById('updated').innerHTML = '<span style="color:var(--naranja);font-weight:700">Sin confirmar</span>';
 document.getElementById('liveWarning').classList.add('visible');
 (function(){
@@ -1526,7 +1535,11 @@ function abrirApartado(sku){
   document.getElementById('apModalSub').textContent = 'SKU '+p.sku+' · '+money(p.precio)+' · '+p.cap+' · '+p.msi;
   document.getElementById('apCliente').value='';
   document.getElementById('apTel').value='';
-  document.getElementById('apVend').value='';
+  /* El vendedor sale de la sesión, no se teclea: es la misma persona que entró
+     con su número de empleado. Se muestra para que se vea a nombre de quién
+     queda, pero no se puede cambiar — cambiarlo sería registrar una venta a
+     nombre de otro. */
+  document.getElementById('apVend').textContent = YO && YO.nombre ? YO.nombre : '⚠️ sin sesión de empleado';
   document.getElementById('apTransaccion').value='';
   document.getElementById('apSeguro').checked=false;
   document.getElementById('apModal').classList.add('show');
@@ -1536,7 +1549,13 @@ function guardarApartado(){
   const sku=_apartSku; if(!sku) return;
   const cliente=document.getElementById('apCliente').value.trim();
   const tel=document.getElementById('apTel').value.trim();
-  const vend=document.getElementById('apVend').value.trim();
+  const vend = (YO && YO.nombre) ? YO.nombre : '';
+  if(!vend){
+    // Sin nombre, el apartado no cuenta para el attach de nadie ni se sabe quién
+    // lo hizo. Mejor parar que guardar una venta huérfana.
+    alert('No se pudo identificar quién eres.' + String.fromCharCode(10,10) + 'Sal y vuelve a entrar con tu número de empleado.');
+    return;
+  }
   const transaccion=document.getElementById('apTransaccion').value.trim();
   const seguro=document.getElementById('apSeguro').checked?'Si':'No';
   if(!cliente){ alert('Escribe el nombre del cliente.'); return; }
