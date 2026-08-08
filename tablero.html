@@ -252,12 +252,21 @@
   .pastilla.p-traer { background:var(--e-traer-bg); color:var(--e-traer); }
   .pastilla.p-no    { background:var(--e-no-bg);    color:var(--e-no); }
 
-  .prod-precio { display:flex; align-items:baseline; gap:9px; margin-top:11px; flex-wrap:wrap; }
-  .prod-precio .pv { font-size:var(--t-2xl); font-weight:800; letter-spacing:-.025em; line-height:1;
-    color:var(--rojo); font-variant-numeric:tabular-nums; }
-  .prod-precio .pa { font-size:12.5px; color:#b5adab; font-weight:600; text-decoration:line-through; }
-  .prod-precio .ah { font-size:11px; font-weight:800; color:var(--e-hay);
-    background:var(--e-hay-bg); padding:2px 7px; border-radius:5px; }
+  /* El porcentaje de ahorro, junto al precio que pinta segSelector */
+  .ah { font-size:11px; font-weight:800; color:var(--e-hay);
+    background:var(--e-hay-bg); padding:2px 7px; border-radius:5px; white-space:nowrap; }
+
+  /* Los tres chips de seguro caben en UNA fila. Antes se envolvían a dos
+     —"+ 2 años" se caía solo abajo— y la tarjeta crecía sin motivo: con 79
+     seguidas, esa línea de más son dos pantallas extra de scroll. */
+  .card.prod .seg-chips { flex-wrap:nowrap; gap:6px; }
+  .card.prod .seg-chip { flex:1; padding:8px 4px; font-size:var(--t-sm);
+    border-radius:var(--r-sm); white-space:nowrap; }
+
+  /* Compartir vuelve al pie, a la derecha del estado, en vez de ocupar todo el
+     ancho: es una acción secundaria y estaba pesando como la principal. */
+  .card.prod .btn-wa { width:auto; margin:0; padding:6px 12px; font-size:var(--t-sm);
+    border-radius:var(--r-sm); flex-shrink:0; }
   .prod-pie { display:flex; justify-content:space-between; align-items:center; gap:8px;
     margin-top:11px; padding-top:10px; border-top:1px solid #f3efee;
     font-size:var(--t-xs); color:#a09895; }
@@ -785,7 +794,10 @@ function desgloseHtml(p0, total, segCosto) {
    primero. `enMedio` deja insertar los badges entre el precio y los chips sin
    sacarlos del contenedor #id — selSeg busca .seg-desglose y .seg-msi ahí
    dentro, así que todo lo dinámico tiene que seguir colgando de él. */
-function segSelector(sku, precioBase, precioVenta, enMedio, regularTachado) {
+/* `dto` es el porcentaje de ahorro. Se pinta AQUÍ y no en la tarjeta porque
+   este es el único sitio donde vive el precio: al añadirlo fuera salían dos
+   precios, uno encima del otro. (8-ago-2026, visto en piso.) */
+function segSelector(sku, precioBase, precioVenta, enMedio, regularTachado, dto) {
   const s = seguroPara(precioBase, sku);
   const p0 = parseFloat(String(precioVenta||0).replace(/[^0-9.]/g,'')) || 0;
   const p1 = s ? p0 + s.p1 : null;
@@ -798,9 +810,10 @@ function segSelector(sku, precioBase, precioVenta, enMedio, regularTachado) {
   // El tachado va FUERA de .seg-desglose: selSeg reescribe ese nodo completo al
   // cambiar de seguro, y si estuviera dentro se borraría en el primer toque.
   const tach = regularTachado ? `<span class="precio-reg">${money(regularTachado)}</span>` : '';
+  const badgeDto = dto ? `<span class="ah">−${dto}%</span>` : '';
   return `<div class="seg-sel" id="${id}">
     <div class="precio-linea">
-      <div class="seg-desglose">${desgloseHtml(p0, p0, 0)}</div>${tach}
+      <div class="seg-desglose">${desgloseHtml(p0, p0, 0)}</div>${tach}${badgeDto}
     </div>
     ${enMedio || ''}
     <div class="seg-chips">
@@ -1526,16 +1539,12 @@ function cardPromo(x){
   const dto = (pb > pv && pb > 0) ? Math.round((1 - pv/pb) * 100) : 0;
   const badges = `<div class="meta"><span class="badge b-promo">🔥 Promo</span>${vig}</div>`;
   const selA = (precioBase && precioVenta)
-    ? segSelector(x.sku, precioBase, precioVenta, badges, x.pr != null && pb > pv ? x.pr : null)
+    ? segSelector(x.sku, precioBase, precioVenta, badges, x.pr != null && pb > pv ? x.pr : null, dto)
     : badges;
   return `<div class="card prod">
     <div class="prod-top">
       <div class="prod-nom">${eyebrowSku(x.sku)}<h3>${x.producto}</h3></div>
       ${pastillaEstado(x.sku)}
-    </div>
-    <div class="prod-precio">
-      <span class="pv">${money(pv)}</span>
-      ${dto ? `<span class="pa">${money(pb)}</span><span class="ah">−${dto}%</span>` : ''}
     </div>
     ${selA}
     <div class="prod-pie"><span>${e.pie || ''}</span>${waBtn}</div>
@@ -1555,7 +1564,6 @@ function cardPrecioReg(x){
       <div class="prod-nom">${eyebrowSku(x.sku)}<h3>${x.producto}</h3></div>
       ${pastillaEstado(x.sku)}
     </div>
-    ${precio ? `<div class="prod-precio"><span class="pv">${money(precio)}</span></div>` : ''}
     ${sel}
     <div class="prod-pie"><span>${e.pie || ''}</span>${waBtn}</div>
   </div>`;
