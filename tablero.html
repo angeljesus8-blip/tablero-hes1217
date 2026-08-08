@@ -10,13 +10,59 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="HES 1217">
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  /* Montserrat desde el propio repo, NO del CDN de Google (8-ago-2026).
+     En la tienda la señal falla, y con el CDN caído el tablero se dibujaba con
+     la letra por defecto del sistema: los precios cambiaban de ancho, las
+     tarjetas se descuadraban y nadie sabía por qué. Es la misma razón por la
+     que spec-cards la lleva dentro desde julio.
+     `swap` y no `block`: aquí importa más ver el precio ya —aunque sea un
+     instante con otra letra— que esperar a que cargue. */
+  @font-face{
+    font-family:'Montserrat';
+    src:url('./fuentes/Montserrat.woff2') format('woff2');
+    font-weight:400 800; font-display:swap;
+  }
+</style>
 <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   :root {
     --rojo:#D12026; --naranja:#F37021; --azul:#336BB4; --verde:#1a8c4e;
     --gris:#777; --linea:#ececec; --bg:#f6f6f7;
+
+    /* ---- Sistema visual (8-ago-2026) ----
+       Antes había 20 tamaños de letra distintos (de 8 a 15 px) y 8 radios de
+       esquina conviviendo. Con todo pesando casi lo mismo, nada destacaba: el
+       precio se leía igual que la fecha de vigencia. Estos tokens son la escala;
+       lo nuevo se construye con ellos. */
+    --t-xs:10.5px;   /* referencias, SKU al pie */
+    --t-sm:11.5px;   /* etiquetas y botones secundarios */
+    --t-md:13px;     /* texto normal */
+    --t-lg:14px;     /* título de producto */
+    --t-xl:19px;     /* número de piezas */
+    --t-2xl:27px;    /* precio */
+
+    --r-sm:9px;      /* pastillas y botones */
+    --r-md:14px;     /* tarjetas */
+    --r-pill:999px;
+
+    /* Dos sombras y ninguna más. La suave da relieve al contenido; la marcada
+       es solo para lo que flota sobre la página. */
+    --sombra:0 1px 2px rgba(34,27,26,.04), 0 3px 10px rgba(34,27,26,.05);
+    --sombra-alta:0 8px 28px rgba(34,27,26,.14);
+
+    --mono:ui-monospace,SFMono-Regular,Menlo,'Cascadia Mono',monospace;
+
+    /* Colores por ESTADO de existencia. Son semánticos: no decoran, dicen qué
+       se puede hacer con el producto. El azul de "se trae de otra tienda" es
+       deliberado — no es una alarma, es una acción; en rojo competiría con el
+       precio y se leería "problema" donde hay una venta que se cierra igual. */
+    --e-hay:#137a43;      --e-hay-bg:#eafaf1;
+    --e-piso:#c2600f;     --e-piso-bg:#fff5ee;
+    --e-50:#b01c22;       --e-50-bg:#fdeaea;
+    --e-traer:#2b5c9c;    --e-traer-bg:#eef3fb;
+    --e-no:#8a827f;       --e-no-bg:#f4f2f1;
   }
   body { font-family:'Montserrat',sans-serif; background:var(--bg); color:#1a1a1a; padding-bottom:40px; }
 
@@ -175,6 +221,47 @@
   .promo-toolbar button:disabled { background:#ccc; }
   @keyframes spin { to { transform:rotate(360deg); } }
   .promo-toolbar button.girando { animation:spin .7s linear infinite; }
+  /* ---- Tarjeta de producto (8-ago-2026) ----
+     Blanca a propósito: el color vive en la pastilla de estado y en el precio.
+     Con 79 tarjetas seguidas, teñir cada una convierte la lista en un mosaico y
+     entonces el color deja de significar algo. */
+  .card.prod { border-left-width:1px; border-radius:var(--r-md); padding:14px 15px;
+    box-shadow:var(--sombra); border-color:#ece8e7; }
+  .prod-top { display:flex; justify-content:space-between; align-items:flex-start; gap:11px; }
+  .prod-nom { flex:1; min-width:0; }
+  .prod-nom h3 { font-size:var(--t-lg); font-weight:700; line-height:1.3; letter-spacing:-.005em; }
+
+  /* El SKU: arriba, monoespaciado y tocable para copiar */
+  .sku-eyebrow { font-family:var(--mono); font-size:11px; font-weight:600; color:#6b6360;
+    letter-spacing:.02em; background:#f4f2f1; border:none; padding:2px 7px; border-radius:5px;
+    margin-bottom:3px; cursor:pointer; font-feature-settings:'tnum'; }
+  .sku-eyebrow:active { background:#e6e1e0; }
+  .sku-eyebrow.copiado { background:var(--e-hay-bg); color:var(--e-hay); }
+  .sku-eyebrow.copiado::after { content:' ✓'; font-family:'Montserrat',sans-serif; font-weight:800; }
+
+  /* Pastilla de estado: el número grande es lo segundo que se mira tras el precio */
+  .pastilla { border-radius:11px; padding:7px 11px; text-align:center; flex-shrink:0;
+    min-width:66px; display:block; }
+  .pastilla b { display:block; font-size:var(--t-xl); font-weight:800; line-height:1.05;
+    font-variant-numeric:tabular-nums; }
+  .pastilla span { display:block; font-size:8.5px; font-weight:800; text-transform:uppercase;
+    letter-spacing:.05em; margin-top:1px; }
+  .pastilla.p-hay   { background:var(--e-hay-bg);   color:var(--e-hay); }
+  .pastilla.p-piso  { background:var(--e-piso-bg);  color:var(--e-piso); }
+  .pastilla.p-50    { background:var(--e-50-bg);    color:var(--e-50); }
+  .pastilla.p-traer { background:var(--e-traer-bg); color:var(--e-traer); }
+  .pastilla.p-no    { background:var(--e-no-bg);    color:var(--e-no); }
+
+  .prod-precio { display:flex; align-items:baseline; gap:9px; margin-top:11px; flex-wrap:wrap; }
+  .prod-precio .pv { font-size:var(--t-2xl); font-weight:800; letter-spacing:-.025em; line-height:1;
+    color:var(--rojo); font-variant-numeric:tabular-nums; }
+  .prod-precio .pa { font-size:12.5px; color:#b5adab; font-weight:600; text-decoration:line-through; }
+  .prod-precio .ah { font-size:11px; font-weight:800; color:var(--e-hay);
+    background:var(--e-hay-bg); padding:2px 7px; border-radius:5px; }
+  .prod-pie { display:flex; justify-content:space-between; align-items:center; gap:8px;
+    margin-top:11px; padding-top:10px; border-top:1px solid #f3efee;
+    font-size:var(--t-xs); color:#a09895; }
+
   /* ---- Cabecera de sección (sustituye a la barra de chips, 8-ago-2026) ---- */
   .sec-bar { display:flex; align-items:center; gap:6px; padding:10px 16px 4px; }
   .sec-volver { background:none; border:none; color:var(--rojo); font-size:26px; line-height:1;
@@ -958,6 +1045,65 @@ function irA(id){ filtroActivo = id; busqueda = ''; const q = document.getElemen
    tarjetas de Inicio y el buscador global. Cuando estaban escritos dentro del
    render, cada nuevo consumidor los copiaba, y el día que cambió el criterio
    —excluir los EOL agotados, 7-ago— hubo que perseguirlo por varios sitios. */
+/* ── Estado de existencia de un SKU ─────────────────────────────────────
+   UNA sola función decide en qué estado está un producto, y todas las tarjetas
+   la usan. Antes cada tarjeta lo deducía por su cuenta con sus propios if, y
+   por eso "solo exhibición" significaba cosas distintas según dónde se mirara:
+   en la lista de resurtir era "pedir caja" y en promos salía como "sin piezas".
+
+   Son CINCO estados, no tres. El que más se confunde es el tercero: quedarse
+   solo con la pieza de piso significa "pedir caja" si el producto sigue vivo,
+   y "rematar al 50%" si está descontinuado. Es la misma existencia y dos
+   acciones opuestas. */
+function estadoSku(sku){
+  const inv = invBySku[sku] || {};
+  const st = inv.stock || 0, ex = inv.exhibe || 0;
+  const esEol = eolSkuSet.has(sku);
+  if(st > 0)              return { k:'hay',   n:st, txt: st===1?'pieza':'piezas', pie:ex?`${ex} en exhibición`:'' };
+  if(ex > 0 && esEol)     return { k:'50',    n:'50%', txt:'última', pie:'Última pieza de piso' };
+  if(ex > 0)              return { k:'piso',  n:ex, txt:'de piso', pie:'Pedir caja al CD' };
+  if(esEol)               return { k:'no',    n:'—', txt:'ya no',  pie:'Descontinuado' };
+  return                         { k:'traer', n:0,   txt:'se trae', pie:'De otra tienda' };
+}
+
+// La pastilla que pinta ese estado. El número va grande a propósito: después
+// del precio, "cuántas hay" es lo que más se mira.
+function pastillaEstado(sku){
+  const e = estadoSku(sku);
+  return `<span class="pastilla p-${e.k}"><b>${e.n}</b><span>${e.txt}</span></span>`;
+}
+
+/* El SKU va ARRIBA y en monoespaciada (8-ago-2026). Estaba al pie en 10,5 px
+   gris claro —lo de menos contraste de la tarjeta— y resulta que se usa para
+   pedir a otra tienda y para buscar en el POS. Monoespaciada por lo mismo que
+   las series de la preventa: se teclea dígito a dígito y en tipografía normal
+   el 0 y la O se confunden con prisa.
+   Se toca y se copia: nueve dígitos transcritos a mano se equivocan. */
+function eyebrowSku(sku){
+  return `<button class="sku-eyebrow" onclick="copiarSku(event,'${sku}')"
+           title="Tocar para copiar">${sku}</button>`;
+}
+
+function copiarSku(ev, sku){
+  ev.stopPropagation();
+  const btn = ev.currentTarget;
+  const listo = () => { btn.classList.add('copiado');
+    setTimeout(()=>btn.classList.remove('copiado'), 1100); };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(sku).then(listo).catch(()=>copiarSkuViejo(sku, listo));
+  } else copiarSkuViejo(sku, listo);
+}
+// Respaldo para los navegadores del piso que no tienen clipboard en http o en
+// vistas embebidas. Sin esto, tocar el SKU no haría nada y no se sabría por qué.
+function copiarSkuViejo(sku, listo){
+  try{
+    const t = document.createElement('textarea');
+    t.value = sku; t.style.position='fixed'; t.style.opacity='0';
+    document.body.appendChild(t); t.select();
+    document.execCommand('copy'); t.remove(); listo();
+  }catch(e){ /* si tampoco se puede, el SKU está a la vista para teclearlo */ }
+}
+
 function conPiezas_(x){ return (x.stock||0) > 0 || (x.exhibe||0) > 0; }
 // Con piezas se muestra siempre. Sin piezas, solo si NO es EOL: ése sí se
 // puede pedir a otra tienda; un EOL agotado no se trae de ningún lado.
@@ -1371,56 +1517,47 @@ function cardPromo(x){
   const pv = parseFloat(String(precioVenta||0).replace(/[^0-9.]/g,''))||0;
   const pb = parseFloat(String(precioBase||0).replace(/[^0-9.]/g,''))||0;
   const waBtn = pv ? `<button class="btn-wa" onclick="compartirWA('${encodeURIComponent(x.producto)}','${x.sku}',${pv},${pb})">📲 Compartir</button>` : '';
-  // Existencias del producto, aquí mismo: el asesor está viendo qué ofrecer y
-  // necesita saber si hay piezas sin salirse a otra pestaña.
-  const inv = invBySku[x.sku] || {};
-  const st  = inv.stock || 0, ex = inv.exhibe || 0;
-  const clsSt = st === 0 ? 'sin' : st <= 3 ? 'poco' : 'hay';
-  // Sin piezas ni exhibición no está "sin piezas": está agotado en tienda y hay
-  // que pedirlo a otra. Decirlo así evita que se descarte la venta.
-  const agotado = st === 0 && ex === 0;
-  const stockB = agotado
-    ? `<span class="badge stock-b traer">✕ agotado · se trae de otra tienda</span>`
-    : `<span class="badge stock-b ${clsSt}">${st === 0 ? '✕ sin piezas' : st + (st === 1 ? ' pieza' : ' piezas')}</span>`;
-  // Orden deliberado: producto → precio → piezas y vigencia → seguro → datos de
-  // referencia. Antes todo pesaba igual y con 117 promos no había dónde mirar.
-  const badges = `<div class="meta">${stockB}<span class="badge b-promo">🔥 Promo</span>${vig}</div>`;
-  const ref = [
-    ex ? `<b>${ex}</b> en exhibición` : '',
-    `SKU ${x.sku}`
-  ].filter(Boolean).join(' · ');
+  /* Las existencias las resuelve `estadoSku`, la misma para todas las tarjetas.
+     Antes cada una las deducía con sus propios if y por eso el mismo producto
+     salía "sin piezas" en promos y "pedir caja" en resurtir. */
+  const e = estadoSku(x.sku);
+  // El ahorro en porcentaje, que es como lo pregunta el cliente. Solo si hay
+  // rebaja de verdad: un "−0%" sobre un precio sin descuento es ruido.
+  const dto = (pb > pv && pb > 0) ? Math.round((1 - pv/pb) * 100) : 0;
+  const badges = `<div class="meta"><span class="badge b-promo">🔥 Promo</span>${vig}</div>`;
   const selA = (precioBase && precioVenta)
     ? segSelector(x.sku, precioBase, precioVenta, badges, x.pr != null && pb > pv ? x.pr : null)
     : badges;
-  return `<div class="card t-promo">
-    <h3 class="t-titulo">${x.producto}</h3>
+  return `<div class="card prod">
+    <div class="prod-top">
+      <div class="prod-nom">${eyebrowSku(x.sku)}<h3>${x.producto}</h3></div>
+      ${pastillaEstado(x.sku)}
+    </div>
+    <div class="prod-precio">
+      <span class="pv">${money(pv)}</span>
+      ${dto ? `<span class="pa">${money(pb)}</span><span class="ah">−${dto}%</span>` : ''}
+    </div>
     ${selA}
-    <div class="t-ref">${ref}</div>
-    ${waBtn}
+    <div class="prod-pie"><span>${e.pie || ''}</span>${waBtn}</div>
   </div>`;
 }
 function cardPrecioReg(x){
   const precio = x.precio || 0;
   const waBtn = precio ? `<button class="btn-wa" onclick="compartirWA('${encodeURIComponent(x.producto)}','${x.sku}',${precio},${precio})">📲 Compartir</button>` : '';
-  // Misma jerarquía que cardPromo, para que los dos slides se lean igual.
-  const st = x.stock || 0, ex = x.exhibe || 0;
-  const clsSt = st === 0 ? 'sin' : st <= 3 ? 'poco' : 'hay';
-  // Sin piezas ni exhibición no está "sin piezas": está agotado en tienda y hay
-  // que pedirlo a otra. Decirlo así evita que se descarte la venta.
-  const agotado = st === 0 && ex === 0;
-  const stockB = agotado
-    ? `<span class="badge stock-b traer">✕ agotado · se trae de otra tienda</span>`
-    : `<span class="badge stock-b ${clsSt}">${st === 0 ? '✕ sin piezas' : st + (st === 1 ? ' pieza' : ' piezas')}</span>`;
-  const badges = `<div class="meta">${stockB}</div>`;
-  const ref = [ex ? `<b>${ex}</b> en exhibición` : '', `SKU ${x.sku}`].filter(Boolean).join(' · ');
+  /* El estado y las piezas los pone `pastillaEstado`, que es la MISMA para todas
+     las tarjetas. Los badges de aquí se quedan solo para lo que no es estado. */
+  const e = estadoSku(x.sku);
   const sel = precio
-    ? segSelector(x.sku, precio, precio, badges)
-    : badges + `<div class="meta"><span class="badge">Sin precio registrado</span></div>`;
-  return `<div class="card">
-    <h3 class="t-titulo">${x.producto}</h3>
+    ? segSelector(x.sku, precio, precio, '')
+    : `<div class="meta"><span class="badge">Sin precio registrado</span></div>`;
+  return `<div class="card prod">
+    <div class="prod-top">
+      <div class="prod-nom">${eyebrowSku(x.sku)}<h3>${x.producto}</h3></div>
+      ${pastillaEstado(x.sku)}
+    </div>
+    ${precio ? `<div class="prod-precio"><span class="pv">${money(precio)}</span></div>` : ''}
     ${sel}
-    <div class="t-ref">${ref}</div>
-    ${waBtn}
+    <div class="prod-pie"><span>${e.pie || ''}</span>${waBtn}</div>
   </div>`;
 }
 function bundlesParaSku(sku){
