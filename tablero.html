@@ -1585,15 +1585,31 @@ function render(){
        existencia, así que un producto sin piezas desaparecía con todo y su
        precio — y son justo los que el cliente pide y se traen de otra tienda.
        Van al final, para que no estorben a quien solo está hojeando, pero el
-       buscador sí los encuentra. */
+       buscador sí los encuentra.
+
+       PERO solo los que de verdad se pueden traer (7-ago-2026). Un agotado
+       marcado EOL no se va a resurtir nunca: enseñar su precio es ofrecerle al
+       cliente algo que no va a llegar. Medido ese día: de 97 agotados en esta
+       lista, 95 estaban marcados EOL. La pestaña decía "Precio regular (110)"
+       cuando lo que se podía vender o traer eran 16.
+
+       El criterio no es nuevo: `AGOTADOS` (l. 901) ya excluye los EOL con este
+       mismo `eolSkuSet`. Esta lista era la única que no lo hacía. */
     const conPiezas = x => (x.stock||0) > 0 || (x.exhibe||0) > 0;
+    // Con piezas se muestra siempre —aunque sea EOL, todavía se vende—. Sin
+    // piezas, solo si NO es EOL: ese sí se puede pedir a otra tienda.
+    const seConsigue = x => conPiezas(x) || !eolSkuSet.has(x.sku);
     const sinPromo = (D.inventario||[]).filter(x =>
       coincide(x.producto, x.sku) &&
       !promoSkus.has(x.sku) &&
-      eolMap[x.sku] !== 'listo'
+      eolMap[x.sku] !== 'listo' &&
+      seConsigue(x)
     ).sort((a,b) => (conPiezas(b)?1:0) - (conPiezas(a)?1:0));
+    // El contador de "se traen de otra tienda" cuenta lo mismo: sin los EOL,
+    // que no se traen de ningún lado.
     const porTraer = sinPromo.filter(x => !conPiezas(x)).length
-                   + promosTodas.filter(x => !tieneExistencia_(x.sku)).length;
+                   + promosTodas.filter(x => !tieneExistencia_(x.sku)
+                                          && !eolSkuSet.has(x.sku)).length;
     const traerTxt = porTraer > 0 ? ` · ${porTraer} agotado${porTraer!==1?'s':''} (se traen de otra tienda)` : '';
     html += `<div class="promo-toolbar"><span>${promos.length} promo${promos.length!==1?'s':''} con existencia${traerTxt}</span><button id="btnRefreshPromos" onclick="cargarPromosNube(true)">↻ Actualizar</button></div>`;
     html += `<div class="promo-tabs">
