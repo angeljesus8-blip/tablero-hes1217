@@ -831,6 +831,20 @@ function selSeg(id, idx, p0, p1, p2, i1, i2) {
   const segCosto = idx===1 ? i1 : idx===2 ? i2 : 0;
   wrap.querySelector('.seg-desglose').innerHTML = desgloseHtml(p0, total, segCosto);
   wrap.querySelector('.seg-msi').innerHTML = msiInfo(total);
+
+  /* El precio regular tachado y el % de ahorro SOLO valen sin seguro
+     (8-ago-2026). Con "+1 año" el precio de arriba ya es producto + seguro, y
+     dejar tachado el regular del producto insinúa un ahorro que no existe:
+     $2.690 + seguro comparado con $2.790 no es una rebaja, son dos cosas
+     distintas.
+
+     Se ocultan en vez de borrarse porque hay que poder volver a "Sin seguro" y
+     recuperarlos. Y viven fuera de `.seg-desglose` porque esa línea se reescribe
+     entera en cada toque: dentro, se perderían al primero. */
+  const conSeguro = idx !== 0;
+  wrap.querySelectorAll('.precio-reg, .ah').forEach(el => {
+    el.style.display = conSeguro ? 'none' : '';
+  });
 }
 /* slidePromo y onPromoSliderScroll se retiraron el 7-ago-2026 junto con las dos
    pestañas deslizables de promos: ahora es una sola lista con encabezados.
