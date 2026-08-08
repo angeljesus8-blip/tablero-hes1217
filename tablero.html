@@ -147,6 +147,8 @@
   .precio .antes { font-size:12px; color:#bbb; text-decoration:line-through; font-weight:600; margin-right:6px; }
   .badge { font-size:11px; font-weight:700; padding:3px 8px; border-radius:6px; background:#f2f2f2; color:#666; }
   .badge.urge { background:#fdeaea; color:var(--rojo); }
+  /* Tramo intermedio de vigencia: queda esta quincena, no esta semana. */
+  .badge.pronto { background:var(--e-piso-bg); color:var(--e-piso); }
   .badge.ok { background:#eafaf1; color:var(--verde); }
   /* Existencias dentro de la tarjeta de promo: verde hay, ámbar quedan pocas,
      rojo no hay. Va primero en la fila de badges para que se vea antes que el
@@ -647,11 +649,35 @@ function diasRestantes(fecha){
   const base = new Date(HOY.getFullYear(), HOY.getMonth(), HOY.getDate());
   return Math.round((f - base)/86400000);
 }
+const _MESES_CORTO = ['ene','feb','mar','abr','may','jun',
+                     'jul','ago','sep','oct','nov','dic'];
+
+/* La vigencia se dice con FECHA y solo cuando queda poco (8-ago-2026).
+
+   Antes salía en todas las promos como "⏳ 23 días" y solo se ponía en rojo con
+   2 días o menos. O sea que entre 23 días y 3 días se veía exactamente igual,
+   cuando la decisión de qué empujar es la contraria. Y con 77 promos, 77 badges
+   que casi nunca dicen nada accionable acaban sin mirarse.
+
+   Ahora: por encima de 15 días no aparece —si está, es que corre prisa— y dice
+   la fecha, que es lo que se le repite al cliente ("la promo va hasta el 31"),
+   no una cuenta mental de días. El color separa "esta quincena" de "esta
+   semana". Sin reloj de arena: con el color diciendo la urgencia, el emoji solo
+   robaba ancho a un badge estrecho. */
+const VIGENCIA_AVISAR_DESDE = 15;   // días
+
 function badgeVigencia(fecha){
   const d = diasRestantes(fecha);
-  const txt = d < 0 ? 'Vencida' : d === 0 ? 'Vence hoy' : d === 1 ? 'Vence mañana' : `${d} días`;
-  const cls = d <= 2 ? 'urge' : '';
-  return `<span class="badge ${cls}">⏳ ${txt}</span>`;
+  if(d > VIGENCIA_AVISAR_DESDE) return '';        // aún queda mucho: no estorba
+  const f = new Date(fecha+'T00:00:00');
+  const cuando = f.getDate() + ' ' + _MESES_CORTO[f.getMonth()];
+  const txt = d < 0  ? 'Vencida'
+            : d === 0 ? 'Último día'
+            : d === 1 ? 'Hasta mañana'
+            : `Hasta el ${cuando}`;
+  // ≤5 días es "esta semana": rojo. El resto del tramo, ámbar.
+  const cls = d <= 5 ? 'urge' : 'pronto';
+  return `<span class="badge ${cls}">${txt}</span>`;
 }
 function coincide(...campos){
   if(!busqueda) return true;
