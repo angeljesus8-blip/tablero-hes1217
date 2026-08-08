@@ -3,7 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <title>Cartel · Captura de Series HES 1217</title>
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  /* Montserrat desde el repo, no del CDN de Google (8-ago-2026). Con la señal
+     de la tienda fallando, el CDN caído dibujaba la app con la letra del
+     sistema y todo se descuadraba sin avisar. Ver tablero.html. */
+  @font-face{
+    font-family:'Montserrat';
+    src:url('./fuentes/Montserrat.woff2') format('woff2');
+    font-weight:400 800; font-display:swap;
+  }
+</style>
 <style>
   :root{ --rojo:#D12026; --naranja:#F37021; --azul:#336BB4; --gris:#777; }
   *{ box-sizing:border-box; margin:0; padding:0; }
