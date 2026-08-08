@@ -795,7 +795,7 @@ llegó y había que ligar series. Lo que falta para que la hoja no haga falta:
 | Cargas de Admin | catálogo+inventario, `catalogo_ref`, exhibición, comisiones, promos | 🔨 v127, SQL sin aplicar |
 | Fotos de venta | Drive → Storage (se borran solas a los 7 días, no hay histórico que mover) | — |
 | Fotos de venta | Drive → tabla `venta_fotos`, con visor en Ventas del día | ✅ v129 |
-| Notificaciones | `notificar_` → OneSignal | 🔨 v130, SQL sin aplicar |
+| Notificaciones | `notificar_` → OneSignal | ✅ v134 · **probado, llegan** |
 
 ### El "nudo" de las notificaciones no lo era *(7-ago-2026)*
 
@@ -808,6 +808,65 @@ la lee la función, que corre como dueña. Sin CLI, sin despliegue y sin una pie
 más que mantener.
 
 **Antes de inventar infraestructura, mirar qué hay instalado.**
+
+### Las notificaciones NUNCA habían funcionado — cinco motivos apilados
+
+El 7-ago se descubrió que no había ni un suscriptor. Al tirar del hilo salieron
+**cinco fallos encadenados**, y ninguno daba señal por separado:
+
+1. **La plataforma Web nunca se configuró en OneSignal.** La app existía y su
+   llave era válida —por eso la API contestaba— pero sin web push activado.
+2. **El scope del service worker.** El código pedía `scope: '/'` y el tablero
+   vive en `/tablero-hes1217/`. Un SW servido desde un subdirectorio no puede
+   reclamar la raíz: el navegador lo rechaza e `init()` falla entero. **Nadie
+   pudo suscribirse jamás.**
+3. **La campana miraba el dato equivocado:** `Notification.permission` (permiso
+   del navegador) en vez de `PushSubscription.optedIn` (suscripción real). Se
+   puede tener lo primero sin lo segundo, y entonces decía "ya están activadas".
+4. **Pedir permiso no suscribe.** Faltaba el `optIn()` explícito.
+5. **`Notification.requestPermission()` en vez del wrapper del SDK.** Con
+   `OneSignal.Notifications.requestPermission()` el diálogo no aparecía nunca:
+   el permiso se quedaba en `default` y Chrome ni listaba el sitio en sus
+   ajustes. Va como primera instrucción del `try`, sin un solo `await` delante:
+   los navegadores descartan la petición si el gesto del clic ya se consumió.
+
+Y dos más en el payload, que **también le faltaban al Apps Script** —o sea que
+sus notificaciones habrían fallado igual aunque hubiera habido suscriptores—:
+
+- `target_channel: 'push'`, obligatorio con el modelo de usuarios nuevo
+- el idioma `en` en `headings`/`contents`, que OneSignal exige como respaldo
+
+**Nada de esto se veía porque `notificarEquipo` descartaba la respuesta con un
+`console.warn`.** Siete fallos tapados por un log que nadie lee en un celular.
+Lo que destrabó el diagnóstico fue hacer que el mensaje de error dijera el
+estado real —permiso, id de suscripción, scopes registrados— en vez de "no se
+pudo activar".
+
+**Para diagnosticar sin tocar el teléfono**, se le pregunta a OneSignal:
+
+```sql
+-- ¿cuántos dispositivos hay suscritos de verdad?
+select (extensions.http(('GET',
+  'https://onesignal.com/api/v1/players?app_id=' || c.app_id || '&limit=1',
+  array[extensions.http_header('Authorization','Basic ' || c.api_key)],
+  null, null)::extensions.http_request)).content::jsonb -> 'total_count'
+from public.notif_config c where c.store_id = '1217';
+```
+
+Cambiando la URL por `/notifications/<id>?app_id=…` se ve qué pasó con un envío
+concreto. **`successful` significa que Google lo aceptó, no que el teléfono lo
+mostró** — eso es `received`. Si `successful` es 1 y `received` 0, el problema
+está en el dispositivo, no en el sistema.
+
+**Configuración correcta en OneSignal** (verificada contra su API):
+
+    serviceWorker.path              = /tablero-hes1217/
+    serviceWorker.workerName        = sw.js
+    serviceWorker.registrationScope = /tablero-hes1217/
+
+No hay que subir el `OneSignalSDKWorker.js` que ofrece el asistente: `sw.js` ya
+lo carga con `importScripts` en su primera línea. Dos service workers peleando
+por el mismo scope es peor que ninguno.
 
 ### Y el fallo que destapó cerrar esto
 
