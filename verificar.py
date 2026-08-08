@@ -275,7 +275,11 @@ def r_cupo():
     if html is None: return
     m = re.search(r'const PREVENTA = \[(.*?)\n\];', html, re.S)
     if not m:
-        falla('cupo', 'no encontré la const PREVENTA en tablero.html'); return
+        # 8-ago-2026: la preventa de la Pura 90S terminó —los equipos llegaron—
+        # y con ella se retiró la lista fija de SKUs con cupo. La tabla
+        # `preventa_cupo` y su trigger se conservan en Supabase para la próxima
+        # preventa; mientras no haya una, no hay nada que comparar.
+        return
     enHtml = {sku: int(n) for sku, n in
               re.findall(r"sku:'(\d+)'.*?cupo:(\d+)", m.group(1))}
     enSql  = {sku: int(n) for sku, n in
