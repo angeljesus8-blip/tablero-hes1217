@@ -175,6 +175,39 @@
   .promo-toolbar button:disabled { background:#ccc; }
   @keyframes spin { to { transform:rotate(360deg); } }
   .promo-toolbar button.girando { animation:spin .7s linear infinite; }
+  /* ---- Cabecera de sección (sustituye a la barra de chips, 8-ago-2026) ---- */
+  .sec-bar { display:flex; align-items:center; gap:6px; padding:10px 16px 4px; }
+  .sec-volver { background:none; border:none; color:var(--rojo); font-size:26px; line-height:1;
+    font-weight:700; cursor:pointer; padding:0 8px 3px 0; }
+  .sec-tit { font-size:15px; font-weight:800; }
+
+  /* ---- Tarjetas de Inicio ---- */
+  .ir-grid { display:flex; flex-direction:column; gap:10px; margin-bottom:4px; }
+  .ir-card { display:flex; align-items:center; gap:12px; width:100%; text-align:left;
+    background:#fff; border:1px solid var(--linea); border-radius:14px; padding:14px 15px;
+    font-family:inherit; cursor:pointer; }
+  .ir-card:active { transform:scale(.995); }
+  .ir-ico { width:38px; height:38px; border-radius:10px; display:grid; place-items:center;
+    font-size:18px; flex-shrink:0; }
+  .ir-txt { flex:1; min-width:0; }
+  .ir-txt b { display:block; font-size:14px; font-weight:800; }
+  .ir-txt span { font-size:11.5px; color:#999; font-weight:600; }
+  .ir-n { font-size:20px; font-weight:800; flex-shrink:0; font-variant-numeric:tabular-nums; }
+
+  /* ---- Franja de avisos en Inicio ---- */
+  .aviso-franja { background:#fff5ee; border:1.5px solid #f7c9a6; border-radius:12px;
+    padding:12px 14px; margin-bottom:12px; }
+  .aviso-franja h4 { font-size:12.5px; font-weight:800; color:var(--naranja);
+    text-transform:uppercase; letter-spacing:.4px; margin-bottom:7px; }
+  .aviso-franja .af-item { font-size:13px; font-weight:700; line-height:1.4; }
+  .aviso-franja .af-item + .af-item { margin-top:7px; padding-top:7px; border-top:1px dashed #f7c9a6; }
+  .aviso-franja .af-det { display:block; font-size:11.5px; color:#8a6a45; font-weight:600; margin-top:2px; }
+
+  /* ---- Buscador global ---- */
+  .g-head { padding:10px 16px 2px; font-size:12px; color:#999; font-weight:600; }
+  .g-head b { color:var(--tinta,#1a1a1a); }
+  .g-vacio { text-align:center; color:#bbb; font-size:13px; padding:26px 20px; }
+
   /* ---- Dashboard ---- */
   .att-card { padding:18px 18px 14px; }
   .att-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; font-size:13px; font-weight:700; color:#555; }
@@ -313,7 +346,7 @@
   </div>
 </div>
 
-<div class="chips" id="chips"></div>
+<div id="secBar"></div>
 
 <div id="liveWarning">
   <span class="lw-icon">⚠️</span>
@@ -454,19 +487,28 @@ function tocarDia(){
    filtro, su línea en `seccionTieneItems`, la de `cuenta()` y la de `render()`.
    `seccionBundles` y `aplicarBundles` se quedan sin usar a propósito, por lo
    mismo. */
+/* Las secciones del tablero. `nov` (Novedades) y `transito` (En tránsito) se
+   BORRARON el 8-ago-2026: salían de `datos.js`, vacío a propósito desde agosto,
+   y no había nada que las llenara —ni un modo del Apps Script ni una tabla en
+   Supabase—. Nunca llegaron a aparecer en pantalla, y aun así había que
+   mantener su filtro, su contador, su tarjeta y su rama del render.
+   Si algún día hacen falta, se reconstruyen sabiendo de dónde salen los datos. */
 const FILTROS = [
-  { id:'inicio', label:'🏠 Inicio' },
-  { id:'promo',  label:'💰 Precios' },
-  { id:'preventa', label:'🚀 Preventa' },
-  { id:'eol',   label:'🏷️ Vender 50%' },
-  { id:'resurtir', label:'🔄 Resurtir' },
-  { id:'transito', label:'🚚 En tránsito' },
-  { id:'nov',   label:'📦 Novedades' },
-  { id:'aviso', label:'📢 Avisos' },
+  { id:'promo',    label:'💰 Precios y promos', icono:'🔥', color:'var(--naranja)',
+    sub:'Lo que se puede vender hoy y a qué precio' },
+  { id:'preventa', label:'🚀 Preventa Pura 90S', icono:'🚀', color:'#7c3aed',
+    sub:'Apartados, series y entregas' },
+  { id:'eol',      label:'🏷️ Vender al 50%', icono:'🏷️', color:'var(--verde)',
+    sub:'Piezas de exhibición que ya se pueden rematar' },
+  { id:'resurtir', label:'🔄 Resurtir', icono:'🔄', color:'var(--azul)',
+    sub:'Sin existencia — hay que pedir' },
 ];
 /* La pestaña se puede fijar desde fuera con #preventa. Lo usa Captura de Series
    para devolver al asesor justo donde estaba después de escanear una serie: sin
    esto vuelve al Inicio y tiene que buscar otra vez al cliente en la lista. */
+/* `inicio` ya no es una sección más de FILTROS: es la pantalla de partida y el
+   único camino entre secciones (8-ago-2026). Se puede fijar desde fuera con
+   #preventa — lo usa Captura de Series para devolver al asesor donde estaba. */
 let filtroActivo = (function(){
   const h = (location.hash || '').replace('#','');
   return FILTROS.some(f => f.id === h) ? h : 'inicio';
@@ -559,7 +601,7 @@ const eolSkuSet = new Set((D.eol||[]).map(e=>e.sku));
 const EOL_PAUSADOS = new Set(['100280724']); // MatePad 11.5" VD+TCL — pendiente autorizacion comercial
 
 // Variables recalculables cuando llegan datos de la nube
-let EOL = [], eolMap = {}, transitoMap = {}, RESURTIR = [], AGOTADOS = [];
+let EOL = [], eolMap = {}, RESURTIR = [], AGOTADOS = [];
 const PROMOS_KEY   = 'hes1217_promos_cache';
 const BUNDLES_KEY  = 'hes1217_bundles_cache';
 let PROMOS = [];
@@ -874,7 +916,6 @@ function calcDerivados(){
       precio:precio, precio50:precio?precio/2:null, stock, exhibe, estado };
   }).filter(e=>e.exhibe>0 && !EOL_PAUSADOS.has(e.sku));
   eolMap = {}; EOL.forEach(e=>{ eolMap[e.sku]=e.estado; });
-  transitoMap = {}; (D.transito||[]).forEach(x=>{ transitoMap[x.sku]=(transitoMap[x.sku]||0)+x.cantidad; });
   RESURTIR = (D.inventario||[]).filter(x=>x.stock===0 && x.exhibe>0 && !eolSkuSet.has(x.sku))
               .sort((a,b)=> a.producto.localeCompare(b.producto));
   AGOTADOS = (D.inventario||[]).filter(x=>(x.stock||0)===0 && (x.exhibe||0)===0 && !eolSkuSet.has(x.sku))
@@ -887,35 +928,124 @@ function cuenta(id){
   if(id==='promo') return PROMOS.filter(x=>coincide(x.producto,x.sku) && tieneExistencia_(x.sku)).length;
   if(id==='preventa') return preventaTotalDisp();
   if(id==='eol')   return EOL.filter(e=>coincide(e.producto,e.sku) && e.estado==='listo').length;
-  if(id==='nov')   return (D.novedades||[]).filter(x=>coincide(x.titulo,x.detalle)).length;
   if(id==='inv')   return (D.inventario||[]).filter(x=>coincide(x.producto,x.sku)&&((x.stock||0)>0||(x.exhibe||0)>0)).length;
   if(id==='resurtir') return [...AGOTADOS,...RESURTIR].filter(x=>coincide(x.producto,x.sku)).length;
-  if(id==='transito') return (D.transito||[]).filter(x=>coincide(x.producto,x.sku)).length;
-  if(id==='aviso') return (D.avisos||[]).filter(x=>coincide(x.titulo,x.detalle)).length;
   return 0;
 }
 
 // ¿la sección tiene algún dato? (ignora el buscador, para que las pestañas no salten al escribir)
 function seccionTieneItems(id){
-  if(id==='inicio')   return true;
   if(id==='promo')    return PROMOS.length>0;
   if(id==='preventa') return PREVENTA.length>0;
   if(id==='eol')      return EOL.length>0;
-  if(id==='transito') return (D.transito||[]).length>0;
-  if(id==='nov')      return (D.novedades||[]).length>0;
   if(id==='inv')      return (D.inventario||[]).length>0;
   if(id==='resurtir') return RESURTIR.length>0 || AGOTADOS.length>0;
-  if(id==='aviso')    return (D.avisos||[]).length>0;
   return false;
 }
 
-function renderChips(){
-  const c = document.getElementById('chips');
-  c.innerHTML = FILTROS.filter(f=>seccionTieneItems(f.id)).map(f=>{
-    const n = `<span class="n">${cuenta(f.id)}</span>`;
-    return `<button class="chip ${filtroActivo===f.id?'active':''}" data-f="${f.id}">${f.label}${n}</button>`;
-  }).join('');
-  c.querySelectorAll('.chip').forEach(b=>b.onclick=()=>{ filtroActivo=b.dataset.f; render(); });
+/* La barra de chips se retiró el 8-ago-2026. Se navega desde Inicio y se vuelve
+   con la flecha; para encontrar un producto concreto está el buscador, que desde
+   hoy mira en TODO el tablero y no solo en la sección abierta.
+
+   Los chips tenían un problema que no se veía: obligaban a saber en qué pestaña
+   estaba cada cosa ANTES de buscarla. Con cinco secciones y 227 SKU, eso es
+   pedirle al asesor que recuerde el mapa mientras el cliente espera. */
+function irA(id){ filtroActivo = id; busqueda = ''; const q = document.getElementById('q');
+  if(q) q.value = ''; window.scrollTo(0,0); render(); }
+
+/* ── Criterios de "qué se puede vender / traer" ──────────────────────────
+   Viven aquí sueltos porque los usan TRES sitios: la sección de precios, las
+   tarjetas de Inicio y el buscador global. Cuando estaban escritos dentro del
+   render, cada nuevo consumidor los copiaba, y el día que cambió el criterio
+   —excluir los EOL agotados, 7-ago— hubo que perseguirlo por varios sitios. */
+function conPiezas_(x){ return (x.stock||0) > 0 || (x.exhibe||0) > 0; }
+// Con piezas se muestra siempre. Sin piezas, solo si NO es EOL: ése sí se
+// puede pedir a otra tienda; un EOL agotado no se trae de ningún lado.
+function seConsigue_(x){ return conPiezas_(x) || !eolSkuSet.has(x.sku); }
+
+function inventarioSinPromo(){
+  const conPromo = new Set(PROMOS.map(p=>p.sku));
+  return (D.inventario||[]).filter(x => !conPromo.has(x.sku) && eolMap[x.sku] !== 'listo');
+}
+function sinPromoConPiezasN(){ return inventarioSinPromo().filter(conPiezas_).length; }
+
+/* ── Buscador global (8-ago-2026) ───────────────────────────────────────
+   Antes el buscador filtraba SOLO dentro de la sección abierta. Un producto
+   podía existir, coincidir con lo escrito y no aparecer — sin ninguna señal de
+   que había que mirar en otra pestaña. Con el cliente enfrente eso se traduce
+   en "no lo tenemos", que es la peor respuesta posible cuando sí lo hay.
+
+   Ahora busca en todo y agrupa por origen, porque de dónde sale cada resultado
+   es justo lo que cambia el precio que se cobra. */
+function buscarEnTodo(){
+  const bloques = [];
+  const push = (titulo, items, fn, nota) => {
+    if(!items.length) return;
+    bloques.push({ titulo, n:items.length, html:items.map(fn).join(''), nota,
+                   skus:items.map(i=>i.sku) });
+  };
+
+  const promosCoinc = PROMOS.filter(x=>coincide(x.producto,x.sku));
+  push('🔥 Con promoción', promosCoinc.filter(x=>tieneExistencia_(x.sku)), cardPromo);
+
+  const sinPromo = inventarioSinPromo().filter(x=>coincide(x.producto,x.sku));
+  push('💰 Precio regular', sinPromo.filter(conPiezas_), cardPrecioReg);
+
+  push('🏷️ Vender al 50%', EOL.filter(e=>coincide(e.producto,e.sku) && e.estado==='listo'), cardEol);
+
+  // Preventa: se busca por color y modelo, que es como la pide el cliente.
+  const pre = PREVENTA.filter(p=>coincide('Pura 90S '+p.ver+' '+p.cap+' '+p.color, p.sku));
+  push('🚀 Preventa Pura 90S', pre, cardPreventa);
+
+  push('🔄 Hay que resurtir', [...AGOTADOS,...RESURTIR].filter(x=>coincide(x.producto,x.sku)), rowResurtir);
+
+  // Se traen de otra tienda: agotados que NO son EOL, con y sin promo.
+  const traibles = [...promosCoinc.filter(x=>!tieneExistencia_(x.sku) && !eolSkuSet.has(x.sku)).map(x=>({__promo:x})),
+                    ...sinPromo.filter(x=>!conPiezas_(x) && seConsigue_(x)).map(x=>({__reg:x}))];
+  if(traibles.length){
+    bloques.push({ titulo:'📭 Se traen de otra tienda', n:traibles.length,
+      html: traibles.map(t => t.__promo ? cardPromo(t.__promo) : cardPrecioReg(t.__reg)).join(''),
+      skus: traibles.map(t => (t.__promo||t.__reg).sku) });
+  }
+
+  /* Lo que coincide pero NO salió en ningún bloque de arriba. Son sobre todo los
+     descontinuados ya agotados: no se venden, no se resurten y no se traen, así
+     que ninguna sección los lista — y sin este bloque, buscarlos daría "nada
+     coincide" sobre un producto que el tablero sí conoce y del que sabe el
+     precio. El cliente pregunta por él justamente porque ya no está.
+
+     OJO al construir `mostrados`: tiene que llevar lo que DE VERDAD se pintó,
+     no lo que se consideró. La primera versión metía aquí `sinPromo` entero
+     —incluidos los agotados que el bloque de precio regular filtra— y entonces
+     estos productos no salían por ningún lado y este bloque nunca aparecía.
+     Un candado que se cierra sobre sí mismo. */
+  const mostrados = new Set();
+  bloques.forEach(b => (b.skus||[]).forEach(k => mostrados.add(k)));
+  const soloCatalogo = (D.inventario||[]).filter(x =>
+    coincide(x.producto,x.sku) && !mostrados.has(x.sku));
+  if(soloCatalogo.length){
+    bloques.push({ titulo:'📚 Ya no se maneja en la tienda', n:soloCatalogo.length,
+      nota:'Descontinuados y sin piezas. Se puede consultar el precio, pero no se pueden pedir.',
+      html: soloCatalogo.slice(0,25).map(cardPrecioReg).join('') });
+  }
+
+  const total = bloques.reduce((a,b)=>a+b.n, 0);
+  if(!total) return `<div class="g-vacio">Nada coincide con «${esc(busqueda)}».<br>Prueba con menos letras o con el SKU.</div>`;
+
+  return `<div class="g-head"><b>${total}</b> resultado${total!==1?'s':''} en todo el tablero</div>`
+       + bloques.map(b => `<div class="grupo-titulo" style="margin-top:14px">${b.titulo} (${b.n})</div>`
+           + (b.nota?`<div class="g-head" style="padding-top:0">${b.nota}</div>`:'')
+           + b.html).join('');
+}
+
+function renderCabeceraSeccion(){
+  const barra = document.getElementById('secBar');
+  if(!barra) return;
+  if(filtroActivo === 'inicio' || busqueda){ barra.className = ''; barra.innerHTML = ''; return; }
+  const f = FILTROS.find(x => x.id === filtroActivo);
+  barra.className = 'sec-bar';
+  barra.innerHTML = `<button class="sec-volver" onclick="irA('inicio')" aria-label="Volver al inicio">‹</button>
+    <span class="sec-tit">${f ? f.label : ''}</span>`;
 }
 
 // Precio de venta de un artículo DENTRO de un combo:
@@ -1345,13 +1475,6 @@ function cardEol(e){
     <div class="meta"><span class="badge">SKU ${e.sku}</span></div>
   </div>`;
 }
-function cardNov(x){
-  return `<div class="card t-nov ${x.prioridad==='alta'?'alta':''}">
-    <div class="top"><h3>${x.titulo}</h3><span class="tag nov">Nuevo</span></div>
-    <p class="det">${x.detalle||''}</p>
-    ${x.fecha?`<div class="meta"><span class="badge">📅 ${x.fecha}</span></div>`:''}
-  </div>`;
-}
 function cardAviso(x){
   const vigTxt = x.d2 ? `<span class="badge">Vence ${x.d2}</span>` : '';
   const tipoTxt = (x.tipo&&x.tipo!=='manual') ? `<span class="badge" style="background:#eef3fb;color:var(--azul)">${x.tipo.toUpperCase()}</span>` : '';
@@ -1359,13 +1482,6 @@ function cardAviso(x){
     <div class="top"><h3>${x.titulo}</h3><span class="tag aviso">Aviso</span></div>
     <p class="det">${x.detalle||''}</p>
     <div class="meta">${vigTxt}${tipoTxt}</div>
-  </div>`;
-}
-function cardTransito(x){
-  return `<div class="card t-trans">
-    <div class="top"><h3>${x.producto}</h3><span class="tag trans">🚚 ${x.cantidad}</span></div>
-    <p class="det">Vienen <b>${x.cantidad}</b> pza(s) en camino desde el CD. Se puede vender a <b>promesa de entrega</b>.</p>
-    <div class="meta"><span class="badge">SKU ${x.sku}</span></div>
   </div>`;
 }
 function rowResurtir(x){
@@ -1429,8 +1545,6 @@ function rowInv(x){
   const eolB = est==='listo' ? `<span class="exh eol-ready">🏷️ 50%</span>`
              : est==='pendiente' ? `<span class="exh eol-pend">EOL</span>` : '';
   const exh = x.exhibe ? `<span class="exh">👁 ${x.exhibe} exhib.</span>` : '';
-  const tr = transitoMap[x.sku];
-  const trB = tr ? `<span class="exh trans-b">🚚 ${tr}</span>` : '';
   const vB = (D._invCloud && x._vendido) ? `<span class="exh" style="background:#f0f0f0;color:#999">−${x._vendido} vend.</span>` : '';
   // Promo vigente del producto, si la hay. Va aquí para no obligar al asesor a
   // saltar entre Inventario y Promos: ve las piezas y el precio en la misma fila.
@@ -1442,7 +1556,7 @@ function rowInv(x){
   return `<div class="inv-row">
     <div class="dot ${cls}"></div>
     <div class="inv-info" style="flex:1;min-width:0"><h4>${x.producto}</h4><span>SKU ${x.sku||'—'}</span></div>
-    ${eolB}${promoB}${exh}${trB}${vB}
+    ${eolB}${promoB}${exh}${vB}
     <div class="stock ${cls}"><div class="num">${x.stock}</div><div class="lbl lbl2">para vender</div></div>
   </div>`;
 }
@@ -1479,7 +1593,14 @@ function seccionBundles(titulo, items){
 function render(){
   // Cruzar la medianoche con la app abierta también cuenta como cambio de día.
   if(tocarDia()){ refiltrarCaches(); pintarUpdated(); }
-  renderChips();
+  renderCabeceraSeccion();
+  /* Escribir en el buscador manda sobre la sección abierta: si el asesor está
+     buscando algo, lo que quiere es ENCONTRARLO, no seguir dentro de donde
+     estaba. Al borrar la búsqueda se vuelve a la sección tal cual estaba. */
+  if(busqueda){
+    document.getElementById('app').innerHTML = buscarEnTodo();
+    return;
+  }
   const f = filtroActivo;
   let html = '';
 
@@ -1493,13 +1614,10 @@ function render(){
   const eolListo = eolAll.filter(e=>e.estado==='listo');
   const eolPend  = eolAll.filter(e=>e.estado==='pendiente');
   const eolAgot  = eolAll.filter(e=>e.estado==='agotado');
-  const nov    = (D.novedades||[]).filter(x=>coincide(x.titulo,x.detalle));
   const inv    = (D.inventario||[]).filter(x=>coincide(x.producto,x.sku)&&((x.stock||0)>0||(x.exhibe||0)>0));
   const resurtir = RESURTIR.filter(x=>coincide(x.producto,x.sku));
   const agotados = AGOTADOS.filter(x=>coincide(x.producto,x.sku));
   const resurtirTodos = [...agotados, ...resurtir];
-  const transito = (D.transito||[]).filter(x=>coincide(x.producto,x.sku));
-  const avisos = (D.avisos||[]).filter(x=>coincide(x.titulo,x.detalle) && (!x.d2||x.d2>=HOY_ISO));
 
   if(f==='inicio'){
     const promoAct = PROMOS.filter(x=>tieneExistencia_(x.sku)).length;
@@ -1533,23 +1651,36 @@ function render(){
       </div>
       <div class="lead-fuente" style="margin-top:8px">Usa estos botones solo para ventas que <b>no</b> capturaste en la app</div>
     </div>
-    <div class="dash-grid">
-      <div class="dash-stat" onclick="filtroActivo='promo';render()">
-        <div class="dash-n">${promoAct}</div><div class="dash-lbl">🔥 Promos</div>
-      </div>
-      <div class="dash-stat" onclick="filtroActivo='eol';render()">
-        <div class="dash-n" style="color:${eolList>0?'var(--rojo)':'#1a1a1a'}">${eolList}</div><div class="dash-lbl">🏷️ EOL al 50%</div>
-      </div>
-      <div class="dash-stat" onclick="filtroActivo='aviso';render()">
-        <div class="dash-n">${avisosAct}</div><div class="dash-lbl">📢 Avisos</div>
-      </div>
-      <div class="dash-stat" onclick="filtroActivo='resurtir';render()">
-        <div class="dash-n" style="color:${resurtirN>0?'var(--naranja)':'#1a1a1a'}">${resurtirN}</div><div class="dash-lbl">🔄 Resurtir</div>
-      </div>
-    </div>
     ${leaderboardHtml()}`;
+
+    /* Los avisos van en una FRANJA arriba, no en una tarjeta más (8-ago-2026).
+       Un aviso se lee al entrar; nadie navega a "Avisos" a ver si hay alguno —
+       por eso llevaba tanto sin mirarse. Solo aparece cuando hay. */
+    const avisosHoy = (D.avisos||[]).filter(a=>!a.d2||a.d2>=HOY_ISO);
+    if(avisosHoy.length){
+      html = `<div class="aviso-franja">
+        <h4>📢 ${avisosHoy.length===1?'Aviso':'Avisos'} de hoy</h4>
+        ${avisosHoy.slice(0,3).map(a=>`<div class="af-item">${esc(a.titulo||'')}
+          ${a.detalle?`<span class="af-det">${esc(String(a.detalle).slice(0,160))}</span>`:''}</div>`).join('')}
+        ${avisosHoy.length>3?`<div class="af-det" style="margin-top:6px">y ${avisosHoy.length-3} más</div>`:''}
+      </div>` + html;
+    }
+
+    /* Las tarjetas sustituyen a la rejilla de números y a la barra de chips:
+       cada una dice a dónde lleva Y cuánto hay dentro, así que se ve de un
+       vistazo dónde hay trabajo sin tener que entrar a mirar. */
+    const cuentas = { promo:promoAct, preventa:preventaTotalDisp(), eol:eolList, resurtir:resurtirN };
+    const subs = { promo:`${promoAct} con promo · ${sinPromoConPiezasN()} a precio regular`,
+                   preventa:`${APARTADOS.filter(a=>String(a.estatus||'').toLowerCase()!=='cancelado').length} apartados · ${preventaTotalDisp()} piezas libres`,
+                   eol:'Piezas de exhibición al 50%',
+                   resurtir:'Sin existencia — hay que pedir' };
+    html += `<div class="ir-grid">` + FILTROS.filter(f=>seccionTieneItems(f.id)).map(f=>`
+      <button class="ir-card" onclick="irA('${f.id}')">
+        <span class="ir-ico" style="background:${f.color}1a">${f.icono}</span>
+        <span class="ir-txt"><b>${f.label}</b><span>${subs[f.id]||f.sub}</span></span>
+        <span class="ir-n" style="color:${(cuentas[f.id]||0)>0?f.color:'#ccc'}">${cuentas[f.id]||0}</span>
+      </button>`).join('') + `</div>`;
   }
-  if(f==='aviso') html += seccion('📢 Avisos', avisos, cardAviso);
   if(f==='eol'){
     html += seccion('🏷️ Vender al 50% · pieza de exhibición', eolListo, cardEol);
     html += seccion('⏳ EOL próximos · agotar stock cerrado', eolPend, cardEol);
@@ -1572,16 +1703,12 @@ function render(){
 
        El criterio no es nuevo: `AGOTADOS` (l. 901) ya excluye los EOL con este
        mismo `eolSkuSet`. Esta lista era la única que no lo hacía. */
-    const conPiezas = x => (x.stock||0) > 0 || (x.exhibe||0) > 0;
-    // Con piezas se muestra siempre —aunque sea EOL, todavía se vende—. Sin
-    // piezas, solo si NO es EOL: ese sí se puede pedir a otra tienda.
-    const seConsigue = x => conPiezas(x) || !eolSkuSet.has(x.sku);
-    const sinPromo = (D.inventario||[]).filter(x =>
-      coincide(x.producto, x.sku) &&
-      !promoSkus.has(x.sku) &&
-      eolMap[x.sku] !== 'listo' &&
-      seConsigue(x)
-    ).sort((a,b) => (conPiezas(b)?1:0) - (conPiezas(a)?1:0));
+    // conPiezas_ y seConsigue_ viven fuera del render: los comparten esta
+    // sección, las tarjetas de Inicio y el buscador global.
+    const conPiezas = conPiezas_;
+    const sinPromo = inventarioSinPromo()
+      .filter(x => coincide(x.producto, x.sku) && seConsigue_(x))
+      .sort((a,b) => (conPiezas_(b)?1:0) - (conPiezas_(a)?1:0));
     // El contador de "se traen de otra tienda" cuenta lo mismo: sin los EOL,
     // que no se traen de ningún lado.
     const porTraer = sinPromo.filter(x => !conPiezas(x)).length
@@ -1639,7 +1766,6 @@ function render(){
       html += `<div class="empty">${busqueda ? 'Sin resultados para «'+esc(busqueda)+'».' : 'Sin promos ni precios que mostrar.'}</div>`;
     }
   }
-  if(f==='nov')   html += seccion('📦 Mercancía nueva', nov, cardNov);
   if(f==='resurtir'){
     if(agotados.length) html += seccion('📭 Sin existencia — pedir urgente', agotados, rowResurtir);
     if(resurtir.length) html += seccion('🪟 Queda piso — pedir caja', resurtir, rowResurtir);
@@ -1647,7 +1773,6 @@ function render(){
       html += `<button class="btn-wa" style="margin-top:14px" onclick="resurtirWA()">📲 Compartir lista completa por WhatsApp</button>`;
     }
   }
-  if(f==='transito') html += seccion('🚚 En tránsito · venta a promesa de entrega', transito, cardTransito);
   if(f==='inv')   html += seccion('📊 Inventario · existencias', inv, rowInv);
 
   if(!html.trim()) html = `<div class="empty">Sin resultados${busqueda?` para “${busqueda}”`:''}.</div>`;
