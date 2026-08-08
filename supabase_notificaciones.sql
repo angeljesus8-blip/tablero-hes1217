@@ -115,6 +115,13 @@ BEGIN
     'application/json',
     jsonb_build_object(
       'app_id',            cfg.app_id,
+      -- `target_channel` es obligatorio desde el modelo de usuarios nuevo de
+      -- OneSignal: una app puede tener push, email y SMS, y sin decirlo responde
+      -- 400 «Message Notifications must have At Least One Target Channel».
+      -- El Apps Script no lo mandaba —se escribió cuando aún se asumía push— y
+      -- por eso sus notificaciones tampoco habrían salido aunque hubiera habido
+      -- suscriptores. (7-ago-2026)
+      'target_channel',    'push',
       'included_segments', jsonb_build_array('All'),
       'headings',          jsonb_build_object('es', v_titulo),
       'contents',          jsonb_build_object('es', trim(p_msg)),
