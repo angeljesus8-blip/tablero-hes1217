@@ -270,8 +270,12 @@
      —"+ 2 años" se caía solo abajo— y la tarjeta crecía sin motivo: con 79
      seguidas, esa línea de más son dos pantallas extra de scroll. */
   .card.prod .seg-chips { flex-wrap:nowrap; gap:6px; }
-  .card.prod .seg-chip { flex:1; padding:8px 4px; font-size:var(--t-sm);
-    border-radius:var(--r-sm); white-space:nowrap; }
+  .card.prod .seg-chip { flex:1; padding:7px 4px; font-size:var(--t-sm);
+    border-radius:var(--r-sm); white-space:nowrap; line-height:1.25; }
+  /* El costo del seguro, dentro del chip y en su propia línea: cabe en móvil y
+     deja el nombre del plazo legible. */
+  .card.prod .seg-chip i { display:block; font-style:normal; font-size:10.5px;
+    font-weight:800; opacity:.75; font-variant-numeric:tabular-nums; }
 
   /* Compartir vuelve al pie, a la derecha del estado, en vez de ocupar todo el
      ancho: es una acción secundaria y estaba pesando como la principal. */
@@ -872,9 +876,13 @@ function msiInfo(total) {
   if (total >= 1500)  return `<span class="msi-badge msi-6">6 MSI · ${cuota(6)}/mes</span>`;
   return '';
 }
+/* Solo el total, grande. El desglose "2.690 + 299 seguro = 2.989" se retiró el
+   8-ago-2026: ahora el chip dice lo que cuesta el seguro, así que la suma en
+   gris repetía el dato y le robaba tamaño al número que de verdad se cobra.
+   `p0` y `segCosto` se conservan en la firma porque selSeg los pasa y puede
+   volver a hacer falta el desglose si algún día se cobra el seguro aparte. */
 function desgloseHtml(p0, total, segCosto) {
-  if (!segCosto) return `<span class="seg-precio-total">${money(total)}</span>`;
-  return `<span class="seg-prod">${money(p0)}</span><span class="seg-op"> + ${money(segCosto)} seguro = </span><span class="seg-precio-total">${money(total)}</span>`;
+  return `<span class="seg-precio-total">${money(total)}</span>`;
 }
 /* El precio va PRIMERO y los meses al final, en gris (rediseño del 1-ago-2026):
    la tarjeta mostraba once bloques con el mismo peso y no había dónde caer
@@ -892,8 +900,12 @@ function segSelector(sku, precioBase, precioVenta, enMedio, regularTachado, dto)
   const i1 = s ? s.p1 : 0;
   const i2 = s ? s.p2 : 0;
   const id = 'sg_' + String(sku).replace(/\D/g,'');
-  const chip1 = s ? `<button class="seg-chip" onclick="selSeg('${id}',1,${p0},${p1},${p2},${i1},${i2})">+ 1 año</button>` : '';
-  const chip2 = s ? `<button class="seg-chip" onclick="selSeg('${id}',2,${p0},${p1},${p2},${i1},${i2})">+ 2 años</button>` : '';
+  /* El costo del seguro va DENTRO del chip (8-ago-2026). Antes solo aparecía al
+     tocarlo, en el desglose gris de arriba: el asesor tenía que seleccionarlo
+     para poder decir cuánto costaba, y con el cliente delante eso es tantear.
+     Aquí se lee antes: "por 299 más te llevas un año". */
+  const chip1 = s ? `<button class="seg-chip" onclick="selSeg('${id}',1,${p0},${p1},${p2},${i1},${i2})">1 año <i>+${money(i1)}</i></button>` : '';
+  const chip2 = s ? `<button class="seg-chip" onclick="selSeg('${id}',2,${p0},${p1},${p2},${i1},${i2})">2 años <i>+${money(i2)}</i></button>` : '';
   // El tachado va FUERA de .seg-desglose: selSeg reescribe ese nodo completo al
   // cambiar de seguro, y si estuviera dentro se borraría en el primer toque.
   const tach = regularTachado ? `<span class="precio-reg">${money(regularTachado)}</span>` : '';
