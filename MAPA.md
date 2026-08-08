@@ -441,9 +441,29 @@ de 3 y el tablero enseñaría 3 piezas de más.
 Eso es peor que el problema original. Enseñar stock que no existe manda a un
 asesor a buscar una caja que no está, con el cliente delante.
 
+### Cuatro sitios excluyen las entregas de preventa, y por el mismo motivo
+
+Una entrega **no es una venta de hoy**: el cliente pagó semanas antes y esa
+operación ya contó entonces. Todo lo que mida "lo de hoy" tiene que dejarla
+fuera, y cada vez que se olvidó uno, apareció un número falso:
+
+| Dónde | Qué pasaba sin el filtro |
+|---|---|
+| `inventario_vivo` | descontaba una pieza que el POS ya había descontado |
+| `cargar_cortes` | el corte se inflaba y restaba ventas normales del conteo |
+| `comparar_ventas` | marcaba "no cuadra" cada día, por algo correcto |
+| `ventas_hoy` | **hundía el Assurant del día** *(visto en piso el 8-ago)* |
+
+El último se descubrió el mismo día de la primera entrega: sin haber vendido
+nada, el tablero marcaba «1 venta sin seguro» y el attach caía a 0 %. Con nueve
+apartados pendientes eran nueve golpes gratis a un KPI que se reporta con meta
+del 25 %. Y en el otro sentido igual: una entrega con seguro lo habría inflado.
+
+**Si mañana se añade otra lectura que mida el día, este filtro va con ella.**
+
 `verificar.py` (regla `preventa-stock`) cuenta que el filtro esté en los tres
-sitios: `inventario_vivo` y las dos mitades de `cargar_cortes`. Se probó
-quitando uno.
+sitios de inventario: `inventario_vivo` y las dos mitades de `cargar_cortes`.
+Se probó quitando uno.
 
 **Cómo se comprobó que no rompió nada:** el día del cambio no había ninguna
 venta ligada a un apartado, así que el cambio **no podía** alterar un solo
