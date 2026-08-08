@@ -228,6 +228,10 @@
   .promo-toolbar button:disabled { background:#ccc; }
   @keyframes spin { to { transform:rotate(360deg); } }
   .promo-toolbar button.girando { animation:spin .7s linear infinite; }
+  .btn-apartar { width:100%; margin-top:10px; border:none; border-radius:var(--r-sm);
+    padding:9px; font-family:inherit; font-size:var(--t-sm); font-weight:800;
+    background:var(--e-traer-bg); color:var(--e-traer); cursor:pointer; }
+
   /* ---- Tarjeta de producto (8-ago-2026) ----
      Blanca a propósito: el color vive en la pastilla de estado y en el precio.
      Con 79 tarjetas seguidas, teñir cada una convierte la lista en un mosaico y
@@ -410,6 +414,12 @@
   .btn-apartar { flex:1; background:#7c3aed; color:#fff; border:none; border-radius:10px; padding:10px; font-family:inherit; font-size:13px; font-weight:700; cursor:pointer; }
   .btn-apartar:disabled { background:#ddd; color:#999; cursor:default; }
   .btn-wa.pv-wa { width:auto; margin-top:0; padding:9px 14px; flex-shrink:0; }
+  .ap-card { border-left-width:4px; }
+  .ap-card.t-pre  { border-left-color:#7c3aed; }
+  .ap-card.t-tras { border-left-color:var(--azul); }
+  .ap-card.t-tarde{ border-left-color:var(--rojo); background:#fffafa; }
+  .ap-traspaso { font-size:10.5px; color:#8a827f; font-weight:600; margin-top:3px; }
+  .ap-traspaso .tarde { color:var(--rojo); font-weight:800; }
   .ap-row { display:flex; align-items:center; gap:10px; padding:11px 14px; }
   .ap-est { font-size:10px; font-weight:800; text-transform:uppercase; padding:3px 8px; border-radius:6px; background:#f3effe; color:#7c3aed; flex-shrink:0; }
   .ap-est.asg { background:#fff4e5; color:#c2700a; }
@@ -490,6 +500,12 @@
     <input id="apCliente" class="ap-inp" type="text" placeholder="Nombre del cliente" autocomplete="off">
     <label class="ap-lbl">Teléfono</label>
     <input id="apTel" class="ap-inp" type="tel" inputmode="numeric" placeholder="10 dígitos" autocomplete="off">
+    <div id="apTraspaso">
+      <label class="ap-lbl">¿De qué tienda viene?</label>
+      <input id="apOrigen" class="ap-inp" type="text" placeholder="Ej. Parque Puebla" autocomplete="off">
+      <label class="ap-lbl">¿Para cuándo se lo prometiste?</label>
+      <input id="apPromesa" class="ap-inp" type="date">
+    </div>
     <label class="ap-lbl">Lo aparta</label>
     <div id="apVend" class="ap-quien"></div>
     <label class="ap-lbl">N° de transacción</label>
@@ -622,8 +638,8 @@ function tocarDia(){
 const FILTROS = [
   { id:'promo',    label:'💰 Precios y promos', icono:'🔥', color:'var(--naranja)',
     sub:'Lo que se puede vender hoy y a qué precio' },
-  { id:'preventa', label:'🚀 Preventa Pura 90S', icono:'🚀', color:'#7c3aed',
-    sub:'Apartados, series y entregas' },
+  { id:'apartados', label:'📋 Apartados', icono:'📋', color:'#7c3aed',
+    sub:'Pagados y pendientes de entregar' },
   { id:'eol',      label:'🏷️ Vender al 50%', icono:'🏷️', color:'var(--verde)',
     sub:'Piezas de exhibición que ya se pueden rematar' },
   { id:'resurtir', label:'🔄 Resurtir', icono:'🔄', color:'var(--azul)',
@@ -641,33 +657,10 @@ let filtroActivo = (function(){
 })();
 let busqueda = '';
 
-/* ====== Preventa Pura 90S (lanzamiento CEA 243 · inicia 22-jul-2026) ====== */
-const PREVENTA_INICIA = '2026-07-22';
-const PREVENTA = [
-  {sku:'100307448', ver:'Pro Max', cap:'12/512GB', color:'Graphite Black', precio:22999, reg:32999, msi:'18 MSI', cupo:4},
-  {sku:'100307464', ver:'Pro Max', cap:'12/512GB', color:'Blush Gold',     precio:22999, reg:32999, msi:'18 MSI', cupo:5},
-  {sku:'100307481', ver:'Pro Max', cap:'12/512GB', color:'Blaze Purple',   precio:22999, reg:32999, msi:'18 MSI', cupo:2},
-  // 5-ago-2026: una pieza más de Orange Ocean. Se agotó primero (5 de 5 vendidas
-  // entre el 23-jul y el 30-jul), y es el color que más sale.
-  {sku:'100307499', ver:'Pro Max', cap:'12/512GB', color:'Orange Ocean',   precio:22999, reg:32999, msi:'18 MSI', cupo:6},
-  {sku:'100307501', ver:'Pro', cap:'12/512GB', color:'Coconut White', precio:18999, reg:27999, msi:'12 MSI', cupo:3},
-  {sku:'100307510', ver:'Pro', cap:'12/512GB', color:'Mulberry Black', precio:18999, reg:27999, msi:'12 MSI', cupo:4},
-  {sku:'100307536', ver:'Pro', cap:'12/512GB', color:'Guava Soda',     precio:18999, reg:27999, msi:'12 MSI', cupo:2},
-  {sku:'100307641', ver:'Pro', cap:'12/512GB', color:'Orange Soda',    precio:18999, reg:27999, msi:'12 MSI', cupo:4},
-  {sku:'100307544', ver:'Pro', cap:'12/256GB', color:'Mulberry Black', precio:15999, reg:22999, msi:'12 MSI', cupo:2},
-  {sku:'100307561', ver:'Pro', cap:'12/256GB', color:'Coconut White', precio:15999, reg:22999, msi:'12 MSI', cupo:2},
-  {sku:'100307595', ver:'Pro', cap:'12/256GB', color:'Orange Soda',    precio:15999, reg:22999, msi:'12 MSI', cupo:2},
-  {sku:'100307616', ver:'Pro', cap:'12/256GB', color:'Guava Soda',     precio:15999, reg:22999, msi:'12 MSI', cupo:1},
-];
 let APARTADOS = [];
-const preventaBySku = {}; PREVENTA.forEach(p=>preventaBySku[p.sku]=p);
-function apartadosVivos(sku){ return APARTADOS.filter(a=>a.sku===sku && String(a.estatus||'').toLowerCase()!=='cancelado'); }
-function disponibles(sku){ const p=preventaBySku[sku]; if(!p) return 0; return Math.max(0, p.cupo - apartadosVivos(sku).length); }
-function preventaTotalDisp(){ return PREVENTA.reduce((s,p)=>s+disponibles(p.sku),0); }
 /* El total decía "de 36" escrito a mano. Al habilitar una pieza más en Orange
    Ocean (5-ago-2026) el banner habría dicho "quedan 1 de 36" con 37 repartidas:
    se suma de los cupos para que no vuelva a mentir. */
-function preventaCupoTotal(){ return PREVENTA.reduce((s,p)=>s+p.cupo,0); }
 
 function diasRestantes(fecha){
   const f = new Date(fecha+'T00:00:00');
@@ -1108,10 +1101,18 @@ function compartirWA(prodEnc,sku,pv,pb,sinSeguro,incluyeEnc){
   window.open('https://wa.me/?text='+encodeURIComponent(msg.trim()),'_blank');
 }
 
+/* ¿Se le puede vender HOY a un cliente que está enfrente?
+   No es lo mismo que "existe una pieza". La de exhibición de un producto ACTIVO
+   no se vende: se queda en el aparador hasta que llegue caja del CD. Solo se
+   vende la de piso cuando el producto está EOL, y entonces va al 50 %.
+
+   Corregido el 8-ago-2026. Antes esto devolvía true con solo tener exhibición, y
+   por eso 17 SKU sin una sola pieza vendible se contaban como "con existencia",
+   salían arriba en Precios y no ofrecían apartar. El asesor leía "1 de piso",
+   creía que tenía qué entregar, y el cliente se iba con las manos vacías. */
 function tieneExistencia_(sku){
-  const inv = invBySku[sku];
-  if(!inv) return false;
-  return (inv.stock||0)>0 || (inv.exhibe||0)>0;
+  const k = estadoSku(sku).k;
+  return k === 'hay' || k === '50';
 }
 
 // Calcula el stock cerrado y la exhibición restante desde los datos crudos de
@@ -1142,13 +1143,33 @@ function calcDerivados(){
               .sort((a,b)=> a.producto.localeCompare(b.producto));
   AGOTADOS = (D.inventario||[]).filter(x=>(x.stock||0)===0 && (x.exhibe||0)===0 && !eolSkuSet.has(x.sku))
               .sort((a,b)=> a.producto.localeCompare(b.producto));
+
+  /* Y los que están en promoción pero NUNCA han tenido fila de inventario.
+     Detectado el 8-ago-2026 con el MatePad P-Max 13.2": sale en el folleto, en
+     Precios aparece con su botón de apartar... y en la lista de resurtir no
+     estaba, porque las dos listas de arriba se arman desde `D.inventario` y ese
+     SKU no tiene fila ahí. Nadie lo iba a pedir nunca.
+
+     Es el caso más urgente de los tres, no el más raro: producto en promoción
+     vigente del que la tienda no tiene ni la de exhibición. */
+  const _conFila = new Set((D.inventario||[]).map(x=>x.sku));
+  PROMOS.forEach(p=>{
+    if(!p.sku || _conFila.has(p.sku) || eolSkuSet.has(p.sku)) return;
+    _conFila.add(p.sku);   // una promo repetida no lo pide dos veces
+    AGOTADOS.push({ sku:p.sku, producto:p.producto||('SKU '+p.sku),
+                    stock:0, exhibe:0, precio:p.pr||p.pp||0, nuncaLlego:true });
+  });
+  AGOTADOS.sort((a,b)=> a.producto.localeCompare(b.producto));
 }
 calcDerivados();
 
 function cuenta(id){
   if(id==='inicio') return '';
   if(id==='promo') return PROMOS.filter(x=>coincide(x.producto,x.sku) && tieneExistencia_(x.sku)).length;
-  if(id==='preventa') return preventaTotalDisp();
+  // Lo que cuenta es lo que hay que ENTREGAR, no lo que se puede apartar: el
+  // número de la tarjeta es trabajo pendiente, no inventario disponible.
+  if(id==='apartados') return APARTADOS.filter(a=>{
+    const e=String(a.estatus||'').toLowerCase(); return e!=='cancelado' && e!=='entregado'; }).length;
   if(id==='eol')   return EOL.filter(e=>coincide(e.producto,e.sku) && e.estado==='listo').length;
   if(id==='inv')   return (D.inventario||[]).filter(x=>coincide(x.producto,x.sku)&&((x.stock||0)>0||(x.exhibe||0)>0)).length;
   if(id==='resurtir') return [...AGOTADOS,...RESURTIR].filter(x=>coincide(x.producto,x.sku)).length;
@@ -1158,7 +1179,7 @@ function cuenta(id){
 // ¿la sección tiene algún dato? (ignora el buscador, para que las pestañas no salten al escribir)
 function seccionTieneItems(id){
   if(id==='promo')    return PROMOS.length>0;
-  if(id==='preventa') return PREVENTA.length>0;
+  if(id==='apartados') return APARTADOS.length>0;
   if(id==='eol')      return EOL.length>0;
   if(id==='inv')      return (D.inventario||[]).length>0;
   if(id==='resurtir') return RESURTIR.length>0 || AGOTADOS.length>0;
@@ -1187,22 +1208,41 @@ function irA(id){ filtroActivo = id; busqueda = ''; const q = document.getElemen
    en la lista de resurtir era "pedir caja" y en promos salía como "sin piezas".
 
    Son CINCO estados, no tres. El que más se confunde es el tercero: quedarse
-   solo con la pieza de piso significa "pedir caja" si el producto sigue vivo,
-   y "rematar al 50%" si está descontinuado. Es la misma existencia y dos
-   acciones opuestas. */
+   solo con la pieza de piso significa "no hay nada que vender" si el producto
+   sigue vivo, y "rematar al 50%" si está descontinuado. Es la misma existencia
+   y dos acciones opuestas.
+
+   Y de esos cinco, SOLO DOS se pueden vender hoy: 'hay' y '50'. La exhibición
+   de un producto activo no se toca — se pide caja al CD, o se le trae al
+   cliente de otra tienda. Por eso 'piso' muestra 0 para vender y no el número
+   de piezas del aparador: es lo que se puede entregar, no lo que se ve. */
 function estadoSku(sku){
   const inv = invBySku[sku] || {};
   const st = inv.stock || 0, ex = inv.exhibe || 0;
   const esEol = eolSkuSet.has(sku);
   if(st > 0)              return { k:'hay',   n:st, txt: st===1?'pieza':'piezas', pie:ex?`${ex} en exhibición`:'' };
   if(ex > 0 && esEol)     return { k:'50',    n:'50%', txt:'última', pie:'Última pieza de piso' };
-  if(ex > 0)              return { k:'piso',  n:ex, txt:'de piso', pie:'Pedir caja al CD' };
+  if(ex > 0)              return { k:'piso',  n:0,  txt:'para vender', pie:`${ex} en piso, no se vende` };
   if(esEol)               return { k:'no',    n:'—', txt:'ya no',  pie:'Descontinuado' };
   return                         { k:'traer', n:0,   txt:'se trae', pie:'De otra tienda' };
 }
 
 // La pastilla que pinta ese estado. El número va grande a propósito: después
 // del precio, "cuántas hay" es lo que más se mira.
+/* Botón de apartar: en lo que NO se puede vender hoy pero SÍ se puede conseguir.
+   Son dos casos y hasta hoy solo se cubría uno:
+     · 'traer' — cero piezas por todos lados
+     · 'piso'  — solo queda la de exhibición, que de un producto activo no se
+                 vende. Para el cliente es exactamente lo mismo que cero.
+   Queda fuera 'no' (descontinuado y agotado): apartarlo sería cobrarle a alguien
+   algo que no va a llegar nunca. Por eso se apoya en `estadoSku` y no en
+   "¿tiene cero piezas?". */
+function botonApartar(sku, producto, precio){
+  const k = estadoSku(sku).k;
+  if(k !== 'traer' && k !== 'piso') return '';
+  return `<button class="btn-apartar" onclick="abrirApartado('${sku}','${encodeURIComponent(producto||'')}',${Number(precio)||0})">📋 Apartar para un cliente</button>`;
+}
+
 function pastillaEstado(sku){
   const e = estadoSku(sku);
   return `<span class="pastilla p-${e.k}"><b>${e.n}</b><span>${e.txt}</span></span>`;
@@ -1239,7 +1279,9 @@ function copiarSkuViejo(sku, listo){
   }catch(e){ /* si tampoco se puede, el SKU está a la vista para teclearlo */ }
 }
 
-function conPiezas_(x){ return (x.stock||0) > 0 || (x.exhibe||0) > 0; }
+// Misma pregunta que `tieneExistencia_`, con el objeto en vez del SKU. Una sola
+// regla para las dos: tener pieza y poder venderla no son lo mismo.
+function conPiezas_(x){ return tieneExistencia_(x.sku); }
 // Con piezas se muestra siempre. Sin piezas, solo si NO es EOL: ése sí se
 // puede pedir a otra tienda; un EOL agotado no se trae de ningún lado.
 function seConsigue_(x){ return conPiezas_(x) || !eolSkuSet.has(x.sku); }
@@ -1274,9 +1316,10 @@ function buscarEnTodo(){
 
   push('🏷️ Vender al 50%', EOL.filter(e=>coincide(e.producto,e.sku) && e.estado==='listo'), cardEol);
 
-  // Preventa: se busca por color y modelo, que es como la pide el cliente.
-  const pre = PREVENTA.filter(p=>coincide('Pura 90S '+p.ver+' '+p.cap+' '+p.color, p.sku));
-  push('🚀 Preventa Pura 90S', pre, cardPreventa);
+  /* Los apartados también se buscan: "¿lo de Mayra ya llegó?" es una pregunta
+     de todos los días, y antes había que ir a la sección a mirar la lista. */
+  const aps = APARTADOS.filter(a => coincide(a.cliente, a.sku, a.color, a.serie));
+  push('📋 Apartados de clientes', aps, cardApartado);
 
   push('🔄 Hay que resurtir', [...AGOTADOS,...RESURTIR].filter(x=>coincide(x.producto,x.sku)), rowResurtir);
 
@@ -1388,32 +1431,13 @@ function desgloseBundle(x){
   </div>`;
 }
 /* ===================== PREVENTA ===================== */
-function cardPreventa(p){
-  const disp = disponibles(p.sku);
-  const agot = disp<=0;
-  const cls = agot ? 'agot' : disp<=1 ? 'ultima' : disp<=2 ? 'pocas' : 'ok';
-  const s = seguroPara(p.reg, p.sku);
-  const segLine = s ? `<div class="pv-seg">🛡️ Con Seguro 1 año: <b>${money(p.precio + s.p1)}</b></div>` : '';
-  return `<div class="card t-preventa${agot?' pv-agot':''}">
-    <div class="top">
-      <h3>${p.color} <span style="font-weight:600;color:#999;font-size:12px">· ${p.cap}</span></h3>
-      <span class="pv-cupo ${cls}">${agot?'AGOTADO':`Quedan ${disp} de ${p.cupo}`}</span>
-    </div>
-    <div class="pv-meta">
-      <span class="precio">${money(p.precio)}</span>
-      <span class="pv-reg">antes ${money(p.reg)}</span>
-      <span class="pv-msi">💳 ${p.msi}</span>
-      <span class="badge">SKU ${p.sku}</span>
-    </div>
-    ${segLine}
-    <div class="pv-btns">
-      <button class="btn-apartar" ${agot?'disabled':''} onclick="abrirApartado('${p.sku}')">${agot?'Sin cupo':'📝 Apartar'}</button>
-      <button class="btn-wa pv-wa" onclick="preventaWA('${p.sku}')">📲</button>
-    </div>
-  </div>`;
-}
 function cardApartado(a){
-  const p=preventaBySku[a.sku]||{};
+  /* El producto sale de `a.color`, que desde el 4-ago guarda el nombre entero
+     ("Pura 90S Pro Max 12/512GB · Graphite Black"). Antes se sacaba de la lista
+     fija de la Pura 90S, y con traspasos de cualquier SKU esa lista ya no
+     existe. Si faltara, se cae al catálogo por SKU. */
+  const inv = invBySku[a.sku] || {};
+  const nombre = a.color || inv.producto || ('SKU '+a.sku);
   const est = String(a.estatus||'Apartado');
   const e   = est.toLowerCase();
   const cls = e==='entregado' ? ' ent' : e==='asignado' ? ' asg' : e==='cancelado' ? ' can' : '';
@@ -1426,12 +1450,16 @@ function cardApartado(a){
       <button class="btn-ap entregar" onclick="entregarApartado('${a.id}')" ${a.serie?'':'disabled'}>✅ Entregar</button>
       <button class="btn-ap gris" onclick="cancelarApartado('${a.id}')" title="Cancelar apartado">✕</button>
     </div>`;
-  return `<div class="card" style="padding:11px 14px">
+  return `<div class="card ap-card ${a.tipo==='traspaso'?'t-tras':'t-pre'}${a.diasTarde>0?' t-tarde':''}" style="padding:11px 14px">
     <div class="ap-row" style="padding:0">
       <div style="flex:1;min-width:0">
         <h4 style="font-size:13.5px;font-weight:700">${esc(a.cliente||'(sin nombre)')} ${a.seguro==='Si'?'🛡️':''}</h4>
-        <span style="font-size:11px;color:#999">${p.ver||''} ${p.color||''} ${p.cap?'· '+p.cap:''} · SKU ${a.sku} · ${esc(a.telefono||'sin tel')} · ${money(Number(a.precio)||0)}${a.transaccion?' · Tx '+esc(a.transaccion):''}</span>
+        <span style="font-size:11px;color:#999">${esc(nombre)} · SKU ${a.sku} · ${esc(a.telefono||'sin tel')}${a.precio?' · '+money(Number(a.precio)):''}${a.transaccion?' · Tx '+esc(a.transaccion):''}</span>
         ${a.serie ? `<div><span class="ap-serie">N° ${esc(a.serie)}</span></div>` : ''}
+        ${a.tipo==='traspaso' ? `<div class="ap-traspaso">🚚 ${a.origen ? 'De '+esc(a.origen) : 'De otra tienda'}${
+            a.promesa ? ' · ' + (a.diasTarde > 0
+              ? `<b class="tarde">prometido hace ${a.diasTarde} día${a.diasTarde!==1?'s':''}</b>`
+              : 'para el '+esc(a.promesa)) : ''}</div>` : ''}
         ${a.entregado ? `<div style="font-size:10.5px;color:#aaa;margin-top:3px">Entregado el ${esc(a.entregado)}${a.entregadoPor?' por '+esc(a.entregadoPor):''}</div>` : ''}
       </div>
       <span class="ap-est${cls}">${esc(est)}</span>
@@ -1478,61 +1506,83 @@ function cancelarApartado(id){
     else { alert('No se pudo cancelar: ' + ((d && d.error) || 'sin conexión')); }
   });
 }
-function seccionPreventa(){
-  const preInicio = HOY < new Date(PREVENTA_INICIA+'T00:00:00');
-  let html = `<div class="pv-banner">
-    <div class="pv-banner-t">🚀 Preventa HUAWEI Pura 90S</div>
-    <div class="pv-banner-s">${preInicio?'Inicia el 22 de julio · ':''}El cliente paga completo y aparta su pieza. Entrega al llegar el stock.</div>
-    <div class="pv-banner-n">${CARGAS.apartados==='ok'
-      ? `Quedan <b>${preventaTotalDisp()}</b> de ${preventaCupoTotal()} piezas de tu cupo`
-      : '⏳ Confirmando cupo con la nube — no prometas la última pieza todavía'}</div>
-  </div>`;
-  const orden = ['Pro Max|12/512GB','Pro|12/512GB','Pro|12/256GB'];
-  const titulos = {'Pro Max|12/512GB':'Pura 90S Pro Max · 12/512GB','Pro|12/512GB':'Pura 90S Pro · 12/512GB','Pro|12/256GB':'Pura 90S Pro · 12/256GB'};
-  orden.forEach(k=>{
-    const arr = PREVENTA.filter(p=>p.ver+'|'+p.cap===k);
-    if(!arr.length) return;
-    const dispG = arr.reduce((s,p)=>s+disponibles(p.sku),0);
-    html += `<div class="grupo-titulo">${titulos[k]} · ${money(arr[0].precio)} · ${arr[0].msi} · ${dispG} disp.</div>`;
-    html += arr.map(cardPreventa).join('');
-  });
-  html += `<button class="btn-wa" style="margin-top:6px" onclick="preventaWA()">📲 Compartir preventa completa por WhatsApp</button>`;
-  /* Los apartados se separan por lo que HAY QUE HACER con cada uno, no por
-     fecha. El día que llega el embarque la pregunta es "¿a cuáles les falta
-     serie?", y en una lista plana de treinta esa respuesta no se ve. */
-  const aps = APARTADOS.filter(a=>preventaBySku[a.sku]);
-  if(aps.length){
-    const es = a => String(a.estatus||'Apartado').toLowerCase();
-    const sinSerie  = aps.filter(a => es(a)!=='cancelado' && es(a)!=='entregado' && !a.serie);
-    const listos    = aps.filter(a => es(a)!=='cancelado' && es(a)!=='entregado' && a.serie);
-    const entregados= aps.filter(a => es(a)==='entregado');
-    const cancelados= aps.filter(a => es(a)==='cancelado');
+/* ── La sección de Apartados (8-ago-2026) ────────────────────────────────
+   Sustituye a la de Preventa. Las doce tarjetas con cupo para apartar Pura 90S
+   se retiraron: los equipos llegaron —24 piezas en piso— y ese modelo se vende
+   desde Precios como cualquier otro. El cupo existía para no prometer más de lo
+   que iba a llegar; ya llegó.
 
-    if(sinSerie.length){
-      html += `<div class="grupo-titulo" style="margin-top:20px">📦 Falta ligar el equipo (${sinSerie.length})</div>`;
-      html += sinSerie.map(cardApartado).join('');
-    }
-    if(listos.length){
-      html += `<div class="grupo-titulo" style="margin-top:20px">✅ Listos para entregar (${listos.length})</div>`;
-      html += listos.map(cardApartado).join('');
-    }
-    if(entregados.length){
-      html += `<div class="grupo-titulo" style="margin-top:20px">🎉 Entregados (${entregados.length})</div>`;
-      html += entregados.map(cardApartado).join('');
-    }
-    if(cancelados.length){
-      html += `<div class="grupo-titulo" style="margin-top:20px">Cancelados (${cancelados.length})</div>`;
-      html += cancelados.map(cardApartado).join('');
-    }
+   Lo que sobrevive son las ENTREGAS, y ahí una preventa y un traspaso son la
+   misma cosa: alguien pagó, el equipo no estaba, hay que dárselo con su serie.
+   Por eso van en la misma lista y solo se distinguen por el filo de color. */
+function seccionApartados(){
+  const vivos = APARTADOS.filter(a => String(a.estatus||'').toLowerCase() !== 'cancelado');
+  const es = a => String(a.estatus||'Apartado').toLowerCase();
+
+  // Lo que se pasó de fecha va PRIMERO. Es lo único de este flujo que se
+  // convierte en queja, y al fondo de la lista no lo ve nadie.
+  const tarde     = vivos.filter(a => es(a)!=='entregado' && a.diasTarde > 0);
+  const sinSerie  = vivos.filter(a => es(a)!=='entregado' && !a.serie && !(a.diasTarde > 0));
+  const listos    = vivos.filter(a => es(a)!=='entregado' && a.serie && !(a.diasTarde > 0));
+  const entregados= APARTADOS.filter(a => es(a)==='entregado');
+  const cancelados= APARTADOS.filter(a => es(a)==='cancelado');
+
+  let html = '';
+  if(CARGAS.apartados !== 'ok'){
+    html += `<div class="pv-banner"><div class="pv-banner-n">⏳ Confirmando los apartados con la nube — puede faltar alguno</div></div>`;
+  }
+  if(tarde.length){
+    html += `<div class="aviso-franja" style="margin:0 16px 12px">
+      <h4>⏰ Se pasó la fecha prometida</h4>
+      <div class="af-item">${tarde.length===1?'Un cliente lleva':'Estos clientes llevan'} esperando más de lo que se le dijo.
+      <span class="af-det">Vale más una llamada avisando del retraso que una queja después.</span></div>
+    </div>`;
+    html += `<div class="grupo-titulo">⏰ Se pasó la fecha (${tarde.length})</div>`;
+    html += tarde.map(cardApartado).join('');
+  }
+  if(sinSerie.length){
+    html += `<div class="grupo-titulo" style="margin-top:18px">📦 Falta ligar el equipo (${sinSerie.length})</div>`;
+    html += sinSerie.map(cardApartado).join('');
+  }
+  if(listos.length){
+    html += `<div class="grupo-titulo" style="margin-top:18px">✅ Listos para entregar (${listos.length})</div>`;
+    html += listos.map(cardApartado).join('');
+  }
+  if(entregados.length){
+    html += `<div class="grupo-titulo" style="margin-top:18px">🎉 Entregados (${entregados.length})</div>`;
+    html += entregados.map(cardApartado).join('');
+  }
+  if(cancelados.length){
+    html += `<div class="grupo-titulo" style="margin-top:18px">Cancelados (${cancelados.length})</div>`;
+    html += cancelados.map(cardApartado).join('');
+  }
+  if(!APARTADOS.length){
+    html += `<div class="empty">No hay nada apartado.<br>
+      Para apartar, busca el producto en Precios y usa «Apartar para un cliente».</div>`;
   }
   return html;
 }
-let _apartSku = null;
-function abrirApartado(sku){
+let _apartSku = null, _apartCtx = null;
+
+/* Sirve para los dos casos y por eso recibe el producto: en la preventa salía
+   de la lista fija de la Pura 90S, pero un traspaso puede ser cualquier SKU del
+   catálogo. Si no se le pasa nada, se busca en el inventario. */
+function abrirApartado(sku, prodEnc, precio){
   _apartSku = sku;
-  const p = preventaBySku[sku];
-  document.getElementById('apModalTitle').textContent = 'Apartar Pura 90S '+p.ver+' · '+p.color;
-  document.getElementById('apModalSub').textContent = 'SKU '+p.sku+' · '+money(p.precio)+' · '+p.cap+' · '+p.msi;
+  const inv = invBySku[sku] || {};
+  const producto = prodEnc ? decodeURIComponent(prodEnc) : (inv.producto || ('SKU '+sku));
+  const px = Number(precio) || Number(inv.precio) || 0;
+  _apartCtx = { producto, precio: px, tipo: 'traspaso' };
+
+  document.getElementById('apModalTitle').textContent = 'Apartar para un cliente';
+  document.getElementById('apModalSub').textContent = producto + (px ? ' · '+money(px) : '');
+  document.getElementById('apTraspaso').style.display = '';
+  document.getElementById('apOrigen').value = '';
+  // Por defecto, para dentro de tres días: es lo que suele tardar un traspaso y
+  // evita que se quede sin fecha, que es lo que impide avisar de un retraso.
+  const d = new Date(); d.setDate(d.getDate()+3);
+  document.getElementById('apPromesa').value =
+    d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   document.getElementById('apCliente').value='';
   document.getElementById('apTel').value='';
   /* El vendedor sale de la sesión, no se teclea: es la misma persona que entró
@@ -1559,7 +1609,6 @@ function guardarApartado(){
   const transaccion=document.getElementById('apTransaccion').value.trim();
   const seguro=document.getElementById('apSeguro').checked?'Si':'No';
   if(!cliente){ alert('Escribe el nombre del cliente.'); return; }
-  const p=preventaBySku[sku];
   const btn=document.getElementById('apGuardar'); btn.disabled=true; btn.textContent='Guardando…';
   /* En `color` va el producto ENTERO, no solo el color: "Pura 90S Pro Max
      12/512GB · Negro". Antes se guardaba solo "Negro" y, al abrir la hoja o
@@ -1571,7 +1620,9 @@ function guardarApartado(){
      El precio de esta vía: el campo Color ya no contiene solo el color, así que
      si algún día alguien quiere filtrar o contar por color, tendrá que partir
      el texto por el "·". Está aquí escrito para que no le pille por sorpresa. */
-  const producto = 'Pura 90S ' + (p.ver||'') + ' ' + (p.cap||'') + ' · ' + (p.color||'');
+  const producto = (_apartCtx && _apartCtx.producto) || ('SKU '+sku);
+  const origen  = (document.getElementById('apOrigen')||{}).value || '';
+  const promesa = (document.getElementById('apPromesa')||{}).value || null;
   /* 7-ago-2026: va DIRECTO a Supabase; ya no pasa por la hoja.
      Lo que se gana no es velocidad, es el cupo: el trigger `apartado_cabe`
      vigila la tabla `apartados` y hasta hoy nadie insertaba ahí, así que nunca
@@ -1579,16 +1630,18 @@ function guardarApartado(){
      la vez era el número de este navegador — y dos navegadores no se ven. */
   sbEscribir('apartado_guardar', {
     p_sku: sku, p_color: producto, p_cliente: cliente, p_telefono: tel,
-    p_precio: p.precio, p_seguro: (seguro === 'Si'),
-    p_vendedor: vend, p_transaccion: transaccion
+    p_precio: (_apartCtx && _apartCtx.precio) || null, p_seguro: (seguro === 'Si'),
+    p_vendedor: vend, p_transaccion: transaccion,
+    p_tipo: 'traspaso', p_origen: origen.trim() || null, p_promesa: promesa || null
   }).then(function(data){
     btn.disabled=false; btn.textContent='Guardar apartado';
     if(data && data.ok === true){
       // el mismo texto que se acaba de mandar, para que la lista local y la
       // nube no digan cosas distintas hasta el próximo refresco
       APARTADOS.push({id:String(data.id), sku:sku, color:producto, cliente:cliente,
-        telefono:tel, precio:String(p.precio), seguro:seguro, vend:vend,
-        estatus:'Apartado', transaccion:transaccion, serie:''});
+        telefono:tel, precio:String((_apartCtx&&_apartCtx.precio)||''), seguro:seguro, vend:vend,
+        estatus:'Apartado', transaccion:transaccion, serie:'',
+        tipo:'traspaso', origen:origen.trim(), promesa:promesa||'', diasTarde:null});
       cerrarApartado(); render(); cargarApartadosNube();
     } else if(data && data.error){
       // "Cupo agotado: 4 de 4 piezas ya apartadas" llega tal cual desde la
@@ -1602,28 +1655,6 @@ function guardarApartado(){
     btn.disabled=false; btn.textContent='Guardar apartado';
     alert('Sin conexión — el apartado NO se guardó. Intenta de nuevo.');
   });
-}
-function preventaWA(sku){
-  const lines=[];
-  if(sku){
-    const p=preventaBySku[sku]; const disp=disponibles(sku); const s=seguroPara(p.reg,p.sku);
-    lines.push('🚀 *Preventa HUAWEI Pura 90S '+p.ver+'*','',
-      '🎨 '+p.color+' · '+p.cap, '💰 '+money(p.precio)+'  (antes '+money(p.reg)+')', '💳 '+p.msi);
-    if(s) lines.push('🛡️ Con Seguro 1 año: '+money(p.precio+s.p1));
-    lines.push('', '📦 Aparta tu pieza pagando hoy.');
-    if(disp<=2 && disp>0) lines.push('⚠️ ¡Solo quedan '+disp+' piezas de este color!');
-    lines.push('', '_HES '+TIENDA_NOMBRE+'_');
-  } else {
-    lines.push('🚀 *Preventa HUAWEI Pura 90S — HES '+TIENDA_NOMBRE+'*','',
-      'Aparta tu pieza pagando hoy:');
-    ['Pro Max|12/512GB','Pro|12/512GB','Pro|12/256GB'].forEach(k=>{
-      const arr=PREVENTA.filter(p=>p.ver+'|'+p.cap===k); if(!arr.length) return;
-      lines.push('', '📱 *'+arr[0].ver+' '+arr[0].cap+'* — '+money(arr[0].precio)+' · '+arr[0].msi);
-      arr.forEach(p=>{ const d=disponibles(p.sku); lines.push('  • '+p.color+(d<=0?' (agotado)':d<=2?(' — solo '+d):'')); });
-    });
-    lines.push('', '_HES '+TIENDA_NOMBRE+' · Odemás_');
-  }
-  window.open('https://wa.me/?text='+encodeURIComponent(lines.join('\n')),'_blank');
 }
 /* Los apartados salen SOLO de Supabase desde el 7-ago-2026.
    No hay caída al Apps Script a propósito: la hoja ya no recibe preventa, así
@@ -1685,6 +1716,7 @@ function cardPromo(x){
       ${pastillaEstado(x.sku)}
     </div>
     ${selA}
+    ${botonApartar(x.sku, x.producto, pv)}
     <div class="prod-pie"><span>${e.pie || ''}</span>${waBtn}</div>
   </div>`;
 }
@@ -1706,6 +1738,7 @@ function cardPrecioReg(x){
       ${pastillaEstado(x.sku)}
     </div>
     ${sel}
+    ${botonApartar(x.sku, x.producto, precio)}
     <div class="prod-pie"><span>${e.pie || ''}</span>${waBtn}</div>
   </div>`;
 }
@@ -1772,7 +1805,9 @@ function cardAviso(x){
 }
 function rowResurtir(x){
   const sinPiso = (x.exhibe||0) === 0;
-  const badge = sinPiso
+  const badge = x.nuncaLlego
+    ? `<span class="exh" style="background:#fdeaea;color:var(--rojo);font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;white-space:nowrap;">🆕 nunca ha llegado</span>`
+    : sinPiso
     ? `<span class="exh" style="background:#fdeaea;color:var(--rojo);font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;white-space:nowrap;">📭 sin piso</span>`
     : `<span class="exh" style="background:#fff5ee;color:var(--naranja);font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;white-space:nowrap;">🪟 ${x.exhibe} piso</span>`;
   const btnEol = ROLE === 'gerente'
@@ -1793,7 +1828,8 @@ function resurtirWA(){
   const lines = ['🔄 *Resurtir · HES ' + TIENDA_NOMBRE + '*'];
   if(AGOTADOS.length){
     lines.push('', '📭 *Sin existencia — pedir urgente (' + AGOTADOS.length + ')*');
-    AGOTADOS.forEach(x => lines.push('• ' + x.producto + ' (SKU ' + x.sku + ')'));
+    AGOTADOS.forEach(x => lines.push('• ' + x.producto + ' (SKU ' + x.sku + ')'
+      + (x.nuncaLlego ? ' — en promoción, nunca ha llegado' : '')));
   }
   if(RESURTIR.length){
     lines.push('', '🪟 *Queda piso — pedir caja (' + RESURTIR.length + ')*');
@@ -1955,9 +1991,14 @@ function render(){
     /* Las tarjetas sustituyen a la rejilla de números y a la barra de chips:
        cada una dice a dónde lleva Y cuánto hay dentro, así que se ve de un
        vistazo dónde hay trabajo sin tener que entrar a mirar. */
-    const cuentas = { promo:promoAct, preventa:preventaTotalDisp(), eol:eolList, resurtir:resurtirN };
+    const cuentas = { promo:promoAct, apartados:cuenta('apartados'), eol:eolList, resurtir:resurtirN };
     const subs = { promo:`${promoAct} con promo · ${sinPromoConPiezasN()} a precio regular`,
-                   preventa:`${APARTADOS.filter(a=>String(a.estatus||'').toLowerCase()!=='cancelado').length} apartados · ${preventaTotalDisp()} piezas libres`,
+                   apartados:(function(){
+                     const v=APARTADOS.filter(a=>{const e=String(a.estatus||'').toLowerCase();
+                       return e!=='cancelado' && e!=='entregado';});
+                     const t=v.filter(a=>a.diasTarde>0).length;
+                     return t ? `${v.length} por entregar · ⏰ ${t} con la fecha pasada`
+                              : `${v.length} pagados, pendientes de entregar`; })(),
                    eol:'Piezas de exhibición al 50%',
                    resurtir:'Sin existencia — hay que pedir' };
     html += `<div class="ir-grid">` + FILTROS.filter(f=>seccionTieneItems(f.id)).map(f=>`
@@ -1972,7 +2013,7 @@ function render(){
     html += seccion('⏳ EOL próximos · agotar stock cerrado', eolPend, cardEol);
     html += seccion('Agotados', eolAgot, cardEol);
   }
-  if(f==='preventa') html += seccionPreventa();
+  if(f==='apartados') html += seccionApartados();
   if(f==='promo'){
     const promoSkus = new Set(PROMOS.map(p => p.sku));
     /* Los agotados TAMBIÉN se listan (1-ago-2026). Antes el filtro exigía
@@ -2011,7 +2052,10 @@ function render(){
     // que en precio regular.
     const promosAgotadas  = promosTodas.filter(x => !tieneExistencia_(x.sku)
                                                  && !eolSkuSet.has(x.sku));
-    const traerTxt = porTraer > 0 ? ` · ${porTraer} agotado${porTraer!==1?'s':''} (se traen de otra tienda)` : '';
+    /* "sin piezas para vender", no "agotados": desde el 8-ago aquí también caen
+       los que conservan la de exhibición. Hay una pieza en el aparador, pero no
+       se puede vender, así que para el cliente cuenta como cero. */
+    const traerTxt = porTraer > 0 ? ` · ${porTraer} sin piezas para vender (se traen de otra tienda)` : '';
     /* Si todas las promos vencen el mismo día, se dice UNA vez aquí arriba y las
        tarjetas se callan. `_vigUnica` lo lee badgeVigencia mientras se pinta la
        sección; se limpia al terminar para no arrastrarlo al buscador ni a otra
@@ -2511,6 +2555,12 @@ function _apartadoDeSupabase(a){
            asignado: a.asignado_en ? String(a.asignado_en).slice(0,10) : '',
            entregado: a.entregado_en ? String(a.entregado_en).slice(0,10) : '',
            entregadoPor: a.entregado_por||'',
+           tipo: a.tipo||'preventa',
+           origen: a.origen||'',
+           promesa: a.promesa||'',
+           // Los días de retraso los calcula la base, no el celular: un
+           // teléfono con la fecha mal decidiría a qué cliente llamar.
+           diasTarde: (a.dias_tarde==null ? null : Number(a.dias_tarde)),
            fecha: a.creado_en ? String(a.creado_en).slice(0,16).replace('T',' ') : '' };
 }
 

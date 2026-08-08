@@ -288,6 +288,47 @@ vendida reaparece al día siguiente.
 caja que se abre para el aparador sigue contando como cerrada hasta la
 siguiente subida.
 
+### Tener una pieza y poder venderla no es lo mismo *(8-ago-2026, v150)*
+
+La pieza de exhibición de un producto **activo no se vende**. Se queda en el
+aparador hasta que llegue caja del CD. Solo se vende la de piso cuando el
+producto está **EOL**, y entonces va al 50 %.
+
+De los cinco estados de `estadoSku`, **solo dos son vendibles hoy**:
+
+| estado | qué hay | ¿se vende hoy? | ¿botón de apartar? |
+|---|---|---|---|
+| `hay` | piezas en bodega | sí | no |
+| `50` | EOL, solo la de piso | sí, al 50 % | no |
+| `piso` | activo, solo la de piso | **no** | **sí** |
+| `traer` | nada por ningún lado | no | sí |
+| `no` | EOL y agotado | no | no — no llega nunca |
+
+Toda la app pregunta esto por **un solo sitio**: `tieneExistencia_(sku)`, y
+`conPiezas_(x)` es la misma función con el objeto en vez del SKU. Si mañana hace
+falta otra lectura de "¿hay para vender?", sale de ahí y no de `stock || exhibe`.
+
+**Por qué se escribió esto:** hasta v149 `tieneExistencia_` devolvía `true` con
+solo tener exhibición. 17 SKU sin una sola pieza vendible se contaban como "con
+existencia", salían arriba en Precios y eran los únicos a los que el tablero
+**negaba** el botón de apartar. El asesor leía «1 de piso», creía que tenía qué
+entregar, y el cliente se iba con las manos vacías. Ahora la pastilla dice
+**«0 para vender · 1 en piso, no se vende»** y ofrece traerlo de otra tienda.
+
+*(La sección Resurtir sigue separándolos: «🪟 Queda piso — pedir caja» es la
+acción del gerente, distinta de la del asesor con el cliente enfrente.)*
+
+### Un SKU en promoción puede no tener fila de inventario *(8-ago-2026)*
+
+`AGOTADOS` y `RESURTIR` se arman desde `D.inventario`. Un producto que nunca ha
+entrado a la tienda no tiene fila ahí, así que **no aparecía en la lista de
+pedidos** aunque estuviera anunciado en el folleto — detectado con el MatePad
+P-Max 13.2" (SKU 100305952). Nadie lo iba a pedir jamás.
+
+`calcDerivados()` los añade a `AGOTADOS` desde `PROMOS`, marcados con
+`nuncaLlego` para que salgan con badge **🆕 nunca ha llegado** en la lista y en
+el WhatsApp al CD.
+
 ---
 
 ## Cadena 6 · Service worker
