@@ -2310,8 +2310,31 @@ async function activarNotifs(){
     actualizarCampana();
     const ok = !!(OneSignal.User && OneSignal.User.PushSubscription
                   && OneSignal.User.PushSubscription.optedIn);
-    alert(ok ? '✅ Avisos activados. Ya te van a llegar las novedades del tablero.'
-             : 'No quedó activado. Revisa que el navegador tenga permitidas las notificaciones para esta página.');
+    if(ok){ alert('✅ Avisos activados. Ya te van a llegar las novedades del tablero.'); return; }
+
+    /* "No quedó activado" a secas no sirve para nada: hay tres motivos posibles
+       y desde fuera no se distinguen. Así que el mensaje LOS DICE.
+       (7-ago-2026: se perdió una hora probando a ciegas por no tener esto.) */
+    const permiso = ('Notification' in window) ? Notification.permission : 'no soportado';
+    let regs = [];
+    try{
+      regs = (await navigator.serviceWorker.getRegistrations()).map(r => r.scope);
+    }catch(e){ regs = ['(no se pudieron leer)']; }
+    const subId = (OneSignal.User && OneSignal.User.PushSubscription
+                   && OneSignal.User.PushSubscription.id) || '(ninguno)';
+
+    let pista = '';
+    if(permiso === 'denied')       pista = 'El navegador tiene BLOQUEADAS las notificaciones para esta página. Hay que permitirlas en los ajustes del sitio.';
+    else if(permiso === 'default') pista = 'No se llegó a conceder el permiso: se cerró el aviso sin aceptar. Toca la campana otra vez y dale a Permitir.';
+    else if(!regs.some(s => s.indexOf('tablero-hes1217') >= 0))
+                                   pista = 'El service worker no está registrado en la ruta correcta. Hay que borrar los datos del sitio y volver a entrar.';
+    else                           pista = 'Permiso concedido y service worker en su sitio, pero OneSignal no completó el alta.';
+
+    alert('No quedó activado.\n\n' + pista +
+          '\n\n— — — datos para diagnóstico — — —' +
+          '\npermiso: ' + permiso +
+          '\nsuscripción: ' + subId +
+          '\nservice workers: ' + (regs.join(' | ') || 'ninguno'));
   }catch(e){
     alert('No se pudieron activar los avisos.\n\n' + ((e && e.message) || e));
   }
