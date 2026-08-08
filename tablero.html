@@ -2300,10 +2300,27 @@ async function activarNotifs(){
     return;
   }
   try{
-    await OneSignal.Notifications.requestPermission();
-    // Pedir permiso NO suscribe: hay que darse de alta explícitamente. Sin esta
-    // línea el navegador dice "permitido" y OneSignal sigue sin destinatarios,
-    // que es exactamente el estado en el que estaba todo el equipo.
+    /* El permiso se pide al NAVEGADOR directamente, no a través del SDK.
+       Con `OneSignal.Notifications.requestPermission()` el diálogo no llegaba a
+       aparecer nunca: el permiso se quedaba en `default` y Chrome ni siquiera
+       listaba el sitio en sus ajustes de Notificaciones — señal de que la
+       petición no le llegó. (7-ago-2026, diagnosticado con los datos que ahora
+       muestra el propio mensaje de error.)
+
+       `Notification.requestPermission()` es la API estándar y se llama DENTRO
+       del gesto del clic, sin un solo `await` por delante: los navegadores
+       descartan la petición si el gesto ya se consumió. Por eso esta línea va
+       la primera de todo el bloque. */
+    const permiso = await Notification.requestPermission();
+    if(permiso !== 'granted'){
+      alert(permiso === 'denied'
+        ? 'Bloqueaste los avisos. Para activarlos: candado junto a la dirección → Permisos → Notificaciones → Permitir.'
+        : 'El navegador no llegó a preguntar.\n\nSi usas Chrome, entra en ⋮ → Configuración → Notificaciones y desactiva "Usar mensajes más discretos". Otra opción que casi siempre funciona: añade el tablero a la pantalla de inicio (⋮ → Añadir a pantalla principal) y ábrelo desde ahí.');
+      return;
+    }
+    // Conceder el permiso NO suscribe: hay que darse de alta explícitamente. Sin
+    // esta línea el navegador dice "permitido" y OneSignal sigue sin
+    // destinatarios, que es el estado en el que estaba todo el equipo.
     if(OneSignal.User && OneSignal.User.PushSubscription){
       await OneSignal.User.PushSubscription.optIn();
     }
@@ -2315,7 +2332,9 @@ async function activarNotifs(){
     /* "No quedó activado" a secas no sirve para nada: hay tres motivos posibles
        y desde fuera no se distinguen. Así que el mensaje LOS DICE.
        (7-ago-2026: se perdió una hora probando a ciegas por no tener esto.) */
-    const permiso = ('Notification' in window) ? Notification.permission : 'no soportado';
+    // `permiso` ya viene de arriba, del requestPermission(). Se relee del
+    // navegador por si cambió durante el alta de OneSignal.
+    const permisoAhora = ('Notification' in window) ? Notification.permission : 'no soportado';
     let regs = [];
     try{
       regs = (await navigator.serviceWorker.getRegistrations()).map(r => r.scope);
@@ -2324,8 +2343,8 @@ async function activarNotifs(){
                    && OneSignal.User.PushSubscription.id) || '(ninguno)';
 
     let pista = '';
-    if(permiso === 'denied')       pista = 'El navegador tiene BLOQUEADAS las notificaciones para esta página. Hay que permitirlas en los ajustes del sitio.';
-    else if(permiso === 'default') pista = 'No se llegó a conceder el permiso: se cerró el aviso sin aceptar. Toca la campana otra vez y dale a Permitir.';
+    if(permisoAhora === 'denied')       pista = 'El navegador tiene BLOQUEADAS las notificaciones para esta página. Hay que permitirlas en los ajustes del sitio.';
+    else if(permisoAhora === 'default') pista = 'El permiso se perdió a mitad del alta. Vuelve a tocar la campana.';
     else if(!regs.some(s => s.indexOf('tablero-hes1217') >= 0))
                                    pista = 'El service worker no está registrado en la ruta correcta. Hay que borrar los datos del sitio y volver a entrar.';
     else                           pista = 'Permiso concedido y service worker en su sitio, pero OneSignal no completó el alta.';
