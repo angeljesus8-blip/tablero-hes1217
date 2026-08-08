@@ -855,7 +855,9 @@ function seguroPara(precio, sku) {
 
    Si un día algún plazo deja de ser universal, se le pone su banco igual que a
    los 18 — la regla es "se nombra el banco solo cuando restringe". */
-const MSI_18_BANCOS = 'Citibanamex y American Express';
+// Abreviados a propósito: el badge va en una tarjeta estrecha y
+// "American Express" completo la partía en dos líneas.
+const MSI_18_BANCOS = 'Citibanamex y Amex';
 
 function msiInfo(total) {
   const cuota = m => money(Math.ceil(total/m));
