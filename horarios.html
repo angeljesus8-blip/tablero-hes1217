@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Planeador de Horarios — Odemás</title>
+<!-- Montserrat sigue viniendo del CDN AQUÍ Y SOLO AQUÍ (8-ago-2026).
+     El resto del tablero la sirve desde ./fuentes/, porque con la señal de la
+     tienda el CDN caído dibuja todo con la letra del sistema. Este archivo no
+     puede: es copia de 02_Equipo/horario_semanal.html, que se publica también
+     en el repo planeador-odemas para las otras tiendas, y allí no existe la
+     carpeta ./fuentes/ — el @font-face fallaría siempre en vez de solo cuando
+     falle la red. Para arreglarlo hay que llevar la fuente a los dos repos. -->
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>

@@ -10,7 +10,16 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="HES Red">
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  /* Montserrat desde el repo, no del CDN de Google (8-ago-2026). Con la señal
+     de la tienda fallando, el CDN caído dibujaba la app con la letra del
+     sistema y todo se descuadraba sin avisar. Ver tablero.html. */
+  @font-face{
+    font-family:'Montserrat';
+    src:url('./fuentes/Montserrat.woff2') format('woff2');
+    font-weight:400 800; font-display:swap;
+  }
+</style>
 <style>
   * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
   :root { --rojo:#D12026; --naranja:#F37021; --azul:#336BB4; --verde:#1a8c4e; --teal:#0e9594; --gris:#777; --linea:#ececec; --bg:#f6f6f7; }
