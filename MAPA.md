@@ -318,6 +318,34 @@ entregar, y el cliente se iba con las manos vacías. Ahora la pastilla dice
 *(La sección Resurtir sigue separándolos: «🪟 Queda piso — pedir caja» es la
 acción del gerente, distinta de la del asesor con el cliente enfrente.)*
 
+### El Assurant del día era distinto en cada celular *(8-ago-2026, v151)*
+
+`attTotal()` sumaba dos cosas que no se pueden sumar:
+
+```
+attCapturado()  → ventas de TODA la tienda, desde Supabase
+attManual()     → botones ✓/✗, en el localStorage de UN celular
+```
+
+Consecuencias, ninguna de las cuales daba error:
+
+- El KPI que se le reporta a Demetrio **salía distinto en cada teléfono**, y no
+  había forma de saber cuál era el bueno.
+- Una venta ajustada a mano y capturada después contaba **dos veces** en ese
+  aparato: la nube la traía una vez y el manual otra.
+- El % grande **no cuadraba con las filas del equipo** de abajo. Las filas salían
+  de la nube limpias; el porcentaje llevaba los manuales encima. Cualquiera que
+  sumara las filas obtenía otro número.
+
+Los botones y todo el mecanismo manual se retiraron. El Assurant es ahora
+exactamente lo que dice Supabase — **la suma de las filas es igual al total, y se
+puede comprobar de un vistazo**. Si falta una venta, se captura en la app, que es
+donde vive la serie.
+
+*(Esto sobrevivió a la migración porque el manual se escribió cuando el tablero
+solo veía las capturas de su propio celular. Ahí sí tenía sentido. Al empezar a
+leer de toda la tienda, dejó de tenerlo y nadie volvió a mirarlo.)*
+
 ### Un SKU en promoción puede no tener fila de inventario *(8-ago-2026)*
 
 `AGOTADOS` y `RESURTIR` se arman desde `D.inventario`. Un producto que nunca ha

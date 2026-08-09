@@ -330,11 +330,16 @@
   .g-vacio { text-align:center; color:#bbb; font-size:13px; padding:26px 20px; }
 
   /* ---- Dashboard ---- */
-  .att-card { padding:18px 18px 14px; }
-  .att-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; font-size:13px; font-weight:700; color:#555; }
-  .att-reset { background:none; border:1.5px solid var(--linea); border-radius:8px; padding:4px 10px; font-family:'Montserrat',sans-serif; font-size:11px; font-weight:700; color:#aaa; cursor:pointer; }
-  .att-rate { font-size:54px; font-weight:800; line-height:1; margin-bottom:4px; }
-  .att-sub { font-size:12px; color:#888; font-weight:600; margin-bottom:10px; min-height:16px; }
+  .att-card { padding:16px 18px 14px; }
+  .att-header { display:flex; justify-content:space-between; align-items:baseline; gap:10px; margin-bottom:10px; font-size:13px; font-weight:700; color:#555; }
+  /* De dónde salen las ventas, en la cabecera y en pequeño. Antes eran dos
+     renglones sueltos a media tarjeta; es una referencia, no un dato. */
+  .att-fuente { font-size:10px; font-weight:600; color:#bbb; text-align:right; line-height:1.35; }
+  /* El número y su explicación, en la MISMA línea. Apilados dejaban una franja
+     vacía a la derecha del 29% que no decía nada. */
+  .att-cifra { display:flex; align-items:baseline; gap:11px; margin-bottom:11px; }
+  .att-rate { font-size:44px; font-weight:800; line-height:1; letter-spacing:-1.5px; }
+  .att-sub { font-size:12px; color:#888; font-weight:600; line-height:1.35; }
   /* ── Barra de meta ── */
   .att-prog { margin:0 0 12px; }
   .att-prog-track { position:relative; height:9px; background:#f0f0f0; border-radius:10px; overflow:hidden; }
@@ -342,23 +347,31 @@
   .att-prog-goal { position:absolute; top:0; bottom:0; left:25%; width:2.5px; background:var(--verde); opacity:.5; }
   .att-prog-lbl { display:flex; justify-content:space-between; font-size:10px; color:#bbb; font-weight:600; margin-top:3px; }
   .att-prog-lbl .meta { color:var(--verde); }
-  /* ── Leaderboard ── */
-  .lead-card { padding:14px 15px; }
-  .lead-head { font-size:11px; font-weight:800; color:#999; text-transform:uppercase; letter-spacing:1px; margin-bottom:10px; }
+  /* ── Equipo, dentro de la misma tarjeta y plegado ──
+     Se abre con un toque y el tablero recuerda cómo lo dejaste. Plegado por
+     defecto: el % del día se mira cien veces, la lista del equipo dos. */
+  .att-equipo { display:flex; align-items:center; gap:7px; width:100%; background:none;
+    border:none; border-top:1px solid var(--linea); margin-top:2px; padding:11px 0 3px;
+    font-family:'Montserrat',sans-serif; font-size:11.5px; font-weight:700; color:#9b9490;
+    cursor:pointer; text-align:left; }
+  .att-equipo .flecha { transition:transform .18s; display:inline-block; font-size:10px; }
+  .att-equipo[aria-expanded="true"] .flecha { transform:rotate(180deg); }
+  .att-equipo .cuantos { margin-left:auto; font-weight:800; color:#b4aeab; }
+  @media (prefers-reduced-motion:reduce){ .att-equipo .flecha { transition:none; } }
+  /* ── Filas del equipo ──
+     `.lead-card`, `.lead-head` y `.lead-fuente` se fueron con la tarjeta aparte
+     (v151): el equipo vive dentro de la del Assurant y la fuente subió a la
+     cabecera. Estas tres siguen porque son la fila en sí. */
   .lead-row { display:flex; align-items:center; gap:8px; padding:7px 0; border-bottom:1px solid var(--linea); }
   .lead-row:last-of-type { border-bottom:none; }
   .lead-name { flex:1; font-size:13px; font-weight:700; }
   .lead-ventas { font-size:11px; color:#aaa; font-weight:700; white-space:nowrap; min-width:52px; text-align:center; }
   .lead-att { font-size:12px; font-weight:800; white-space:nowrap; min-width:80px; text-align:right; }
-  .lead-fuente { font-size:10px; color:#bbb; font-weight:600; margin-top:9px; text-align:center; line-height:1.4; }
   .lw-btn { background:#fff; border:1.5px solid var(--naranja); color:var(--naranja); border-radius:8px;
     padding:5px 11px; font-family:'Montserrat',sans-serif; font-size:11px; font-weight:800; cursor:pointer; margin-top:7px; }
   #liveWarning.err .lw-btn { border-color:var(--rojo); color:var(--rojo); }
-  /* ── Botones ── */
-  .att-btns { display:flex; gap:10px; }
-  .att-btn { flex:1; padding:12px; border:none; border-radius:12px; font-family:'Montserrat',sans-serif; font-size:13px; font-weight:800; cursor:pointer; }
-  .att-si { background:#eafaf1; color:var(--verde); }
-  .att-no { background:#fdeaea; color:var(--rojo); }
+  /* Los botones ✓ Con seguro / ✗ Sin seguro se retiraron en v151 junto con el
+     ajuste manual que alimentaban. Ver el comentario de `attTotal`. */
   .dash-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:0 16px 16px; }
   .dash-stat { background:#fff; border-radius:14px; padding:16px 12px; text-align:center; border:1px solid #ececec; cursor:pointer; active:opacity:.8; }
   .dash-n { font-size:34px; font-weight:800; line-height:1; color:#1a1a1a; }
@@ -963,11 +976,21 @@ const SERIES_KEY = 'hes1217_series_v1';   // misma clave que escribe captura_ser
 let VENTAS_NUBE = null;        // {vendedor:{c,s}} de TODA la tienda; null = no disponible
 let VENTAS_NUBE_HORA = '';
 
-// El conteo manual se guarda por día; hoyISO() se relee cada vez, así que al
-// cruzar la medianoche el contador arranca solo en cero.
-function attKey(){ return 'att_'+hoyISO(); }
-// Ajustes manuales del día (los botones ✓/✗)
-function attManual(){ try{ return JSON.parse(localStorage.getItem(attKey())||'{"c":0,"s":0}'); }catch(e){ return {c:0,s:0}; } }
+/* Los botones ✓/✗ de ajuste manual se retiraron el 8-ago-2026 (v151).
+   No fue por espacio. Sumaban un conteo guardado en el localStorage de UN
+   celular al total que viene de Supabase, que es de TODA la tienda. Con eso:
+
+     · el Assurant del día salía distinto en cada teléfono, y ninguno era el
+       bueno — el mismo KPI que se le reporta a Demetrio
+     · una venta ajustada a mano y capturada después contaba DOS veces en ese
+       aparato
+     · el % grande no cuadraba con las filas del equipo: las filas venían de la
+       nube, el porcentaje llevaba los manuales encima
+
+   Ahora el número es exactamente lo que dice Supabase, igual en todos lados.
+   Si una venta falta, se captura en la app —que es donde vive la serie— en vez
+   de parchear el número en una pantalla. Y desde v150 los apartados entran
+   solos el día que se cobran, que era el hueco de verdad. */
 
 // Ventas capturadas HOY en este dispositivo
 function ventasHoyLocal(){
@@ -994,22 +1017,9 @@ function attCapturado(){
   Object.keys(por).forEach(n=>{ t.c += por[n].c||0; t.s += por[n].s||0; });
   return t;
 }
-function attTotal(){
-  const cap = attCapturado(), m = attManual();
-  return { c: cap.c + (m.c||0), s: cap.s + (m.s||0) };
-}
-function attAdd(tipo){
-  const m = attManual(); m[tipo] = (m[tipo]||0) + 1;
-  localStorage.setItem(attKey(), JSON.stringify(m));
-  render();
-}
-function attReset(){
-  const m = attManual(); const n = (m.c||0)+(m.s||0);
-  if(!n){ alert('No hay registros manuales que reiniciar.\n\nLas ventas capturadas en Captura de Series no se borran desde aquí.'); return; }
-  if(!confirm('¿Borrar los '+n+' registro(s) manuales de hoy?\n\nLas ventas capturadas en la app NO se tocan.')) return;
-  localStorage.removeItem(attKey());
-  render();
-}
+// El total es lo capturado y nada más. Se conserva la función porque la llaman
+// el resumen de WhatsApp y la tarjeta; que sea un alias hoy no la hace inútil.
+function attTotal(){ return attCapturado(); }
 
 /* ---- Leaderboard & Resumen WA ---- */
 // Los nombres vienen de la config de tienda (Supabase). Sin sesión la lista va
@@ -1033,8 +1043,25 @@ function filasLeaderboard(){
     return b.pct - a.pct || b.total - a.total;
   });
 }
-function leaderboardHtml(){
-  const rows = filasLeaderboard().map(f=>{
+/* El equipo va PLEGADO dentro de la tarjeta del Assurant (v151). Eran dos
+   tarjetas apiladas que se comían pantalla y media antes de llegar a Precios, y
+   la mitad de sus renglones eran guiones de gente que aún no vendía.
+
+   Se recuerda abierto o cerrado entre recargas: quien lo abre suele quererlo
+   abierto todo el día, y el tablero se repinta solo cada pocos minutos. */
+let EQUIPO_ABIERTO = (function(){
+  try{ return localStorage.getItem('hes_equipo_abierto') === '1'; }catch(e){ return false; }
+})();
+function toggleEquipo(){
+  EQUIPO_ABIERTO = !EQUIPO_ABIERTO;
+  // sin cuota de almacenamiento se abre igual, solo no lo recuerda al recargar
+  try{ localStorage.setItem('hes_equipo_abierto', EQUIPO_ABIERTO ? '1' : '0'); }catch(e){}
+  render();
+}
+function equipoHtml(){
+  const filas = filasLeaderboard();
+  const conVenta = filas.filter(f => f.total > 0).length;
+  const rows = filas.map(f=>{
     const ev = f.pct===null?'':f.pct>=25?'✅':f.pct>=15?'⚠️':'🔴';
     const col= f.pct===null?'#aaa':f.pct>=25?'var(--verde)':f.pct>=15?'var(--naranja)':'var(--rojo)';
     return `<div class="lead-row">
@@ -1043,15 +1070,14 @@ function leaderboardHtml(){
       <span class="lead-att" style="color:${col}">${f.pct!==null?f.pct+'% '+ev:'—'}</span>
     </div>`;
   }).join('');
-  const fuente = VENTAS_NUBE
-    ? `Ventas de toda la tienda · ${VENTAS_NUBE_HORA}`
-    : 'Solo las ventas capturadas en <b>este</b> equipo';
-  return `<div class="card lead-card">
-    <div class="lead-head">👥 Equipo hoy — Assurant</div>
-    ${rows}
-    <div class="lead-fuente">${fuente}</div>
-    <button class="btn-wa" onclick="resumenWA()">📲 Compartir resumen por WhatsApp</button>
-  </div>`;
+  // Sin nadie en la lista no hay nada que plegar, y un desplegable vacío deja
+  // al gerente tocando un botón que no hace nada.
+  if(!filas.length) return '';
+  return `<button class="att-equipo" aria-expanded="${EQUIPO_ABIERTO}" onclick="toggleEquipo()">
+      <span class="flecha">▾</span> 👥 Equipo hoy
+      <span class="cuantos">${conVenta} de ${filas.length} con venta</span>
+    </button>
+    ${EQUIPO_ABIERTO ? rows : ''}`;
 }
 function resumenWA(){
   const att=attTotal(); const total=att.c+att.s;
@@ -1947,19 +1973,24 @@ function render(){
     const avisosAct= (D.avisos||[]).filter(a=>!a.d2||a.d2>=HOY_ISO).length;
     const resurtirN= RESURTIR.length + AGOTADOS.length;
     const att=attTotal(); const total=att.c+att.s;
-    const cap=attCapturado(); const man=attManual();
-    const nCap=cap.c+cap.s, nMan=(man.c||0)+(man.s||0);
     const pct=total>0?Math.round(att.c/total*100):0;
     const col=pct>=25?'var(--verde)':pct>=15?'var(--naranja)':'var(--rojo)';
     const barW=Math.min(pct,100);
-    // De dónde salió el número: capturas de la app + ajustes manuales
-    const origen = total===0 ? 'Aún sin ventas registradas hoy'
-      : (nCap?`${nCap} de Captura de Series`:'') + (nCap&&nMan?' + ':'') + (nMan?`${nMan} manual${nMan!==1?'es':''}`:'');
+    /* De dónde salen las ventas. Ya no se enumeran capturas contra ajustes
+       manuales porque los manuales dejaron de existir: o son las de toda la
+       tienda, o —sin red— solo las de este aparato, y ESO sí hay que decirlo. */
+    const fuente = VENTAS_NUBE
+      ? `toda la tienda<br>${VENTAS_NUBE_HORA}`
+      : 'solo lo capturado<br>en <b>este</b> equipo';
     html += `<div class="card att-card">
-      <div class="att-header"><span>🛡️ Assurant del día</span><button class="att-reset" onclick="attReset()">↺ Reiniciar</button></div>
-      <div class="att-rate" id="attRate" style="color:${col}">${total>0?pct+'%':'—'}</div>
-      <div class="att-sub" id="attSub">${att.c} con seguro de ${total} ventas hoy ${pct>=25?'✅':pct>0?'⚠️':''}</div>
-      <div class="lead-fuente" style="text-align:left;margin:-6px 0 10px">${origen}</div>
+      <div class="att-header"><span>🛡️ Assurant del día</span>
+        <span class="att-fuente">${fuente}</span></div>
+      <div class="att-cifra">
+        <div class="att-rate" id="attRate" style="color:${col}">${total>0?pct+'%':'—'}</div>
+        <div class="att-sub" id="attSub">${total>0
+          ? `${att.c} con seguro<br>de ${total} venta${total!==1?'s':''} hoy ${pct>=25?'✅':'⚠️'}`
+          : 'Aún sin ventas<br>registradas hoy'}</div>
+      </div>
       <div class="att-prog">
         <div class="att-prog-track">
           <div class="att-prog-fill" id="attBarFill" style="width:${barW}%;background:${col}"></div>
@@ -1967,13 +1998,9 @@ function render(){
         </div>
         <div class="att-prog-lbl"><span>0%</span><span class="meta">▲ meta 25%</span><span>100%</span></div>
       </div>
-      <div class="att-btns">
-        <button class="att-btn att-si" onclick="attAdd('c')">✓ Con seguro</button>
-        <button class="att-btn att-no" onclick="attAdd('s')">✗ Sin seguro</button>
-      </div>
-      <div class="lead-fuente" style="margin-top:8px">Usa estos botones solo para ventas que <b>no</b> capturaste en la app</div>
-    </div>
-    ${leaderboardHtml()}`;
+      ${equipoHtml()}
+      <button class="btn-wa" onclick="resumenWA()">📲 Compartir resumen por WhatsApp</button>
+    </div>`;
 
     /* Los avisos van en una FRANJA arriba, no en una tarjeta más (8-ago-2026).
        Un aviso se lee al entrar; nadie navega a "Avisos" a ver si hay alguno —
