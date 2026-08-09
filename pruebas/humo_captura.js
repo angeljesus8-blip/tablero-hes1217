@@ -33,7 +33,12 @@ function escenario(store, empleado) {
   if (store) LS['hes_store'] = JSON.stringify(store);
   if (empleado) LS['hes_empleado'] = JSON.stringify(empleado);
   const els = {};
-  let gateOculto = null, gateHTML = '';
+  /* El gate arranca VISIBLE, igual que en el HTML (<div id="gate"> sin la clase
+   `hide`). Empezar en "indeterminado" fue lo que dejó pasar el bloqueo del
+   8-ago: el código identificaba al asesor y se olvidaba de llamar a
+   `hideGate()`, la pantalla se quedaba encima y vacía, y la prueba lo daba por
+   bueno porque nadie había tocado el gate. No tocarlo NO es esconderlo. */
+let gateOculto = false, gateHTML = '';
   function el(id) {
     if (!els[id]) els[id] = {
       id, style: {}, dataset: {}, value: '', textContent: '', children: [],
@@ -82,7 +87,7 @@ function escenario(store, empleado) {
 
   if (err) return { error: err };
   const nombres = (gateHTML.match(/gate-name/g) || []).length;
-  const resultado = (gateOculto !== false) ? 'captura' : (nombres ? 'elegir' : 'atascado');
+  const resultado = (gateOculto === true) ? 'captura' : (nombres ? 'elegir' : 'atascado');
   return { resultado, nombres, vendedor: el('vendLabel').textContent,
            tieneSalida: gateHTML.indexOf('index.html') >= 0 };
 }
