@@ -42,6 +42,9 @@ function abrirPagina(pagina, hash, tipoNav){
                       addEventListener:(t, f) => { (oyentes[t] = oyentes[t] || []).push(f); } };
   global.window.addEventListener = (t, f) => { (oyentes[t] = oyentes[t] || []).push(f); };
   global.performance = { getEntriesByType: () => [{ type: tipoNav || 'navigate' }] };
+  /* Sin service worker: aquí solo se prueba a dónde te lleva el menú. Que la app
+     se ponga al día sola es otra cosa y se comprueba en `actualizacion.js`. */
+  Object.defineProperty(global, 'navigator', { configurable:true, writable:true, value:{} });
   global.setInterval = () => 1; global.clearInterval = () => {};
   vm.runInThisContext(codigo, { filename:'continuidad.js' });
   return oyentes;
