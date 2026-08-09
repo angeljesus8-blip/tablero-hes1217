@@ -80,3 +80,66 @@ ok('irA escribe la sección en la URL', location.hash === '#resurtir', location.
 busqueda = 'mate 11'; _urlAlDia();
 ok('la búsqueda también va en la URL', /resurtir/.test(location.hash) && /mate/.test(location.hash),
    location.hash);
+
+/* ── 7 · Resurtir es de gerente y subgerente (9-ago-2026) ────
+   Pedirle mercancía al CD es trabajo de quien lleva la tienda. Lo que NO puede
+   pasar es que al asesor se le esconda el producto: con el cliente enfrente
+   necesita saber que existe y que se trae de otra tienda. Por eso aquí se
+   comprueban las dos mitades, y la segunda es la que de verdad importa. */
+
+// Los puestos, uno por uno. Salen de la lista cerrada de Admin → Equipo.
+ok('el gerente y el subgerente gestionan',
+   esPuestoDeGestion_('Gerente de Tienda') && esPuestoDeGestion_('Subgerente de Tienda'));
+ok('el asesor no', !esPuestoDeGestion_('Asesor de Tienda'));
+ok('el encargado y el auxiliar tampoco',
+   !esPuestoDeGestion_('Encargado de Tienda') && !esPuestoDeGestion_('Auxiliar de Tienda'));
+// Sonar escribe el mismo puesto de otra forma: "SUBGERENTE TIENDA RS"
+ok('el puesto como lo escribe Sonar también cuenta', esPuestoDeGestion_('SUBGERENTE TIENDA RS'));
+// Un acento de más al teclearlo a mano no debe costarle el acceso a nadie
+ok('un acento mal puesto no lo tumba', esPuestoDeGestion_('Gérente de Tienda'));
+ok('sin puesto no se adivina nada',
+   !esPuestoDeGestion_('') && !esPuestoDeGestion_(null) && !esPuestoDeGestion_(undefined));
+
+const _eraGestion = PUEDE_GESTIONAR;
+PUEDE_GESTIONAR = false;                      // a partir de aquí, un asesor
+
+busqueda = ''; filtroActivo = 'inicio'; render();
+ok('al asesor no le sale la tarjeta de Resurtir en Inicio',
+   app.innerHTML.indexOf("irA('resurtir')") < 0);
+
+/* Entrar por la URL tampoco: el hash se teclea, se comparte y lo restaura
+   continuidad.js al volver de WhatsApp. */
+filtroActivo = 'resurtir'; render();
+ok('al asesor un #resurtir lo deja en Inicio', filtroActivo === 'inicio', filtroActivo);
+ok('y la URL no se queda apuntando a una sección que no verá',
+   location.hash.indexOf('resurtir') < 0, location.hash);
+
+/* El botón ✕ EOL marca un producto como descontinuado para toda la tienda:
+   no es una acción de asesor ni aunque llegara a ver la fila. */
+const _fila = RESURTIR[0] || AGOTADOS[0];
+ok('el asesor no ve el botón ✕ EOL', rowResurtir(_fila).indexOf('marcarNoResurtir') < 0);
+
+/* LA MITAD QUE IMPORTA: el buscador. El producto tiene que seguir saliendo,
+   solo que bajo el encabezado del asesor —"se traen de otra tienda"— y no bajo
+   la lista de pedidos del gerente. Si esto se rompe, el asesor le dice a un
+   cliente "no lo tenemos" de un producto que sí se puede conseguir. */
+filtroActivo = 'inicio'; busqueda = '900003'; render();
+const _vistaAsesor = app.innerHTML;
+ok('el asesor no ve el bloque "Hay que resurtir"',
+   _vistaAsesor.indexOf('Hay que resurtir') < 0);
+ok('pero el producto sigue apareciendo', _vistaAsesor.indexOf('900003') >= 0);
+ok('y sale como algo que se puede conseguir',
+   _vistaAsesor.indexOf('Se traen de otra tienda') >= 0);
+/* Y no acaba en el cajón de los descontinuados. `mostrados` se arma con los
+   SKU de los bloques pintados: si el de Resurtir era el único que lo reclamaba,
+   al quitarlo el producto caería en "Ya no se maneja en la tienda" — o sea,
+   pasaría de "se consigue" a "no lo pidas", que es peor que ocultarlo. */
+ok('y no cae en "ya no se maneja en la tienda"',
+   _vistaAsesor.indexOf('Ya no se maneja') < 0);
+
+PUEDE_GESTIONAR = _eraGestion;                // vuelve el gerente
+busqueda = ''; filtroActivo = 'inicio'; render();
+ok('el gerente sí ve la tarjeta de Resurtir',
+   app.innerHTML.indexOf("irA('resurtir')") >= 0);
+ok('y el gerente sí ve el botón ✕ EOL',
+   rowResurtir(_fila).indexOf('marcarNoResurtir') >= 0);

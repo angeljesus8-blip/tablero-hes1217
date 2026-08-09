@@ -61,6 +61,65 @@ tiene que aparecer en algún `RETURNS TABLE` de `login_asesor`.
 guardado en `hes_store` no se actualiza solo. Lo mismo al correr el SQL de
 arriba: la sesión vieja no trae los campos nuevos.
 
+### Cadena 1-bis · Quién ve qué *(9-ago-2026, v167)*
+
+La sección **🔄 Resurtir** es de gerente y subgerente. Pedirle mercancía al CD
+es trabajo de quien lleva la tienda; el asesor sigue viendo el producto entero
+en Precios y en el buscador, bajo *«se traen de otra tienda»*.
+
+```
+empleados.puesto (Supabase)
+      ↓ login_empleado → emp_puesto        ← puerta 1: número de empleado ✅
+      ↓ vincular_mi_cuenta → puesto        ← puerta 2: correo y contraseña
+index.html guarda hes_empleado.puesto      ← se arma campo por campo
+      ↓
+tablero.html · PUEDE_GESTIONAR
+      ↓ seccionVisible_() lo consultan LOS CUATRO:
+tarjeta de Inicio · render · buscador global · el hash de la URL
+```
+
+**El criterio es el PUESTO, no `admin`.** Son dos preguntas distintas —«qué
+haces en la tienda» y «puedes tocar la configuración»— que hoy coinciden por
+casualidad, con las mismas dos personas. Atarlas habría dado el permiso
+equivocado el día que se separen, sin que nadie lo notara.
+
+**Las dos puertas tienen que entregar el puesto, y la segunda no lo hacía.**
+`vincular_mi_cuenta` devolvía store_id, nombre, admin y empno — no el puesto — y
+`index.html` guardaba `puesto:''`. O sea que Miguel veía una cosa entrando con
+su número y otra con su correo: la misma persona, el mismo puesto, distinta
+puerta. Es exactamente el fallo de `hoja_auth` de arriba, repetido. Lo cierra
+`supabase_puesto_en_sesion.sql`.
+
+**Sin puesto se cae en el rol, y eso NO es un agujero:** es el gerente dueño de
+la tienda, que entra con el correo de la tienda y por eso no tiene ficha de
+empleado que mirar. Un asesor nunca llega ahí con rol de gerente.
+
+**Cuatro sitios preguntan, uno solo decide.** `seccionVisible_()` existe porque
+esconder una sección son cuatro sitios, no uno, y basta olvidar el del hash para
+que `#resurtir` pegado a mano la siga abriendo. El portero vive al principio de
+`render()` —la única puerta por la que se pinta algo— y no dentro de la rama de
+la sección: ahí habría dejado la cabecera con su título y la pantalla vacía
+debajo.
+
+**El permiso no se congela en el teléfono.** `hes_empleado` se escribe UNA vez,
+al entrar, y nadie cierra sesión nunca. `confirmarPuesto()` se lo vuelve a
+preguntar a `login_empleado` en cada arranque y **corrige en las dos
+direcciones**: quitar sería más "seguro" y estaría mal, porque ascender a
+alguien y que no vea lo suyo no da ningún error y nadie ataría el síntoma a un
+puesto viejo guardado en un celular.
+
+⚠️ **Esto se le esconde al asesor, no se le oculta el dato.** El inventario
+completo baja igual al teléfono: es el mismo `D.inventario` que alimenta
+Precios. Quien edite el `localStorage` a mano vería la sección hasta que
+Supabase lo desmienta. Para que el dato no llegue habría que partir la lectura
+del tablero, y eso rompe Precios.
+
+Lo cubren cuatro pruebas de `casos_tablero.js` (bloque 7), **las cuatro
+comprobadas rompiendo su guardia a propósito**. La que más importa no es la que
+esconde: es la que exige que el producto **siga apareciendo** en el buscador del
+asesor y no acabe en «ya no se maneja en la tienda» — pasar de *«se consigue»* a
+*«no lo pidas»* es peor que enseñarle la lista de pedidos.
+
 ---
 
 ## Cadena 2 · Escrituras al Apps Script
