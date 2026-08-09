@@ -577,6 +577,53 @@ const ROLE          = localStorage.getItem('hes_role') || 'asesor';
    salían "Arturo" y "Arturo Aguilar rosette" como si fueran dos personas. */
 const YO = (function(){ try{ return JSON.parse(localStorage.getItem('hes_empleado')||'null'); }
                         catch(e){ return null; } })();
+
+/* ── Quién ve Resurtir ──────────────────────────────────────────────────
+   Por PUESTO, no por el permiso de Admin (decidido el 9-ago-2026). Pedirle
+   mercancía al CD es trabajo de quien lleva la tienda: gerente y subgerente.
+   Un asesor con el cliente enfrente necesita saber si puede vender algo o
+   traerlo de otra tienda, y eso lo sigue viendo entero en Precios y en el
+   buscador; la lista de pedidos no es su decisión.
+
+   Se elige el puesto y no `admin` a propósito: son dos preguntas distintas
+   —"qué haces en la tienda" y "puedes tocar la configuración"— y hoy coinciden
+   por casualidad, con las mismas dos personas. El día que se separen, atarlas
+   habría dado el permiso equivocado sin que nadie lo notara.
+
+   Se compara por el PRINCIPIO de la palabra porque el mismo puesto se escribe
+   de dos formas: la ficha dice "Subgerente de Tienda" y el reporte de Sonar
+   "SUBGERENTE TIENDA RS". Exigir el texto exacto dejaría fuera a quien se dé
+   de alta desde el otro lado. Ojo al orden de las letras: "subgerente" no
+   empieza por "gerente", así que ninguno de los dos se cuela en el otro. */
+const SIN_ACENTOS = new RegExp('[\\u0300-\\u036f]', 'g');
+const PUESTOS_GESTION = ['gerente', 'subgerente'];
+function esPuestoDeGestion_(puesto){
+  // Los acentos se quitan con el rango escapado, no con los caracteres
+  // combinantes escritos tal cual: invisibles en el editor, un guardado en otra
+  // codificación los rompe y el filtro dejaría de quitar nada, en silencio.
+  const p = String(puesto || '').toLowerCase()
+              .normalize('NFD').replace(SIN_ACENTOS, '').trim();
+  return PUESTOS_GESTION.some(function(x){ return p.indexOf(x) === 0; });
+}
+
+/* Sin puesto se cae en el rol, y eso NO es un agujero: es el gerente dueño de
+   la tienda, que entra con el correo de la tienda y por eso no tiene ficha de
+   empleado de la que sacar un puesto. Un asesor nunca llega aquí con rol de
+   gerente, así que el respaldo no le abre nada.
+
+   Es `let` porque el servidor puede desmentirlo: ver confirmarPuesto(). */
+let PUEDE_GESTIONAR = (YO && YO.puesto)
+  ? esPuestoDeGestion_(YO.puesto)
+  : ROLE === 'gerente';
+
+/* Un solo portero para "¿esta sección existe para quien está mirando?". Lo
+   preguntan las tarjetas de Inicio, el render, el buscador y la URL: si cada
+   uno lo decidiera por su cuenta, bastaría olvidar uno para que la sección
+   siguiera alcanzable por ahí. */
+function seccionVisible_(id){
+  return id !== 'resurtir' || PUEDE_GESTIONAR;
+}
+
 document.getElementById('updated').innerHTML = '<span style="color:var(--naranja);font-weight:700">Sin confirmar</span>';
 document.getElementById('liveWarning').classList.add('visible');
 (function(){
@@ -683,7 +730,10 @@ function _deLaUrl(){
   const h = decodeURIComponent((location.hash||'').replace(/^#/,''));
   const corte = h.indexOf('/');
   const id = corte >= 0 ? h.slice(0, corte) : h;
-  return { id: FILTROS.some(f=>f.id===id) ? id : 'inicio',
+  // La sección tiene que existir Y ser de quien está mirando: el hash se
+  // teclea, se comparte por WhatsApp y lo restaura continuidad.js, así que sin
+  // esto un `#resurtir` pegado a mano abriría la sección igual.
+  return { id: (FILTROS.some(f=>f.id===id) && seccionVisible_(id)) ? id : 'inicio',
            q:  corte >= 0 ? h.slice(corte+1) : '' };
 }
 let filtroActivo = _deLaUrl().id;
@@ -1390,7 +1440,14 @@ function buscarEnTodo(){
   const aps = APARTADOS.filter(a => coincide(a.cliente, a.sku, a.color, a.serie));
   push('📋 Apartados de clientes', aps, cardApartado);
 
-  push('🔄 Hay que resurtir', [...AGOTADOS,...RESURTIR].filter(x=>coincide(x.producto,x.sku)), rowResurtir);
+  /* La lista de pedidos solo para quien pide (9-ago-2026). El producto NO
+     desaparece del buscador para nadie: los agotados y los que solo conservan
+     la pieza de piso siguen saliendo abajo, en «se traen de otra tienda», que
+     es la respuesta que el asesor necesita con el cliente enfrente. Lo que se
+     le quita es el encabezado de "hay que pedir esto", no el resultado.
+     Comprobado en las pruebas: sin este bloque, ninguno se queda sin bloque. */
+  if(PUEDE_GESTIONAR)
+    push('🔄 Hay que resurtir', [...AGOTADOS,...RESURTIR].filter(x=>coincide(x.producto,x.sku)), rowResurtir);
 
   // Se traen de otra tienda: agotados que NO son EOL, con y sin promo.
   const traibles = [...promosCoinc.filter(x=>!tieneExistencia_(x.sku) && !eolSkuSet.has(x.sku)).map(x=>({__promo:x})),
@@ -1946,7 +2003,10 @@ function rowResurtir(x){
     : sinPiso
     ? `<span class="exh" style="background:#fdeaea;color:var(--rojo);font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;white-space:nowrap;">📭 sin piso</span>`
     : `<span class="exh" style="background:#fff5ee;color:var(--naranja);font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;white-space:nowrap;">🪟 ${x.exhibe} piso</span>`;
-  const btnEol = ROLE === 'gerente'
+  /* Mismo criterio que la sección entera, no `ROLE==='gerente'`. Con el rol,
+     Miguel perdía el botón por entrar con su número de empleado en vez de con
+     su correo — la misma persona y el mismo puesto, distinta puerta. */
+  const btnEol = PUEDE_GESTIONAR
     ? `<button onclick="marcarNoResurtir('${x.sku}','${x.producto.replace(/'/g,'')}',this)"
          title="Ya no se resurte — quitar del listado"
          style="background:none;border:1.5px solid #ddd;border-radius:7px;cursor:pointer;padding:3px 8px;font-size:11px;font-weight:700;color:#aaa;flex-shrink:0;white-space:nowrap">✕ EOL</button>`
@@ -2051,6 +2111,13 @@ function seccionBundles(titulo, items){
 function render(){
   // Cruzar la medianoche con la app abierta también cuenta como cambio de día.
   if(tocarDia()){ refiltrarCaches(); pintarUpdated(); }
+  /* Aquí y no dentro de cada rama: es la ÚNICA puerta por la que se pinta algo,
+     así que basta con cerrarla una vez. Filtrar en la rama de la sección habría
+     dejado la cabecera con su título y la pantalla vacía debajo — y el asesor
+     leería que existe una sección a la que no puede entrar.
+     Hace falta aunque `_deLaUrl` e `irA` ya filtren, porque el servidor puede
+     retirar el permiso con la sección abierta (ver confirmarPuesto). */
+  if(!seccionVisible_(filtroActivo)){ filtroActivo = 'inicio'; _urlAlDia(); }
   renderCabeceraSeccion();
   /* Escribir en el buscador manda sobre la sección abierta: si el asesor está
      buscando algo, lo que quiere es ENCONTRARLO, no seguir dentro de donde
@@ -2138,7 +2205,7 @@ function render(){
                               : `${v.length} pagados, pendientes de entregar`; })(),
                    eol:'Piezas de exhibición al 50%',
                    resurtir:'Sin existencia — hay que pedir' };
-    html += `<div class="ir-grid">` + FILTROS.filter(f=>seccionTieneItems(f.id)).map(f=>`
+    html += `<div class="ir-grid">` + FILTROS.filter(f=>seccionTieneItems(f.id) && seccionVisible_(f.id)).map(f=>`
       <button class="ir-card" onclick="irA('${f.id}')">
         <span class="ir-ico" style="background:${f.color}1a">${f.icono}</span>
         <span class="ir-txt"><b>${f.label}</b><span>${subs[f.id]||f.sub}</span></span>
@@ -2659,21 +2726,63 @@ const SB_KEY = 'sb_publishable_mELjDmCaFpNOxcwPi5MB2A_qSZ5ZA2z';
    siempre: ninguna función de la base contesta sin saber de qué tienda habla.
    Devuelve null —nunca lanza— para que quien llama decida si cae al Apps
    Script o si avisa; un throw aquí tumbaría el arranque del tablero. */
-async function sbCall(fn, params, ms){
+/* La llamada pelada, con los parámetros EXACTOS que se le pasen. Casi nada la
+   usa directamente: existe porque no todas las funciones de la base hablan de
+   una tienda —`login_empleado` recibe un número de empleado y nada más—, y
+   colarle un `p_store` que no está en su firma hace que PostgREST no la
+   encuentre y responda 404. Un 404 aquí devuelve null igual que un corte de
+   red, así que se vería como "sin conexión" y no como "la llamada está mal". */
+async function sbCallRaw(fn, params, ms){
   const ctl = new AbortController();
   const t = setTimeout(function(){ ctl.abort(); }, ms || 8000);
   try{
     const r = await fetch(SB_URL + '/rest/v1/rpc/' + fn, {
       method:'POST', signal: ctl.signal,
       headers:{ apikey:SB_KEY, Authorization:'Bearer '+SB_KEY, 'Content-Type':'application/json' },
-      body: JSON.stringify(Object.assign({ p_store: String(TIENDA_ID || '') }, params || {}))
+      body: JSON.stringify(params || {})
     });
     if(!r.ok) return null;
     return await r.json();
   }catch(e){ return null; }        // sin red, timeout o rechazo: se cae al GAS
   finally{ clearTimeout(t); }
 }
+async function sbCall(fn, params, ms){
+  return sbCallRaw(fn, Object.assign({ p_store: String(TIENDA_ID || '') }, params || {}), ms);
+}
 async function sbRpc(fn, ms){ return sbCall(fn, null, ms); }
+
+/* ── Que el permiso no se quede congelado en el teléfono ────────────────
+   `hes_empleado` se escribe UNA vez, al entrar, y no se vuelve a refrescar.
+   Sin esto, cambiar un puesto en Admin → Equipo no llegaría hasta que esa
+   persona cerrara sesión y volviera a entrar — y nadie cierra sesión: la app
+   recuerda al usuario. Es el mismo fallo que dejó a los asesores dos días sin
+   poder capturar (ver el comentario de `queFaltaEnLaSesion` en index.html).
+
+   Corrige en LAS DOS direcciones a propósito. Solo quitar sería más "seguro" y
+   estaría mal: ascender a alguien y que no vea lo suyo no da ningún error, y
+   nadie relacionaría el síntoma con que su teléfono guarda el puesto viejo.
+
+   Se reusa `login_empleado`, que es la misma función del login y ya devuelve el
+   puesto: una función nueva sería un segundo sitio donde vive la respuesta a
+   "¿qué puesto tiene esta persona?", y esos dos sitios se separan solos.
+
+   Si no hay red no pasa nada: se queda lo que decidió el arranque, que es lo
+   que había hasta hoy. */
+async function confirmarPuesto(){
+  if(!YO || !YO.empno) return;      // gerente dueño: su permiso es la sesión
+  const r = await sbCallRaw('login_empleado', { p_pin: String(YO.empno) }, 8000);
+  const f = Array.isArray(r) ? r[0] : r;
+  if(!f || !f.emp_puesto) return;   // sin respuesta útil no se toca nada
+  const antes = PUEDE_GESTIONAR;
+  PUEDE_GESTIONAR = esPuestoDeGestion_(f.emp_puesto);
+  if(f.emp_puesto !== YO.puesto){
+    YO.puesto = f.emp_puesto;
+    // Se guarda para que el próximo arranque ya nazca bien, aunque sea sin red
+    try{ localStorage.setItem('hes_empleado', JSON.stringify(YO)); }
+    catch(e){ /* almacenamiento lleno o bloqueado: se vuelve a preguntar mañana */ }
+  }
+  if(antes !== PUEDE_GESTIONAR) render();   // aparece o desaparece sin recargar
+}
 
 /* Las escrituras de preventa llevan el token de tienda, el mismo secreto que
    ya protegía al Apps Script. Sale de la sesión (login_asesor lo devuelve), y
@@ -2858,6 +2967,7 @@ async function refrescarNube(){
 render();
 actualizarBanner();
 refrescarNube();
+confirmarPuesto();
 
 /* ---- Al volver a la app ----
    El asesor deja la PWA abierta y regresa horas (o días) después: sin esto ve

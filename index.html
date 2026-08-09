@@ -233,7 +233,10 @@ function initSB() {
 }
 
 const CARDS = [
-  { label:'Tablero / Inventario',       icon:'📊', href:'tablero.html',     cls:'c1', desc:'Existencias, EOL al 50%, resurtir, agotados y promos.' },
+  // Sin "resurtir" en la descripción: esa sección es de gerente y subgerente
+  // (9-ago-2026), y anunciarla en el menú a todo el equipo sería ofrecer una
+  // pantalla que la mayoría no va a encontrar al entrar.
+  { label:'Tablero / Inventario',       icon:'📊', href:'tablero.html',     cls:'c1', desc:'Existencias, precios, promos, apartados y EOL al 50%.' },
   { label:'Comisiones y Extracoberturas', icon:'💰', href:'comisiones.html', cls:'c6', desc:'Venta por vendedor y avance de extracobertura, desde Sonar.' },
   { label:'Captura de Series',           icon:'📷', href:'captura_series.html', cls:'c2', desc:'Escanea el N° de serie y registra la venta.' },
   { label:'Sales Arena',   icon:'🎯', href:'https://sales-arena-app.vercel.app', cls:'c5', desc:'Entrena tu venta por voz con un cliente IA.', ext:true },
@@ -433,7 +436,14 @@ async function doLogin() {
   const rol = (!ficha || ficha.admin) ? 'gerente' : 'asesor';
   localStorage.setItem('hes_store', JSON.stringify(cfg));
   localStorage.setItem('hes_role', rol);
-  if (ficha) localStorage.setItem('hes_empleado', JSON.stringify({ empno:ficha.empno, nombre:ficha.nombre, puesto:'', admin: ficha.admin === true }));
+  /* El puesto viaja igual que por el otro login (9-ago-2026). El tablero decide
+     con él quién ve la sección de Resurtir, así que dejarlo en '' hacía que la
+     MISMA persona viera cosas distintas según entrara con su correo o con su
+     número — sin ningún error a la vista, que es lo que costó dos días con
+     `hoja_auth` (MAPA, cadena 1). Si `vincular_mi_cuenta` todavía no lo
+     devuelve, llega vacío y el tablero se apoya en el rol; no se queda nadie
+     fuera mientras tanto. */
+  if (ficha) localStorage.setItem('hes_empleado', JSON.stringify({ empno:ficha.empno, nombre:ficha.nombre, puesto:ficha.puesto||'', admin: ficha.admin === true }));
   else localStorage.removeItem('hes_empleado');
   applyStoreConfig(cfg, rol);
   sc('menu');
