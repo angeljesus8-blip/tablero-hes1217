@@ -625,7 +625,7 @@ def r_pruebas():
     if not node:
         aviso('pruebas', 'node no está instalado: no se pudo ejecutar la app')
         return
-    for guion in ('humo_tablero.js', 'navegacion.js'):
+    for guion in ('humo_tablero.js', 'humo_captura.js', 'navegacion.js'):
         ruta = os.path.join(BASE, 'pruebas', guion)
         if not os.path.exists(ruta):
             falla('pruebas', 'falta pruebas/%s — es lo que impide publicar una app '
