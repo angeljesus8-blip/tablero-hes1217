@@ -119,6 +119,11 @@ const _storeConfig = (function(){ try{ return JSON.parse(localStorage.getItem('h
 })();
 
 if(!_storeConfig || !_storeConfig.store_id){
+  // Se avisa a continuidad.js de que esta salida es voluntaria. Hoy el menú ya
+  // no reanudaría —sin `hes_store` no reanuda nada—, pero eso es una casualidad
+  // de dos condiciones que coinciden, y el día que una cambie esto sería un
+  // bucle: comisiones → menú → comisiones.
+  if(window.HES_salirAlMenu) window.HES_salirAlMenu();
   location.replace('index.html');
   throw new Error('Sin sesión de tienda — redirigiendo a login');
 }
