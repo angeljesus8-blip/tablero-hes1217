@@ -151,13 +151,22 @@
     if(!localStorage.getItem('hes_store')){ olvidar(); return; }
   } catch(e){ return; }   // sin localStorage no se puede saber: mejor el menú
 
-  /* Refuerzo: el botón ATRÁS no debe reabrir lo que se acaba de cerrar. El
-     candado de arriba ya cubre este caso; esto lo cubre otra vez por si el
-     navegador estrena `sessionStorage` en una restauración. */
-  try {
-    var nav = performance.getEntriesByType('navigation')[0];
-    if(nav && nav.type === 'back_forward') return;
-  } catch(e){}   // navegador sin esta API: el candado de arriba ya cubre el caso
+  /* Aquí había una comprobación de `performance.navigation.type === back_forward`
+     para que el botón atrás no reabriera lo cerrado. Se quitó el 8-ago-2026:
+     el candado de arriba hace ese trabajo mejor, y ésta estropeaba el caso más
+     frecuente de todos.
+
+     Al volver desde la lista de apps recientes después de que Android matara la
+     PWA, Chrome restaura la pestaña y la reporta como `back_forward` — aunque
+     sea un arranque nuevo. La comprobación lo tomaba por un «atrás» y dejaba al
+     asesor en el menú, que es justo lo que esto venía a evitar.
+
+     El candado sí sabe distinguirlos: si Android mató la app, `sessionStorage`
+     viene vacío y hay que reanudar; si fue un atrás dentro de la misma sesión,
+     el sello está puesto desde que se abrió el menú la primera vez.
+
+     Lo encontró una prueba de las 64 combinaciones de salir y volver. Ninguna
+     de las pruebas sueltas anteriores lo vio. */
 
   /* `href` y NO `replace`. Con replace el menú desaparecía del historial y el
      botón atrás del teléfono sacaba de la app entera en vez de llevar al menú
