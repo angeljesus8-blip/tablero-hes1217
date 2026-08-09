@@ -514,9 +514,9 @@
     <input id="apCliente" class="ap-inp" type="text" placeholder="Nombre del cliente" autocomplete="off">
     <label class="ap-lbl">Teléfono</label>
     <input id="apTel" class="ap-inp" type="tel" inputmode="numeric" placeholder="10 dígitos" autocomplete="off">
-    <!-- Solo cuando el catálogo no sabe el precio. Sin esto el apartado se
-         guarda en blanco: la etiqueta de la caja sale sin importe y quien
-         entrega no puede cotejar contra el ticket. -->
+    <!-- Último recurso: solo si el precio no está ni en el catálogo ni en las
+         promociones. Sin esto el apartado se guardaría en blanco y la etiqueta
+         de la caja saldría sin importe. -->
     <div id="apPrecioBox" style="display:none">
       <label class="ap-lbl">¿En cuánto se lo vendiste?</label>
       <input id="apPrecio" class="ap-inp" type="text" inputmode="decimal" placeholder="$ del ticket" autocomplete="off">
@@ -1640,22 +1640,25 @@ function abrirApartado(sku, prodEnc, precio){
   _apartSku = sku;
   const inv = invBySku[sku] || {};
   const producto = prodEnc ? decodeURIComponent(prodEnc) : (inv.producto || ('SKU '+sku));
-  const px = Number(precio) || Number(inv.precio) || 0;
+  /* El precio se busca en TRES sitios, en este orden: el que manda la tarjeta,
+     el del catálogo, y el de la promoción vigente.
+     El tercero se añadió el 8-ago-2026. Un SKU que dejó de ser vigente pierde
+     su importe en el catálogo —el informe ya no lo lista— pero puede seguir con
+     promo en curso, que es el precio al que de verdad se está vendiendo. Sin
+     mirar ahí, el apartado se guardaba sin monto y había que teclearlo. */
+  const promo = PROMOS.find(p => p.sku === sku);
+  const px = Number(precio) || Number(inv.precio)
+             || Number(promo && (promo.pp || promo.pr)) || 0;
   _apartCtx = { producto, precio: px, tipo: 'traspaso' };
 
   document.getElementById('apModalTitle').textContent = 'Apartar para un cliente';
   document.getElementById('apModalSub').textContent = producto + (px ? ' · '+money(px) : '');
-  /* Se pregunta el precio en dos casos:
-     · el catálogo no lo trae — los que dejaron de ser vigentes perdieron el
-       importe cuando el informe dejó de listarlos
-     · es una excepción — son ventas YA COBRADAS que se registran después, y el
-       precio de hoy puede no ser el del ticket. Este GT6 tiene promo a $3.999
-       hasta el 31-ago y su regular es $5.999: poner uno de los dos por él sería
-       adivinar cuál cobró.
-     Si hay precio conocido se deja escrito para que solo confirme. */
-  const preguntarPrecio = !px || APARTAR_EXCEPCION.has(sku);
-  document.getElementById('apPrecioBox').style.display = preguntarPrecio ? '' : 'none';
-  document.getElementById('apPrecio').value = (preguntarPrecio && px) ? String(px) : '';
+  /* El precio solo se pregunta cuando NO se sabe por ningún lado. Es el último
+     recurso, no un paso más del formulario: si el tablero lo conoce, teclearlo
+     sería pedirle al asesor que copie algo que ya está en pantalla, con el
+     riesgo de que se equivoque. */
+  document.getElementById('apPrecioBox').style.display = px ? 'none' : '';
+  document.getElementById('apPrecio').value = '';
   document.getElementById('apTraspaso').style.display = '';
   document.getElementById('apOrigen').value = '';
   // Por defecto, para dentro de tres días: es lo que suele tardar un traspaso y
