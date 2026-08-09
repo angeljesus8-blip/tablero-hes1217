@@ -1571,6 +1571,19 @@ function setVend(n){ currentVend = n || ''; $('vendLabel').textContent = current
 function hideGate(){ $('gate').classList.add('hide'); }
 function buildGate(){
   const cur = currentVend || localStorage.getItem(VKEY) || '';
+  /* Sin nombres esta pantalla era un callejón: el título «¿Quién eres?» sobre
+     el vacío, sin nada que tocar y sin poder capturar. Pasa cuando la sesión se
+     guardó antes de que el equipo estuviera dado de alta en Admin. Se dice qué
+     ocurre y cómo salir, en vez de dejar la pantalla en blanco. */
+  if(!VENDEDORES.length){
+    $('gateNames').innerHTML =
+      '<p style="font-size:13px;color:#888;line-height:1.5">Tu sesión no trae la lista del equipo.' +
+      '<br><br>Sal al menú y vuelve a entrar con tu número de empleado: así se descarga.</p>' +
+      '<a href="index.html" style="text-decoration:none;border-radius:12px;padding:12px 20px;' +
+      'background:var(--rojo);color:#fff;font-size:13px;font-weight:700;display:inline-block;margin-top:6px">' +
+      '← Ir al menú</a>';
+    return;
+  }
   $('gateNames').innerHTML = VENDEDORES.map(n =>
     `<button class="gate-name${n===cur?' saved':''}" data-name="${esc(n)}">${esc(n)}${n===cur?'<span class="yo">tú</span>':''}</button>`).join('');
   [...$('gateNames').children].forEach(b => {
@@ -1596,9 +1609,23 @@ function vendedorDeLaSesion(){
   catch(e){ return ''; }   // sesión ilegible: se pregunta, como siempre
   const nombre = emp && emp.nombre;
   if(!nombre) return '';
+  // Si está en la lista, se usa el nombre TAL COMO está escrito ahí: es el que
+  // ven el leaderboard y el reporte, y dos grafías del mismo asesor lo parten
+  // en dos personas.
   if(VENDEDORES.includes(nombre)) return nombre;
   const flojo = VENDEDORES.filter(v => _sinAcentos(v) === _sinAcentos(nombre));
-  return flojo.length === 1 ? flojo[0] : '';
+  if(flojo.length === 1) return flojo[0];
+  if(flojo.length > 1) return '';   // dos con el mismo nombre: que elija
+  /* Y si NO está en la lista, manda la sesión igual (8-ago-2026).
+     Encontrado en piso: un asesor entra con su número, la lista de vendedores
+     de SU sesión viene vacía —se guardó antes de que se llenara en Admin y no
+     se refresca hasta volver a entrar— y la pantalla «¿Quién eres?» aparecía
+     sin un solo nombre que tocar. Sin salida y sin poder capturar.
+
+     La lista nunca fue la autoridad sobre quién eres: es un atajo para elegir a
+     OTRO. Quien entró con su número de empleado ya está identificado, y ese
+     nombre sale de la tabla `empleados`, que es la lista oficial. */
+  return nombre;
 }
 
 (function initGate(){
