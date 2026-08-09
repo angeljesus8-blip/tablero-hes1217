@@ -2,7 +2,7 @@ importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
 // ÚNICO lugar donde vive la versión de la app. Las páginas ya no la repiten:
 // registran './sw.js' con updateViaCache:'none' y el navegador detecta el
 // cambio al ver que este archivo es distinto. Subir el número aquí y ya.
-const VERSION = 'v163';
+const VERSION = 'v164';
 const CACHE = 'hes1217-' + VERSION;
 const ARCHIVOS = [
   './index.html',
@@ -32,11 +32,31 @@ const ARCHIVOS = [
 ];
 
 self.addEventListener('install', e => {
-  // Uno por uno y tolerando fallos: con addAll(), un solo archivo que dé 404
-  // aborta la instalación completa y la app se queda sin service worker.
+  /* `cache: 'reload'` — 9-ago-2026. ESTE era el fallo que tuvo al equipo dos
+     días sin recibir ni un arreglo.
+
+     `c.add(url)` a secas pide el archivo pasando por la caché HTTP del
+     navegador, y GitHub Pages manda `Cache-Control: max-age=600`. O sea que la
+     caché recién creada con el número de versión NUEVO podía llenarse con los
+     HTML VIEJOS que el navegador ya tenía guardados. A partir de ahí el service
+     worker servía lo viejo creyendo que era lo último, y como la caché lleva el
+     número correcto, no había forma de notarlo desde fuera.
+
+     Se vio en una ventana de incógnito: la primera carga traía la pantalla
+     nueva y, al recargar, el mensaje desaparecía. La versión de ayer volviendo
+     de la caché de hoy.
+
+     Con 'reload' cada archivo se baja de la red, sin excepción. Se instala una
+     vez por versión: el gasto es de una sola vez y compra que lo que se guarde
+     sea de verdad lo publicado.
+
+     Uno por uno y tolerando fallos: con addAll(), un solo archivo que dé 404
+     aborta la instalación completa y la app se queda sin service worker. */
   e.waitUntil(
     caches.open(CACHE).then(c =>
-      Promise.all(ARCHIVOS.map(u => c.add(u).catch(() => {})))
+      Promise.all(ARCHIVOS.map(u =>
+        c.add(new Request(u, { cache: 'reload' })).catch(() => {})
+      ))
     )
   );
   self.skipWaiting();
