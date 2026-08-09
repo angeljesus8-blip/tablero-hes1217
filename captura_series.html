@@ -1667,6 +1667,16 @@ function vendedorDeLaSesion(){
   if(yo){
     setVend(yo);
     try{ localStorage.setItem(VKEY, yo); }catch(e){}   // sin cuota se pregunta la próxima vez, nada se rompe
+    /* Y SE QUITA DE EN MEDIO. El gate viene visible de fábrica en el HTML: no
+       llamar a `showGate()` no lo esconde, solo lo deja como estaba — tapando
+       la pantalla, y vacío porque `buildGate()` nunca llegó a pintarlo.
+
+       Este olvido tuvo al equipo dos días sin poder capturar (8 y 9-ago-2026).
+       Se identificaba al asesor, se le ponía su nombre en la barra, y encima
+       de todo eso seguía el «¿Quién eres?» en blanco. Con el correo del
+       gerente no pasaba: ahí no se le reconoce, cae al camino de siempre, y
+       ése sí pinta la lista y la oculta al elegir. */
+    hideGate();
     return;
   }
   showGate();   // sin sesión reconocible, se pregunta como siempre

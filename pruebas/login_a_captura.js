@@ -68,7 +68,12 @@ const LS = { hes_store: JSON.stringify(cfg),
                                             puesto: RESPUESTA_ASESOR[0].emp_puesto,
                                             admin: RESPUESTA_ASESOR[0].emp_admin }) };
 const els = {};
-let gateOculto = null, gateHTML = '';
+/* El gate arranca VISIBLE, igual que en el HTML (<div id="gate"> sin la clase
+   `hide`). Empezar en "indeterminado" fue lo que dejó pasar el bloqueo del
+   8-ago: el código identificaba al asesor y se olvidaba de llamar a
+   `hideGate()`, la pantalla se quedaba encima y vacía, y la prueba lo daba por
+   bueno porque nadie había tocado el gate. No tocarlo NO es esconderlo. */
+let gateOculto = false, gateHTML = '';
 function el(id){
   if(!els[id]) els[id] = { id, style:{}, dataset:{}, value:'', textContent:'', children:[],
     set innerHTML(v){ if(id === 'gateNames') gateHTML = v; },
@@ -109,7 +114,7 @@ try { vm.runInContext(js, caja, { filename:'captura.js' }); } catch(e){ err = e.
 
 ok('Captura de Series no se cae con esa sesión', !err, err);
 if(!err){
-  ok('entra directo a capturar, sin preguntar quién es', gateOculto !== false,
+  ok('entra directo a capturar, sin preguntar quién es', gateOculto === true,
      'se quedó en el gate con ' + (gateHTML.match(/gate-name/g) || []).length + ' nombre(s)');
   ok('y con el nombre del asesor puesto', el('vendLabel').textContent === 'Jorge Medina Rejón',
      '"' + el('vendLabel').textContent + '"');
