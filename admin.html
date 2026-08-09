@@ -27,6 +27,8 @@ body { font-family:'Montserrat',sans-serif; background:var(--bg); color:#1a1a1a;
 
 /* PIN */
 #pinWrap { position:fixed;inset:0;background:#fff;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:32px; }
+#pinWrap .pin-back { position:absolute;top:calc(10px + env(safe-area-inset-top));left:12px;
+  text-decoration:none;color:var(--rojo);font-size:30px;font-weight:700;line-height:1;padding:4px 12px 8px; }
 #pinWrap img { height:44px; }
 #pinWrap h1 { font-size:18px;font-weight:800; }
 #pinWrap p { font-size:13px;color:#888; }
@@ -170,6 +172,9 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
 
 <!-- PIN -->
 <div id="pinWrap">
+  <!-- Salida disponible desde el primer instante: esta capa tapa la cabecera,
+       y si la verificación se queda colgada (sin red) no habría forma de irse. -->
+  <a href="index.html" class="pin-back" title="Menú">‹</a>
   <img src="logo_odemas.png" alt="Odemás">
   <h1>Admin</h1>
   <p>Verificando tu acceso…</p>
@@ -682,7 +687,11 @@ function mostrarCerrado(motivo, quien){
   w.innerHTML = '<img src="logo_odemas.png" alt="Odemás" style="height:44px">' +
     '<h1 style="font-size:18px;font-weight:800">Admin</h1>' +
     '<p style="font-size:13px;color:#888;text-align:center;max-width:280px">' + msg + '</p>' +
-    '<button onclick="location.replace(\'index.html\')" style="border:none;border-radius:12px;padding:12px 20px;background:var(--rojo);color:#fff;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer">← Ir al menú</button>';
+    /* ENLACE, no botón con location.replace (8-ago-2026). continuidad.js borra
+       la marca de «dónde estabas» al hacer clic en un enlace al menú; una
+       navegación por JavaScript se la salta. Con el botón, un asesor sin
+       permiso quedaba en bucle: Admin → menú → Admin, sin salida. */
+    '<a href="index.html" style="text-decoration:none;border-radius:12px;padding:12px 20px;background:var(--rojo);color:#fff;font-family:inherit;font-size:13px;font-weight:700">← Ir al menú</a>';
 }
 
 window.addEventListener('load', async function(){
