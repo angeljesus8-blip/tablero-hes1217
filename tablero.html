@@ -514,6 +514,13 @@
     <input id="apCliente" class="ap-inp" type="text" placeholder="Nombre del cliente" autocomplete="off">
     <label class="ap-lbl">Teléfono</label>
     <input id="apTel" class="ap-inp" type="tel" inputmode="numeric" placeholder="10 dígitos" autocomplete="off">
+    <!-- Solo cuando el catálogo no sabe el precio. Sin esto el apartado se
+         guarda en blanco: la etiqueta de la caja sale sin importe y quien
+         entrega no puede cotejar contra el ticket. -->
+    <div id="apPrecioBox" style="display:none">
+      <label class="ap-lbl">¿En cuánto se lo vendiste?</label>
+      <input id="apPrecio" class="ap-inp" type="text" inputmode="decimal" placeholder="$ del ticket" autocomplete="off">
+    </div>
     <div id="apTraspaso">
       <label class="ap-lbl">¿De qué tienda viene?</label>
       <input id="apOrigen" class="ap-inp" type="text" placeholder="Ej. Parque Puebla" autocomplete="off">
@@ -1287,9 +1294,21 @@ function estadoSku(sku){
    Queda fuera 'no' (descontinuado y agotado): apartarlo sería cobrarle a alguien
    algo que no va a llegar nunca. Por eso se apoya en `estadoSku` y no en
    "¿tiene cero piezas?". */
+/* EXCEPCIONES, una por una y con su motivo escrito.
+   No son una regla nueva: los descontinuados siguen SIN poder apartarse. Cada
+   SKU de aquí es un caso cerrado, no un permiso general — si algún día son
+   muchos, entonces la regla está mal y hay que cambiarla, no alargar la lista.
+
+   · 100274990 · Watch GT6 1.32" AMLD MO · 8-ago-2026
+     La pieza se vendió a promesa de entrega ANTES de que la línea GT6 pasara a
+     EOL. La venta ya está hecha y el equipo viene de otra tienda; falta
+     registrar el apartado para que aparezca en la lista de entregas y se le
+     pueda ligar la serie. Sin esto no hay forma de meterlo por la app. */
+const APARTAR_EXCEPCION = new Set(['100274990']);
+
 function botonApartar(sku, producto, precio){
   const k = estadoSku(sku).k;
-  if(k !== 'traer' && k !== 'piso') return '';
+  if(k !== 'traer' && k !== 'piso' && !APARTAR_EXCEPCION.has(sku)) return '';
   return `<button class="btn-apartar" onclick="abrirApartado('${sku}','${encodeURIComponent(producto||'')}',${Number(precio)||0})">📋 Apartar para un cliente</button>`;
 }
 
@@ -1626,6 +1645,17 @@ function abrirApartado(sku, prodEnc, precio){
 
   document.getElementById('apModalTitle').textContent = 'Apartar para un cliente';
   document.getElementById('apModalSub').textContent = producto + (px ? ' · '+money(px) : '');
+  /* Se pregunta el precio en dos casos:
+     · el catálogo no lo trae — los que dejaron de ser vigentes perdieron el
+       importe cuando el informe dejó de listarlos
+     · es una excepción — son ventas YA COBRADAS que se registran después, y el
+       precio de hoy puede no ser el del ticket. Este GT6 tiene promo a $3.999
+       hasta el 31-ago y su regular es $5.999: poner uno de los dos por él sería
+       adivinar cuál cobró.
+     Si hay precio conocido se deja escrito para que solo confirme. */
+  const preguntarPrecio = !px || APARTAR_EXCEPCION.has(sku);
+  document.getElementById('apPrecioBox').style.display = preguntarPrecio ? '' : 'none';
+  document.getElementById('apPrecio').value = (preguntarPrecio && px) ? String(px) : '';
   document.getElementById('apTraspaso').style.display = '';
   document.getElementById('apOrigen').value = '';
   // Por defecto, para dentro de tres días: es lo que suele tardar un traspaso y
@@ -1716,6 +1746,15 @@ function guardarApartado(){
   const producto = (_apartCtx && _apartCtx.producto) || ('SKU '+sku);
   const origen  = (document.getElementById('apOrigen')||{}).value || '';
   const promesa = (document.getElementById('apPromesa')||{}).value || null;
+  /* Cuando el campo está a la vista, manda lo que se tecleó: se enseña
+     justamente porque el precio del catálogo no sirve para este apartado. Si
+     está oculto, el del catálogo es el bueno y no hay nada que teclear. */
+  const cajaPrecio = document.getElementById('apPrecioBox');
+  const tecleado = parseFloat(String((document.getElementById('apPrecio')||{}).value || '')
+                     .replace(/[^0-9.]/g,'')) || null;
+  const precio = (cajaPrecio && cajaPrecio.style.display !== 'none')
+    ? (tecleado || (_apartCtx && _apartCtx.precio) || null)
+    : ((_apartCtx && _apartCtx.precio) || null);
   /* 7-ago-2026: va DIRECTO a Supabase; ya no pasa por la hoja.
      Lo que se gana no es velocidad, es el cupo: el trigger `apartado_cabe`
      vigila la tabla `apartados` y hasta hoy nadie insertaba ahí, así que nunca
@@ -1723,7 +1762,7 @@ function guardarApartado(){
      la vez era el número de este navegador — y dos navegadores no se ven. */
   sbEscribir('apartado_guardar', {
     p_sku: sku, p_color: producto, p_cliente: cliente, p_telefono: tel,
-    p_precio: (_apartCtx && _apartCtx.precio) || null, p_seguro: (seguro === 'Si'),
+    p_precio: precio, p_seguro: (seguro === 'Si'),
     p_vendedor: vend, p_transaccion: transaccion,
     p_tipo: 'traspaso', p_origen: origen.trim() || null, p_promesa: promesa || null
   }).then(function(data){
@@ -1732,7 +1771,7 @@ function guardarApartado(){
       // el mismo texto que se acaba de mandar, para que la lista local y la
       // nube no digan cosas distintas hasta el próximo refresco
       APARTADOS.push({id:String(data.id), sku:sku, color:producto, cliente:cliente,
-        telefono:tel, precio:String((_apartCtx&&_apartCtx.precio)||''), seguro:seguro, vend:vend,
+        telefono:tel, precio:String(precio||''), seguro:seguro, vend:vend,
         estatus:'Apartado', transaccion:transaccion, serie:'',
         tipo:'traspaso', origen:origen.trim(), promesa:promesa||'', diasTarde:null});
       cerrarApartado(); render(); cargarApartadosNube();
@@ -1872,6 +1911,7 @@ function cardEol(e){
       </div>
       <p class="warn">⚠️ Al 50% pierde garantía de fábrica y NO es elegible para Assurant.</p>
       ${bundleTip(e.sku)}
+      ${botonApartar(e.sku, e.producto, e.precio)}
     </div>`;
   }
   if(e.estado==='pendiente'){
