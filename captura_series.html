@@ -1579,11 +1579,46 @@ function buildGate(){
 }
 function showGate(){ buildGate(); $('gate').classList.remove('hide'); }
 
+/* ¿Quién entró a la app? Desde que se retiró el PIN de tienda, cada quien abre
+   con su número de empleado, así que la sesión YA dice quién eres.
+
+   Se casa contra la lista de vendedores por nombre exacto y, si no, sin acentos
+   ni mayúsculas: las dos listas salen de la tabla `empleados`, pero una pasa por
+   la config de tienda y no hay garantía de que lleguen escritas igual. Si la
+   comparación floja diera con dos personas, se prefiere preguntar. */
+function _sinAcentos(s){
+  return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'')
+         .toLowerCase().replace(/\s+/g,' ').trim();
+}
+function vendedorDeLaSesion(){
+  let emp = null;
+  try{ emp = JSON.parse(localStorage.getItem('hes_empleado')||'null'); }
+  catch(e){ return ''; }   // sesión ilegible: se pregunta, como siempre
+  const nombre = emp && emp.nombre;
+  if(!nombre) return '';
+  if(VENDEDORES.includes(nombre)) return nombre;
+  const flojo = VENDEDORES.filter(v => _sinAcentos(v) === _sinAcentos(nombre));
+  return flojo.length === 1 ? flojo[0] : '';
+}
+
 (function initGate(){
   const saved = localStorage.getItem(VKEY) || '';
   if(saved && VENDEDORES.includes(saved)) setVend(saved);
   updateDownloadAccess();   // estado inicial del botón de descarga
-  showGate();   // siempre se muestra al cargar la página
+
+  /* Si la sesión ya dice quién eres, no se pregunta (8-ago-2026). Antes el gate
+     se mostraba SIEMPRE, incluso enseñando tu propio nombre marcado con «tú»:
+     un toque de más en cada apertura para responder algo que la app ya sabía.
+
+     Se sigue pudiendo cambiar con el botón «Cambiar» de la barra de arriba, que
+     es la salida para cuando alguien captura desde el teléfono de otro. */
+  const yo = vendedorDeLaSesion();
+  if(yo){
+    setVend(yo);
+    try{ localStorage.setItem(VKEY, yo); }catch(e){}   // sin cuota se pregunta la próxima vez, nada se rompe
+    return;
+  }
+  showGate();   // sin sesión reconocible, se pregunta como siempre
 })();
 
 $('btnChange').onclick = showGate;
