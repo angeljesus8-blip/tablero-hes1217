@@ -1576,9 +1576,33 @@ function buildGate(){
      guardó antes de que el equipo estuviera dado de alta en Admin. Se dice qué
      ocurre y cómo salir, en vez de dejar la pantalla en blanco. */
   if(!VENDEDORES.length){
+    /* Con el diagnóstico a la vista. Esta pantalla tuvo bloqueado al equipo dos
+       días y cada intento de arreglarla fue a ciegas, deduciendo qué tendría
+       guardado el teléfono. Ahora lo dice él: una foto de esta pantalla basta
+       para saber qué falta y dónde mirar. */
+    var _diag = [];
+    try{ var _c = JSON.parse(localStorage.getItem('hes_store')||'null');
+         _diag.push('tienda ' + ((_c && _c.store_id) || '—'));
+         _diag.push('equipo ' + ((_c && Array.isArray(_c.vendedores) ? _c.vendedores.length : 0)) + ' nombres');
+    }catch(e){ _diag.push('sesión de tienda ilegible'); }
+    try{ var _e = JSON.parse(localStorage.getItem('hes_empleado')||'null');
+         _diag.push(_e && _e.nombre ? 'entró ' + _e.nombre : 'no se sabe quién entró');
+    }catch(e){ _diag.push('empleado ilegible'); }
+    if(navigator.serviceWorker && navigator.serviceWorker.controller){
+      try{
+        var _ch = new MessageChannel();
+        _ch.port1.onmessage = function(ev){
+          var v = ev.data && ev.data.version; if(!v) return;
+          var caja = document.getElementById('gateDiag'); if(caja) caja.textContent += ' · app ' + v;
+        };
+        navigator.serviceWorker.controller.postMessage('version', [_ch.port2]);
+      }catch(e){}   // sin versión el diagnóstico sirve igual, solo es un dato menos
+    }
     $('gateNames').innerHTML =
       '<p style="font-size:13px;color:#888;line-height:1.5">Tu sesión no trae la lista del equipo.' +
       '<br><br>Sal al menú y vuelve a entrar con tu número de empleado: así se descarga.</p>' +
+      '<p id="gateDiag" style="font-size:11px;color:#b9b3b0;line-height:1.5;margin-top:-4px">' +
+      _diag.join(' · ') + '</p>' +
       '<a href="index.html" style="text-decoration:none;border-radius:12px;padding:12px 20px;' +
       'background:var(--rojo);color:#fff;font-size:13px;font-weight:700;display:inline-block;margin-top:6px">' +
       '← Ir al menú</a>';
