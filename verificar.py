@@ -605,6 +605,33 @@ def r_cadenas():
                         'menos stock del real (MAPA cadena 5)')
 
 
+# ── 15 · El precache tiene que bajar de la red ──────────────
+# 9-ago-2026. `c.add(url)` a secas pasa por la cache HTTP del navegador, y
+# GitHub Pages manda max-age=600: la cache nueva se llenaba con los HTML
+# VIEJOS que el navegador ya tenia. El service worker los servia creyendo que
+# eran los ultimos, y como la cache lleva el numero de version correcto no
+# habia forma de verlo desde fuera. El equipo estuvo dos dias sin recibir un
+# solo arreglo por esto.
+def r_precache():
+    s = leer('sw.js')
+    if s is None:
+        falla('precache', 'no encuentro sw.js'); return
+    m = re.search(r'addEventListener\(\s*.install.', s)
+    if not m:
+        falla('precache', 'sw.js no tiene el evento install'); return
+    cuerpo = s[m.start():m.start() + 1600]
+    # Sin comentarios: el propio comentario que explica esto dice "reload" y
+    # satisfacia la regla aunque el codigo ya no lo hiciera. Una regla que se
+    # cumple sola con su documentacion no vigila nada.
+    codigo = re.sub(r'/\*.*?\*/', '', cuerpo, flags=re.S)
+    codigo = re.sub(r'//[^\n]*', '', codigo)
+    if re.search(r'cache\s*:\s*.reload.', codigo):
+        return
+    falla('precache', "sw.js precachea sin cache:'reload': se guardaran los "
+                      'archivos que el navegador tenga en su cache HTTP, no los '
+                      'publicados, y la app servira una version vieja sin avisar')
+
+
 # ── 14 · Que la app FUNCIONE, no solo que compile ───────────
 # Las reglas de arriba leen el código. Éstas lo ejecutan: pintan las seis
 # pantallas del tablero con una tienda inventada y recorren las 64 formas de
@@ -650,7 +677,7 @@ def main():
     staged = '--staged' in sys.argv
     r_sintaxis(); r_helpers(); r_version(staged); r_copias(); r_cupo()
     r_preventa_sb(); r_preventa_stock(); r_cargas_sb(); r_lectura_con_escritura()
-    r_personales(); r_secretos(); r_silencios(); r_cadenas(); r_pruebas()
+    r_personales(); r_secretos(); r_silencios(); r_cadenas(); r_precache(); r_pruebas()
 
     for regla, msg in avisos:
         print('  aviso  [%s] %s' % (regla, msg))
