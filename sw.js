@@ -2,7 +2,7 @@ importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
 // ÚNICO lugar donde vive la versión de la app. Las páginas ya no la repiten:
 // registran './sw.js' con updateViaCache:'none' y el navegador detecta el
 // cambio al ver que este archivo es distinto. Subir el número aquí y ya.
-const VERSION = 'v165';
+const VERSION = 'v166';
 const CACHE = 'hes1217-' + VERSION;
 const ARCHIVOS = [
   './index.html',
@@ -55,7 +55,12 @@ self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE).then(c =>
       Promise.all(ARCHIVOS.map(u =>
-        c.add(new Request(u, { cache: 'reload' })).catch(() => {})
+        /* Si la red falla se reintenta a la manera de antes. Sin esto, instalar
+           sin cobertura dejaba la caché VACÍA y la app sin funcionar sin
+           conexión — cambiar un problema por otro. Lo de la caché HTTP es peor
+           que nada solo cuando hay red para traer lo bueno. */
+        c.add(new Request(u, { cache: 'reload' }))
+         .catch(() => c.add(u).catch(() => {}))
       ))
     )
   );
