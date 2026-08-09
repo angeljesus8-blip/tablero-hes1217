@@ -605,11 +605,51 @@ def r_cadenas():
                         'menos stock del real (MAPA cadena 5)')
 
 
+# ── 14 · Que la app FUNCIONE, no solo que compile ───────────
+# Las reglas de arriba leen el código. Éstas lo ejecutan: pintan las seis
+# pantallas del tablero con una tienda inventada y recorren las 64 formas de
+# salir de una pantalla y volver.
+#
+# Se añadieron el 8-ago-2026 después de publicar tres versiones seguidas con
+# fallos que ninguna revisión de código habría visto —dos dejaron la app sin
+# forma de llegar al menú— porque cada arreglo se probó por su camino y los
+# fallos vivían en los cruces. Tardan menos de dos segundos las dos.
+def r_pruebas():
+    node = None
+    for cand in ('node', 'node.exe'):
+        try:
+            subprocess.run([cand, '--version'], capture_output=True, timeout=10)
+            node = cand; break
+        except (OSError, subprocess.SubprocessError):
+            pass
+    if not node:
+        aviso('pruebas', 'node no está instalado: no se pudo ejecutar la app')
+        return
+    for guion in ('humo_tablero.js', 'navegacion.js'):
+        ruta = os.path.join(BASE, 'pruebas', guion)
+        if not os.path.exists(ruta):
+            falla('pruebas', 'falta pruebas/%s — es lo que impide publicar una app '
+                             'que no se puede usar' % guion)
+            continue
+        try:
+            r = subprocess.run([node, ruta], capture_output=True, text=True,
+                               timeout=120, encoding='utf-8', errors='replace')
+        except subprocess.SubprocessError as e:
+            falla('pruebas', '%s no pudo correr: %s' % (guion, e))
+            continue
+        salida = (r.stdout or '').strip() + (('\n' + r.stderr.strip()) if r.returncode and r.stderr else '')
+        if r.returncode:
+            for linea in salida.splitlines()[:12]:
+                falla('pruebas', linea.strip())
+        elif salida:
+            print('  ok     %s' % salida.splitlines()[0])
+
+
 def main():
     staged = '--staged' in sys.argv
     r_sintaxis(); r_helpers(); r_version(staged); r_copias(); r_cupo()
     r_preventa_sb(); r_preventa_stock(); r_cargas_sb(); r_lectura_con_escritura()
-    r_personales(); r_secretos(); r_silencios(); r_cadenas()
+    r_personales(); r_secretos(); r_silencios(); r_cadenas(); r_pruebas()
 
     for regla, msg in avisos:
         print('  aviso  [%s] %s' % (regla, msg))
