@@ -288,6 +288,49 @@ vendida reaparece al día siguiente.
 caja que se abre para el aparador sigue contando como cerrada hasta la
 siguiente subida.
 
+### El informe NO trae los agotados, y está bien *(8-ago-2026)*
+
+El *Informe de Artículos Totales en Tienda* que se sube en Admin **solo lista los
+SKU que tienen piezas**. Un producto agotado simplemente no viene en el archivo.
+
+Y `carga_catalogo` solo actualiza el ON HAND de lo que viene. Visto así parece
+un fallo —un SKU que se agota conservaría sus piezas para siempre— pero **no lo
+es**, porque son dos fuentes que se complementan:
+
+```
+el reporte pone el punto de partida  →  onhand
+las capturas descuentan en vivo      →  stock = onhand − vendido
+```
+
+Un SKU no se agota solo: se agota vendiéndose, y esas ventas se capturan. Para
+cuando el archivo deja de traerlo, el tablero ya lo bajó a cero por su cuenta. Y
+como tampoco se toca su corte, la resta sigue dando cero indefinidamente.
+
+**Comprobado el 8-ago-2026** contra un archivo de 69 renglones:
+
+```
+227 en catálogo · 69 vigentes (= los 69 del Excel) · 70 con onhand > 0
+el 1 de diferencia:  Band 11 Pro AZ, onhand 1 − 1 venta = stock 0  ✓
+de los 69 vigentes, 0 vienen con cero  → el archivo solo trae lo que hay
+```
+
+**Lo que sí rompería esto** son las salidas que no son venta capturada:
+
+- una venta que no se metió en la app
+- **un traspaso de SALIDA** — mandarle una pieza a otra tienda no es venta y no
+  pasa por Captura de Series
+
+Si era la última pieza, el SKU desaparece del archivo y el tablero se queda con
+ella. Nadie lo corrige, porque ya no vuelve a venir hasta que llegue mercancía.
+
+Hoy no hay ni un caso. Si empiezan a ser frecuentes, el arreglo es poner en cero
+lo que no venga en el archivo —la misma señal que ya usa el `vigente = false` de
+la línea 111— pero **con candado**: un Excel subido a medias dejaría el tablero
+diciendo que no hay nada que vender.
+
+*(Anotado porque estuve a punto de "arreglar" esto sin entenderlo. La ausencia en
+el archivo no es falta de dato: es el dato.)*
+
 ### Tener una pieza y poder venderla no es lo mismo *(8-ago-2026, v150)*
 
 La pieza de exhibición de un producto **activo no se vende**. Se queda en el
