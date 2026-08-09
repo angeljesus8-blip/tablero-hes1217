@@ -74,6 +74,39 @@
     } catch(e){}   // cuota llena: se pierde la marca, no la sesión
   }
 
+  /* ── Traer la versión nueva sin que nadie haga nada ─────────
+     9-ago-2026. Un teléfono del equipo llevaba CUATRO versiones atrás y por
+     eso no le llegaba ningún arreglo: se publicaba, se comprobaba que el
+     servidor lo servía, y en la tienda seguían con lo viejo.
+
+     El motivo: registrar el service worker no es pedirle que se actualice.
+     Chrome comprueba si hay uno nuevo por su cuenta, pero en una PWA que se
+     queda abierta días eso puede no pasar en toda la semana. Nadie llamaba a
+     `update()` ni escuchaba cuando el nuevo tomaba el control.
+
+     Ahora se pregunta al abrir y cada vez que la app vuelve a primer plano.
+     Cuando el nuevo toma el control se recarga UNA vez —la marca de dónde
+     estabas ya está guardada, así que se vuelve al mismo sitio— y la bandera
+     evita que dos recargas se persigan. */
+  if(typeof navigator !== 'undefined' && navigator.serviceWorker){
+    var pedirActualizacion = function(){
+      navigator.serviceWorker.getRegistration()
+        .then(function(reg){ if(reg) reg.update(); })
+        .catch(function(){});   // sin registro no hay nada que actualizar
+    };
+    pedirActualizacion();
+    document.addEventListener('visibilitychange', function(){
+      if(document.visibilityState === 'visible') pedirActualizacion();
+    });
+    navigator.serviceWorker.addEventListener('controllerchange', function(){
+      try {
+        if(sessionStorage.getItem('hes_recargando') === '1') return;
+        sessionStorage.setItem('hes_recargando', '1');
+      } catch(e){ return; }   // sin bandera no se recarga: peor un bucle que una versión vieja
+      location.reload();
+    });
+  }
+
   // ── En una app: apuntar dónde estoy ─────────────────────────
   if(!ESTOY_EN_EL_MENU){
     /* Se LEE antes de guardar. Al revés —que es como estaba— el `guardar()` de
