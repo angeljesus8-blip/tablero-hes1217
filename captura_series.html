@@ -251,6 +251,8 @@
 </style>
 </head>
 <body>
+<script src="./continuidad.js"></script>
+
 
 <!-- Pantalla de inicio: selección de vendedor -->
 <div id="gate">
@@ -943,6 +945,7 @@ window.finalizarVenta = function(conSeguro){
   savePending(); flushCloud();
   render();
   ['serie','sku','precio','desc'].forEach(f=> $(f).value='');
+  tirarBorrador();   // ya está en el reporte: el borrador dejó de servir
   setRecon(true); setPromo(false);
   toast(conSeguro ? '🛡️ Con Assurant · Agregada ✓' : 'Agregada ✓ · sin seguro', 'ok');
   $('serie').focus();
@@ -1492,6 +1495,43 @@ async function copiarSerie(i){
 
 // Enter en serie = agregar rápido
 $('serie').addEventListener('keydown', e => { if(e.key==='Enter') $('btnAdd').click(); });
+
+/* ---------- La captura a medias sobrevive al cambio de app ----------
+   Es la pantalla donde más duele. El botón 📸 abre la cámara del SISTEMA, que
+   es otra app; y entre serie, SKU, precio y descripción, aquí siempre hay algo
+   escrito. Si Android descarta la pestaña mientras tanto —al tomar la foto, al
+   contestar un WhatsApp, al mirar la galería—, al volver el formulario está en
+   blanco y hay que leer el código de barras otra vez.
+
+   La foto NO se guarda: son cientos de KB y llenaría la cuota que usan las
+   ventas pendientes de subir, que sí importan. Se restauran los cuatro campos,
+   que es lo que cuesta teclear. */
+const BKEY = 'hes1217_captura_borrador';
+const BCAMPOS = ['serie','sku','precio','desc'];
+function guardarBorrador(){
+  const d = { ts: Date.now() };
+  BCAMPOS.forEach(f => d[f] = $(f).value);
+  if(!BCAMPOS.some(f => (d[f]||'').trim())){ tirarBorrador(); return; }   // todo vacío: nada que recordar
+  try{ localStorage.setItem(BKEY, JSON.stringify(d)); }catch(e){}   // cuota llena: manda la venta pendiente, no el borrador
+}
+function tirarBorrador(){
+  try{ localStorage.removeItem(BKEY); }catch(e){}   // si no se puede borrar, caduca solo en 2 h
+}
+(function restaurarBorrador(){
+  let d = null;
+  try{ d = JSON.parse(localStorage.getItem(BKEY)||'null'); }catch(e){}   // borrador ilegible = sin borrador, se captura en blanco
+  if(!d){ return; }
+  // Dos horas. Pasado ese rato ya es otra venta y otro cliente, y rellenar la
+  // serie del anterior es peor que dejarlo en blanco: se guardaría mal.
+  if(Date.now() - d.ts > 2*60*60*1000){ tirarBorrador(); return; }
+  BCAMPOS.forEach(f => { if(d[f]) $(f).value = d[f]; });
+  if(d.serie || d.sku) toast('Se recuperó lo que estabas capturando', 'ok');
+})();
+BCAMPOS.forEach(f => $(f).addEventListener('input', guardarBorrador));
+// Y al irse a otra app, por si el cambio vino de un escaneo y no de teclear.
+document.addEventListener('visibilitychange', function(){
+  if(document.visibilityState === 'hidden') guardarBorrador();
+});
 
 /* ---------- Vendedor / pantalla de inicio (HES 1217) ---------- */
 // El equipo se edita en Admin → Equipo; de ahí baja en la config de tienda.
