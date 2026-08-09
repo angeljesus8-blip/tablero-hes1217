@@ -359,6 +359,54 @@ el WhatsApp al CD.
 
 ---
 
+## Cadena 5-bis · Volver donde estabas *(8-ago-2026, v152)*
+
+```
+sales de la app  →  Android la descarta  →  vuelves
+                                              ↓
+                          el sistema relanza start_url = index.html
+                                              ↓
+                          continuidad.js te devuelve a tu pantalla
+```
+
+**El síntoma:** el asesor busca un producto, toca «📲 Compartir», manda el precio
+por WhatsApp y al volver está en el menú. Tiene que buscar el producto otra vez.
+Cada vez que manda un precio — y el tablero manda a WhatsApp desde cuatro
+botones, así que rompe el flujo de venta normal.
+
+No es un fallo del tablero: Android descarta la PWA en segundo plano y la
+relanza desde `start_url`. Nadie guardaba en qué pantalla estabas.
+
+**Las cuatro piezas, y por qué hacen falta las cuatro:**
+
+| pieza | sin ella |
+|---|---|
+| `continuidad.js` apunta la pantalla y el menú te devuelve | vuelves al menú |
+| el tablero escribe sección y búsqueda en el hash (`#promo/matepad`) | vuelves al tablero, pero a Inicio y sin la búsqueda |
+| borrador del apartado y de la captura | vuelves a la pantalla correcta, con los campos vacíos |
+| el service worker deja de esperar a la red sin tope | vuelves, pero tras segundos de pantalla en blanco |
+
+**Lo que NO debe reanudar** — las tres son igual de importantes que reanudar:
+
+- Tocar «‹ Menú» borra la marca. Salir por tu cuenta es haber terminado.
+- El botón **atrás** del teléfono no reabre lo que se acaba de cerrar
+  (`performance.navigation.type === 'back_forward'`). Sin esto el «atrás» queda
+  inservible: te devuelve a la pantalla de la que intentas salir.
+- **Sin `hes_store` no se reanuda.** Las apps sin sesión enseñan un «vuelve a
+  entrar»; mandar ahí a alguien cuya sesión se cayó le cambia el login por un
+  callejón sin salida.
+
+**Al tocar esto, el orden importa:** `continuidad.js` lee la marca ANTES de
+volver a guardarla. Al revés, el `guardar()` de arranque escribe el scroll
+actual —que siempre es 0, porque la página acaba de cargar— y pisa la altura que
+venía a restaurar. La marca quedaba bien y el asesor volvía arriba del todo.
+
+*`horarios.html` queda fuera a propósito: es una copia que también vive en el
+repo planeador-odemas, donde `continuidad.js` no existe. Mismo motivo por el que
+su fuente sigue viniendo del CDN.*
+
+---
+
 ## Cadena 6 · Service worker
 
 ```

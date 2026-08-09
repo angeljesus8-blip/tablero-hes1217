@@ -470,6 +470,7 @@
 </style>
 </head>
 <body>
+<script src="./continuidad.js"></script>
 
 <header>
   <a href="index.html" class="back" title="Menú">‹</a>
@@ -664,11 +665,34 @@ const FILTROS = [
 /* `inicio` ya no es una sección más de FILTROS: es la pantalla de partida y el
    único camino entre secciones (8-ago-2026). Se puede fijar desde fuera con
    #preventa — lo usa Captura de Series para devolver al asesor donde estaba. */
-let filtroActivo = (function(){
-  const h = (location.hash || '').replace('#','');
-  return FILTROS.some(f => f.id === h) ? h : 'inicio';
-})();
-let busqueda = '';
+/* La sección Y la búsqueda viven en la URL desde v152: `#promo` o
+   `#promo/mate 11`. Antes el hash solo se LEÍA —para que Captura de Series
+   pudiera devolver al asesor a su sección— pero nunca se escribía, así que al
+   recargar siempre se caía en Inicio.
+
+   Ahora que se escribe, volver de WhatsApp devuelve la pantalla completa: la
+   sección donde estabas y lo que habías tecleado. Ver continuidad.js. */
+function _deLaUrl(){
+  const h = decodeURIComponent((location.hash||'').replace(/^#/,''));
+  const corte = h.indexOf('/');
+  const id = corte >= 0 ? h.slice(0, corte) : h;
+  return { id: FILTROS.some(f=>f.id===id) ? id : 'inicio',
+           q:  corte >= 0 ? h.slice(corte+1) : '' };
+}
+let filtroActivo = _deLaUrl().id;
+let busqueda = _deLaUrl().q;
+
+/* Escribe el estado en la URL sin ensuciar el historial: con pushState, cada
+   letra tecleada en el buscador dejaría una entrada y el botón «atrás» del
+   teléfono tardaría veinte toques en salir de la app. */
+function _urlAlDia(){
+  const h = filtroActivo + (busqueda ? '/' + busqueda : '');
+  const nueva = '#' + encodeURIComponent(h).replace(/%2F/g,'/');
+  if(location.hash !== nueva){
+    try{ history.replaceState(null, '', nueva); }
+    catch(e){ location.hash = nueva; }   // navegador sin History API: se nota el salto, pero funciona
+  }
+}
 
 let APARTADOS = [];
 /* El total decía "de 36" escrito a mano. Al habilitar una pieza más en Orange
@@ -1220,7 +1244,7 @@ function seccionTieneItems(id){
    estaba cada cosa ANTES de buscarla. Con cinco secciones y 227 SKU, eso es
    pedirle al asesor que recuerde el mapa mientras el cliente espera. */
 function irA(id){ filtroActivo = id; busqueda = ''; const q = document.getElementById('q');
-  if(q) q.value = ''; window.scrollTo(0,0); render(); }
+  if(q) q.value = ''; window.scrollTo(0,0); _urlAlDia(); render(); }
 
 /* ── Criterios de "qué se puede vender / traer" ──────────────────────────
    Viven aquí sueltos porque los usan TRES sitios: la sección de precios, las
@@ -1619,8 +1643,51 @@ function abrirApartado(sku, prodEnc, precio){
   document.getElementById('apTransaccion').value='';
   document.getElementById('apSeguro').checked=false;
   document.getElementById('apModal').classList.add('show');
+  _apartBorradorRestaurar(sku);
 }
-function cerrarApartado(){ document.getElementById('apModal').classList.remove('show'); _apartSku=null; }
+
+/* ── El apartado a medio llenar sobrevive al cambio de app ──────
+   Llenar esto lleva su rato: nombre, teléfono, de qué tienda viene, para
+   cuándo. Y a media captura es normal irse a WhatsApp a confirmarle al cliente
+   la fecha, o al POS por el número de ticket. Si Android descarta la app en
+   ese momento, se vuelve a empezar con el cliente enfrente.
+
+   Se guarda por SKU: dos apartados distintos no se pisan el borrador. */
+const AP_BORRADOR = 'hes_apartado_borrador';
+const AP_CAMPOS = ['apOrigen','apPromesa','apCliente','apTel','apTransaccion'];
+function _apartBorradorGuardar(){
+  if(!_apartSku) return;
+  const d = { sku:_apartSku, ts:Date.now(), seguro:document.getElementById('apSeguro').checked };
+  AP_CAMPOS.forEach(id => { d[id] = document.getElementById(id).value; });
+  try{ localStorage.setItem(AP_BORRADOR, JSON.stringify(d)); }catch(e){}   // sin cuota se pierde el borrador, no el apartado
+}
+function _apartBorradorTirar(){
+  try{ localStorage.removeItem(AP_BORRADOR); }catch(e){}   // si no se puede borrar, caduca solo a las 2 h
+}
+function _apartBorradorRestaurar(sku){
+  let d = null;
+  try{ d = JSON.parse(localStorage.getItem(AP_BORRADOR)||'null'); }catch(e){}   // borrador ilegible = sin borrador, se abre en blanco
+  // Dos horas: más allá, quien vuelve a abrir el modal ya está con otro cliente
+  // y rellenarle el nombre del anterior es peor que dejarlo vacío.
+  if(!d || d.sku !== sku || Date.now() - d.ts > 2*60*60*1000) return;
+  if(!AP_CAMPOS.some(id => (d[id]||'').trim())) return;   // borrador vacío: nada que restaurar
+  AP_CAMPOS.forEach(id => { if(d[id]) document.getElementById(id).value = d[id]; });
+  document.getElementById('apSeguro').checked = !!d.seguro;
+}
+AP_CAMPOS.forEach(id => {
+  const el = document.getElementById(id);
+  if(el) el.addEventListener('input', _apartBorradorGuardar);
+});
+(function(){ const s = document.getElementById('apSeguro');
+  if(s) s.addEventListener('change', _apartBorradorGuardar); })();
+
+function cerrarApartado(){
+  document.getElementById('apModal').classList.remove('show');
+  _apartSku=null;
+  // Cerrar es abandonar: el borrador solo sirve para volver de otra app, y el
+  // modal cerrado ya no se está llenando.
+  _apartBorradorTirar();
+}
 function guardarApartado(){
   const sku=_apartSku; if(!sku) return;
   const cliente=document.getElementById('apCliente').value.trim();
@@ -2145,8 +2212,15 @@ function render(){
 
 document.getElementById('q').addEventListener('input', e=>{
   busqueda = e.target.value.trim().toLowerCase();
+  _urlAlDia();
   render();
 });
+/* Lo que se rescató de la URL hay que ponerlo en la caja del buscador; si no,
+   se filtra la lista pero el recuadro se ve vacío y parece un tablero roto. */
+(function(){
+  const q = document.getElementById('q');
+  if(q && busqueda) q.value = busqueda;
+})();
 
 /* ================= Cola de llamadas al GAS =================
    Google Apps Script descarta las llamadas que llegan encimadas y lo hace EN
@@ -2761,6 +2835,21 @@ function alVolver(){
 }
 document.addEventListener('visibilitychange', alVolver);
 window.addEventListener('focus', alVolver);
+
+/* Si la app se recargó con un apartado a medio llenar, se vuelve a abrir sola.
+   Sin esto el borrador existiría pero habría que acordarse de tocar «Apartar»
+   en el mismo producto para verlo, y nadie lo sabría. */
+(function(){
+  let d = null;
+  try{ d = JSON.parse(localStorage.getItem(AP_BORRADOR)||'null'); }catch(e){}   // borrador ilegible = sin borrador, se abre en blanco
+  if(!d || !d.sku) return;
+  // Media hora, igual que continuidad.js: es la misma pregunta —«¿esto sigue
+  // siendo lo que estaba haciendo?»— y dos plazos distintos confundirían.
+  if(Date.now() - d.ts > 30*60*1000){ _apartBorradorTirar(); return; }
+  if(!AP_CAMPOS.some(id => (d[id]||'').trim())) return;   // se abrió y no se escribió nada
+  const inv = invBySku[d.sku] || {};
+  abrirApartado(d.sku, encodeURIComponent(inv.producto||''), inv.precio||0);
+})();
 window.addEventListener('online', function(){ _ultimoIntento = 0; alVolver(); });
 
 // ── Push notifications (OneSignal) ──────────────────────────────

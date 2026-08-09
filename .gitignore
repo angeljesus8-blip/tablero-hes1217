@@ -9,3 +9,5 @@ eol/
 .snapshot_inventario.json
 comisiones_datos.js
 _privado_no_publicar/
+# lo deja Python al importar verificar.py desde una prueba
+__pycache__/
