@@ -160,6 +160,13 @@
     align-items:center; justify-content:center; padding:24px 22px calc(24px + env(safe-area-inset-bottom));
     text-align:center; }
   #gate.hide{ display:none; }
+  /* El gate tapa la cabecera entera (z-index 100), así que el «‹» del header no
+     se ve y quien entra por equivocación se queda sin salida hasta elegir un
+     nombre. Va aquí su propio enlace, arriba a la izquierda y en el mismo sitio
+     donde está en las demás pantallas. */
+  .gate-back{ position:absolute; top:calc(10px + env(safe-area-inset-top)); left:12px;
+    text-decoration:none; color:var(--rojo); font-size:30px; font-weight:700; line-height:1;
+    padding:4px 12px 8px; display:flex; align-items:center; }
   .gate-logo{ height:46px; width:auto; margin-bottom:18px; }
   .gate-title{ font-size:24px; font-weight:800; letter-spacing:-.4px; }
   .gate-title::first-line{ }
@@ -262,6 +269,7 @@
 
 <!-- Pantalla de inicio: selección de vendedor -->
 <div id="gate">
+  <a href="index.html" class="gate-back" title="Menú">‹</a>
   <img class="gate-logo" src="logo_odemas.png" alt="Odemás">
   <h1 class="gate-title">Captura de Series</h1>
   <p class="gate-sub">HES 1217 · Angelópolis</p>
