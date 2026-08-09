@@ -35,7 +35,12 @@ function domFalso(){
     createElement:()=>el('tmp'+Math.random()), head:el('head'), body:el('body'),
     readyState:'complete', addEventListener(){} };
   const guardado = {};
-  global.localStorage = { getItem:k=> k==='hes_empleado' ? '{"empno":"1","nombre":"Prueba Uno"}'
+  /* Con PUESTO desde el 9-ago-2026: el tablero decide con él quién ve la
+     sección de Resurtir. Se entra como gerente para que las pruebas recorran
+     la app completa; el caso del asesor se prueba aparte, bajando
+     PUEDE_GESTIONAR a mano (ver casos_tablero.js, bloque 7). */
+  global.localStorage = { getItem:k=> k==='hes_empleado'
+                                    ? '{"empno":"1","nombre":"Prueba Uno","puesto":"Gerente de Tienda"}'
                                     : (k in guardado ? guardado[k] : null),
                           setItem:(k,v)=>{ guardado[k]=String(v); }, removeItem:k=>{ delete guardado[k]; } };
   global.sessionStorage = { getItem:()=>null, setItem(){}, removeItem(){} };
