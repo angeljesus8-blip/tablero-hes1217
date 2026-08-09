@@ -30,16 +30,16 @@ const js = bloques
 /* Del archivo entero solo interesa esta función, y montar el resto del menú
    —Supabase, el DOM, el teclado del PIN— para llegar a ella sería construir un
    navegador. Se extrae y se ejecuta sola. */
-const trozo = js.match(/function sesionIncompleta\([\s\S]*?\n\}/);
+const trozo = js.match(/function queFaltaEnLaSesion\([\s\S]*?\n\}/);
 if (!trozo) {
-  console.log('menú: no encontré sesionIncompleta() en index.html — ¿se renombró?');
+  console.log('menú: no encontré queFaltaEnLaSesion() en index.html — ¿se renombró?');
   console.log('   · es la que decide si hay que volver a pedir el número de empleado');
   process.exit(1);
 }
 const caja = { console };
 vm.createContext(caja);
-vm.runInContext(trozo[0] + '\n;globalThis.__f = sesionIncompleta;', caja, { filename:'index-trozo.js' });
-const sesionIncompleta = caja.__f;
+vm.runInContext(trozo[0] + '\n;globalThis.__f = queFaltaEnLaSesion;', caja, { filename:'index-trozo.js' });
+const queFalta = caja.__f;
 
 const EQUIPO = ['Jorge Medina Rejón', 'Luis de Jesús Ortega Vidal',
                 'Elena Navarro Gálvez', 'María Fuentes Bravo', 'Ángel de Jesús Ramirez Solis'];
@@ -47,25 +47,27 @@ const conLista = { store_id:'1217', vendedores:EQUIPO };
 const sinLista = { store_id:'1217', vendedores:[] };
 const EMP = JSON.stringify({ empno:'<empno>', nombre:'Jorge Medina Rejón' });
 
-//        qué pasa                                  cfg        rol        empleado   ¿se le pide?
+/* Se comprueba QUÉ dice que falta, no solo si falta algo: ese texto es lo que
+   se le enseña al equipo y lo que llega en la foto cuando algo se tuerce. Una
+   cadena vacía significa "la sesión está completa, déjale entrar". */
+//        qué pasa                                  cfg        rol        empleado          qué debe faltar
 const CASOS = [
-  ['asesor con todo al día',                        conLista, 'asesor',   EMP,        false],
-  ['asesor sin saber quién entró (el bloqueo)',     conLista, 'asesor',   null,       true ],
-  ['asesor sin la lista del equipo',                sinLista, 'asesor',   EMP,        true ],
-  ['asesor sin ninguna de las dos cosas',           sinLista, 'asesor',   null,       true ],
-  ['asesor con el empleado guardado a medias',      conLista, 'asesor',   '{"empno":"1"}', true ],
-  ['asesor con el empleado ilegible',               conLista, 'asesor',   '{roto',    true ],
-  ['gerente: entra con su correo, no se le pide',   sinLista, 'gerente',  null,       false],
+  ['asesor con todo al día',                        conLista, 'asesor',   EMP,              ''],
+  ['asesor sin saber quién entró (el bloqueo)',     conLista, 'asesor',   null,             'quién entró'],
+  ['asesor sin la lista del equipo',                sinLista, 'asesor',   EMP,              'la lista del equipo'],
+  ['asesor sin ninguna de las dos cosas',           sinLista, 'asesor',   null,             'quién entró y la lista del equipo'],
+  ['asesor con el empleado guardado a medias',      conLista, 'asesor',   '{"empno":"1"}',  'quién entró'],
+  ['asesor con el empleado ilegible',               conLista, 'asesor',   '{roto',          'quién entró'],
+  ['gerente: entra con su correo, no se le pide',   sinLista, 'gerente',  null,             ''],
 ];
 
 const fallos = [];
 for (const [titulo, cfg, rol, emp, esperado] of CASOS) {
   let dio;
-  try { dio = sesionIncompleta(cfg, rol, emp); }
+  try { dio = queFalta(cfg, rol, emp); }
   catch (e) { fallos.push(titulo + ': se cae -> ' + e.message); continue; }
-  if (!!dio !== esperado) {
-    fallos.push(titulo + ': ' + (esperado ? 'debía pedir el número y no lo pide'
-                                          : 'pide el número sin hacer falta'));
+  if (dio !== esperado) {
+    fallos.push(titulo + ': esperaba "' + (esperado || '(nada)') + '" y dice "' + (dio || '(nada)') + '"');
   }
 }
 
@@ -74,4 +76,4 @@ if (fallos.length) {
   fallos.forEach(f => console.log('   · ' + f));
   process.exit(1);
 }
-console.log('menú: ' + CASOS.length + ' sesiones, se pide el número solo cuando falta algo');
+console.log('menú: ' + CASOS.length + ' sesiones, se pide el número solo cuando falta algo y se dice qué');

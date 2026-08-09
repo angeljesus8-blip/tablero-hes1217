@@ -199,6 +199,10 @@
 
 <!-- ── MENÚ ── -->
 <div id="mainMenu">
+  <!-- Solo aparece si la sesión entró coja aun después de pedir el número. Dice
+       QUÉ falta, para que la foto que me manden ya traiga el diagnóstico. -->
+  <div id="diagSesion" style="display:none;background:#fff5ee;color:#b4531a;font-size:12px;
+       font-weight:700;padding:10px 14px;text-align:center;line-height:1.4"></div>
   <header>
     <img src="logo_odemas.png" alt="Odemás">
     <div class="h-txt">
@@ -513,14 +517,24 @@ async function doLogout() {
    valida Supabase, así que a él no se le pregunta.
 
    Vive fuera de `init` para poder probarla sin montar media app: es la clase
-   de regla que se rompe en silencio y deja a alguien sin trabajar. */
-function sesionIncompleta(cfg, role, empGuardado) {
-  if (role === 'gerente') return false;
+   de regla que se rompe en silencio y deja a alguien sin trabajar.
+
+   Devuelve QUÉ falta, no un sí/no: cuando esto se tuerce, saber cuál de las dos
+   piezas es lo que separa arreglarlo en un minuto de estar dos días a ciegas. */
+function queFaltaEnLaSesion(cfg, role, empGuardado) {
+  if (role === 'gerente') return '';
   let emp = null;
   try { emp = JSON.parse(empGuardado || 'null'); } catch(e) { emp = null; }
-  if (!emp || !emp.nombre) return true;                       // no se sabe quién entró
-  if (!cfg || !Array.isArray(cfg.vendedores) || !cfg.vendedores.length) return true;
-  return false;
+  const sinQuien = !emp || !emp.nombre;
+  const sinLista = !cfg || !Array.isArray(cfg.vendedores) || !cfg.vendedores.length;
+  if (sinQuien && sinLista) return 'quién entró y la lista del equipo';
+  if (sinQuien) return 'quién entró';
+  if (sinLista) return 'la lista del equipo';
+  return '';
+}
+// El nombre viejo sigue existiendo: lo usan las pruebas y se lee mejor en un if
+function sesionIncompleta(cfg, role, empGuardado) {
+  return !!queFaltaEnLaSesion(cfg, role, empGuardado);
 }
 
 async function init() {
@@ -550,7 +564,17 @@ async function init() {
        Con volver a teclear su número se arregla, así que se pide una vez y
        en cuanto entren queda al día. Solo se comprueba para asesor: el
        gerente entra con su correo y su sesión la valida Supabase arriba. */
-    if (sesionIncompleta(cfg, role, localStorage.getItem('hes_empleado'))) {
+    const falta = queFaltaEnLaSesion(cfg, role, localStorage.getItem('hes_empleado'));
+    /* Se pide UNA vez por arranque de la app. Si después de identificarse la
+       sesión sigue coja —porque la base respondió a medias, por ejemplo— pedirlo
+       otra vez sería un bucle en la pantalla del teclado, sin manera de entrar.
+       Más vale pasar con una sesión imperfecta y que la app lo diga, que dejar
+       a alguien fuera. */
+    let yaSePidio = false;
+    // sin sessionStorage no hay memoria de haberlo pedido: se pide, que es lo seguro
+    try { yaSePidio = sessionStorage.getItem('hes_pedi_num') === '1'; } catch(e){}
+    if (falta && !yaSePidio) {
+      try { sessionStorage.setItem('hes_pedi_num', '1'); } catch(e){}   // sin esto se pide cada vez, pero se entra igual
       const aviso = document.getElementById('pinErr');
       if (aviso) {
         // Gris, no rojo: no se equivocaron en nada, solo hay que ponerse al día
@@ -559,6 +583,13 @@ async function init() {
       }
       sc('pin');
       return;
+    }
+    /* Si se pidió y AÚN falta algo, se entra igual pero queda dicho en el menú.
+       Sin esto el equipo ve que algo va mal y no tiene nada que contarme. */
+    if (falta) {
+      const d = document.getElementById('diagSesion');
+      if (d) { d.style.display = ''; d.textContent = 'Sesión incompleta: falta ' + falta +
+                                                     ' · enséñale esto a Ángel'; }
     }
 
     applyStoreConfig(cfg, role);
