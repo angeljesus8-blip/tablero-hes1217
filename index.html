@@ -497,6 +497,32 @@ async function doLogout() {
   sc('pin');
 }
 
+/* ¿Hay que volver a pedir el número de empleado? (9-ago-2026)
+
+   La sesión se escribe UNA vez, al entrar, y nunca se refresca. Las que se
+   guardaron antes de que existieran `hes_empleado` y la lista del equipo se
+   quedaron sin ellos para siempre, porque la app recuerda al usuario y ya no
+   vuelve a pasar por el login.
+
+   Costó dos días: los asesores abrían Captura de Series y se topaban con un
+   «¿Quién eres?» sin un solo nombre, sin poder capturar. La base devolvía sus
+   datos perfectamente — nadie se los estaba pidiendo.
+
+   Con volver a teclear su número se arregla, así que se pide una vez y en
+   cuanto entren queda al día. El gerente entra con su correo y su sesión la
+   valida Supabase, así que a él no se le pregunta.
+
+   Vive fuera de `init` para poder probarla sin montar media app: es la clase
+   de regla que se rompe en silencio y deja a alguien sin trabajar. */
+function sesionIncompleta(cfg, role, empGuardado) {
+  if (role === 'gerente') return false;
+  let emp = null;
+  try { emp = JSON.parse(empGuardado || 'null'); } catch(e) { emp = null; }
+  if (!emp || !emp.nombre) return true;                       // no se sabe quién entró
+  if (!cfg || !Array.isArray(cfg.vendedores) || !cfg.vendedores.length) return true;
+  return false;
+}
+
 async function init() {
   try {
     initSB();
@@ -510,6 +536,31 @@ async function init() {
       const { data } = await sb.auth.getSession();
       if (!data || !data.session) { localStorage.removeItem('hes_store'); localStorage.removeItem('hes_role'); sc('pin'); return; }
     }
+
+    /* ── Una sesión guardada a medias se vuelve a pedir (9-ago-2026) ──
+       La sesión se escribe UNA vez, al entrar, y nunca se refresca. Las que
+       se guardaron antes de que existieran `hes_empleado` y la lista del
+       equipo se quedaron sin ellos para siempre, porque la app recuerda al
+       usuario y ya no vuelve a pasar por aquí.
+
+       Costó dos días: los asesores abrían Captura de Series y se topaban con
+       un «¿Quién eres?» sin un solo nombre, sin poder capturar. La base
+       devolvía sus datos perfectamente — nadie se los estaba pidiendo.
+
+       Con volver a teclear su número se arregla, así que se pide una vez y
+       en cuanto entren queda al día. Solo se comprueba para asesor: el
+       gerente entra con su correo y su sesión la valida Supabase arriba. */
+    if (sesionIncompleta(cfg, role, localStorage.getItem('hes_empleado'))) {
+      const aviso = document.getElementById('pinErr');
+      if (aviso) {
+        // Gris, no rojo: no se equivocaron en nada, solo hay que ponerse al día
+        aviso.style.color = '#888';
+        aviso.textContent = 'Teclea tu número de empleado para ponerte al día';
+      }
+      sc('pin');
+      return;
+    }
+
     applyStoreConfig(cfg, role);
     sc('menu');
   } catch(e) {
