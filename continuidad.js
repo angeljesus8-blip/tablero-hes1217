@@ -121,6 +121,24 @@
   }
 
   // ── En el menú: devolver a donde estaba ─────────────────────
+
+  /* EL CANDADO VA PRIMERO, antes que cualquier otra comprobación. El menú puede
+     devolverte UNA vez por arranque de la app y ni una más.
+
+     Tiene que sellarse aunque esta vez no se reanude, porque el encierro venía
+     justo de ahí: abres la app, el menú no reanuda nada (no hay marca todavía),
+     entras a Captura, y al volver con el atrás el menú se encuentra la marca
+     que Captura acaba de dejar y te manda de vuelta. Sellando al pasar por el
+     menú la primera vez, la segunda visita ya está cubierta llegues como
+     llegues — con el botón, con el atrás o escribiendo la dirección.
+
+     `sessionStorage` dura lo que dura la pestaña: se vacía solo cuando Android
+     mata la app y la relanza, que es cuando SÍ hay que reanudar. */
+  try {
+    if(sessionStorage.getItem('hes_ya_reanude')) return;
+    sessionStorage.setItem('hes_ya_reanude', '1');
+  } catch(e){ return; }   // sin sessionStorage no hay candado, y sin candado no se reanuda
+
   var d = leer();
   if(!d || !d.url) return;
   if(Date.now() - d.ts > VENTANA_MS){ olvidar(); return; }
@@ -133,20 +151,9 @@
     if(!localStorage.getItem('hes_store')){ olvidar(); return; }
   } catch(e){ return; }   // sin localStorage no se puede saber: mejor el menú
 
-  /* UNA SOLA VEZ por arranque de la app. `sessionStorage` dura lo que dura la
-     pestaña: sobrevive a navegar entre pantallas, pero se vacía cuando Android
-     mata la app y la relanza — que es exactamente cuando SÍ hay que reanudar.
-
-     Este es el candado bueno. El de `performance.navigation` no bastaba: si el
-     navegador restaura el menú desde su caché, el script ni siquiera corre, y
-     si lo recarga hay que acertar con el tipo de navegación. Con esto, llegues
-     como llegues al menú por segunda vez, el menú se queda. */
-  try {
-    if(sessionStorage.getItem('hes_ya_reanude')) return;
-    sessionStorage.setItem('hes_ya_reanude', '1');
-  } catch(e){ return; }   // sin sessionStorage no hay candado, y sin candado no se reanuda
-
-  /* El botón ATRÁS del teléfono no debe reabrir lo que se acaba de cerrar. */
+  /* Refuerzo: el botón ATRÁS no debe reabrir lo que se acaba de cerrar. El
+     candado de arriba ya cubre este caso; esto lo cubre otra vez por si el
+     navegador estrena `sessionStorage` en una restauración. */
   try {
     var nav = performance.getEntriesByType('navigation')[0];
     if(nav && nav.type === 'back_forward') return;
