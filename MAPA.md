@@ -241,6 +241,72 @@ lado lo que se escribe en el otro.
 Reintentar es seguro: `venta_guardar` responde `ok+duplicada` ante una serie
 repetida el mismo día, así que nunca duplica una venta.
 
+### Corregir una venta *(17-ago-2026, v171)*
+
+Lo último que se hacía en la hoja. Vive en el panel **Ventas del día** de
+Captura, no en Admin: la lista ya está ahí, con navegación por días, la foto y
+el `captura_id` —que es lo único que identifica la fila—. Rehacerla en Admin
+serían dos listas y una se quedaría atrás.
+
+**Lo que mueve cada campo, porque no es obvio:**
+
+| campo | mueve | ¿avisa si sale mal? |
+|---|---|---|
+| seguro | el Assurant del día | no |
+| vendedor · precio | comisiones | no |
+| serie | choca con `UNIQUE(store, serie, día)` | sí, da error |
+| fecha | solo el día. **No mueve stock** | — |
+| **sku** | **el stock de DOS productos** | **no** |
+
+⚠️ **El SKU obliga a tocar el corte, y esto es lo que hay que entender antes de
+tocar `venta_editar`.** El stock es `onhand − (ventas del SKU − corte)`, y
+`inventario_corte` es una FOTO de cuántas ventas había al subir el informe. Si
+la venta ya estaba en esa foto con el SKU equivocado:
+
+- el SKU **correcto** resta una pieza que el On Hand ya descontaba → una de menos
+- el **equivocado** queda con `total < corte`; `greatest(0,…)` lo tapa hasta que
+  se venda otra pieza de verdad, y esa **no se descontará**
+
+Ninguno da error. Es el mismo error de las entregas de preventa: restar dos
+veces la misma pieza. Por eso `venta_editar` mueve la unidad en el corte junto
+con la venta (−1 al viejo, +1 al nuevo, si `vendida_en < tomado_en`), en la
+misma transacción. Corregir una etiqueta no cambia cuántas cajas hay en bodega.
+
+**Toda edición queda en `ventas_ediciones`** con el antes y el después
+completos. Eso es lo que de verdad protege aquí, y lo que no había cuando esto
+se hacía a mano en la hoja: una corrección equivocada se ve y se deshace.
+
+**Sobre el permiso, sin adornos:** `escritura_ok_` valida el token de TIENDA,
+que es el mismo para todos. `venta_editar` recibe además el número de empleado
+y comprueba el puesto — pero el gerente dueño entra por correo y no tiene ficha
+(cadena 1-bis), así que un `p_quien` vacío tiene que seguir pasando. Es el mismo
+nivel que Resurtir: se le esconde al asesor, no se le impide. La auditoría es la
+barrera real.
+
+`_esGestionCS` en captura repite el criterio de `esPuestoDeGestion_` del
+tablero **a propósito y con nota en los dos sitios**: dos ideas de "quién manda"
+acabarían separándose y la misma persona podría editar en una pantalla y no en
+la otra.
+
+### El fallo que la prueba no vio, y ahora sí *(17-ago-2026)*
+
+Se enganchó un `addEventListener` a nivel superior sobre `$('edSku')`, cuyo
+`<div>` está **después** del cierre del `<script>`. En el navegador eso es
+`null` y `null.addEventListener` **tumbaba la captura entera al arrancar** — no
+el modal: toda la pantalla, sin poder capturar una venta.
+
+`verificar.py` decía "todo en orden" porque el DOM falso de las pruebas devuelve
+un elemento para **cualquier** id. Y no bastaba con comprobar que el id existiera
+en el HTML: `edSku` existe, solo que más abajo.
+
+`pruebas/cola_ventas.js` ahora compara **posiciones**: durante la carga, un id
+que aparece por debajo del script principal devuelve `null`, como el navegador;
+al terminar, existen todos. Comprobado reintroduciendo el fallo — sale con el
+mismo mensaje que daría el teléfono.
+
+**Todos los paneles de `captura_series.html` se pintan después del script.** Se
+tocan solo dentro de funciones, nunca al cargar.
+
 ### La hoja dejó de recibir ventas *(17-ago-2026, v170 — fase 6)*
 
 Se apagó el mismo día que se invirtió el flujo, por decisión de Ángel, sabiendo
@@ -1125,10 +1191,10 @@ Estado por fases, en `MIGRACION_PLAN.md`:
 | 4 · fotos, autollenado, edición | ✅ salvo **editar una venta**, que no existe |
 | 5 · invertir el flujo | ✅ v169 — Supabase deja de depender del GAS |
 | 6 · retirar la escritura al Apps Script | ✅ **v170, 17-ago-2026** |
+| + · corregir una venta | ✅ v171 — lo último que quedaba de la hoja |
 
-**Lo único que sigue haciendo falta de la hoja es editar una venta a mano.**
-Mientras no exista esa pantalla en Admin, corregir una captura equivocada no
-tiene dónde hacerse. Es el último pendiente real de la migración.
+**La migración está terminada.** La hoja es respaldo de solo lectura con su
+histórico hasta el 17-ago-2026 y no queda nada que dependa de ella.
 
 **La fase 4 se está haciendo por bloques, no de un salto** *(decidido el
 7-ago-2026)*. El primero fue la preventa, porque el embarque de la Pura 90S
