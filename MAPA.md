@@ -241,6 +241,59 @@ lado lo que se escribe en el otro.
 Reintentar es seguro: `venta_guardar` responde `ok+duplicada` ante una serie
 repetida el mismo día, así que nunca duplica una venta.
 
+### Vender la pieza de exhibición de un EOL *(17-ago-2026, v174)*
+
+Hasta aquí, `eol_precio_venta` exigía `stock = 0`: el 50 % solo aparecía cuando
+**ya no quedaba nada en bodega**. Un EOL con dos cajas nuevas más la de aparador
+se cobraba entero, incluida la de aparador.
+
+Y había una segunda mitad que no se veía. `inventario_vivo` imputaba **toda**
+venta a bodega y solo el excedente a exhibición, así que vender la de aparador
+teniendo cajas nuevas dejaba esto:
+
+```
+bodega       2 cajas intactas   →  el tablero decía 1
+exhibición   vacía, ya se fue   →  el tablero decía 1
+```
+
+Se equivocaba en los dos sentidos a la vez, sin dar error. Lo de bodega se
+corrige solo con el informe del día siguiente; **lo de exhibición no** —la
+exhibición se sube de vez en cuando— y es justo el lado que hace que el tablero
+ofrezca al 50 % una pieza que ya no está.
+
+**Ahora la venta dice de dónde salió** (`ventas.de_exhibicion`). Las de bodega
+descuentan del On Hand; las de aparador, de la exhibición.
+
+⚠️ **Tres cosas que, si se deshacen, no dan error:**
+
+1. **Los cortes se separan.** El de On Hand cuenta solo ventas de bodega y el de
+   exhibición solo las del aparador (`corte_tomar_`, usado por las dos cargas de
+   `supabase_cargas_admin.sql`). Si el de exhibición contara todas, `exh_marcada`
+   quedaría clavado en cero por el `greatest(0,…)` y **el aparador no bajaría
+   nunca**: la marca no serviría de nada. Y el de On Hand al revés: contaría de
+   más y la siguiente venta de bodega no descontaría stock.
+2. **`exh_vendida` suma las marcadas MÁS el excedente sobre el On Hand.** Lo
+   segundo es lo que ya hacía el modelo viejo, y se conserva a propósito: sin
+   ello, las ventas que se comieron una pieza de piso **antes** de que existiera
+   la marca volverían a aparecer como disponibles.
+3. **Dos listas separadas en la app.** `EOL_VENTA` (sin bodega → 50 %
+   automático) y `EOL_EXHIB` (con bodega → solo si el asesor lo marca). Meterlas
+   juntas pondría al 50 % todos los EOL con bodega: regalar producto nuevo, en
+   cada venta y en silencio.
+
+**El interruptor se apaga solo** al guardar y al teclear un SKU sin
+coincidencia. Dejarlo encendido cobraría la mitad en la venta siguiente, y eso
+no lo caza nadie hasta el corte — para entonces ya se fue el cliente.
+
+**`venta_editar` NO puede cambiar la procedencia**, a propósito: moverla de
+bodega a aparador exige mover la unidad en los dos cortes, igual que con el SKU.
+Sin ese ajuste descuadraría el stock en silencio. Para corregir una marcada mal:
+borrar la captura y rehacerla, que la app deshace las dos cosas bien.
+
+Lo cubren los bloques 5 y 6 de `pruebas/cola_ventas.js` —que la marca llegue al
+cuerpo que va a Supabase, y que una venta normal salga explícitamente como **no**
+de exhibición—, comprobados rompiendo el paso del dato.
+
 ### Corregir una venta *(17-ago-2026, v171)*
 
 Lo último que se hacía en la hoja. Vive en el panel **Ventas del día** de
