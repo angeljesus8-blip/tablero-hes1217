@@ -388,42 +388,22 @@ const _cfgCS = (function(){ try{ return JSON.parse(localStorage.getItem('hes_sto
 
 const GAS_TOKEN = (_cfgCS && _cfgCS.gas_token) || '';
 const gasQS = qs => CLOUD_URL + '?' + qs + (GAS_TOKEN ? '&t=' + encodeURIComponent(GAS_TOKEN) : '');
-// Para los POST (guardar y eliminar venta). FALTABA: se usaba gasPost() en dos
-// lugares sin haberlo definido, y cada guardado moria con ReferenceError dentro
-// de un try/catch que lo tomaba por "sin conexion". Las ventas del 1-ago-2026
-// no llegaron a la hoja por esto.
-const gasPost = () => CLOUD_URL + (GAS_TOKEN ? '?t=' + encodeURIComponent(GAS_TOKEN) : '');
+/* ── FASE 6 · la hoja dejó de recibir ventas (17-ago-2026, v170) ──────────
+   Aquí vivían `gasPost`, `gasEnviar` y la cola del Sheet. Se fueron enteros:
+   la captura ya no le escribe NADA al Apps Script. Ni al guardar ni al borrar.
 
-/* Sube al Apps Script y DICE si funcionó. Antes iba con mode:'no-cors', que deja
-   la respuesta opaca: el navegador no permite leerla, así que la app daba por
-   bueno cualquier envío — incluso uno rechazado. Así se perdieron ventas el
-   1-ago-2026 sin que nadie lo notara hasta el día siguiente.
-   El Apps Script responde con Access-Control-Allow-Origin:*, o sea que no-cors
-   nunca hizo falta: solo nos dejaba ciegos. Lanza si algo salió mal; quien llama
-   ya tiene su try/catch y lo muestra en pantalla. */
-async function gasEnviar(payload){
-  const res = await fetch(gasPost(), { method:'POST',
-    headers:{'Content-Type':'text/plain;charset=utf-8'},
-    body: JSON.stringify(payload) });
-  let r = null;
-  try{ r = JSON.parse(await res.text()); }catch(e){}   // no-JSON: cae en los if de abajo
-  if(!res.ok) throw new Error('la nube respondió ' + res.status);
-  if(r && r.error === 'no_autorizado')
-    throw new Error('la nube rechazó la sesión — sal y vuelve a entrar desde el menú');
-  if(!r || r.ok === false)
-    throw new Error((r && r.error) ? String(r.error) : 'la nube no confirmó el guardado');
-  return r;
-}
+   Lo que sigue viviendo del GAS son LECTURAS de respaldo (catálogo, promos,
+   eol_venta), y se quedan a propósito: una promo de hace unos días casi siempre
+   sigue vigente, y quedarse sin precios deja al asesor sin poder vender. El
+   dato viejo hace daño en el stock, no en el precio.
 
-// Link de la Hoja de Google (concentrado de ventas) que abre Laura:
-const SHEET_BASE = 'https://docs.google.com/spreadsheets/d/1rcHq6XdJ8K2fSDQkVQf5agbCLG4zD3c4b58mF90oBq0/edit';
-const GKEY = 'hes1217_ventas_gid';
-let ventasGid = localStorage.getItem(GKEY) || '';
-const SHEET_URL = () => ventasGid ? SHEET_BASE + '#gid=' + ventasGid : SHEET_BASE;
-const PKEY = 'hes1217_pending';
-let pending = JSON.parse(localStorage.getItem(PKEY) || '[]');
-function savePending(){ localStorage.setItem(PKEY, JSON.stringify(pending)); }
-let flushing = false;
+   El link a la hoja también se fue: `SHEET_URL` llevaba semanas sin usarse
+   —«Ventas del día» lee `ventas_detalle` de Supabase desde el 7-ago— y con él
+   se cae la llamada a `modo=estado` que solo servía para armarlo.
+
+   La hoja se queda como respaldo de solo lectura, con todo su histórico hasta
+   hoy. Nada depende de ella. */
+const PKEY = 'hes1217_pending';   // solo se LEE, para el rescate del final
 
 /* Fotos: se comprimen y se mandan a Drive (vía Apps Script). Se guardan en memoria
    (no en localStorage) por id; se suben con la captura y se borran al subir. */
@@ -602,51 +582,8 @@ async function flushSupabase(){
 }
 window.addEventListener('online', flushSupabase);
 
-/* Envía al concentrado (la hoja) las capturas pendientes. Reintenta si no hay
-   señal, igual que antes.
-
-   YA NO AVISA AL ASESOR, y esto es deliberado (17-ago-2026, fase 5). Desde que
-   Supabase es la fuente de verdad, una venta que no llegue a la hoja no afecta
-   a nada de lo que se ve en piso: ni al stock, ni al Assurant, ni a las
-   comisiones. Alarmar por eso enseña al equipo a ignorar el aviso, justo antes
-   de la fase 6, cuando esta cola desaparezca.
-
-   Pero no se calla del todo, que sería un fallo invisible: si la hoja deja de
-   recibir ventas, lo dice `comparar_ventas_diario` a la mañana siguiente, en
-   `ventas_comparacion` — y ahí sale como `faltan`, con las series. Ese es el
-   canal que alguien lee de verdad; el banner del celular no lo era. */
-async function flushCloud(){
-  if(!CLOUD_URL || flushing || !pending.length) return;
-  flushing = true;
-  try{
-    while(pending.length){
-      const row = pending[0];
-      const body = Object.assign({}, row);
-      /* La foto YA NO viaja al Apps Script (7-ago-2026). Iba en este mismo POST
-         y de ahí a Drive; ahora va aparte, a Supabase, donde además se puede
-         mirar. Quitarla de aquí adelgaza el POST en ~150 KB por venta, que es
-         lo que hacía lenta la cola con mala señal — justo cuando más importa
-         que la venta suba. */
-      // Sin no-cors: el Apps Script responde con Access-Control-Allow-Origin:*,
-      // así que SÍ se puede leer si guardó. Solo se saca de la cola cuando el
-      // servidor confirma; si no, la captura se queda y se reintenta.
-      const res = await fetch(gasPost(), { method:'POST',
-        headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify(body) });
-      let r = null;
-      try{ r = JSON.parse(await res.text()); }catch(e){}   // r queda null y se maneja abajo
-      if(!res.ok || !r || r.ok === false){
-        break;                                   // no vaciar la cola a ciegas
-      }
-      pending.shift(); savePending();            // el servidor confirmó
-      /* La venta y la foto YA NO cuelgan de aquí (17-ago-2026, fase 5). Van por
-         la cola de Supabase, que corre en paralelo y no espera a esta. */
-    }
-  }catch(e){
-    // Sin señal: la cola se conserva y se reintenta sola.
-  }
-  finally{ flushing = false; }
-}
-window.addEventListener('online', flushCloud);
+/* `flushCloud` y su cola se retiraron en la fase 6 (17-ago-2026, v170).
+   La venta va solo a Supabase, por `flushSupabase`. */
 
 /* Catálogo desde la nube (lo sube la página "Actualizar datos"); si no hay, usa el de la app */
 const CATKEY = 'hes1217_catalogo';
@@ -904,19 +841,10 @@ function render(){
 function esc(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 function eliminarDeNube(id){
-  // Cancela la subida si aún está en cola — en los DOS lados. La cola de
-  // Supabase se identifica por p_captura_id, no por el id suelto.
-  pending = pending.filter(p => p.id !== id);
-  savePending();
+  // Cancela la subida si aún está en cola. Se identifica por p_captura_id, no
+  // por el id suelto.
   sbPend = sbPend.filter(c => c.p_captura_id !== id);
   saveSbPend();
-
-  /* Al Apps Script también, mientras dure la doble escritura. Ya NO se avisa si
-     falla: desde la fase 5 la hoja no decide nada que se vea en piso, y una
-     alarma por algo que no tiene consecuencia enseña a ignorar las alarmas. Si
-     la hoja se quedara con la fila, sale al día siguiente en `ventas_comparacion`
-     como `sobran`. Esta línea entera desaparece en la fase 6. */
-  gasEnviar({tipo:'eliminar', id}).catch(function(){});   // sin consecuencia visible: lo reporta la comparación nocturna
 
   /* Y a Supabase, que hasta el 7-ago-2026 no se enteraba.
      El alta tenía doble escritura desde la fase 3 y el borrado no, así que una
@@ -990,8 +918,6 @@ window.finalizarVenta = function(conSeguro){
      stock, el Assurant y las comisiones—; la del Sheet queda de respaldo
      mientras dure la doble escritura, y es lo que se borrará en la fase 6. */
   sbPend.push(_sbCuerpo(pend)); saveSbPend(); flushSupabase();
-  pending.push(pend);
-  savePending(); flushCloud();
   render();
   ['serie','sku','precio','desc'].forEach(f=> $(f).value='');
   tirarBorrador();   // ya está en el reporte: el borrador dejó de servir
@@ -1722,24 +1648,20 @@ function vendedorDeLaSesion(){
 $('btnChange').onclick = showGate;
 
 render();
-function refreshGid(){
-  if(ventasGid) return;
-  const cb = '_cbGid' + Date.now();
-  window[cb] = function(data){
-    delete window[cb];
-    const sc = document.getElementById('_gid_sc'); if(sc) sc.remove();
-    if(data && data.ventasGid){ ventasGid = data.ventasGid; localStorage.setItem(GKEY, ventasGid); }
-  };
-  const sc = document.createElement('script');
-  sc.id = '_gid_sc';
-  sc.src = gasQS('modo=estado') + '&callback=' + cb;
-  document.head.appendChild(sc);
-}
+/* `refreshGid` se fue en la fase 6. Pedía `modo=estado` al Apps Script para
+   averiguar la pestaña de la hoja y armar el enlace a Google Sheets — un enlace
+   que ya nadie abría: «Ventas del día» lee `ventas_detalle` de Supabase desde
+   el 7-ago. Era una llamada al GAS en cada arranque para nada. */
 
-/* ── Rescate de la cola vieja al pasar a la fase 5 (17-ago-2026) ──────────
+/* ── Rescate de la cola vieja del Sheet (17-ago-2026, fases 5 y 6) ────────
    Hasta v168 una venta llegaba a Supabase SOLO después de que el Sheet la
-   confirmara. O sea que lo que hay en `pending` es, por definición, exactamente
-   lo que NO está en Supabase.
+   confirmara. O sea que lo que quedara en `hes1217_pending` es, por definición,
+   exactamente lo que NO está en Supabase.
+
+   ESTO SOBREVIVE A LA FASE 6 y no es residuo: un teléfono puede pasar meses sin
+   abrir la app y saltar de v168 a v170 de golpe, con capturas en esa cola. Es lo
+   único que sigue leyendo `hes1217_pending` — ya nadie escribe en ella. Se puede
+   borrar cuando conste que los seis teléfonos han abierto la app en v169 o más.
 
    Sin esto, el teléfono que actualice con capturas en cola las subiría a la
    hoja —donde ya nadie mira— y jamás aquí: ventas que no descuentan stock, no
@@ -1756,10 +1678,11 @@ function refreshGid(){
    —`venta_guardar` responde ok+duplicada— pero la cola no bajaría nunca. */
 try{
   if(!localStorage.getItem(MIGKEY)){
+    const viejas = JSON.parse(localStorage.getItem(PKEY) || '[]') || [];
     const yaEnCola = {};
     sbPend.forEach(function(c){ if(c && c.p_captura_id) yaEnCola[c.p_captura_id] = true; });
     let rescatadas = 0;
-    pending.forEach(function(row){
+    viejas.forEach(function(row){
       if(row && row.id && yaEnCola[row.id]) return;   // ya estaba encolada aquí
       sbPend.push(_sbCuerpo(row)); rescatadas++;
     });
@@ -1774,8 +1697,7 @@ try{
   window._sbFallos.push({ serie:'(rescate de cola)', motivo: (e && e.message) || 'error' });
 }
 
-flushSupabase();   // primero lo que decide el stock, el Assurant y las comisiones
-flushCloud();      // y después el respaldo a la hoja, que ya no condiciona nada
+flushSupabase();   // la única cola: de aquí salen stock, Assurant y comisiones
 reindexarPorSku(); // con lo que haya en caché, antes de que responda la nube
 
 /* Teclear el SKU autollena descripción y precio, igual que escanear el código.
@@ -1804,7 +1726,7 @@ reindexarPorSku(); // con lo que haya en caché, antes de que responda la nube
 refreshCatalogo(); // trae el catálogo más reciente de la nube
 refreshPromos();   // trae las promociones vigentes
 refreshEolVenta(); // trae los EOL con 50% activo (solo exhibición)
-refreshGid();      // obtiene el GID de la hoja Ventas para el link directo
+// (aquí se llamaba a refreshGid; se fue con el enlace a la hoja, fase 6)
 </script>
 <div id="vdPanel" class="vd">
   <div class="vd-box">
