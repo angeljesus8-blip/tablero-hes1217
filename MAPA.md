@@ -357,8 +357,19 @@ concedía y la otra bloqueaba, sin decir nada. Desde v176 el panel se abre por
 `hoja_auth` **o** por puesto de gestión.
 
 Y al revés sigue igual: `hoja_auth` es hoy una asesora, que ve las ventas para
-cotejarlas pero NO ve el ✏️. Lo cubre el bloque 7 de `cola_ventas.js`, en las
-dos direcciones.
+cotejarlas pero NO ve el ✏️.
+
+**Y lo preguntan DOS sitios**, por eso hay un solo portero (`puedeVerVentas_`):
+el que enseña el botón y el que responde al clic. En v176 se cambió solo el
+primero — el gerente veía «Ventas del día» y al tocarlo le decía que no tenía
+permiso. Es la misma lección de `seccionVisible_` en el tablero, aprendida
+aparte en este archivo.
+
+La prueba **pulsa el botón** y comprueba que el panel se abre; mirar si
+`puedeVerVentas_()` devuelve `true` habría dado verde con el fallo puesto,
+porque la función estaba bien y quien no la llamaba era el handler. Para eso el
+DOM de `cola_ventas.js` tiene un `classList` de verdad: sin él solo se pueden
+probar valores de retorno, no comportamiento.
 
 **Sobre el permiso, sin adornos:** `escritura_ok_` valida el token de TIENDA,
 que es el mismo para todos. `venta_editar` recibe además el número de empleado

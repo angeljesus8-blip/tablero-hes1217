@@ -75,14 +75,25 @@ function arrancar(extraLS){
   function el(id){
     // Durante la carga, lo que se pinta por debajo del script todavía no existe.
     if(cargando && POS_ID.has(id) && POS_ID.get(id) > POS_SCRIPT) return null;
-    if(!els[id]) els[id] = {
+    if(!els[id]) els[id] = (function(){
+      /* `classList` de verdad, con un Set. Con los `add(){}` vacíos de antes no
+         se puede comprobar COMPORTAMIENTO —si un panel se abrió—, solo que una
+         función devuelva lo esperado. Y el fallo del 17-ago-2026 fue justo ese:
+         `puedeVerVentas_()` daba true y el botón igual no abría nada, porque el
+         handler no la llamaba. Probar la función habría dado verde. */
+      const clases = new Set();
+      return {
       id, style:{}, dataset:{}, value:'', textContent:'', children:[],
       innerHTML:'',
-      classList:{ add(){}, remove(){}, toggle(){}, contains(){ return false; } },
+      classList:{ add:c=>clases.add(c), remove:c=>clases.delete(c),
+                  toggle:(c,on)=>{ if(on===undefined){ clases.has(c)?clases.delete(c):clases.add(c); }
+                                   else { on ? clases.add(c) : clases.delete(c); } },
+                  contains:c=>clases.has(c) },
       querySelectorAll:()=>[], addEventListener(){}, appendChild(){},
       closest:()=>null, focus(){}, remove(){}, onclick:null,
       insertBefore(){}, scrollIntoView(){}
-    };
+      };
+    })();
     return els[id];
   }
   const caja = {
@@ -281,6 +292,12 @@ const ok = (t, c, extra) => { if(!c) fallos.push(t + (extra ? ' -> ' + extra : '
   }
 }
 
+/* Los bloques que siguen tocan handlers `async` (el onclick de «Ventas del
+   día» hace `await flushSupabase()` antes de abrir el panel), así que hay que
+   esperarlos de verdad. Comprobar justo después de pulsar daba un falso rojo:
+   el panel todavía no se había abierto. */
+(async function(){
+
 /* ── 7 · Quien puede corregir, puede llegar a la lista ──────────────────
    El ✏️ vive DENTRO del panel «Ventas del día», que hasta v175 solo abría la
    persona designada en `hoja_auth`. O sea que el subgerente tenía permiso de
@@ -296,6 +313,17 @@ const ok = (t, c, extra) => { if(!c) fallos.push(t + (extra ? ' -> ' + extra : '
     ok('el subgerente sí puede abrir Ventas del día',
        s.caja.document.getElementById('btnCsv').style.display !== 'none',
        'quedó display=' + s.caja.document.getElementById('btnCsv').style.display);
+
+    /* Y AL PULSARLO tiene que abrirse. Ver el botón y poder usarlo son dos
+       preguntas distintas, y el 17-ago-2026 se cambió solo la primera: el
+       gerente veía «Ventas del día» y al tocarlo le decía que no tenía permiso.
+
+       SE PULSA EL BOTÓN DE VERDAD, no se llama a `puedeVerVentas_()`. Esa
+       comprobación habría dado verde con el fallo puesto, porque la función
+       estaba bien — lo que no la usaba era el handler. */
+    await s.caja.document.getElementById('btnCsv').onclick();
+    ok('y al pulsarlo se abre la lista, no un aviso de permiso',
+       s.caja.document.getElementById('vdPanel').classList.contains('show'));
   }
 }
 {
@@ -360,3 +388,5 @@ if(fallos.length){
   process.exit(1);
 }
 console.log('cola de ventas: la venta llega a Supabase sin red, y la cola vieja se rescata');
+
+})();
