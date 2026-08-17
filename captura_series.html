@@ -266,6 +266,15 @@
   .vd-det .sku{ font-family:ui-monospace,monospace; font-weight:700; color:#555;
     background:#f1f1f1; border-radius:5px; padding:1px 5px; letter-spacing:.2px; }
   .vd-fila.hecha .vd-det .sku{ background:#f7f7f7; color:#cfcfcf; }
+  /* Entregas de preventa y traspaso (17-ago-2026). Se cobraron semanas antes,
+     así que al cuadrar contra el POS no aparecen en el ticket de hoy. Azul y no
+     rojo: no es un problema, es un renglón que se explica solo. */
+  .vd-ent{ display:inline-block; margin-left:8px; font-family:Montserrat,sans-serif;
+    font-size:10px; font-weight:800; letter-spacing:.02em; vertical-align:middle;
+    color:var(--azul); background:#eaf1fa; border-radius:5px; padding:2px 7px;
+    white-space:nowrap; }
+  .vd-fila.entrega{ background:#fbfdff; }
+  .vd-fila.hecha .vd-ent{ color:#cfcfcf; background:#f7f7f7; }
   .vd-pie{ padding:12px 18px 16px; border-top:1px solid var(--linea); }
   .vd-vacio{ padding:28px 18px; text-align:center; color:#aaa; font-size:13px; }
 
@@ -1446,7 +1455,9 @@ async function cargarVentasDia(dia){
       return { serie:v.serie||'', sku:v.sku||'', desc:v.descripcion||'',
                precio: v.precio==null ? '' : String(v.precio),
                vend:v.vendedor||'', hora: v.vendida_en ? String(v.vendida_en).slice(11,16) : '',
-               captura_id: v.captura_id||'', foto: !!v.tiene_foto };
+               captura_id: v.captura_id||'', foto: !!v.tiene_foto,
+               // 'preventa' | 'traspaso' | '' — ver la etiqueta en pintarVentasDia
+               entrega: v.entrega || '' };
     });
     _vdFecha  = dia;
     pintarVentasDia();
@@ -1473,9 +1484,9 @@ function pintarVentasDia(){
   $('vdFechaTxt').textContent = fechaBonita(dia);
   $('vdN').textContent = _vdVentas.length + (_vdVentas.length === 1 ? ' equipo' : ' equipos');
   $('vdLista').innerHTML = _vdVentas.length
-    ? _vdVentas.map((v, i) => `<div class="vd-fila${ya.indexOf(v.serie) >= 0 ? ' hecha' : ''}" id="vdf${i}" onclick="copiarSerie(${i})">
+    ? _vdVentas.map((v, i) => `<div class="vd-fila${ya.indexOf(v.serie) >= 0 ? ' hecha' : ''}${v.entrega ? ' entrega' : ''}" id="vdf${i}" onclick="copiarSerie(${i})">
         <div class="txt">
-          <div class="vd-serie">${v.serie}</div>
+          <div class="vd-serie">${v.serie}${v.entrega ? `<span class="vd-ent">${v.entrega === 'traspaso' ? '🚚 traspaso' : '📦 preventa'}</span>` : ''}</div>
           <div class="vd-det">
             <span class="sku">${v.sku || '—'}</span>
             <span>${v.desc || 'sin descripción'}</span>
@@ -1705,13 +1716,24 @@ async function verFoto(capturaId, serie){
 // Cuántas quedan del día que se está viendo. Se cuenta sobre las marcas, no sobre
 // el DOM, para que al volver a un día ya trabajado siga cuadrando.
 function vdContar(){
-  if(!_vdVentas.length){ $('vdAyuda').textContent = ''; return; }
+  if(!_vdVentas.length){ $('vdAyuda').innerHTML = ''; return; }
   const ya = copiadasDe(fechaGas(_vdFecha || new Date()));
   const faltan = _vdVentas.filter(v => ya.indexOf(v.serie) < 0).length;
-  $('vdAyuda').textContent = faltan === _vdVentas.length
+  const txt = faltan === _vdVentas.length
     ? 'Haz clic en una serie para copiarla'
     : faltan ? faltan + (faltan === 1 ? ' serie por copiar' : ' series por copiar')
              : '✓ Todas copiadas';
+
+  /* Y cuántas de esas NO son venta de hoy. Es el número que hace falta para
+     cuadrar contra el POS: el cliente pagó semanas antes, así que esos tickets
+     no están en el corte de hoy. Sin esto, quien cuadra la caja busca renglones
+     que no va a encontrar y no sabe por qué. */
+  const ent = _vdVentas.filter(v => v.entrega).length;
+  $('vdAyuda').innerHTML = txt + (ent
+    ? `<div style="margin-top:6px;font-size:11.5px;color:var(--azul);line-height:1.4">`
+      + `${ent} ${ent === 1 ? 'es una entrega' : 'son entregas'} de apartado · `
+      + `se cobraron antes, no están en el corte de hoy</div>`
+    : '');
 }
 
 function vdMover(dias){
