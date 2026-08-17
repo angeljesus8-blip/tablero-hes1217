@@ -232,6 +232,44 @@ lado lo que se escribe en el otro.
 Reintentar es seguro: `venta_guardar` responde `ok+duplicada` ante una serie
 repetida el mismo día, así que nunca duplica una venta.
 
+### La venta ya no pasa por la hoja para llegar aquí *(17-ago-2026, v169)*
+
+```
+ANTES (v168)                          AHORA (v169)
+captura                               captura
+   ↓                                     ├──► cola Supabase ──► tabla ventas
+cola Sheet ──► POST al GAS               │     (manda: stock, Assurant, comisiones)
+                  ↓ SI CONFIRMA          └──► cola Sheet ──► POST al GAS
+             tabla ventas                      (respaldo, no condiciona nada)
+```
+
+**Supabase dependía del Apps Script y nadie lo había visto así.**
+`guardarEnSupabase` colgaba del final de `flushCloud`, o sea que solo corría si
+el Sheet confirmaba. Con el GAS caído no entraba **ni una venta** a Supabase, y
+como `inventario_vivo` descuenta de la tabla `ventas` DE SUPABASE, el stock
+dejaba de bajar. Sin error: con el número de piezas de ayer.
+
+Ahora son dos colas independientes. Ninguna espera a la otra ni puede tumbarla.
+
+**El aviso se mudó con la verdad.** El banner de «capturas sin subir» era del
+Sheet; ahora lo levanta la cola de Supabase, porque una venta que no llegue ahí
+no cuenta para nada aunque esté en la hoja. `flushCloud` dejó de alarmar a
+propósito: un fallo suyo ya no tiene consecuencia en piso, y alarmar por algo
+sin consecuencia enseña al equipo a ignorar el aviso. **No se calla:** sale al
+día siguiente en `ventas_comparacion` como `faltan`, con las series.
+
+⚠️ **El rescate de la cola vieja va AL FINAL del archivo, y no es un capricho.**
+Lo que hubiera en `hes1217_pending` al actualizar es, por definición, lo que NO
+está en Supabase; sin rescatarlo son ventas que solo viven en la hoja. Se
+escribió primero junto a la cola, y ahí `_sbCuerpo` reventaba con
+ReferenceError —usa `SB_STORE`, un `const` de 200 líneas más abajo, y un `const`
+no se eleva— **y el `catch` se lo tragaba entero**: la migración no hacía nada y
+no lo decía. Lo cazó `pruebas/cola_ventas.js`, no la lectura del código.
+
+Esa prueba corre en cada commit y comprueba las dos cosas que fallarían sin dar
+señal: que una venta capturada **sin red** acaba en la cola de Supabase, y que
+la cola vieja se rescata una vez y solo una. Las dos, comprobadas rompiéndolas.
+
 ### El Assurant del día también lleva candado *(17-ago-2026, v168)*
 
 Tercer candado `__sb`, junto al del stock y el de los apartados, y por el mismo
