@@ -1229,10 +1229,23 @@ function finalizarStock(item){
   if(!item || item._onhand === undefined) return;   // sin datos de nube: conserva lo estático
   const o = item._onhand||0, e = item._exhibeRaw||0, v = item._vendido||0, ev = item._ev||0;
   item.stock = Math.max(0, o - v);                   // stock cerrado (almacén), sin exhibición
-  // La exhibición solo la venden los productos EOL; ahí las ventas que exceden
-  // el almacén la descuentan. Usa su propio corte (ev), que NO se reinicia con
-  // el ON HAND diario, para que una pieza vendida no reaparezca al día siguiente.
-  item.exhibe = eolSkuSet.has(item.sku) ? Math.max(0, e - Math.max(0, ev - o)) : e;
+  /* La exhibición solo la venden los productos EOL. `ev` (exh_vendida) usa su
+     propio corte, que NO se reinicia con el ON HAND diario, para que una pieza
+     vendida no reaparezca al día siguiente.
+
+     SE RESTA TAL CUAL desde el 17-ago-2026 (v175). Antes aquí había un
+     `Math.max(0, ev - o)`: el cliente calculaba por su cuenta cuántas ventas
+     habían excedido el almacén, porque el servidor solo mandaba el total. Desde
+     v174 `exh_vendida` YA trae esa cuenta hecha —más las ventas marcadas como
+     pieza de exhibición—, así que restarlo otra vez lo anulaba:
+
+         e=1, ev=1, onhand=5  ->  1 - max(0, 1-5) = 1   ✗ decía "1 en exhibición"
+                                  1 - 1           = 0   ✓
+
+     Visto en piso el mismo día: el aparador seguía marcando una pieza que ya se
+     había vendido. Cambiar lo que significa un campo del servidor obliga a
+     mirar quién lo consume — el campo llegaba bien, la cuenta era la vieja. */
+  item.exhibe = eolSkuSet.has(item.sku) ? Math.max(0, e - ev) : e;
 }
 function calcDerivados(){
   (D.inventario||[]).forEach(finalizarStock);
