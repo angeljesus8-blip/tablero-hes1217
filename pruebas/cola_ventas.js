@@ -231,6 +231,56 @@ const ok = (t, c, extra) => { if(!c) fallos.push(t + (extra ? ' -> ' + extra : '
   }
 }
 
+/* ── 5 · La pieza de exhibición viaja hasta la nube ─────────────────────
+   El interruptor decide DOS cosas: qué precio se cobra y de qué contador se
+   descuenta la pieza. Si `exhibicion` se cayera en cualquier escalón —del
+   formulario al item, del item a la cola, de la cola al cuerpo de la RPC— la
+   venta se guardaría como de bodega: descontaría una caja que sigue en el
+   almacén y dejaría el aparador ocupado por una pieza que ya salió.
+
+   Es la cadena 1 del MAPA otra vez: lo que no se nombra en cada escalón se
+   pierde en silencio. Por eso se comprueba el extremo final, el cuerpo que
+   sale hacia Supabase, y no los intermedios. */
+{
+  const s = arrancar();
+  if(!s.err){
+    s.els['serie'].value  = 'SERIE-EXHIB-1';
+    s.els['sku'].value    = '900001';
+    s.els['precio'].value = '2500';
+    s.els['desc'].value   = 'EOL de piso';
+    s.caja.setVend(EQUIPO[1]);
+    s.caja.document.getElementById('exhChk').checked = true;   // «es la de exhibición»
+    s.els['btnAdd'].onclick();
+    s.caja.finalizarVenta(false);
+
+    const cola = s.colaSb();
+    ok('la marca de exhibición llega al cuerpo que va a Supabase',
+       cola.length === 1 && cola[0].p_de_exhibicion === true,
+       cola.length ? String(cola[0].p_de_exhibicion) : 'la cola quedó vacía');
+  }
+}
+
+/* ── 6 · Y una venta normal NO se marca ─────────────────────────────────
+   La otra mitad, y no es simétrica de la de arriba: si esto fallara, TODAS las
+   ventas descontarían del aparador en vez de la bodega. El stock de almacén
+   dejaría de bajar nunca y el tablero prometería cajas que no existen. */
+{
+  const s = arrancar();
+  if(!s.err){
+    s.els['serie'].value  = 'SERIE-NORMAL-1';
+    s.els['sku'].value    = '900001';
+    s.els['precio'].value = '5000';
+    s.caja.setVend(EQUIPO[1]);
+    s.els['btnAdd'].onclick();
+    s.caja.finalizarVenta(true);
+
+    const cola = s.colaSb();
+    ok('una venta normal se manda explícitamente como NO de exhibición',
+       cola.length === 1 && cola[0].p_de_exhibicion === false,
+       cola.length ? String(cola[0].p_de_exhibicion) : 'la cola quedó vacía');
+  }
+}
+
 if(fallos.length){
   console.log('cola de ventas: ' + fallos.length + ' fallo(s)');
   fallos.forEach(f => console.log('   · ' + f));

@@ -133,7 +133,7 @@ CREATE OR REPLACE FUNCTION public.venta_editar(
   p_vendedor   text,
   p_seguro     boolean,
   p_fecha      date,
-  p_quien      text DEFAULT NULL
+  p_quien      text    DEFAULT NULL
 ) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
 AS $fn$
@@ -181,7 +181,7 @@ BEGIN
   antes := jsonb_build_object('serie', v.serie, 'sku', v.sku,
              'descripcion', v.descripcion, 'precio', v.precio,
              'vendedor', v.vendedor, 'con_seguro', v.con_seguro,
-             'dia_venta', v.dia_venta);
+             'dia_venta', v.dia_venta, 'de_exhibicion', v.de_exhibicion);
 
   /* EL CORTE, ANTES DEL UPDATE. Ver la cabecera: si esta venta ya estaba
      contada en la foto del informe con el SKU viejo, hay que mover esa unidad
@@ -228,7 +228,7 @@ BEGIN
   despues := jsonb_build_object('serie', v.serie, 'sku', v.sku,
                'descripcion', v.descripcion, 'precio', v.precio,
                'vendedor', v.vendedor, 'con_seguro', v.con_seguro,
-               'dia_venta', v.dia_venta);
+               'dia_venta', v.dia_venta, 'de_exhibicion', v.de_exhibicion);
 
   INSERT INTO public.ventas_ediciones
     (store_id, venta_id, captura_id, quien, antes, despues)
@@ -239,6 +239,17 @@ BEGIN
                             'cambio_sku', (antes->>'sku') IS DISTINCT FROM (despues->>'sku'));
 END $fn$;
 
+/* NO se puede cambiar `de_exhibicion` desde aqui, y es deliberado.
+   Moverla de bodega a aparador (o al reves) cambia de que contador descuenta la
+   pieza, asi que habria que mover tambien la unidad en LOS DOS cortes — igual
+   que se hace arriba con el SKU. Sin ese ajuste, corregir la procedencia
+   descuadraria el stock en silencio, que es justo lo que este archivo evita.
+
+   El valor SI se guarda en la auditoria (antes/despues), asi que si una venta
+   se marco mal se ve. Corregirla hoy es borrar la captura y volver a hacerla
+   con la casilla correcta: la app deshace las dos cosas bien.
+
+   Si algun dia hace falta, es el mismo patron que el bloque del SKU. */
 REVOKE ALL ON FUNCTION public.venta_editar(text,text,text,text,text,text,numeric,text,boolean,date,text)
   FROM public;
 GRANT EXECUTE ON FUNCTION public.venta_editar(text,text,text,text,text,text,numeric,text,boolean,date,text)

@@ -109,6 +109,13 @@
   .promo-badge s{ color:#999; font-weight:600; }
 
   /* ---- Ver la foto de una captura ---- */
+  /* La pieza de exhibición de un EOL (17-ago-2026). Naranja y no verde: es una
+     excepción que el asesor declara, no un estado normal de la venta. */
+  .exh-check{ display:none; align-items:center; gap:10px; margin-top:10px;
+    padding:11px 12px; border-radius:10px; border:1.5px solid var(--naranja);
+    background:#fff6ee; font-size:13.5px; color:#8a4b1f; cursor:pointer; }
+  .exh-check.show{ display:flex; }
+  .exh-check input{ width:20px; height:20px; flex:none; accent-color:var(--naranja); }
   .vd-lupa{ background:none; border:none; font-size:17px; padding:0 8px; cursor:pointer;
     line-height:1; flex-shrink:0; }
   /* Corregir una venta (17-ago-2026) */
@@ -340,6 +347,12 @@
       <label>Descripción</label>
       <input type="text" id="desc" placeholder="Descripción del artículo" autocomplete="off">
     </div>
+    <!-- Solo aparece si ESTE SKU es EOL y le queda pieza de piso teniendo
+         además cajas nuevas. Ver `EOL_EXHIB`. -->
+    <label class="exh-check" id="exhWrap">
+      <input type="checkbox" id="exhChk" onchange="marcarExhibicion()">
+      <span>Es la pieza de <b>exhibición</b> — se cobra al 50 %</span>
+    </label>
     <div class="recon-warn" id="reconWarn">⚠ Producto NO reconocido — pudo ser mala lectura. Revisa o re-toma la foto.</div>
     <button class="btn btn-add" id="btnAdd" style="margin-top:6px;">＋ Agregar al reporte</button>
   </div>
@@ -507,7 +520,11 @@ function _sbCuerpo(row){
        para borrarla: la serie no basta —una devolución la repite otro día— y la
        fecha tampoco. Sin esto, `venta_eliminar` no tiene por dónde agarrarla y
        una captura borrada se queda descontando stock para siempre. */
-    p_captura_id: String(row.id || '')
+    p_captura_id: String(row.id || ''),
+    /* De dónde salió la pieza. `false` explícito y no undefined: la función SQL
+       tiene DEFAULT false, pero mandarlo siempre deja la venta diciendo lo que
+       es en vez de depender de un valor por omisión que alguien podría cambiar. */
+    p_de_exhibicion: row.exhibicion === true
   };
 }
 
@@ -795,14 +812,34 @@ try{ localStorage.removeItem(EOLVKEY); }catch(e){}   // si no se puede borrar, d
    producto que ya se quedó solo con la pieza de exhibición no se marcaba al
    50%, o sea cobrarle de más a un cliente. Con la doble escritura de la fase 3
    ya no aplica y vuelve a Supabase. */
+/* DOS listas desde el 17-ago-2026, y la diferencia es dinero:
+
+     EOL_VENTA[sku]  -> no queda bodega. La de piso es la única pieza que hay,
+                        así que el 50% se pone SOLO, como siempre.
+     EOL_EXHIB[sku]  -> hay cajas nuevas Y una de piso. El 50% es SOLO para la
+                        de piso, y solo si el asesor lo marca.
+
+   Meter las dos en `EOL_VENTA` habría puesto al 50% todos los EOL con bodega:
+   regalar producto nuevo, en silencio y en cada venta. */
+let EOL_EXHIB = {};
 async function refreshEolVenta(){
   const filas = await sbRpcCS('eol_precio_venta');
   if(filas){
-    const e = {};
-    filas.forEach(function(x){ e[x.sku] = x.precio50; });
-    if(esObjValido(e)){ EOL_VENTA = e; return; }
+    const auto = {}, manual = {};
+    filas.forEach(function(x){
+      if(x.solo_exhibicion) auto[x.sku] = x.precio50;
+      else                  manual[x.sku] = x.precio50;
+    });
+    /* Se aceptan aunque `auto` venga vacío: puede no haber ningún EOL agotado y
+       sí varios con pieza de piso. Exigir que la primera tuviera algo tiraría
+       la segunda entera — el fallo de `esCatalogoValido` del 2-ago, otra vez. */
+    if(Array.isArray(filas)){ EOL_VENTA = auto; EOL_EXHIB = manual; return; }
   }
   if(!CLOUD_URL) return;
+  /* El respaldo del Apps Script solo sabe de los automáticos: su `modo=eol_venta`
+     es anterior a esta distinción. Se queda como red para el 50% de siempre; el
+     interruptor de exhibición no aparecerá si Supabase no contestó, que es
+     preferible a ofrecerlo con un precio que nadie ha confirmado. */
   catJsonp(gasQS('modo=eol_venta')).then(e=>{
     if(esObjValido(e)){ EOL_VENTA = e; }   // solo de la nube en vivo, sin persistir
   }).catch(()=>{});
@@ -907,6 +944,8 @@ $('btnAdd').onclick = () => {
     vend: currentVend,
     fecha: d.toLocaleDateString('es-MX'),
     hora: d.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}),
+    // De dónde salió la pieza: decide de qué contador se descuenta.
+    exhibicion: $('exhChk').checked === true,
     _foto: lastPhoto
   };
   lastPhoto = null;
@@ -918,10 +957,16 @@ window.finalizarVenta = function(conSeguro){
   if(!_pendingVenta) return;
   const v = _pendingVenta; _pendingVenta = null;
   const item = { id:v.id, serie:v.serie, sku:v.sku, precio:v.precio,
-    desc:v.desc, vend:v.vend, fecha:v.fecha, hora:v.hora, seguro:conSeguro };
+    desc:v.desc, vend:v.vend, fecha:v.fecha, hora:v.hora, seguro:conSeguro,
+    exhibicion: v.exhibicion === true };
   items.unshift(item); save();
+  /* `exhibicion` viaja hasta el final: si se cayera aquí, la venta se guardaría
+     como de bodega y descontaría una caja que sigue en el almacén, dejando
+     además el aparador ocupado por una pieza que ya salió. Es la cadena 1 del
+     MAPA otra vez — lo que no se nombra se pierde en silencio. */
   const pend = { id:item.id, fecha:item.fecha, hora:item.hora, serie:item.serie,
-    sku:item.sku, desc:item.desc, precio:item.precio, vend:item.vend, seguro:item.seguro };
+    sku:item.sku, desc:item.desc, precio:item.precio, vend:item.vend, seguro:item.seguro,
+    exhibicion: item.exhibicion };
   if(v._foto){ photoMap[item.id] = v._foto; pend.foto = true; }
   /* SUPABASE PRIMERO, y por su cuenta (17-ago-2026, fase 5).
 
@@ -940,6 +985,10 @@ window.finalizarVenta = function(conSeguro){
   ['serie','sku','precio','desc'].forEach(f=> $(f).value='');
   tirarBorrador();   // ya está en el reporte: el borrador dejó de servir
   setRecon(true); setPromo(false);
+  /* El interruptor de exhibición se apaga con los campos. Dejarlo encendido
+     cobraría la mitad en la venta siguiente, y eso no lo caza nadie hasta el
+     corte — para entonces ya se fue el cliente. */
+  refrescarExhibicion('');
   toast(conSeguro ? '🛡️ Con Assurant · Agregada ✓' : 'Agregada ✓ · sin seguro', 'ok');
   $('serie').focus();
 };
@@ -1110,9 +1159,46 @@ function precioDeCatalogo_(hit){
   return { precio: hit.p ? String(hit.p).replace(/[^0-9.]/g,'') : '', motivo:'regular', promo:null };
 }
 
+/* El interruptor de «pieza de exhibición» aparece SOLO cuando tiene sentido:
+   este SKU es EOL, le queda pieza de piso y además hay cajas nuevas en bodega
+   (`EOL_EXHIB`). Si no queda bodega, el 50 % ya se aplica solo y preguntar
+   sobraría; si el producto no es EOL, su pieza de piso NO se vende — se queda
+   en el aparador hasta que llegue caja (cadena 5 del MAPA).
+
+   Se llama al reconocer un producto y al cambiar el SKU a mano, para que no se
+   quede encendido de la venta anterior: marcar sin querer la exhibición cobra
+   la mitad, y eso no lo cazaría nadie hasta el corte. */
+function refrescarExhibicion(sku){
+  const px50 = EOL_EXHIB[sku];
+  const hay  = !!px50;
+  $('exhWrap').classList.toggle('show', hay);
+  if(!hay){ $('exhChk').checked = false; return; }
+  $('exhChk').checked = false;              // cada venta empieza en "no"
+}
+
+/* Marcarla cambia el precio al 50 % y lo dice; desmarcarla lo devuelve. */
+window.marcarExhibicion = function(){
+  const sku = $('sku').value.trim();
+  const px50 = EOL_EXHIB[sku];
+  if(!px50) return;
+  if($('exhChk').checked){
+    $('precio').value = String(px50).replace(/[^0-9.]/g,'');
+    setPromo(true, { pr: (CAT_POR_SKU[sku] || {}).p, __eol:true });
+    toast('🏷️ Pieza de exhibición · $' + px50, 'ok');
+  } else {
+    const hit = CAT_POR_SKU[sku];
+    if(hit){
+      const px = precioDeCatalogo_(hit);
+      if(px.precio) $('precio').value = px.precio;
+      setPromo(px.motivo !== 'regular', px.promo);
+    }
+  }
+};
+
 function aplicarProducto(hit){
   $('sku').value  = hit.s || '';
   $('desc').value = hit.d || '';
+  refrescarExhibicion(hit.s);
   const px = precioDeCatalogo_(hit);
   if(px.precio) $('precio').value = px.precio;                          // editable
   if(px.motivo === 'eol'){
@@ -1943,7 +2029,14 @@ reindexarPorSku(); // con lo que haya en caché, antes de que responda la nube
     const val = (inp.value || '').trim();
     if(!val || val === ultimo) return;
     const hit = CAT_POR_SKU[val] || CAT_POR_SKU[val.replace(/^0+/, '')];
-    if(!hit) return;                       // sin coincidencia se queda lo tecleado
+    if(!hit){
+      /* Sin coincidencia se queda lo tecleado, pero el interruptor de
+         exhibición SÍ se apaga: si no, quedaría encendido del producto
+         anterior y esta venta —de otro SKU— se guardaría como pieza de piso,
+         cobrada a la mitad y descontando del aparador equivocado. */
+      refrescarExhibicion('');
+      return;
+    }
     ultimo = val;
     aplicarProducto(hit);
   }
