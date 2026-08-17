@@ -138,11 +138,12 @@ BEGIN
   -- EL CORTE. Va aquí dentro, en la misma transacción que el On Hand: si se
   -- hiciera en otra llamada, una venta que entre en medio se contaría dos veces.
   -- El filtro de entregas de preventa es el MISMO que usa inventario_vivo.
+  -- Solo ventas de BODEGA (17-ago-2026). Una venta marcada como pieza de
+  -- exhibición no debe entrar aquí: si entrara, el corte de On Hand quedaría
+  -- alto y la siguiente venta de bodega no descontaría stock. Ver
+  -- `supabase_venta_exhibicion.sql`.
   INSERT INTO public.inventario_corte (store_id, tipo, sku, vendidas)
-  SELECT p_store, 'onhand', g.sku,
-         (SELECT count(*)::int FROM public.ventas v
-           WHERE v.store_id = p_store AND v.sku = g.sku
-             AND NOT EXISTS (SELECT 1 FROM public.apartados a WHERE a.venta_id = v.id))
+  SELECT p_store, 'onhand', g.sku, public.corte_tomar_(p_store, 'onhand', g.sku)
   FROM _carga g
   ON CONFLICT (store_id, tipo, sku) DO UPDATE
     SET vendidas = excluded.vendidas, tomado_en = now();
@@ -195,11 +196,11 @@ BEGIN
   GET DIAGNOSTICS n = ROW_COUNT;
 
   -- Corte PROPIO, independiente del de On Hand. Ver la cabecera.
+  -- Y solo con las ventas DE EXHIBICIÓN (17-ago-2026): si contara todas, el
+  -- corte quedaría siempre por encima de las marcadas y el aparador no bajaría
+  -- nunca — la marca no serviría de nada, sin dar ningún error.
   INSERT INTO public.inventario_corte (store_id, tipo, sku, vendidas)
-  SELECT p_store, 'exhibicion', e.sku,
-         (SELECT count(*)::int FROM public.ventas v
-           WHERE v.store_id = p_store AND v.sku = e.sku
-             AND NOT EXISTS (SELECT 1 FROM public.apartados a WHERE a.venta_id = v.id))
+  SELECT p_store, 'exhibicion', e.sku, public.corte_tomar_(p_store, 'exhibicion', e.sku)
   FROM _exh e
   ON CONFLICT (store_id, tipo, sku) DO UPDATE
     SET vendidas = excluded.vendidas, tomado_en = now();
