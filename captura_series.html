@@ -1815,8 +1815,22 @@ const VKEY = 'hes1217_vend';
 const DESCARGA_AUTORIZADA = (_cfgCS && _cfgCS.hoja_auth) || '';
 let currentVend = '';
 
+/* Quién puede abrir «Ventas del día». Dos vías, y la segunda se añadió el
+   17-ago-2026 (v176) porque sin ella el trabajo quedaba a medias:
+
+     · `hoja_auth`   — la persona designada para revisar el concentrado
+     · PUEDE_EDITAR  — gerente y subgerente
+
+   El ✏️ para corregir una venta vive DENTRO de este panel. Con solo la primera
+   vía, el subgerente tenía permiso de corregir —`puede_gestionar_` le dice que
+   sí— y ninguna forma de llegar al botón: la lista no se le abría. Una puerta
+   concedía el permiso y la otra lo bloqueaba, sin que nada lo dijera.
+
+   Y al revés también importa: `hoja_auth` puede ser un asesor (hoy lo es), que
+   sigue viendo las ventas para cotejarlas pero NO ve el ✏️. Ver y corregir son
+   dos permisos distintos y se conceden por separado. */
 function updateDownloadAccess(){
-  const ok = currentVend === DESCARGA_AUTORIZADA;
+  const ok = (currentVend === DESCARGA_AUTORIZADA) || PUEDE_EDITAR;
   $('btnCsv').style.display = ok ? '' : 'none';
   $('lockMsg').style.display = ok ? 'none' : '';
 }
