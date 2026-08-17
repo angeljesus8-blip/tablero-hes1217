@@ -309,6 +309,51 @@ const ok = (t, c, extra) => { if(!c) fallos.push(t + (extra ? ' -> ' + extra : '
   }
 }
 
+/* ── 8 · Las entregas se distinguen en «Ventas del día» ─────────────────
+   Una entrega de preventa o traspaso NO es una venta de hoy: el cliente pagó
+   semanas antes, no cuenta para el Assurant, no descuenta stock y no se puede
+   corregir con el ✏️. Sin distintivo, quien cuadra la caja contra el POS busca
+   renglones que no va a encontrar.
+
+   Se comprueba también lo que NO debe pasar: que la venta normal siga siendo
+   la única con ✏️. Las entregas no tienen `captura_id` —las crea
+   `apartado_entregar`, no la app— y por eso el botón no les sale; si algún día
+   lo tuvieran, el servidor las rechaza igual, pero el asesor se llevaría el
+   viaje en balde. */
+{
+  const sub = { empno:'973345', nombre:EQUIPO[1], puesto:'Subgerente de Tienda' };
+  const s = arrancar({ hes_empleado: JSON.stringify(sub) });
+  if(!s.err){
+    s.correr(`
+      _vdVentas = [
+        { serie:'S-NORMAL', sku:'900001', desc:'Venta normal', precio:'1000',
+          vend:'X', hora:'10:00', captura_id:'i1', foto:false, entrega:'' },
+        { serie:'S-PREVENTA', sku:'900002', desc:'Entrega de preventa', precio:'2000',
+          vend:'Y', hora:'11:00', captura_id:'', foto:false, entrega:'preventa' },
+        { serie:'S-TRASPASO', sku:'900003', desc:'Entrega de traspaso', precio:'3000',
+          vend:'Z', hora:'12:00', captura_id:'', foto:false, entrega:'traspaso' }
+      ];
+      _vdFecha = new Date();
+      pintarVentasDia();
+    `);
+    const lista = s.caja.document.getElementById('vdLista').innerHTML || '';
+
+    ok('la entrega de preventa se marca', lista.indexOf('preventa') >= 0);
+    ok('y la de traspaso también, con su propia etiqueta',
+       lista.indexOf('traspaso') >= 0);
+    ok('exactamente dos filas llevan distintivo, no las tres',
+       (lista.match(/vd-ent/g) || []).length === 2,
+       'salieron ' + (lista.match(/vd-ent/g) || []).length);
+    ok('solo la venta normal ofrece el ✏️ de corregir',
+       (lista.match(/abrirEditarVenta/g) || []).length === 1,
+       'salieron ' + (lista.match(/abrirEditarVenta/g) || []).length);
+
+    const pie = s.caja.document.getElementById('vdAyuda').innerHTML || '';
+    ok('y el pie dice cuántas no están en el corte de hoy',
+       pie.indexOf('2 son entregas') >= 0, pie);
+  }
+}
+
 if(fallos.length){
   console.log('cola de ventas: ' + fallos.length + ' fallo(s)');
   fallos.forEach(f => console.log('   · ' + f));
