@@ -487,6 +487,11 @@ let sbPend = [];
 try{ sbPend = JSON.parse(localStorage.getItem(SBQKEY) || '[]') || []; }catch(e){ sbPend = []; }
 function saveSbPend(){ try{ localStorage.setItem(SBQKEY, JSON.stringify(sbPend)); }catch(e){} }   // cuota llena: se reintenta en esta sesión igual
 
+/* El rescate de la cola vieja NO va aquí: `_sbCuerpo` necesita `SB_STORE`, que
+   es un `const` de más abajo, y llamarlo antes lanza ReferenceError. Va al final
+   del archivo, junto al arranque. Ver "Rescate de la cola vieja". */
+const MIGKEY = 'hes1217_cola_a_supabase';
+
 function _sbCuerpo(row){
   return {
     p_store: String(SB_STORE),
@@ -529,11 +534,10 @@ async function _sbInsertar(cuerpo){
   }
 }
 
-async function guardarEnSupabase(row){
-  const cuerpo = _sbCuerpo(row);
-  if(await _sbInsertar(cuerpo)) return;
-  sbPend.push(cuerpo); saveSbPend();
-}
+/* `guardarEnSupabase` se retiró el 17-ago-2026 (fase 5). Era el puente que
+   colgaba del Sheet: `flushCloud` la llamaba tras confirmar. Ahora la venta
+   entra directa a `sbPend` en `finalizarVenta` y sube por `flushSupabase`, sin
+   depender del Apps Script. */
 
 /* La foto, a la base (7-ago-2026). Antes iba a Drive dentro del POST al Apps
    Script; ahora viaja aparte y a Supabase.
@@ -564,21 +568,53 @@ async function subirFoto(capturaId, dataUrl){
   }
 }
 
-/* Se vacía al abrir la app y cuando vuelve la señal, igual que la del Sheet. */
+/* Se vacía al abrir la app y cuando vuelve la señal, igual que la del Sheet.
+
+   DESDE LA FASE 5 ESTA ES LA COLA QUE IMPORTA, y por eso es la que avisa. Una
+   venta que no llegue aquí no cuenta para el stock, ni para el Assurant, ni
+   para las comisiones — aunque sí esté en la hoja. El aviso era del Sheet
+   cuando el Sheet era la verdad; se mueve con ella. */
 let _sbFlushing = false;
 async function flushSupabase(){
   if(_sbFlushing || !sbPend.length) return;
   _sbFlushing = true;
   try{
     while(sbPend.length){
-      if(!(await _sbInsertar(sbPend[0]))) break;   // sigue sin poder: se conserva
+      const cuerpo = sbPend[0];
+      if(!(await _sbInsertar(cuerpo))) break;      // sigue sin poder: se conserva
+      /* La foto se agarra ANTES de sacar la venta de la cola y se sube sin
+         await: una foto que no sube es una molestia —esa caja no se podrá
+         cotejar—, una venta que espera por ella es dinero que no se cuenta. */
+      const id = cuerpo.p_captura_id;
+      const foto = (id && photoMap[id]) ? photoMap[id] : null;
+      if(foto) delete photoMap[id];
       sbPend.shift(); saveSbPend();
+      if(foto) subirFoto(id, foto);
+      avisoPendientes(sbPend.length ? sbPend.length + ' venta(s) por guardar…' : '');
+    }
+    if(sbPend.length){
+      const fallo = (window._sbFallos || []).slice(-1)[0];
+      avisoPendientes(sbPend.length + ' venta(s) SIN GUARDAR — '
+        + ((fallo && fallo.motivo) || 'sin conexión')
+        + '. No se han perdido: se reintentan al reabrir la app.');
     }
   } finally { _sbFlushing = false; }
 }
 window.addEventListener('online', flushSupabase);
 
-// Envía al concentrado las capturas pendientes (reintenta si no hay señal)
+/* Envía al concentrado (la hoja) las capturas pendientes. Reintenta si no hay
+   señal, igual que antes.
+
+   YA NO AVISA AL ASESOR, y esto es deliberado (17-ago-2026, fase 5). Desde que
+   Supabase es la fuente de verdad, una venta que no llegue a la hoja no afecta
+   a nada de lo que se ve en piso: ni al stock, ni al Assurant, ni a las
+   comisiones. Alarmar por eso enseña al equipo a ignorar el aviso, justo antes
+   de la fase 6, cuando esta cola desaparezca.
+
+   Pero no se calla del todo, que sería un fallo invisible: si la hoja deja de
+   recibir ventas, lo dice `comparar_ventas_diario` a la mañana siguiente, en
+   `ventas_comparacion` — y ahí sale como `faltan`, con las series. Ese es el
+   canal que alguien lee de verdad; el banner del celular no lo era. */
 async function flushCloud(){
   if(!CLOUD_URL || flushing || !pending.length) return;
   flushing = true;
@@ -599,29 +635,14 @@ async function flushCloud(){
       let r = null;
       try{ r = JSON.parse(await res.text()); }catch(e){}   // r queda null y se maneja abajo
       if(!res.ok || !r || r.ok === false){
-        const causa = (r && r.error) ? r.error : ('HTTP ' + res.status);
-        avisoPendientes(pending.length + ' captura(s) sin subir — ' + causa
-          + '. No se han perdido: se reintentan al reabrir la app.');
         break;                                   // no vaciar la cola a ciegas
       }
-      // Se guarda ANTES de vaciar photoMap: la foto se sube a Supabase abajo y
-      // para entonces ya no estaría.
-      const fotoDeEsta = (row.foto && photoMap[row.id]) ? photoMap[row.id] : null;
-      if(row.foto) delete photoMap[row.id];
       pending.shift(); savePending();            // el servidor confirmó
-      // FASE 3 · la misma venta, además, a Supabase. Va DESPUÉS de que el Sheet
-      // confirme y sin await: el Sheet es la fuente de verdad y esto no puede
-      // retrasar ni condicionar la cola. Si falla, la venta ya está guardada.
-      guardarEnSupabase(row);
-      // Y la foto, con el mismo id de captura que liga la venta. Sin await: una
-      // foto no puede hacer esperar a la siguiente venta de la cola.
-      if(fotoDeEsta) subirFoto(row.id, fotoDeEsta);
-      avisoPendientes(pending.length ? pending.length + ' captura(s) por subir…' : '');
+      /* La venta y la foto YA NO cuelgan de aquí (17-ago-2026, fase 5). Van por
+         la cola de Supabase, que corre en paralelo y no espera a esta. */
     }
   }catch(e){
-    // Aquí sí suele ser falta de señal: la cola se conserva y se reintenta.
-    avisoPendientes(pending.length + ' captura(s) sin subir (sin conexión). '
-      + 'Se reintentan solas; no cierres sesión.');
+    // Sin señal: la cola se conserva y se reintenta sola.
   }
   finally{ flushing = false; }
 }
@@ -890,12 +911,12 @@ function eliminarDeNube(id){
   sbPend = sbPend.filter(c => c.p_captura_id !== id);
   saveSbPend();
 
-  // Siempre avisa al servidor: si la fila ya subió la borra, si no existe no hace nada.
-  // Si esto falla, la captura desaparece de aquí pero SIGUE en la hoja: hay que
-  // decirlo, o el conteo del día queda descuadrado sin que nadie sepa por qué.
-  gasEnviar({tipo:'eliminar', id}).catch(e => {
-    toast('Se borró aquí, pero sigue en la hoja · ' + (e && e.message ? e.message : 'sin conexión'), 'warn');
-  });
+  /* Al Apps Script también, mientras dure la doble escritura. Ya NO se avisa si
+     falla: desde la fase 5 la hoja no decide nada que se vea en piso, y una
+     alarma por algo que no tiene consecuencia enseña a ignorar las alarmas. Si
+     la hoja se quedara con la fila, sale al día siguiente en `ventas_comparacion`
+     como `sobran`. Esta línea entera desaparece en la fase 6. */
+  gasEnviar({tipo:'eliminar', id}).catch(function(){});   // sin consecuencia visible: lo reporta la comparación nocturna
 
   /* Y a Supabase, que hasta el 7-ago-2026 no se enteraba.
      El alta tenía doble escritura desde la fase 3 y el borrado no, así que una
@@ -956,6 +977,19 @@ window.finalizarVenta = function(conSeguro){
   const pend = { id:item.id, fecha:item.fecha, hora:item.hora, serie:item.serie,
     sku:item.sku, desc:item.desc, precio:item.precio, vend:item.vend, seguro:item.seguro };
   if(v._foto){ photoMap[item.id] = v._foto; pend.foto = true; }
+  /* SUPABASE PRIMERO, y por su cuenta (17-ago-2026, fase 5).
+
+     Hasta v168 la venta iba al Sheet y solo llegaba a Supabase SI el Sheet
+     confirmaba (`flushCloud` la pasaba al final). O sea que Supabase dependía
+     del Apps Script: con el GAS caído no entraba nada aquí, y como el stock del
+     tablero se calcula descontando de la tabla `ventas` DE SUPABASE, el
+     inventario dejaba de descontar sin que nada lo dijera.
+
+     Ahora son dos colas independientes: ninguna espera a la otra y ninguna
+     puede tumbar a la otra. La de Supabase es la que manda —de ella salen el
+     stock, el Assurant y las comisiones—; la del Sheet queda de respaldo
+     mientras dure la doble escritura, y es lo que se borrará en la fase 6. */
+  sbPend.push(_sbCuerpo(pend)); saveSbPend(); flushSupabase();
   pending.push(pend);
   savePending(); flushCloud();
   render();
@@ -1331,7 +1365,10 @@ function marcarCopiada(fechaTxt, serie){
 
 $('btnCsv').onclick = async () => {
   if(currentVend !== DESCARGA_AUTORIZADA){ toast('No tienes permiso para ver las ventas', 'warn'); return; }
-  await flushCloud();                       // primero sube lo que falte de este teléfono
+  /* Primero sube lo que falte de este teléfono, y a SUPABASE: el panel de abajo
+     lee `ventas_detalle` de ahí desde el 7-ago. Esperar al Sheet mostraba la
+     lista sin la venta que se acababa de capturar. */
+  await flushSupabase();
   $('vdPanel').classList.add('show');
   cargarVentasDia(new Date());
 };
@@ -1699,8 +1736,46 @@ function refreshGid(){
   document.head.appendChild(sc);
 }
 
-flushCloud();      // sube al concentrado lo que haya quedado pendiente
-flushSupabase();   // y lo que no llegó a Supabase, para que el stock cuadre
+/* ── Rescate de la cola vieja al pasar a la fase 5 (17-ago-2026) ──────────
+   Hasta v168 una venta llegaba a Supabase SOLO después de que el Sheet la
+   confirmara. O sea que lo que hay en `pending` es, por definición, exactamente
+   lo que NO está en Supabase.
+
+   Sin esto, el teléfono que actualice con capturas en cola las subiría a la
+   hoja —donde ya nadie mira— y jamás aquí: ventas que no descuentan stock, no
+   cuentan para el Assurant y no pagan comisión, sin un solo aviso. Es el fallo
+   que costó un día de ventas el 1-ago, con otro disfraz.
+
+   VA AL FINAL A PROPÓSITO: `_sbCuerpo` usa `SB_STORE`, un `const` declarado
+   cientos de líneas más arriba de donde estaba esto al principio. Un `const` no
+   se eleva, así que lanzaba ReferenceError y el `catch` lo tragaba entero: la
+   migración no hacía nada y no lo decía. Lo cazó `pruebas/cola_ventas.js`.
+
+   Corre UNA vez: si corriera en cada arranque, cada venta atascada en la cola
+   del Sheet se reencolaría aquí sin parar. Re-insertar no duplicaría datos
+   —`venta_guardar` responde ok+duplicada— pero la cola no bajaría nunca. */
+try{
+  if(!localStorage.getItem(MIGKEY)){
+    const yaEnCola = {};
+    sbPend.forEach(function(c){ if(c && c.p_captura_id) yaEnCola[c.p_captura_id] = true; });
+    let rescatadas = 0;
+    pending.forEach(function(row){
+      if(row && row.id && yaEnCola[row.id]) return;   // ya estaba encolada aquí
+      sbPend.push(_sbCuerpo(row)); rescatadas++;
+    });
+    if(rescatadas) saveSbPend();
+    localStorage.setItem(MIGKEY, String(Date.now()));
+  }
+}catch(e){
+  /* No se calla: si esto falla, hay ventas que existen solo en la hoja y nadie
+     lo sabría. Queda el rastro donde ya se miran los fallos de Supabase, y la
+     marca NO se pone, así que se reintenta en el siguiente arranque. */
+  window._sbFallos = window._sbFallos || [];
+  window._sbFallos.push({ serie:'(rescate de cola)', motivo: (e && e.message) || 'error' });
+}
+
+flushSupabase();   // primero lo que decide el stock, el Assurant y las comisiones
+flushCloud();      // y después el respaldo a la hoja, que ya no condiciona nada
 reindexarPorSku(); // con lo que haya en caché, antes de que responda la nube
 
 /* Teclear el SKU autollena descripción y precio, igual que escanear el código.
