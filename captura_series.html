@@ -111,6 +111,18 @@
   /* ---- Ver la foto de una captura ---- */
   .vd-lupa{ background:none; border:none; font-size:17px; padding:0 8px; cursor:pointer;
     line-height:1; flex-shrink:0; }
+  /* Corregir una venta (17-ago-2026) */
+  .ed-l{ display:block; font-size:12px; font-weight:700; color:var(--gris);
+    margin:12px 0 4px; text-transform:uppercase; letter-spacing:.03em; }
+  .ed-i{ width:100%; padding:11px 12px; border:1.5px solid #ddd; border-radius:9px;
+    font-size:15px; font-family:inherit; background:#fff; color:#222; }
+  .ed-i:focus{ outline:none; border-color:var(--azul); }
+  .ed-seg{ display:flex; gap:8px; }
+  .ed-seg button{ flex:1; padding:11px 8px; border-radius:9px; font-size:14px;
+    font-weight:700; font-family:inherit; cursor:pointer; border:1.5px solid #ddd;
+    background:#fff; color:#777; }
+  .ed-seg button.on{ border-color:var(--verde); background:#eaf7ee; color:#1c6b34; }
+  .ed-seg button.on.no{ border-color:var(--gris); background:#f0f0f0; color:#555; }
   .foto-modal{ position:fixed; inset:0; z-index:300; background:rgba(0,0,0,.72);
     display:flex; align-items:center; justify-content:center; padding:16px; }
   .foto-box{ background:#fff; border-radius:14px; max-width:560px; width:100%;
@@ -1363,12 +1375,129 @@ function pintarVentasDia(){
         </div>
         ${v.foto ? `<button class="vd-lupa" title="Ver la foto de esta captura"
              onclick="event.stopPropagation(); verFoto('${v.captura_id}','${(v.serie||'').replace(/'/g,'')}')">🔍</button>` : ''}
+        ${PUEDE_EDITAR && v.captura_id ? `<button class="vd-lupa" title="Corregir esta venta"
+             onclick="event.stopPropagation(); abrirEditarVenta(${i})">✏️</button>` : ''}
         <div class="vd-check">✓</div>
       </div>`).join('')
     : `<div class="vd-vacio">Sin ventas registradas ${fechaBonita(dia) === 'hoy' ? 'hoy' : 'el ' + fechaBonita(dia)}.</div>`;
   vdBotonesNav(true);
   vdContar();
 }
+
+/* ---------- Corregir una venta (17-ago-2026) ----------
+   Lo último que se hacía en la hoja de cálculo. Desde la fase 6 la hoja no
+   recibe ventas, así que una captura equivocada no tenía dónde arreglarse.
+
+   Vive aquí y no en Admin porque la lista ya está aquí: con navegación por
+   días, la foto y el `captura_id`, que es lo único que identifica la fila.
+   Construirla otra vez en Admin serían dos listas, y una se quedaría atrás.
+
+   El formulario manda SIEMPRE los siete campos, no solo los tocados: así no
+   hay que distinguir "no lo toques" de "ponlo vacío", que es la clase de
+   ambigüedad con la que se borran datos sin querer. */
+let _edIdx = null, _edSeguro = null, _edSkuOriginal = '';
+
+window.abrirEditarVenta = function(i){
+  const v = _vdVentas[i];
+  if(!v || !v.captura_id) return;
+  _edIdx = i;
+  _edSkuOriginal = v.sku || '';
+  $('edSerie').value  = v.serie || '';
+  $('edSku').value    = v.sku || '';
+  $('edDesc').value   = v.desc || '';
+  $('edPrecio').value = String(v.precio || '').replace(/[^0-9.]/g,'');
+
+  /* El vendedor, de la lista del equipo. Escribirlo a mano parte a un asesor en
+     dos personas en el leaderboard y en comisiones — la misma razón por la que
+     `vendedorDeLaSesion` respeta la grafía de la lista. Si el que traía la
+     venta ya no está en el equipo, se conserva como opción para no perderlo. */
+  const opciones = VENDEDORES.slice();
+  if(v.vend && opciones.indexOf(v.vend) < 0) opciones.unshift(v.vend);
+  $('edVend').innerHTML = opciones.map(function(n){
+    return '<option' + (n === v.vend ? ' selected' : '') + '>' + esc(n) + '</option>';
+  }).join('');
+
+  const d = _vdFecha || new Date();
+  $('edFecha').value = d.getFullYear() + '-' +
+    String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+
+  /* El seguro arranca en lo que diga la venta. `null` (ventas viejas sin dato)
+     NO se convierte en `false`: son cosas distintas y confundirlas hunde el
+     attach. Se deja sin marcar y no se puede guardar hasta elegir. */
+  edSeguro(typeof v.seguro === 'boolean' ? v.seguro : null);
+
+  $('edError').style.display = 'none';
+  $('edAvisoSku').style.display = 'none';
+  $('modalEdit').classList.add('show');
+};
+
+window.cerrarEditarVenta = function(){
+  $('modalEdit').classList.remove('show');
+  _edIdx = null;
+};
+
+/* El SKU es el único campo que mueve stock, así que se avisa EN EL MOMENTO de
+   tocarlo y no al guardar: en un formulario con siete campos, un aviso al final
+   no se relaciona con el campo que lo provocó.
+
+   Va como `oninput` en el HTML y NO como addEventListener aquí: este <script>
+   termina antes de que exista el <div> del modal, así que `$('edSku')` sería
+   null al cargar y `null.addEventListener` tumbaría la app entera al arrancar
+   — no el modal, la captura completa. Es el mismo orden que ya respetan todos
+   los paneles de este archivo, que solo se tocan dentro de funciones. */
+window.edMirarSku = function(){
+  $('edAvisoSku').style.display =
+    ($('edSku').value.trim() !== String(_edSkuOriginal || '').trim()) ? 'block' : 'none';
+};
+
+window.edSeguro = function(val){
+  _edSeguro = val;
+  $('edSegSi').className = val === true ? 'on' : '';
+  $('edSegNo').className = val === false ? 'on no' : '';
+};
+
+window.guardarEdicionVenta = async function(){
+  if(_edIdx === null) return;
+  const v = _vdVentas[_edIdx];
+  const err = (m) => { const e = $('edError'); e.textContent = m; e.style.display = 'block'; };
+  $('edError').style.display = 'none';
+
+  const serie = $('edSerie').value.trim();
+  if(!serie) return err('La serie no puede quedar vacía.');
+  if(_edSeguro !== true && _edSeguro !== false)
+    return err('Marca si el equipo lleva seguro o no. Es el KPI de Assurant y no puede quedar a medias.');
+
+  const btn = $('edGuardar');
+  btn.disabled = true; btn.textContent = 'Guardando…';
+  try{
+    const d = await sbCallCS('venta_editar', {
+      p_token: GAS_TOKEN, p_captura_id: v.captura_id,
+      p_serie: serie,
+      p_sku:   $('edSku').value.trim(),
+      p_desc:  $('edDesc').value.trim(),
+      p_precio: Number($('edPrecio').value.replace(/[^0-9.]/g,'')) || null,
+      p_vendedor: $('edVend').value,
+      p_seguro: _edSeguro,
+      p_fecha: $('edFecha').value || null,
+      p_quien: MI_EMPNO
+    }, 15000);
+
+    /* Un guardado que no guarda tiene el mismo aspecto que uno que sí. Si la
+       nube no confirma, se dice y el modal SE QUEDA ABIERTO con lo tecleado:
+       cerrarlo daría por hecho que quedó, y la corrección se perdería. */
+    if(!d || d.ok !== true)
+      return err((d && d.error) || 'No se pudo guardar. Revisa la conexión e inténtalo otra vez.');
+
+    cerrarEditarVenta();
+    toast(d.cambio_sku ? 'Venta corregida · revisa el stock de los dos SKU'
+                       : 'Venta corregida ✓', 'ok');
+    cargarVentasDia(_vdFecha || new Date());   // se recarga de la nube, no de memoria
+  }catch(e){
+    err('No se pudo guardar · ' + ((e && e.message) || 'sin conexión'));
+  }finally{
+    btn.disabled = false; btn.textContent = 'Guardar cambios';
+  }
+};
 
 /* ---------- Ver la foto de una captura ----------
    Esto es lo que las fotos no tenían: una forma de mirarlas. Se subían a Drive,
@@ -1590,6 +1719,33 @@ function _sinAcentos(s){
   return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'')
          .toLowerCase().replace(/\s+/g,' ').trim();
 }
+/* ¿Quien está usando esta pantalla lleva la tienda? (17-ago-2026)
+   Decide quién ve el ✏️ para corregir una venta.
+
+   MISMO criterio que `esPuestoDeGestion_` en tablero.html, a propósito: dos
+   ideas de "quién manda" acaban separándose, y entonces la misma persona puede
+   editar en una pantalla y no en la otra sin que nadie entienda por qué. Si se
+   cambia allí, se cambia aquí.
+
+   Sin puesto se cae en el rol, igual que el tablero: es el gerente dueño, que
+   entra con el correo de la tienda y no tiene ficha de empleado. Un asesor
+   nunca llega con rol de gerente.
+
+   Y esto ESCONDE, no impide: el servidor comprueba el puesto por número de
+   empleado en `venta_editar`, y toda corrección queda en `ventas_ediciones`. */
+const _PUESTOS_GESTION_CS = ['gerente', 'subgerente'];
+function _esGestionCS(puesto){
+  const p = String(puesto || '').toLowerCase()
+              .normalize('NFD').replace(new RegExp('[\\u0300-\\u036f]','g'), '').trim();
+  return _PUESTOS_GESTION_CS.some(function(x){ return p.indexOf(x) === 0; });
+}
+let _empCS = null;
+try{ _empCS = JSON.parse(localStorage.getItem('hes_empleado')||'null'); }catch(e){}   // sesión ilegible: se cae en el rol, como el tablero
+const MI_EMPNO = (_empCS && _empCS.empno) ? String(_empCS.empno) : '';
+const PUEDE_EDITAR = (_empCS && _empCS.puesto)
+  ? _esGestionCS(_empCS.puesto)
+  : (localStorage.getItem('hes_role') === 'gerente');
+
 function vendedorDeLaSesion(){
   let emp = null;
   try{ emp = JSON.parse(localStorage.getItem('hes_empleado')||'null'); }
@@ -1748,6 +1904,51 @@ refreshEolVenta(); // trae los EOL con 50% activo (solo exhibición)
       <div id="vdAyuda" style="font-size:12.5px;color:var(--gris);text-align:center;line-height:1.45">
         Haz clic en una serie para copiarla
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Corregir una venta. Lo último que se hacía en la hoja (17-ago-2026). -->
+<!-- z-index por encima del panel de Ventas del día (.vd = 70): este modal se
+     abre ENCIMA de esa lista, no debajo. -->
+<div id="modalEdit" class="vd" style="z-index:80">
+  <div class="vd-box" style="max-height:92vh">
+    <div class="vd-top">
+      <h2>Corregir venta</h2>
+      <button class="vd-cerrar" onclick="cerrarEditarVenta()" aria-label="Cerrar">×</button>
+    </div>
+    <div class="vd-lista" style="padding:14px 16px">
+      <label class="ed-l">Número de serie</label>
+      <input id="edSerie" class="ed-i" autocapitalize="characters" autocomplete="off">
+      <label class="ed-l">SKU</label>
+      <input id="edSku" class="ed-i" inputmode="numeric" autocomplete="off" oninput="edMirarSku()">
+      <label class="ed-l">Descripción</label>
+      <input id="edDesc" class="ed-i" autocomplete="off">
+      <label class="ed-l">Precio</label>
+      <input id="edPrecio" class="ed-i" inputmode="decimal" autocomplete="off">
+      <label class="ed-l">Vendedor</label>
+      <select id="edVend" class="ed-i"></select>
+      <label class="ed-l">Fecha de la venta</label>
+      <input id="edFecha" class="ed-i" type="date">
+      <label class="ed-l">Seguro Assurant</label>
+      <div class="ed-seg">
+        <button type="button" id="edSegSi" onclick="edSeguro(true)">🛡️ Con seguro</button>
+        <button type="button" id="edSegNo" onclick="edSeguro(false)">Sin seguro</button>
+      </div>
+      <!-- Solo aparece si se toca el SKU: es el único campo que mueve stock. -->
+      <div id="edAvisoSku" style="display:none;margin-top:12px;padding:10px 12px;
+           border-radius:9px;border-left:4px solid var(--naranja);background:#fff6ee;
+           font-size:12.5px;line-height:1.45;color:#8a4b1f">
+        Al cambiar el SKU se corrige también el inventario de los <b>dos</b>
+        productos. Comprueba el stock de ambos después.
+      </div>
+      <div id="edError" style="display:none;margin-top:12px;padding:10px 12px;
+           border-radius:9px;border-left:4px solid var(--rojo);background:#fdeaea;
+           font-size:12.5px;line-height:1.45;color:#8a1f1f"></div>
+    </div>
+    <div class="vd-pie" style="display:flex;gap:10px;padding:12px 16px">
+      <button class="btn" style="flex:1;background:#eee;color:#444" onclick="cerrarEditarVenta()">Cancelar</button>
+      <button class="btn" style="flex:2" id="edGuardar" onclick="guardarEdicionVenta()">Guardar cambios</button>
     </div>
   </div>
 </div>
