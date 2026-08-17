@@ -21,8 +21,8 @@ no solo el archivo que tocaste.
 | `horarios.html` | Planeador semanal. **Copia — no se edita aquí** (ver Cadena 7) | Gerente y equipo |
 | `sw.js` | Service worker. **Aquí vive la versión de la app** | Los 7 html |
 | `datos.js` | Vacío a propósito. Solo estructura | `tablero.html` |
-| Apps Script | 14 modos por `doGet` + guardar ventas por `doPost`. **Ya no la preventa** (cadena 6-ter) | Todas |
-| Supabase | Las 11 tablas. **Fuente única de apartados** desde el 7-ago | Todas |
+| Apps Script | **Solo LECTURAS de respaldo** (catálogo, promos, eol_venta). Ya no recibe ni una escritura desde el 17-ago | Captura y tablero, como último recurso |
+| Supabase | Las 11 tablas. **Fuente única de todo** desde el 17-ago | Todas |
 
 ---
 
@@ -122,14 +122,23 @@ asesor y no acabe en «ya no se maneja en la tienda» — pasar de *«se consigu
 
 ---
 
-## Cadena 2 · Escrituras al Apps Script
+## Cadena 2 · Escrituras al Apps Script — **ya no queda ninguna** *(17-ago-2026, v170)*
 
 ```
-tablero.html      → eol_add                    (manda pin=TIENDA_ID)
-captura_series    → guardar y eliminar venta   (POST)
-admin.html        → comisiones, bundles, avisos, notificar
-actualizar_datos  → catalogo, catalogo_ref, exhibicion, promos
+tablero.html      → eol_add                    ✗ migrado (v125)
+captura_series    → guardar y eliminar venta   ✗ migrado (v170)  ← el último
+admin.html        → comisiones, bundles, avisos, notificar   ✗ migrado (v125/v134)
+actualizar_datos  → catalogo, catalogo_ref, exhibicion, promos ✗ migrado (v127)
 ```
+
+**La hoja quedó de solo lectura, con su histórico hasta el 17-ago-2026.** Nada
+depende de ella. Lo que sigue viviendo del Apps Script son lecturas de respaldo
+—catálogo, promos, `eol_venta`— y se quedan a propósito: una promo de hace unos
+días casi siempre sigue vigente, y quedarse sin precios deja al asesor sin poder
+vender. El dato viejo hace daño en el stock, no en el precio.
+
+Lo que sigue vale como historia de cómo se llegó aquí, y porque el candado del
+token sigue protegiendo esas lecturas.
 
 ⚠️ **`apartado_add` salió de esta lista el 7-ago-2026.** La preventa ya no pasa
 por aquí: ver la cadena 6-ter. Los tres modos de apartados siguen existiendo en
@@ -231,6 +240,35 @@ lado lo que se escribe en el otro.
 
 Reintentar es seguro: `venta_guardar` responde `ok+duplicada` ante una serie
 repetida el mismo día, así que nunca duplica una venta.
+
+### La hoja dejó de recibir ventas *(17-ago-2026, v170 — fase 6)*
+
+Se apagó el mismo día que se invirtió el flujo, por decisión de Ángel, sabiendo
+que la evidencia medida era del flujo viejo. Es reversible —revertir el commit
+devuelve la doble escritura— y no borra nada: la hoja conserva su histórico.
+
+Lo que se fue de `captura_series.html`: `gasPost`, `gasEnviar`, la cola
+`hes1217_pending`, `flushCloud`, el `gasEnviar({tipo:'eliminar'})` del borrado y
+`refreshGid` (pedía `modo=estado` en cada arranque solo para armar un enlace a
+Google Sheets que ya nadie abría).
+
+⚠️ **El rescate de la cola vieja NO se fue, y no es residuo.** Un teléfono puede
+pasar semanas sin abrir la app y saltar de v168 a v170 de golpe, con capturas en
+`hes1217_pending`; eso es, por definición, lo que no está en Supabase. Es el
+único código que sigue leyendo esa clave. Se puede borrar cuando conste que los
+seis teléfonos han abierto la app en v169 o posterior.
+
+**Y hubo que desagendar la comparación nocturna en el mismo movimiento**
+(`supabase_apagar_hoja.sql`). Comparaba Supabase contra la hoja; sin hoja que
+reciba, a partir de la noche siguiente habría dicho «no cuadra» todos los días
+con TODAS las ventas como `sobran` — y con razón. Un indicador permanentemente
+en rojo por un motivo correcto deja de mirarse, que es justo antes de que un día
+se ponga rojo de verdad. Por lo mismo se retiró `revisarCuadre` de Admin, que lo
+preguntaba en cada apertura.
+
+`ventas_comparacion` se conserva entera: es la prueba de los 12 días —65 ventas
+cotejadas, cero faltantes— que autorizaron apagar. Borrarla sería tirar la única
+evidencia de que la decisión estaba fundada.
 
 ### La venta ya no pasa por la hoja para llegar aquí *(17-ago-2026, v169)*
 
@@ -1082,10 +1120,15 @@ Estado por fases, en `MIGRACION_PLAN.md`:
 | Fase | Estado |
 |---|---|
 | 1 · datos y paridad | ✅ cerrada el 4-ago con datos del mismo momento |
-| 2 · lecturas | ✅ tablero y captura (v115) · falta admin/comisiones |
-| 3 · ventas, doble escritura | ✅ **cada venta va a los dos lados (v115)** |
-| 4 · fotos, autollenado, edición | 🔨 en curso · **preventa cerrada (v124)**, ver cadena 6-ter |
-| 5 · retirar el Apps Script | — |
+| 2 · lecturas | ✅ las cinco apps |
+| 3 · ventas, doble escritura | ✅ v115 · **medida y cerrada el 17-ago** |
+| 4 · fotos, autollenado, edición | ✅ salvo **editar una venta**, que no existe |
+| 5 · invertir el flujo | ✅ v169 — Supabase deja de depender del GAS |
+| 6 · retirar la escritura al Apps Script | ✅ **v170, 17-ago-2026** |
+
+**Lo único que sigue haciendo falta de la hoja es editar una venta a mano.**
+Mientras no exista esa pantalla en Admin, corregir una captura equivocada no
+tiene dónde hacerse. Es el último pendiente real de la migración.
 
 **La fase 4 se está haciendo por bloques, no de un salto** *(decidido el
 7-ago-2026)*. El primero fue la preventa, porque el embarque de la Pura 90S
