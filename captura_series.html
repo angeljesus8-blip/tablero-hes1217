@@ -1090,19 +1090,36 @@ function setPromo(on, promo){
    promoción, y la promoción sobre el precio regular.
    Se extrajo de routeCode para poder usarla también cuando el asesor teclea el
    SKU a mano, que antes no autollenaba nada. */
+/* La prioridad de precio, en UN SOLO SITIO: EOL al 50% manda sobre promoción, y
+   la promoción sobre el regular (cadena 3 del MAPA).
+
+   Se extrajo el 17-ago-2026 al añadirla también al corregir una venta. Estaba a
+   punto de escribir la misma cadena de ifs allí, y dos copias de "cuál es el
+   precio bueno" acaban separándose: la captura cobraría una cosa y la
+   corrección pondría otra, las dos convencidas de tener razón.
+
+   Devuelve el precio y de dónde sale, para poder decirlo en pantalla.
+   Lo cubre el bloque 4 de `pruebas/cola_ventas.js`, comprobado invirtiendo la
+   prioridad a propósito: cobrar la promo en vez del EOL es cobrarle de más a un
+   cliente con el equipo en la mano. */
+function precioDeCatalogo_(hit){
+  const eol50 = EOL_VENTA[hit.s];
+  if(eol50) return { precio: String(eol50), motivo:'eol', promo:{pr: hit.p, __eol:true} };
+  const promo = promoActiva(hit.s);
+  if(promo) return { precio: String(promo.pp).replace(/[^0-9.]/g,''), motivo:'promo', promo:promo };
+  return { precio: hit.p ? String(hit.p).replace(/[^0-9.]/g,'') : '', motivo:'regular', promo:null };
+}
+
 function aplicarProducto(hit){
   $('sku').value  = hit.s || '';
   $('desc').value = hit.d || '';
-  if(hit.p) $('precio').value = String(hit.p).replace(/[^0-9.]/g,'');   // editable
-  const eol50 = EOL_VENTA[hit.s];
-  const promo = promoActiva(hit.s);
-  if(eol50){
-    $('precio').value = String(eol50);                                  // solo exhibición
-    setPromo(true, {pr: hit.p, __eol:true});
-    toast('🏷️ EOL −50% · $' + eol50, 'ok');
-  } else if(promo){
-    $('precio').value = String(promo.pp).replace(/[^0-9.]/g,'');
-    setPromo(true, promo);
+  const px = precioDeCatalogo_(hit);
+  if(px.precio) $('precio').value = px.precio;                          // editable
+  if(px.motivo === 'eol'){
+    setPromo(true, px.promo);
+    toast('🏷️ EOL −50% · $' + px.precio, 'ok');
+  } else if(px.motivo === 'promo'){
+    setPromo(true, px.promo);
     toast('🏷️ PROMO ' + (hit.s||''), 'ok');
   } else {
     setPromo(false);
@@ -1472,18 +1489,33 @@ window.edMirarSku = function(){
      A partir de 9 dígitos, que es lo que miden los SKU de Huawei: buscar con
      cada tecla encontraría cualquier cosa a medio teclear.
 
-     EL PRECIO NO SE TOCA a propósito, aunque el catálogo lo tenga. En una
-     venta ya hecha el precio es lo que se le cobró al cliente y está en el
-     ticket; el del catálogo es lo que costaría hoy. Pisarlo cuadraría la
-     pantalla y descuadraría las comisiones contra el POS. Si hay que
-     corregirlo, se escribe a mano, que es una decisión y no un efecto. */
+     El precio también, con la MISMA prioridad que la captura
+     (`precioDeCatalogo_`: EOL 50% > promo > regular), por decisión de Ángel el
+     17-ago-2026.
+
+     ⚠️ Y por eso se avisa cuando la venta NO es de hoy: ese precio es el que
+     estaría vigente HOY, y la promoción de la semana pasada pudo ser otra. Lo
+     que se le cobró al cliente está en el ticket, no en el catálogo de hoy. El
+     campo queda editable y el aviso dice de dónde salió el número, para que
+     nadie lo dé por bueno sin mirar. */
   if(sku.length < 9) return;
   const hit = CAT_POR_SKU[sku] || CAT_POR_SKU[sku.replace(/^0+/, '')];
   if(hit && hit.d){
     $('edDesc').value = hit.d;
-    $('edAvisoSku').innerHTML = 'Ahora es <b>' + esc(hit.d) + '</b>.<br>'
-      + 'Al cambiar el SKU se corrige también el inventario de los <b>dos</b> '
-      + 'productos. El precio no se toca: es lo que se cobró.';
+    const px = precioDeCatalogo_(hit);
+    if(px.precio) $('edPrecio').value = px.precio;
+    const deDonde = px.motivo === 'eol'   ? ' (EOL −50%)'
+                  : px.motivo === 'promo' ? ' (precio de promoción)'
+                  : '';
+    // ¿La venta es de hoy? Si no, el precio de hoy puede no ser el que se cobró.
+    const hoy = new Date();
+    const esDeHoy = $('edFecha').value === (hoy.getFullYear() + '-'
+      + String(hoy.getMonth()+1).padStart(2,'0') + '-' + String(hoy.getDate()).padStart(2,'0'));
+    $('edAvisoSku').innerHTML = 'Ahora es <b>' + esc(hit.d) + '</b>'
+      + (px.precio ? ', a <b>$' + Number(px.precio).toLocaleString('es-MX') + '</b>' + deDonde : '')
+      + '.<br>Se corrige también el inventario de los <b>dos</b> productos.'
+      + (esDeHoy ? '' : '<br><b>Ojo:</b> ese precio es el de hoy. Esta venta es de '
+                      + 'otro día — comprueba contra el ticket lo que de verdad se cobró.');
   } else {
     /* Un SKU que no está en el catálogo no es un error —puede ser nuevo— pero
        hay que decirlo: si no, la descripción se queda con la vieja y parece
