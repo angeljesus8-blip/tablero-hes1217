@@ -114,9 +114,10 @@ const ok = (t, c, extra) => { if(!c) fallos.push(t + (extra ? ' -> ' + extra : '
       ok('y con el id de captura, que es lo único que permite borrarla luego',
          !!cola[0].p_captura_id, 'llegó vacío');
     }
-    /* La del Sheet también la recibe: durante la fase 5 siguen las dos, para
-       que la comparación nocturna pueda seguir midiendo. */
-    ok('y el respaldo a la hoja sigue recibiéndola', s.colaGas().length === 1,
+    /* Y a la hoja NO va nada (fase 6, v170). Se comprueba explícitamente: si
+       alguien reintrodujera la doble escritura, volvería a haber dos verdades
+       —que es lo que esta migración vino a resolver— y nada daría error. */
+    ok('y a la hoja ya no se le manda nada', s.colaGas().length === 0,
        'la cola del Sheet quedó con ' + s.colaGas().length);
   }
 }
