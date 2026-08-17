@@ -253,6 +253,12 @@
   .vd-det{ font-size:11.5px; color:var(--gris); margin-top:3px;
     display:flex; gap:8px; flex-wrap:wrap; align-items:baseline; }
   .vd-det .precio{ font-weight:800; color:var(--verde); }
+  /* El SKU, siempre a la vista (17-ago-2026). Antes solo salía cuando faltaba
+     la descripción, que es justo cuando menos sirve: para cotejar contra el POS
+     o para ver si una captura lleva el SKU equivocado hace falta el número. */
+  .vd-det .sku{ font-family:ui-monospace,monospace; font-weight:700; color:#555;
+    background:#f1f1f1; border-radius:5px; padding:1px 5px; letter-spacing:.2px; }
+  .vd-fila.hecha .vd-det .sku{ background:#f7f7f7; color:#cfcfcf; }
   .vd-pie{ padding:12px 18px 16px; border-top:1px solid var(--linea); }
   .vd-vacio{ padding:28px 18px; text-align:center; color:#aaa; font-size:13px; }
 
@@ -1368,7 +1374,8 @@ function pintarVentasDia(){
         <div class="txt">
           <div class="vd-serie">${v.serie}</div>
           <div class="vd-det">
-            <span>${v.desc || 'SKU ' + (v.sku||'—')}</span>
+            <span class="sku">${v.sku || '—'}</span>
+            <span>${v.desc || 'sin descripción'}</span>
             <span class="precio">$${Number(String(v.precio).replace(/[^0-9.]/g,'')||0).toLocaleString('es-MX')}</span>
             ${v.vend ? '<span>· ' + v.vend + '</span>' : ''}
           </div>
@@ -1396,6 +1403,8 @@ function pintarVentasDia(){
    hay que distinguir "no lo toques" de "ponlo vacío", que es la clase de
    ambigüedad con la que se borran datos sin querer. */
 let _edIdx = null, _edSeguro = null, _edSkuOriginal = '';
+const AVISO_SKU_BASE = 'Al cambiar el SKU se corrige también el inventario de '
+  + 'los <b>dos</b> productos. Comprueba el stock de ambos después.';
 
 window.abrirEditarVenta = function(i){
   const v = _vdVentas[i];
@@ -1427,6 +1436,10 @@ window.abrirEditarVenta = function(i){
   edSeguro(typeof v.seguro === 'boolean' ? v.seguro : null);
 
   $('edError').style.display = 'none';
+  /* El texto se reinicia, no solo se esconde: `edMirarSku` lo reescribe con el
+     producto que encontró, y sin esto la siguiente venta que se abriera
+     arrastraría el mensaje de la anterior — diciendo el nombre de otro equipo. */
+  $('edAvisoSku').innerHTML = AVISO_SKU_BASE;
   $('edAvisoSku').style.display = 'none';
   $('modalEdit').classList.add('show');
 };
@@ -1446,8 +1459,38 @@ window.cerrarEditarVenta = function(){
    — no el modal, la captura completa. Es el mismo orden que ya respetan todos
    los paneles de este archivo, que solo se tocan dentro de funciones. */
 window.edMirarSku = function(){
-  $('edAvisoSku').style.display =
-    ($('edSku').value.trim() !== String(_edSkuOriginal || '').trim()) ? 'block' : 'none';
+  const sku = $('edSku').value.trim();
+  const cambio = sku !== String(_edSkuOriginal || '').trim();
+  $('edAvisoSku').style.display = cambio ? 'block' : 'none';
+  if(!cambio) return;
+
+  /* La descripción se rellena sola con el SKU nuevo, del MISMO índice que usa
+     la captura (`CAT_POR_SKU`, con el respaldo de quitar ceros a la izquierda).
+     Sin esto, corregir el SKU dejaba la descripción del producto equivocado y
+     la venta quedaba diciendo dos cosas distintas.
+
+     A partir de 9 dígitos, que es lo que miden los SKU de Huawei: buscar con
+     cada tecla encontraría cualquier cosa a medio teclear.
+
+     EL PRECIO NO SE TOCA a propósito, aunque el catálogo lo tenga. En una
+     venta ya hecha el precio es lo que se le cobró al cliente y está en el
+     ticket; el del catálogo es lo que costaría hoy. Pisarlo cuadraría la
+     pantalla y descuadraría las comisiones contra el POS. Si hay que
+     corregirlo, se escribe a mano, que es una decisión y no un efecto. */
+  if(sku.length < 9) return;
+  const hit = CAT_POR_SKU[sku] || CAT_POR_SKU[sku.replace(/^0+/, '')];
+  if(hit && hit.d){
+    $('edDesc').value = hit.d;
+    $('edAvisoSku').innerHTML = 'Ahora es <b>' + esc(hit.d) + '</b>.<br>'
+      + 'Al cambiar el SKU se corrige también el inventario de los <b>dos</b> '
+      + 'productos. El precio no se toca: es lo que se cobró.';
+  } else {
+    /* Un SKU que no está en el catálogo no es un error —puede ser nuevo— pero
+       hay que decirlo: si no, la descripción se queda con la vieja y parece
+       que el autollenado "no funcionó". */
+    $('edAvisoSku').innerHTML = 'Ese SKU no está en el catálogo, así que la '
+      + 'descripción no se rellenó sola. Compruébala antes de guardar.';
+  }
 };
 
 window.edSeguro = function(val){
