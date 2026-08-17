@@ -1420,7 +1420,7 @@ function marcarCopiada(fechaTxt, serie){
 }
 
 $('btnCsv').onclick = async () => {
-  if(currentVend !== DESCARGA_AUTORIZADA){ toast('No tienes permiso para ver las ventas', 'warn'); return; }
+  if(!puedeVerVentas_()){ toast('No tienes permiso para ver las ventas', 'warn'); return; }
   /* Primero sube lo que falte de este teléfono, y a SUPABASE: el panel de abajo
      lee `ventas_detalle` de ahí desde el 7-ago. Esperar al Sheet mostraba la
      lista sin la venta que se acababa de capturar. */
@@ -1851,8 +1851,15 @@ let currentVend = '';
    Y al revés también importa: `hoja_auth` puede ser un asesor (hoy lo es), que
    sigue viendo las ventas para cotejarlas pero NO ve el ✏️. Ver y corregir son
    dos permisos distintos y se conceden por separado. */
+/* UN SOLO PORTERO, igual que `seccionVisible_` en el tablero y por la misma
+   razón: esto lo preguntan DOS sitios —el que enseña el botón y el que responde
+   al clic— y basta cambiar uno para que el botón aparezca y luego diga que no
+   tienes permiso. Pasó el 17-ago-2026, con el gerente delante. */
+function puedeVerVentas_(){
+  return (currentVend === DESCARGA_AUTORIZADA) || PUEDE_EDITAR;
+}
 function updateDownloadAccess(){
-  const ok = (currentVend === DESCARGA_AUTORIZADA) || PUEDE_EDITAR;
+  const ok = puedeVerVentas_();
   $('btnCsv').style.display = ok ? '' : 'none';
   $('lockMsg').style.display = ok ? 'none' : '';
 }
