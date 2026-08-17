@@ -349,6 +349,17 @@ misma transacción. Corregir una etiqueta no cambia cuántas cajas hay en bodega
 completos. Eso es lo que de verdad protege aquí, y lo que no había cuando esto
 se hacía a mano en la hoja: una corrección equivocada se ve y se deshace.
 
+⚠️ **Ver las ventas y corregirlas son DOS permisos, y se estorbaban.** El ✏️
+vive dentro del panel «Ventas del día», que solo abría la persona de
+`hoja_auth`. El subgerente tenía permiso de corregir —`puede_gestionar_` le dice
+que sí— y ninguna forma de llegar al botón: la lista no se le abría. Una puerta
+concedía y la otra bloqueaba, sin decir nada. Desde v176 el panel se abre por
+`hoja_auth` **o** por puesto de gestión.
+
+Y al revés sigue igual: `hoja_auth` es hoy una asesora, que ve las ventas para
+cotejarlas pero NO ve el ✏️. Lo cubre el bloque 7 de `cola_ventas.js`, en las
+dos direcciones.
+
 **Sobre el permiso, sin adornos:** `escritura_ok_` valida el token de TIENDA,
 que es el mismo para todos. `venta_editar` recibe además el número de empleado
 y comprueba el puesto — pero el gerente dueño entra por correo y no tiene ficha

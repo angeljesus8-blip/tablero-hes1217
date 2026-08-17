@@ -281,6 +281,34 @@ const ok = (t, c, extra) => { if(!c) fallos.push(t + (extra ? ' -> ' + extra : '
   }
 }
 
+/* ── 7 · Quien puede corregir, puede llegar a la lista ──────────────────
+   El ✏️ vive DENTRO del panel «Ventas del día», que hasta v175 solo abría la
+   persona designada en `hoja_auth`. O sea que el subgerente tenía permiso de
+   corregir —el servidor se lo concede— y ninguna forma de llegar al botón.
+   Una puerta daba el permiso y la otra lo bloqueaba, sin decir nada.
+
+   Se prueban las dos direcciones: sin ellas, "arreglarlo" abriendo el panel a
+   todos pasaría igual de desapercibido. */
+{
+  const sub = { empno:'973345', nombre:EQUIPO[1], puesto:'Subgerente de Tienda' };
+  const s = arrancar({ hes_empleado: JSON.stringify(sub) });
+  if(!s.err){
+    ok('el subgerente sí puede abrir Ventas del día',
+       s.caja.document.getElementById('btnCsv').style.display !== 'none',
+       'quedó display=' + s.caja.document.getElementById('btnCsv').style.display);
+  }
+}
+{
+  // Asesor que NO es el de `hoja_auth`: sigue sin ver la lista, como siempre.
+  const ases = { empno:'747851', nombre:EQUIPO[0], puesto:'Asesor de Tienda' };
+  const s = arrancar({ hes_empleado: JSON.stringify(ases) });
+  if(!s.err){
+    ok('y un asesor cualquiera sigue sin verla',
+       s.caja.document.getElementById('btnCsv').style.display === 'none',
+       'quedó display=' + s.caja.document.getElementById('btnCsv').style.display);
+  }
+}
+
 if(fallos.length){
   console.log('cola de ventas: ' + fallos.length + ' fallo(s)');
   fallos.forEach(f => console.log('   · ' + f));
