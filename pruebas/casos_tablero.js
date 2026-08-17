@@ -143,3 +143,39 @@ ok('el gerente sí ve la tarjeta de Resurtir',
    app.innerHTML.indexOf("irA('resurtir')") >= 0);
 ok('y el gerente sí ve el botón ✕ EOL',
    rowResurtir(_fila).indexOf('marcarNoResurtir') >= 0);
+
+
+/* ── 8 · El Assurant del día solo se acepta de Supabase (17-ago-2026) ────
+
+   El `modo=todo` del Apps Script trae su propio `ventas_hoy`, sacado de la
+   hoja. Mientras la doble escritura viva, los dos dicen lo mismo; en cuanto se
+   apague, la hoja se queda congelada y esa mitad de la respuesta seguiría
+   llegando —además ~7 s DESPUÉS, o sea pisando la buena.
+
+   Y no daría ningún error: daría un porcentaje. Un attach del 40 % de anteayer
+   se ve exactamente igual de creíble que el de hoy, y es el número que se
+   reporta con meta del 25 %.
+
+   Se comprueban las DOS mitades a propósito. La segunda es la guardia; la
+   primera es que la guardia no se haya pasado de frenada y deje el leaderboard
+   vacío para siempre, que sería cambiar un fallo callado por otro. */
+aplicarTodo(Object.assign(_deSupabase(JSON.parse(JSON.stringify(TIENDA))), { __sb:true }));
+const _attSb = JSON.stringify(VENTAS_NUBE);
+ok('las ventas de Supabase sí se aplican',
+   !!(VENTAS_NUBE && VENTAS_NUBE['Prueba Uno'] && VENTAS_NUBE['Prueba Uno'].c === 2),
+   'llegó ' + _attSb);
+ok('y la carga queda marcada como buena', CARGAS.ventas === 'ok', 'quedó ' + CARGAS.ventas);
+
+/* La guardia, rota a propósito: la misma forma que devuelve el GAS, con otro
+   número y sin la marca `__sb`. Antes del 17-ago esto entraba sin más. */
+aplicarTodo({ ventas_hoy: { vend: { 'Prueba Uno': { c:99, s:0 } } } });
+ok('las ventas del Apps Script NO pisan las de Supabase',
+   JSON.stringify(VENTAS_NUBE) === _attSb,
+   'las pisó: ' + JSON.stringify(VENTAS_NUBE));
+ok('y la carga se marca fallida, para que el banner lo diga',
+   CARGAS.ventas === 'error', 'quedó ' + CARGAS.ventas);
+ok('y el banner la nombra de forma reconocible en piso',
+   CARGA_NOMBRE.ventas.indexOf('Assurant') >= 0);
+
+// Se deja el tablero con los datos buenos, por si mañana alguien añade un caso 9.
+aplicarTodo(Object.assign(_deSupabase(JSON.parse(JSON.stringify(TIENDA))), { __sb:true }));
