@@ -36,13 +36,45 @@ const STORE  = { store_id:'1217', nombre:'Angelopolis', gas_url:'https://gas.exa
                  gas_token:'t', vendedores:EQUIPO };
 const EMP    = { empno:'2', nombre:'Luis de Jesús Ortega Vidal', puesto:'asesor' };
 
+/* ── El DOM respeta el ORDEN del documento ───────────────────────────────
+   El DOM falso de las otras pruebas devuelve un elemento para cualquier id, y
+   eso esconde una clase entera de fallo: tocar durante la carga un elemento
+   que se pinta MÁS ABAJO que el <script>.
+
+   Pasó el 17-ago-2026 al escribir la pantalla de corregir ventas: un
+   `addEventListener` a nivel superior sobre `$('edSku')`, cuyo <div> está 30
+   líneas DESPUÉS del cierre del script. En el navegador eso es null y
+   `null.addEventListener` tumbaba la captura entera al arrancar — no el modal,
+   toda la pantalla. Con el DOM permisivo las pruebas decían "todo en orden".
+
+   No basta con comprobar que el id exista en el HTML: `edSku` existe. Hay que
+   comparar POSICIONES. Durante la carga, un id que aparece después de donde
+   empieza el script principal todavía no está en el documento. Al terminar la
+   carga se levanta la bandera y ya existen todos, como en el navegador. */
+const POS_ID = new Map();
+for(const m of html.matchAll(/\bid="([^"]+)"/g)){
+  if(!POS_ID.has(m[1])) POS_ID.set(m[1], m.index);
+}
+// El bloque de <script> más largo es el principal; los paneles van tras él.
+const POS_SCRIPT = (() => {
+  let mejor = 0, largo = -1;
+  for(const m of html.matchAll(/<script(?![^>]*\ssrc=)(?![^>]*type="module")[^>]*>/g)){
+    const fin = html.indexOf('</script>', m.index);
+    if(fin - m.index > largo){ largo = fin - m.index; mejor = m.index; }
+  }
+  return mejor;
+})();
+
 function arrancar(extraLS){
   const LS = Object.assign({
     hes_store: JSON.stringify(STORE),
     hes_empleado: JSON.stringify(EMP)
   }, extraLS || {});
   const els = {};
+  let cargando = true;          // se baja en cuanto termina de correr el script
   function el(id){
+    // Durante la carga, lo que se pinta por debajo del script todavía no existe.
+    if(cargando && POS_ID.has(id) && POS_ID.get(id) > POS_SCRIPT) return null;
     if(!els[id]) els[id] = {
       id, style:{}, dataset:{}, value:'', textContent:'', children:[],
       innerHTML:'',
@@ -82,6 +114,7 @@ function arrancar(extraLS){
   vm.createContext(caja);
   let err = null;
   try{ vm.runInContext(js, caja, { filename:'captura.js' }); }catch(e){ err = e.message; }
+  cargando = false;   // documento completo: a partir de aquí existe todo
   return { err, LS, els, caja,
            colaSb: () => { try{ return JSON.parse(LS['hes1217_sb_pend'] || '[]'); }catch(e){ return []; } },
            colaGas: () => { try{ return JSON.parse(LS['hes1217_pending'] || '[]'); }catch(e){ return []; } } };
