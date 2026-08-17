@@ -115,7 +115,11 @@ function arrancar(extraLS){
   let err = null;
   try{ vm.runInContext(js, caja, { filename:'captura.js' }); }catch(e){ err = e.message; }
   cargando = false;   // documento completo: a partir de aquí existe todo
-  return { err, LS, els, caja,
+  /* Para tocar las variables del script. Las `let`/`const` de nivel superior no
+     aparecen en el objeto global —solo `var` y las funciones—, pero sí viven en
+     el ámbito léxico del contexto, que otro `runInContext` sí alcanza. */
+  const correr = (codigo) => vm.runInContext(codigo, caja, { filename:'prueba.js' });
+  return { err, LS, els, caja, correr,
            colaSb: () => { try{ return JSON.parse(LS['hes1217_sb_pend'] || '[]'); }catch(e){ return []; } },
            colaGas: () => { try{ return JSON.parse(LS['hes1217_pending'] || '[]'); }catch(e){ return []; } } };
 }
@@ -186,6 +190,44 @@ const ok = (t, c, extra) => { if(!c) fallos.push(t + (extra ? ' -> ' + extra : '
   if(!s.err){
     ok('con la marca ya puesta, la cola vieja no se vuelve a encolar',
        s.colaSb().length === 0, 'se encolaron ' + s.colaSb().length);
+  }
+}
+
+/* ── 4 · La prioridad de precio, en un solo sitio ───────────────────────
+   `precioDeCatalogo_` se extrajo el 17-ago-2026 para que la captura y la
+   corrección de una venta no tengan dos ideas del precio bueno. Al extraerla se
+   tocó `aplicarProducto`, que es el camino de escanear Y el de teclear, y no lo
+   cubría ninguna prueba.
+
+   La regla es la de la cadena 3 del MAPA y se repite en el tablero y en el
+   Apps Script: EOL al 50% manda sobre promoción, y promoción sobre regular.
+   Invertirla cobraría de más a un cliente con el equipo en la mano. */
+{
+  const s = arrancar();
+  if(!s.err){
+    const hoy = new Date();
+    const iso = hoy.getFullYear() + '-' + String(hoy.getMonth()+1).padStart(2,'0')
+              + '-' + String(hoy.getDate()).padStart(2,'0');
+    const FICHA = "({ s:'900001', d:'Equipo de prueba', p:10000 })";
+
+    // Sin nada: el regular
+    ok('sin promo ni EOL se cobra el precio regular',
+       s.correr('precioDeCatalogo_(' + FICHA + ').precio') === '10000');
+
+    // Con promo vigente: la promo
+    s.correr("PROMOS['900001'] = { pp:'8500', d1:'" + iso + "', d2:'" + iso + "' };");
+    ok('con promoción vigente se cobra la promoción',
+       s.correr('precioDeCatalogo_(' + FICHA + ').precio') === '8500',
+       s.correr('precioDeCatalogo_(' + FICHA + ').precio'));
+
+    // Con las dos a la vez: manda el EOL, NUNCA la promo
+    s.correr("EOL_VENTA['900001'] = 5000;");
+    ok('con EOL y promoción a la vez manda el EOL al 50%',
+       s.correr('precioDeCatalogo_(' + FICHA + ').precio') === '5000',
+       s.correr('precioDeCatalogo_(' + FICHA + ').precio'));
+    ok('y se sabe de dónde salió el precio, para poder decirlo en pantalla',
+       s.correr('precioDeCatalogo_(' + FICHA + ').motivo') === 'eol',
+       s.correr('precioDeCatalogo_(' + FICHA + ').motivo'));
   }
 }
 
