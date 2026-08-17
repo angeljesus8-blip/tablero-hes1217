@@ -179,3 +179,44 @@ ok('y el banner la nombra de forma reconocible en piso',
 
 // Se deja el tablero con los datos buenos, por si mañana alguien añade un caso 9.
 aplicarTodo(Object.assign(_deSupabase(JSON.parse(JSON.stringify(TIENDA))), { __sb:true }));
+
+
+/* ── 9 · La pieza de exhibición vendida desaparece del aparador ──────────
+   Con los números REALES del caso que lo destapó (17-ago-2026, v175):
+   HUAWEI WATCH FIT 4 — 5 piezas cerradas, 1 en exhibición, y esa se vendió
+   marcada como pieza de piso.
+
+   El servidor mandaba `exh_vendida = 1` y el tablero seguía pintando «1 en
+   exhibición», porque aquí se volvía a restar el excedente sobre el almacén
+   —`ev - onhand`— que desde v174 el servidor YA trae descontado. Con 5 en
+   bodega, `max(0, 1-5)` es 0 y la resta se anulaba entera.
+
+   Lo que estaba en juego no es el texto: `estadoSku` decide con `exhibe` si
+   ofrece la última pieza al 50 %. Un aparador que no baja manda al asesor a
+   buscar una caja que ya se llevó otro cliente. */
+{
+  const T = JSON.parse(JSON.stringify(TIENDA));
+  // 900004 es el EOL con pieza de piso: el mismo caso del WATCH FIT 4. Tiene que
+  // ser EOL, porque solo esos venden su exhibición (cadena 5 del MAPA).
+  const fila = (T.inventario || []).find(function(x){ return x.sku === '900004'; });
+  fila.onhand = 5; fila.vendido = 0; fila.exhibicion = 1; fila.exh_vendida = 1;
+  aplicarTodo(Object.assign(_deSupabase(T), { __sb:true }));
+
+  const inv = invBySku[fila.sku] || {};
+  ok('las piezas cerradas no se tocan al vender la de exhibición',
+     inv.stock === 5, 'stock ' + inv.stock);
+  ok('y el aparador queda en cero, no en uno',
+     inv.exhibe === 0, 'exhibe ' + inv.exhibe);
+
+  /* La otra mitad: sin ventas de exhibición, el aparador sigue contando. Si
+     alguien "arreglara" esto restando de más, el tablero escondería piezas de
+     piso que sí están y nadie las ofrecería nunca. */
+  fila.exh_vendida = 0;
+  aplicarTodo(Object.assign(_deSupabase(T), { __sb:true }));
+  ok('y sin ventas de exhibición el aparador sigue contando su pieza',
+     (invBySku[fila.sku] || {}).exhibe === 1,
+     'exhibe ' + (invBySku[fila.sku] || {}).exhibe);
+}
+
+// Y se deja otra vez con los datos buenos.
+aplicarTodo(Object.assign(_deSupabase(JSON.parse(JSON.stringify(TIENDA))), { __sb:true }));

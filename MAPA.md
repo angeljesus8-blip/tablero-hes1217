@@ -281,6 +281,26 @@ descuentan del On Hand; las de aparador, de la exhibición.
    juntas pondría al 50 % todos los EOL con bodega: regalar producto nuevo, en
    cada venta y en silencio.
 
+#### El aparador seguía marcando la pieza vendida *(v175, el mismo día)*
+
+Visto en piso a la primera prueba: las piezas cerradas no se movieron —lo
+delicado funcionó— pero la tarjeta seguía diciendo «1 en exhibición».
+
+`finalizarStock` (l. 1235) hacía `e − max(0, ev − onhand)`: el cliente calculaba
+por su cuenta cuántas ventas habían excedido el almacén, porque el servidor solo
+mandaba el total. Desde v174 `exh_vendida` YA trae esa cuenta hecha, así que
+restarla otra vez la anulaba — con 5 en bodega, `max(0, 1−5)` es 0.
+
+**Cambiar lo que SIGNIFICA un campo obliga a buscar quién lo consume.** El campo
+llegaba perfecto; la cuenta que se hacía con él era la vieja. Es el reverso de la
+regla del MAPA sobre migrar lecturas: ahí faltaba un campo, aquí sobraba una
+resta, y las dos veces el dato se veía bien.
+
+No era cosmético: `estadoSku` decide con `exhibe` si ofrece la última pieza al
+50 %, así que un aparador que no baja manda al asesor a buscar una caja que ya
+se llevó otro cliente. Lo cubre el caso 9 de `casos_tablero.js`, con los números
+reales del WATCH FIT 4 y comprobado devolviendo la resta vieja.
+
 **El interruptor se apaga solo** al guardar y al teclear un SKU sin
 coincidencia. Dejarlo encendido cobraría la mitad en la venta siguiente, y eso
 no lo caza nadie hasta el corte — para entonces ya se fue el cliente.
