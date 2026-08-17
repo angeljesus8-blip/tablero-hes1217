@@ -2395,10 +2395,17 @@ async function _gasBombear(){
 }
 
 /* ---- Estado de las cargas + aviso al usuario ---- */
+/* `ventas` entró aquí el 17-ago-2026, y es lo que faltaba: el leaderboard de
+   Assurant era la única carga que podía quedarse vieja SIN que el banner dijera
+   nada. Con la doble escritura viva no se notaba —la hoja y Supabase decían lo
+   mismo— pero al apagarla, un fallo aquí no daría error: daría un porcentaje.
+   Y ese porcentaje es el KPI que se reporta con meta del 25 %. */
 const CARGAS = { inventario:'pendiente', eol:'pendiente', promos:'pendiente',
-                 bundles:'pendiente', avisos:'pendiente', apartados:'pendiente' };
+                 bundles:'pendiente', avisos:'pendiente', apartados:'pendiente',
+                 ventas:'pendiente' };
 const CARGA_NOMBRE = { inventario:'inventario', eol:'EOL', promos:'promos',
-                       bundles:'combos', avisos:'avisos', apartados:'apartados' };
+                       bundles:'combos', avisos:'avisos', apartados:'apartados',
+                       ventas:'Assurant del día' };
 function marcarCarga(k, ok){ CARGAS[k] = ok ? 'ok' : 'error'; actualizarBanner(); }
 
 function actualizarBanner(){
@@ -2431,7 +2438,8 @@ function actualizarBanner(){
 
 function reintentarCargas(){
   const mapa = { inventario:cargarInventarioNube, eol:cargarEolNube, promos:cargarPromosNube,
-                 bundles:cargarBundlesNube, avisos:cargarAvisosNube, apartados:cargarApartadosNube };
+                 bundles:cargarBundlesNube, avisos:cargarAvisosNube, apartados:cargarApartadosNube,
+                 ventas:cargarVentasNube };
   Object.keys(CARGAS).forEach(function(k){
     if(CARGAS[k] === 'error'){ CARGAS[k] = 'pendiente'; mapa[k](); }
   });
@@ -2585,6 +2593,20 @@ function aplicarAvisos(data){
   });
 }
 
+/* Las filas de `ventas_hoy` de Supabase, a la forma {vendedor:{c,s}} que espera
+   aplicarVentas. Vive aquí, en un solo sitio, porque la usan DOS rutas: el
+   viaje único (`tablero_todo`, vía _deSupabase) y la carga suelta de abajo.
+   Duplicarla es la trampa que ya documenta el mapa en aplicarTodo: una de las
+   dos copias se queda atrás y el tablero enseña cosas distintas según qué
+   llamada contestó, sin dar ningún error. */
+function _vendDeSupabase(filas){
+  const vend = {};
+  (filas || []).forEach(function(v){
+    vend[v.vendedor] = { c:Number(v.con_seguro)||0, s:Number(v.sin_seguro)||0 };
+  });
+  return vend;
+}
+
 // Devuelve false si la respuesta no trae el formato esperado (GAS sin el modo)
 function aplicarVentas(data){
   if(!_esObj(data) || !_esObj(data.vend)) return false;
@@ -2696,13 +2718,30 @@ async function cargarAvisosNube(){
 }
 
 /* Ventas del día de TODA la tienda, para el leaderboard de Assurant.
-   Si el GAS todavía no expone modo=ventas_hoy, no es un error: el tablero se
-   queda con las ventas capturadas en este equipo (ver attPorVendedor). */
+
+   A SUPABASE, no al Apps Script (17-ago-2026). Esta carga pedía `modo=ventas_hoy`
+   al GAS, que lo saca de la hoja. Mientras la doble escritura siga viva da lo
+   mismo —los dos lados tienen las mismas ventas—, pero el día que se apague, la
+   hoja se queda congelada y esto serviría el Assurant del último día que la
+   recibió. No daría un error: daría un porcentaje, con la misma pinta que uno
+   bueno, en el número que se reporta a Demetrio con meta del 25 %.
+
+   Es el mismo motivo por el que el stock y los apartados ya solo se aceptan de
+   Supabase (ver aplicarTodo). Se cambia AHORA, con los dos lados diciendo lo
+   mismo, para que el cambio se pueda comprobar sin nada en juego.
+
+   Si Supabase no contesta, se marca la carga como fallida y el banner lo dice.
+   El tablero se queda con las ventas capturadas en este equipo (attPorVendedor):
+   un dato incompleto y anunciado, en vez de uno falso y callado. */
 async function cargarVentasNube(){
-  let data;
-  try{ data = await gasPedir('modo=ventas_hoy', { reintentos:0 }); }
-  catch(e){ return; }
-  if(aplicarVentas(data)) render();
+  const filas = await sbRpc('ventas_hoy');
+  if(!Array.isArray(filas)){ marcarCarga('ventas', false); return; }
+  if(aplicarVentas({ vend: _vendDeSupabase(filas) })){
+    marcarCarga('ventas', true);
+    render();
+  } else {
+    marcarCarga('ventas', false);
+  }
 }
 
 /* ---------- FASE 2 · leer de Supabase, con el Apps Script de respaldo ----------
@@ -2829,10 +2868,7 @@ function _deSupabase(d){
     pro[p.sku] = { d:p.producto, pr:p.precio_reg, pp:p.precio_pro,
                    est:p.estatus, msi:p.msi, d1:p.vigente_desde, d2:p.vigente_hasta };
   });
-  const vend = {};
-  (d.ventas_hoy||[]).forEach(function(v){
-    vend[v.vendedor] = { c:Number(v.con_seguro)||0, s:Number(v.sin_seguro)||0 };
-  });
+  const vend = _vendDeSupabase(d.ventas_hoy);
   return {
     inventario: inv,
     promos: pro,
@@ -2913,7 +2949,19 @@ function aplicarTodo(d){
      asesor acaba de guardar, o le devolvería la serie a un equipo ya entregado.
      No da error, solo deshace trabajo — por eso se marca el origen. */
   if(d.__sb && Array.isArray(d.apartados)) { APARTADOS = d.apartados; marcarCarga('apartados', true); }
-  aplicarVentas(d.ventas_hoy);
+  /* Las ventas del día, SOLO de Supabase — mismo candado que el stock y los
+     apartados, y por el mismo motivo (17-ago-2026).
+
+     El `modo=todo` del Apps Script también trae `ventas_hoy`, pero de la hoja.
+     Hoy coinciden; en cuanto se apague la doble escritura, esa mitad de la
+     respuesta queda congelada y pisaría el Assurant bueno que Supabase acaba de
+     entregar — porque además llega ~7 s DESPUÉS. Sería el caso de los apartados
+     otra vez: la respuesta lenta deshaciendo el trabajo de la rápida.
+
+     Sin el candado esto no avisaría de nada: un attach del 40 % de anteayer se
+     ve igual de creíble que el de hoy. Con él, si el dato no viene de Supabase
+     la carga se marca fallida y el banner lo nombra. */
+  marcarCarga('ventas', d.__sb ? aplicarVentas(d.ventas_hoy) : false);
   calcDerivados();
   render();
   return true;

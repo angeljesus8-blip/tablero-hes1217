@@ -232,6 +232,34 @@ lado lo que se escribe en el otro.
 Reintentar es seguro: `venta_guardar` responde `ok+duplicada` ante una serie
 repetida el mismo día, así que nunca duplica una venta.
 
+### El Assurant del día también lleva candado *(17-ago-2026, v168)*
+
+Tercer candado `__sb`, junto al del stock y el de los apartados, y por el mismo
+motivo. `aplicarTodo` aplicaba `d.ventas_hoy` **viniera de donde viniera**, y
+`cargarVentasNube()` se lo pedía directamente al Apps Script.
+
+Mientras la doble escritura viva no se nota: los dos lados traen las mismas
+ventas. **El día que se apague, la hoja se queda congelada** y el leaderboard
+enseñaría el Assurant del último día que la recibió — además pisando el bueno,
+porque el `modo=todo` llega ~7 s después que Supabase.
+
+Y no daría ningún error: daría un porcentaje. Un attach del 40 % de anteayer se
+ve igual de creíble que el de hoy, y es el KPI que se reporta con meta del 25 %.
+
+Se cerró **antes** de tocar la escritura, a propósito: con los dos lados
+diciendo lo mismo, el cambio se comprueba en piso sin nada en juego.
+
+- `CARGAS.ventas` es nuevo. Era la única carga que podía quedarse vieja sin que
+  el banner dijera nada; ahora sale como **«Assurant del día»**.
+- `_vendDeSupabase` traduce las filas en **un solo sitio**, para el viaje único
+  y para la carga suelta. Duplicarla es la trampa de siempre: la copia que se
+  queda atrás hace que el tablero enseñe cosas distintas según qué llamada
+  contestó.
+- Lo cubre el caso 8 de `casos_tablero.js`, **comprobado rompiendo la guardia**.
+  Prueba las dos mitades: que el dato de Supabase sí entre y que el del GAS no
+  pise. Una guardia pasada de frenada dejaría el leaderboard vacío para
+  siempre, que es cambiar un fallo callado por otro.
+
 ---
 
 ## Cadena 3 · Del Excel al precio que se cobra
@@ -1028,13 +1056,24 @@ llegó y había que ligar series. Lo que falta para que la hoja no haga falta:
 | Bloque | Modos que hay que reponer | Estado |
 |---|---|---|
 | Preventa | `apartado_add/estatus/del` | ✅ v124 |
-| EOL | `eol_add`, `eol_del` | 🔨 código listo, SQL sin aplicar |
-| Avisos y combos | `aviso_add/del`, `bundle_add/del/clear` | 🔨 código listo, SQL sin aplicar |
-| Borrar una venta | `tipo:'eliminar'` | 🔨 código listo, SQL sin aplicar |
-| Cargas de Admin | catálogo+inventario, `catalogo_ref`, exhibición, comisiones, promos | 🔨 v127, SQL sin aplicar |
-| Fotos de venta | Drive → Storage (se borran solas a los 7 días, no hay histórico que mover) | — |
+| EOL | `eol_add`, `eol_del` | ✅ v125 |
+| Avisos y combos | `aviso_add/del`, `bundle_add/del/clear` | ✅ v125 |
+| Borrar una venta | `tipo:'eliminar'` | ✅ v125 |
+| Cargas de Admin | catálogo+inventario, `catalogo_ref`, exhibición, comisiones, promos | ✅ v127 |
 | Fotos de venta | Drive → tabla `venta_fotos`, con visor en Ventas del día | ✅ v129 |
 | Notificaciones | `notificar_` → OneSignal | ✅ v134 · **probado, llegan** |
+| Traspasos | vender con promesa de entrega, sobre la misma tabla | ✅ 8-ago |
+| Editar una venta | pantalla en Admin | ❌ **no existe** — es lo que sigue haciendo falta la hoja |
+
+*(Esta tabla dijo «SQL sin aplicar» durante diez días sobre bloques que llevaban
+funcionando en piso desde el 7-ago. Se corrigió el 17-ago comprobando el código,
+no releyendo el documento. Una tabla de estado que no se actualiza es peor que
+no tenerla: manda a rehacer lo hecho y esconde lo que falta de verdad — aquí,
+la edición de ventas.)*
+
+La fila de Storage se cayó: las fotos acabaron en la tabla `venta_fotos`, no en
+Storage. Se había quedado como pendiente algo que ya se había resuelto por otro
+camino.
 
 ### El "nudo" de las notificaciones no lo era *(7-ago-2026)*
 
