@@ -104,6 +104,9 @@ VALUES
   ('1217','43739-CARGA-66W',     'CARGADOR 66W',                         499, '43739',  50),
   ('1217','43739-CARGA-100W',    'CARGADOR 100W',                        999, '43739',  60),
   ('1217','W-1999',              'LICENCIA WINDOWS',                    1999, '43739',  70),
+  -- Sale en los tickets (KITLIMPIEZA, $169) pero no viene en ninguno de los
+  -- dos documentos oficiales. Precio confirmado por Angel el 18-ago-2026.
+  ('1217','43739-KITLIMPIEZA',   'KIT DE LIMPIEZA',                      169, '43739',  80),
   ('1217','80066',               'MEMORIA OTG 32GB ADATA ANDROID',        99, '43739', 100),
   ('1217','AUV250-64G-RBK',      'MEM USB ADATA 64GB UV250',             189, '43739', 110),
   ('1217','AUSDX64GUICL10-RA1',  'TARJETA MICROSD ADATA 64GB CLASE 10',  249, '43739', 120),
