@@ -346,6 +346,48 @@ lo correcto: un apartado se corrige desde Preventa.
 Para comprobar que la lista y el KPI siguen cuadrando está el punto 1-bis de
 `supabase_ventas_detalle_entrega.sql`.
 
+### Accesorios · el SKU genérico 43739 *(18-ago-2026, v183)*
+
+Cargadores, micas y kits se venden con el SKU `000043739` y **no pasan por
+Captura de Series**, que es para equipos con número de serie. Su reporte mensual
+de comisiones se llenaba desde fotos del POS: en julio, **24 de ~85 tickets
+(28 %) no se pudieron resolver desde la foto** y acabaron en una lista para
+abrirlos uno por uno.
+
+⚠️ **`accesorios_ventas` es tabla propia, y no es un capricho.** En `ventas`
+rompería dos cosas sin dar error: `inventario_vivo` descuenta stock POR SKU —y
+el 43739 no existe en el catálogo— y `ventas_hoy` calcula el Assurant contando
+ventas, así que cada cargador hundiría el KPI que se reporta con meta del 25 %.
+
+**De dónde sale cada dato, medido sobre tickets reales:**
+
+| dato | fuente | por qué |
+|---|---|---|
+| ticket · fecha · vendedor | OCR | se leyeron exactos |
+| precio y cantidad | OCR de **la línea del 43739** | el total no sirve: un ticket de $16,962.50 llevaba un kit de $169 |
+| **producto** | **lista que toca el asesor** | el OCR devolvió `CARGATOOWTS`, y en un ticket de 8 artículos agarró el IMEI del MatePad |
+
+**El vendedor es «Atendido por», NO el número del final del ticket** — ese es
+quien cobró en caja. En el 33480 el número decía 749608 (Ángel) y había
+atendido Arturo. La comisión es de quien vendió, y el campo fácil de leer es el
+equivocado.
+
+**Tres cosas que, si se deshacen, no dan error:**
+
+1. **El precio unitario lleva TRES decimales:** `999.000` son 999 pesos. Leerlo
+   como separador de miles daba $999,000, la comprobación no cerraba nunca y la
+   app habría mandado a revisar el 100 % de las líneas — hasta que alguien se
+   cansara y las diera por buenas. El importe, en cambio, lleva dos decimales y
+   coma de miles. Formatos distintos, funciones distintas.
+2. **`precio × cantidad = importe`** es la red. Y dice **en qué línea** falla,
+   que es lo que la verificación por subtotales del reporte nunca pudo decir.
+3. **El OCR corre EN PARALELO** mientras el asesor elige el producto. Son ~9 s
+   medidos en el celular; al revés serían nueve segundos mirando una barra con
+   el cliente delante.
+
+`UNIQUE (store_id, ticket, producto)` frena la doble captura — dos asesores
+registrando el mismo ticket al cerrar el día.
+
 ### Corregir una venta *(17-ago-2026, v171)*
 
 Lo último que se hacía en la hoja. Vive en el panel **Ventas del día** de
