@@ -385,6 +385,83 @@ def r_lectura_con_escritura():
                              'que ya no recibe nada.' % (escritura, modo))
 
 
+def r_porteros():
+    """Una condición de permiso se pregunta desde UN solo sitio.
+
+    17-ago-2026: «Ventas del día» se abrió a gerente y subgerente, pero solo en
+    `updateDownloadAccess` —el que ENSEÑA el botón—. El `onclick` tenía su propia
+    copia de la condición, con la versión vieja. El botón aparecía y al tocarlo
+    decía "no tienes permiso", con el gerente delante.
+
+    Es la misma lección de `seccionVisible_` en tablero.html, que existe porque
+    esconder una sección son cuatro sitios y basta olvidar uno. La diferencia es
+    que aquí nadie lo recordaba, así que ahora lo cuenta esta regla.
+
+    No mira nombres de función: cuenta cuántas veces se COMPARA la constante. Si
+    sale de una función, aparece una vez (en la función) y las demás la llaman.
+
+    Solo vigila las constantes de SESIÓN —las que traen un valor de la config y
+    se comparan contra el estado actual—, no las banderas booleanas ya
+    calculadas. Se probó con `PUEDE_GESTIONAR` y da falso positivo:
+    `confirmarPuesto()` hace `if(antes !== PUEDE_GESTIONAR)` para detectar un
+    cambio, que no es decidir un permiso. Una regla que avisa de algo correcto
+    se acaba ignorando, y entonces no avisa de nada.
+
+    A esa bandera la cubren las pruebas del bloque 7 de `casos_tablero.js`, que
+    comprueban los cuatro consultantes de `seccionVisible_`."""
+    PERMISOS = [('captura_series.html', 'DESCARGA_AUTORIZADA')]
+    for arch, const in PERMISOS:
+        s = leer(arch)
+        if s is None: continue
+        # Comparaciones y usos en condición, no la declaración ni los comentarios
+        js = scripts_de(s)      # devuelve un str, no una lista: no lo "juntes"
+        js = re.sub(r'/\*[\s\S]*?\*/', '', js)
+        js = re.sub(r'(?m)//.*$', '', js)
+        usos = len(re.findall(r'[=!]==?\s*' + const + r'\b', js)) \
+             + len(re.findall(r'\b' + const + r'\s*[=!]==?', js)) \
+             + len(re.findall(r'(?:\|\||&&|\(|!)\s*' + const + r'\b(?!\s*[=:])', js))
+        if usos > 1:
+            falla('porteros', '%s decide con %s en %d sitios. Sácalo a UNA función '
+                              'y que los demás la llamen: si no, cambiar uno deja el '
+                              'otro con la regla vieja y el botón aparece pero no '
+                              'deja pasar.' % (arch, const, usos))
+
+
+def r_contrato_sql():
+    """Aviso: si cambia lo que DEVUELVE una función SQL, mirar quién la consume.
+
+    17-ago-2026: `exh_vendida` pasó a traer el excedente ya descontado. El campo
+    seguía llegando perfecto y el tablero seguía restándolo por su cuenta, así
+    que la resta se anulaba y el aparador marcaba una pieza ya vendida. No dio
+    ningún error: dio un número.
+
+    Es el reverso de la regla de migrar lecturas —allí faltaba un campo, aquí
+    sobraba una cuenta— y las dos veces el dato se ve bien.
+
+    Esto NO se puede bloquear: hace falta criterio para saber si el consumidor
+    necesita cambiar. Solo pone la pregunta delante en el momento en que se está
+    tocando, que es cuando sale barata."""
+    cambiados = git_cambiados(staged='--staged' in sys.argv)
+    sqls = [c for c in cambiados if c.endswith('.sql')]
+    if not sqls: return
+    htmls = ['tablero.html', 'captura_series.html', 'admin.html',
+             'comisiones.html', 'actualizar_datos.html']
+    for sql in sqls:
+        s = leer(sql)
+        if s is None: continue
+        for m in re.finditer(r'FUNCTION\s+public\.(\w+)\s*\([^)]*\)\s*\n?\s*RETURNS\s+TABLE\s*\(([^;]*?)\)\s*\n\s*LANGUAGE',
+                             s, re.I):
+            fn, cuerpo = m.group(1), m.group(2)
+            campos = re.findall(r'(?m)^\s*(\w+)\s+\w', cuerpo)
+            quien = [h for h in htmls if (leer(h) or '').find(fn) >= 0]
+            if quien and campos:
+                aviso('contrato', '%s cambia lo que devuelve %s (%s). Lo leen: %s. '
+                                  'Comprueba que devuelve los MISMOS campos Y que '
+                                  'significan lo mismo — un campo que cambia de '
+                                  'sentido no da error, da un número falso.'
+                                  % (sql, fn, ', '.join(campos[:6]), ', '.join(quien)))
+
+
 def r_preventa_stock():
     """La lectura del inventario y el corte tienen que contar las ventas con el
     MISMO filtro. Si se separan no da error: da stock inventado.
@@ -678,6 +755,7 @@ def main():
     staged = '--staged' in sys.argv
     r_sintaxis(); r_helpers(); r_version(staged); r_copias(); r_cupo()
     r_preventa_sb(); r_preventa_stock(); r_cargas_sb(); r_lectura_con_escritura()
+    r_porteros(); r_contrato_sql()
     r_personales(); r_secretos(); r_silencios(); r_cadenas(); r_precache(); r_pruebas()
 
     for regla, msg in avisos:

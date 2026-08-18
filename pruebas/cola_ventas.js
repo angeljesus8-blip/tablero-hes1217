@@ -24,115 +24,27 @@
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const html = fs.readFileSync(path.join(__dirname, '..', 'captura_series.html'), 'utf8');
 
-const bloques = html.match(/<script[^>]*>[\s\S]*?<\/script>/g) || [];
-const js = bloques
-  .filter(b => !/\ssrc=/.test(b.slice(0, b.indexOf('>'))))
-  .filter(b => !/type="module"/.test(b.slice(0, b.indexOf('>'))))
-  .map(b => b.slice(b.indexOf('>') + 1, b.lastIndexOf('</script>')))
-  .join('\n;\n');
+const { crearEntorno } = require('./dom.js');
 
 const EQUIPO = ['Arnulfo Gonzalez Arrieta', 'Miguel Angel Garcia Gutierrez'];
 const STORE  = { store_id:'1217', nombre:'Angelopolis', gas_url:'https://gas.example/exec',
                  gas_token:'t', vendedores:EQUIPO };
 const EMP    = { empno:'2', nombre:'Miguel Angel Garcia Gutierrez', puesto:'asesor' };
 
-/* ── El DOM respeta el ORDEN del documento ───────────────────────────────
-   El DOM falso de las otras pruebas devuelve un elemento para cualquier id, y
-   eso esconde una clase entera de fallo: tocar durante la carga un elemento
-   que se pinta MÁS ABAJO que el <script>.
-
-   Pasó el 17-ago-2026 al escribir la pantalla de corregir ventas: un
-   `addEventListener` a nivel superior sobre `$('edSku')`, cuyo <div> está 30
-   líneas DESPUÉS del cierre del script. En el navegador eso es null y
-   `null.addEventListener` tumbaba la captura entera al arrancar — no el modal,
-   toda la pantalla. Con el DOM permisivo las pruebas decían "todo en orden".
-
-   No basta con comprobar que el id exista en el HTML: `edSku` existe. Hay que
-   comparar POSICIONES. Durante la carga, un id que aparece después de donde
-   empieza el script principal todavía no está en el documento. Al terminar la
-   carga se levanta la bandera y ya existen todos, como en el navegador. */
-const POS_ID = new Map();
-for(const m of html.matchAll(/\bid="([^"]+)"/g)){
-  if(!POS_ID.has(m[1])) POS_ID.set(m[1], m.index);
-}
-// El bloque de <script> más largo es el principal; los paneles van tras él.
-const POS_SCRIPT = (() => {
-  let mejor = 0, largo = -1;
-  for(const m of html.matchAll(/<script(?![^>]*\ssrc=)(?![^>]*type="module")[^>]*>/g)){
-    const fin = html.indexOf('</script>', m.index);
-    if(fin - m.index > largo){ largo = fin - m.index; mejor = m.index; }
-  }
-  return mejor;
-})();
-
+/* El entorno vive en `dom.js` desde el 17-ago-2026: respeta el orden del
+   documento y trae un classList de verdad. Aquí solo se dice con qué sesión
+   arranca cada escenario. */
 function arrancar(extraLS){
-  const LS = Object.assign({
-    hes_store: JSON.stringify(STORE),
-    hes_empleado: JSON.stringify(EMP)
-  }, extraLS || {});
-  const els = {};
-  let cargando = true;          // se baja en cuanto termina de correr el script
-  function el(id){
-    // Durante la carga, lo que se pinta por debajo del script todavía no existe.
-    if(cargando && POS_ID.has(id) && POS_ID.get(id) > POS_SCRIPT) return null;
-    if(!els[id]) els[id] = (function(){
-      /* `classList` de verdad, con un Set. Con los `add(){}` vacíos de antes no
-         se puede comprobar COMPORTAMIENTO —si un panel se abrió—, solo que una
-         función devuelva lo esperado. Y el fallo del 17-ago-2026 fue justo ese:
-         `puedeVerVentas_()` daba true y el botón igual no abría nada, porque el
-         handler no la llamaba. Probar la función habría dado verde. */
-      const clases = new Set();
-      return {
-      id, style:{}, dataset:{}, value:'', textContent:'', children:[],
-      innerHTML:'',
-      classList:{ add:c=>clases.add(c), remove:c=>clases.delete(c),
-                  toggle:(c,on)=>{ if(on===undefined){ clases.has(c)?clases.delete(c):clases.add(c); }
-                                   else { on ? clases.add(c) : clases.delete(c); } },
-                  contains:c=>clases.has(c) },
-      querySelectorAll:()=>[], addEventListener(){}, appendChild(){},
-      closest:()=>null, focus(){}, remove(){}, onclick:null,
-      insertBefore(){}, scrollIntoView(){}
-      };
-    })();
-    return els[id];
-  }
-  const caja = {
-    console,
-    location:{ href:'', search:'', hash:'', pathname:'/t/captura_series.html', replace(){}, reload(){} },
-    navigator:{ serviceWorker:{ addEventListener(){}, ready:{ then(){ return { catch(){} }; } },
-                                register(){ return { catch(){} }; } } },
-    document:{ getElementById: el, querySelectorAll:()=>[], querySelector:()=>null,
-      createElement:()=>el('t'+Math.random()), head: el('head'), body: el('body'),
-      readyState:'complete', addEventListener(){} },
-    localStorage:{ getItem: k => (k in LS ? LS[k] : null),
-      setItem:(k,v)=>{ LS[k] = String(v); }, removeItem: k => { delete LS[k]; } },
-    sessionStorage:{ getItem:()=>null, setItem(){}, removeItem(){} },
-    // El escenario que importa: la nube no contesta, ni el GAS ni Supabase.
-    fetch: () => Promise.reject(new Error('sin red')),
-    alert:()=>{}, confirm:()=>true, prompt:()=>null,
-    setInterval:()=>0, clearInterval:()=>{}, setTimeout:(f)=>{ if(typeof f==='function') f(); return 0; },
-    clearTimeout:()=>{},
-    scrollTo:()=>{}, addEventListener:()=>{}, removeEventListener:()=>{},
-    AbortController: class { constructor(){ this.signal = {}; } abort(){} },
-    Blob: class {}, URL:{ createObjectURL:()=>'', revokeObjectURL:()=>{} },
-    XMLHttpRequest: class { open(){} send(){} setRequestHeader(){} },
-    Image: class {}, FileReader: class {}, requestAnimationFrame:()=>0,
-    URLSearchParams, TextEncoder, TextDecoder, Date, JSON, Math, RegExp,
-    Promise, Array, Object, String, Number, Boolean, Error, Set, Map, isNaN, parseFloat, parseInt,
-    encodeURIComponent, decodeURIComponent, btoa: s => Buffer.from(s,'binary').toString('base64'),
-  };
-  caja.window = caja; caja.globalThis = caja;
-  vm.createContext(caja);
-  let err = null;
-  try{ vm.runInContext(js, caja, { filename:'captura.js' }); }catch(e){ err = e.message; }
-  cargando = false;   // documento completo: a partir de aquí existe todo
-  /* Para tocar las variables del script. Las `let`/`const` de nivel superior no
-     aparecen en el objeto global —solo `var` y las funciones—, pero sí viven en
-     el ámbito léxico del contexto, que otro `runInContext` sí alcanza. */
-  const correr = (codigo) => vm.runInContext(codigo, caja, { filename:'prueba.js' });
-  return { err, LS, els, caja, correr,
-           colaSb: () => { try{ return JSON.parse(LS['hes1217_sb_pend'] || '[]'); }catch(e){ return []; } },
-           colaGas: () => { try{ return JSON.parse(LS['hes1217_pending'] || '[]'); }catch(e){ return []; } } };
+  const ent = crearEntorno({
+    html,
+    ruta: '/t/captura_series.html',
+    ls: Object.assign({ hes_store: JSON.stringify(STORE),
+                        hes_empleado: JSON.stringify(EMP) }, extraLS || {})
+  });
+  return Object.assign(ent, {
+    colaSb:  () => ent.lsJson('hes1217_sb_pend') || [],
+    colaGas: () => ent.lsJson('hes1217_pending') || []
+  });
 }
 
 const fallos = [];
@@ -143,12 +55,12 @@ const ok = (t, c, extra) => { if(!c) fallos.push(t + (extra ? ' -> ' + extra : '
   const s = arrancar();
   ok('la pantalla arranca', !s.err, s.err);
   if(!s.err){
-    s.els['serie'].value  = 'SERIE-PRUEBA-1';
-    s.els['sku'].value    = '900001';
-    s.els['precio'].value = '4999';
-    s.els['desc'].value   = 'Equipo de prueba';
+    s.el('serie').value  = 'SERIE-PRUEBA-1';
+    s.el('sku').value    = '900001';
+    s.el('precio').value = '4999';
+    s.el('desc').value   = 'Equipo de prueba';
     s.caja.setVend(EQUIPO[1]);            // ya eligió su nombre
-    s.els['btnAdd'].onclick();            // abre el modal del seguro
+    s.el('btnAdd').onclick();            // abre el modal del seguro
     s.caja.finalizarVenta(true);          // "con Assurant"
 
     const cola = s.colaSb();
@@ -255,13 +167,13 @@ const ok = (t, c, extra) => { if(!c) fallos.push(t + (extra ? ' -> ' + extra : '
 {
   const s = arrancar();
   if(!s.err){
-    s.els['serie'].value  = 'SERIE-EXHIB-1';
-    s.els['sku'].value    = '900001';
-    s.els['precio'].value = '2500';
-    s.els['desc'].value   = 'EOL de piso';
+    s.el('serie').value  = 'SERIE-EXHIB-1';
+    s.el('sku').value    = '900001';
+    s.el('precio').value = '2500';
+    s.el('desc').value   = 'EOL de piso';
     s.caja.setVend(EQUIPO[1]);
-    s.caja.document.getElementById('exhChk').checked = true;   // «es la de exhibición»
-    s.els['btnAdd'].onclick();
+    s.el('exhChk').checked = true;   // «es la de exhibición»
+    s.el('btnAdd').onclick();
     s.caja.finalizarVenta(false);
 
     const cola = s.colaSb();
@@ -278,11 +190,11 @@ const ok = (t, c, extra) => { if(!c) fallos.push(t + (extra ? ' -> ' + extra : '
 {
   const s = arrancar();
   if(!s.err){
-    s.els['serie'].value  = 'SERIE-NORMAL-1';
-    s.els['sku'].value    = '900001';
-    s.els['precio'].value = '5000';
+    s.el('serie').value  = 'SERIE-NORMAL-1';
+    s.el('sku').value    = '900001';
+    s.el('precio').value = '5000';
     s.caja.setVend(EQUIPO[1]);
-    s.els['btnAdd'].onclick();
+    s.el('btnAdd').onclick();
     s.caja.finalizarVenta(true);
 
     const cola = s.colaSb();
@@ -311,8 +223,8 @@ const ok = (t, c, extra) => { if(!c) fallos.push(t + (extra ? ' -> ' + extra : '
   const s = arrancar({ hes_empleado: JSON.stringify(sub) });
   if(!s.err){
     ok('el subgerente sí puede abrir Ventas del día',
-       s.caja.document.getElementById('btnCsv').style.display !== 'none',
-       'quedó display=' + s.caja.document.getElementById('btnCsv').style.display);
+       s.el('btnCsv').style.display !== 'none',
+       'quedó display=' + s.el('btnCsv').style.display);
 
     /* Y AL PULSARLO tiene que abrirse. Ver el botón y poder usarlo son dos
        preguntas distintas, y el 17-ago-2026 se cambió solo la primera: el
@@ -321,9 +233,9 @@ const ok = (t, c, extra) => { if(!c) fallos.push(t + (extra ? ' -> ' + extra : '
        SE PULSA EL BOTÓN DE VERDAD, no se llama a `puedeVerVentas_()`. Esa
        comprobación habría dado verde con el fallo puesto, porque la función
        estaba bien — lo que no la usaba era el handler. */
-    await s.caja.document.getElementById('btnCsv').onclick();
+    await s.el('btnCsv').onclick();
     ok('y al pulsarlo se abre la lista, no un aviso de permiso',
-       s.caja.document.getElementById('vdPanel').classList.contains('show'));
+       s.el('vdPanel').classList.contains('show'));
   }
 }
 {
@@ -332,8 +244,8 @@ const ok = (t, c, extra) => { if(!c) fallos.push(t + (extra ? ' -> ' + extra : '
   const s = arrancar({ hes_empleado: JSON.stringify(ases) });
   if(!s.err){
     ok('y un asesor cualquiera sigue sin verla',
-       s.caja.document.getElementById('btnCsv').style.display === 'none',
-       'quedó display=' + s.caja.document.getElementById('btnCsv').style.display);
+       s.el('btnCsv').style.display === 'none',
+       'quedó display=' + s.el('btnCsv').style.display);
   }
 }
 
@@ -364,7 +276,7 @@ const ok = (t, c, extra) => { if(!c) fallos.push(t + (extra ? ' -> ' + extra : '
       _vdFecha = new Date();
       pintarVentasDia();
     `);
-    const lista = s.caja.document.getElementById('vdLista').innerHTML || '';
+    const lista = s.el('vdLista').innerHTML || '';
 
     ok('la entrega de preventa se marca', lista.indexOf('preventa') >= 0);
     ok('y la de traspaso también, con su propia etiqueta',
@@ -376,7 +288,7 @@ const ok = (t, c, extra) => { if(!c) fallos.push(t + (extra ? ' -> ' + extra : '
        (lista.match(/abrirEditarVenta/g) || []).length === 1,
        'salieron ' + (lista.match(/abrirEditarVenta/g) || []).length);
 
-    const pie = s.caja.document.getElementById('vdAyuda').innerHTML || '';
+    const pie = s.el('vdAyuda').innerHTML || '';
     ok('y el pie dice cuántas no están en el corte de hoy',
        pie.indexOf('2 son entregas') >= 0, pie);
   }
