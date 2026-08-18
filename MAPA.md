@@ -1087,6 +1087,41 @@ arrancar()
 
 ---
 
+## El verificador y las pruebas *(17-ago-2026)*
+
+Las 15 reglas de `verificar.py` nacieron cada una de un fallo que ya había
+llegado a producción, así que por diseño miran hacia atrás. En un día con tres
+fallos nuevos eso se notó, y el diagnóstico no fue "faltan reglas":
+
+**El DOM de las pruebas mentía.** Devolvía un elemento para CUALQUIER id y
+traía `classList.add(){}` vacío. Con eso es imposible detectar dos cosas: tocar
+algo que todavía no se ha pintado, y si una pantalla se abrió de verdad.
+
+Ahora vive en `pruebas/dom.js`, uno solo para todas:
+
+- **respeta el orden del documento** — durante la carga, un id que se pinta por
+  debajo del `<script>` devuelve `null`, igual que el navegador
+- **`classList` de verdad**, con un Set, para poder probar comportamiento
+
+⚠️ **Probar la función no es probar el comportamiento.** La primera prueba del
+botón de «Ventas del día» llamaba a `puedeVerVentas_()` y daba VERDE con el
+fallo puesto: la función estaba bien, quien no la usaba era el handler. La que
+sirve pulsa el botón y mira si el panel se abrió.
+
+Y los handlers `async` hay que esperarlos: el `onclick` hace `flushSupabase()`
+antes de abrir el panel, así que comprobar justo después daba un falso rojo.
+
+**Dos reglas nuevas:**
+
+- `porteros` — una condición de permiso comparada en más de un sitio. Solo mira
+  constantes de sesión; con banderas ya calculadas daba falso positivo
+  (`confirmarPuesto` compara antes/después, que no es decidir un permiso), y una
+  regla que avisa de algo correcto se acaba ignorando.
+- `contrato` — avisa, sin bloquear, cuando cambia el `RETURNS TABLE` de un SQL,
+  diciendo qué pantallas lo leen. No puede decidir por nadie, pero pone delante
+  la pregunta que costó el fallo del aparador: **¿siguen significando lo mismo
+  esos campos?**
+
 ## Antes de dar algo por terminado
 
 1. `python verificar.py` — corre solo en el commit, pero córrelo antes
