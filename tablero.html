@@ -1459,7 +1459,11 @@ function buscarEnTodo(){
      es la respuesta que el asesor necesita con el cliente enfrente. Lo que se
      le quita es el encabezado de "hay que pedir esto", no el resultado.
      Comprobado en las pruebas: sin este bloque, ninguno se queda sin bloque. */
-  if(PUEDE_GESTIONAR)
+  /* Por el portero, no por la bandera (17-ago-2026). Hoy `seccionVisible_`
+     devuelve exactamente `PUEDE_GESTIONAR`, así que no cambia nada — pero el
+     día que la sección se esconda por otro motivo, este sitio se habría quedado
+     con la regla vieja. Es el cuarto consultante que menciona la cadena 1-bis. */
+  if(seccionVisible_('resurtir'))
     push('🔄 Hay que resurtir', [...AGOTADOS,...RESURTIR].filter(x=>coincide(x.producto,x.sku)), rowResurtir);
 
   // Se traen de otra tienda: agotados que NO son EOL, con y sin promo.

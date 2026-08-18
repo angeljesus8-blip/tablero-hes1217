@@ -21,74 +21,39 @@ const fs = require('fs'), path = require('path'), vm = require('vm');
 const RUTA = path.join(__dirname, '..', 'captura_series.html');
 const html = fs.readFileSync(RUTA, 'utf8');
 
-const bloques = html.match(/<script[^>]*>[\s\S]*?<\/script>/g) || [];
-const js = bloques
-  .filter(b => !/\ssrc=/.test(b.slice(0, b.indexOf('>'))))
-  .filter(b => !/type="module"/.test(b.slice(0, b.indexOf('>'))))
-  .map(b => b.slice(b.indexOf('>') + 1, b.lastIndexOf('</script>')))
-  .join('\n;\n');
+const { crearEntorno } = require('./dom.js');
 
+/* El entorno vive en `dom.js` desde el 17-ago-2026. Antes esta prueba tenía su
+   propio DOM, que devolvía un elemento para CUALQUIER id y llevaba setters a
+   medida para el gate. Con el compartido:
+
+     · un id que se pinta por debajo del <script> devuelve null durante la
+       carga, como el navegador — así se caza tocar algo que aún no existe
+     · `classList` es de verdad, así que "¿se ocultó el gate?" se lee del
+       elemento en vez de espiar un `add()` con truco
+
+   El resultado de cada escenario sale ahora de mirar el DOM, no de contadores
+   propios. Un `hideGate()` que no se llame se ve igual, y uno que se llame de
+   más también. */
 function escenario(store, empleado) {
-  const LS = {};
-  if (store) LS['hes_store'] = JSON.stringify(store);
-  if (empleado) LS['hes_empleado'] = JSON.stringify(empleado);
-  const els = {};
+  const ls = {};
+  if (store) ls['hes_store'] = JSON.stringify(store);
+  if (empleado) ls['hes_empleado'] = JSON.stringify(empleado);
+
+  const ent = crearEntorno({ html, ruta:'/t/captura_series.html', ls });
+  if (ent.err) return { error: ent.err };
+
   /* El gate arranca VISIBLE, igual que en el HTML (<div id="gate"> sin la clase
-   `hide`). Empezar en "indeterminado" fue lo que dejó pasar el bloqueo del
-   8-ago: el código identificaba al asesor y se olvidaba de llamar a
-   `hideGate()`, la pantalla se quedaba encima y vacía, y la prueba lo daba por
-   bueno porque nadie había tocado el gate. No tocarlo NO es esconderlo. */
-let gateOculto = false, gateHTML = '';
-  function el(id) {
-    if (!els[id]) els[id] = {
-      id, style: {}, dataset: {}, value: '', textContent: '', children: [],
-      set innerHTML(v) { if (id === 'gateNames') gateHTML = v; },
-      get innerHTML() { return id === 'gateNames' ? gateHTML : ''; },
-      classList: {
-        add: () => { if (id === 'gate') gateOculto = true; },
-        remove: () => { if (id === 'gate') gateOculto = false; },
-        toggle() {}, contains() { return false; }
-      },
-      querySelectorAll: () => [], addEventListener() {}, appendChild() {},
-      closest: () => null, focus() {}, remove() {}, onclick: null,
-      insertBefore() {}, scrollIntoView() {}
-    };
-    return els[id];
-  }
-  const caja = {
-    console,
-    location: { href: '', search: '', hash: '', pathname: '/t/captura_series.html', replace() {}, reload() {} },
-    navigator: { serviceWorker: { addEventListener() {}, ready: { then() { return { catch() {} }; } },
-                                  register() { return { catch() {} }; } } },
-    document: { getElementById: el, querySelectorAll: () => [], querySelector: () => null,
-      createElement: () => el('t' + Math.random()), head: el('head'), body: el('body'),
-      readyState: 'complete', addEventListener() {} },
-    localStorage: { getItem: k => (k in LS ? LS[k] : null),
-      setItem: (k, v) => { LS[k] = String(v); }, removeItem: k => { delete LS[k]; } },
-    sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
-    fetch: () => Promise.reject(new Error('sin red')),
-    alert: () => {}, confirm: () => true, prompt: () => null,
-    setInterval: () => 0, clearInterval: () => {}, setTimeout: () => 0, clearTimeout: () => {},
-    scrollTo: () => {}, addEventListener: () => {}, removeEventListener: () => {},
-    AbortController: class { constructor() { this.signal = {}; } abort() {} },
-    Blob: class {}, URL: { createObjectURL: () => '', revokeObjectURL: () => {} },
-    XMLHttpRequest: class { open() {} send() {} setRequestHeader() {} },
-    Image: class {}, FileReader: class {}, requestAnimationFrame: () => 0,
-    URLSearchParams, TextEncoder, TextDecoder, Date, JSON, Math, RegExp,
-    Promise, Array, Object, String, Number, Boolean, Error, Set, Map, isNaN, parseFloat, parseInt,
-    encodeURIComponent, decodeURIComponent, btoa: s => Buffer.from(s,'binary').toString('base64'),
-  };
-  caja.window = caja;
-  caja.globalThis = caja;
-  vm.createContext(caja);
+     `hide`). Empezar en "indeterminado" fue lo que dejó pasar el bloqueo del
+     8-ago: el código identificaba al asesor y se olvidaba de llamar a
+     `hideGate()`, la pantalla se quedaba encima y vacía, y la prueba lo daba por
+     bueno porque nadie había tocado el gate. No tocarlo NO es esconderlo. */
+  const gateOculto = ent.tiene('gate', 'hide');
+  const gateHTML   = ent.htmlDe('gateNames');
+  const nombres    = (gateHTML.match(/gate-name/g) || []).length;
+  const resultado  = gateOculto ? 'captura' : (nombres ? 'elegir' : 'atascado');
 
-  let err = null;
-  try { vm.runInContext(js, caja, { filename: 'captura.js' }); } catch (e) { err = e.message; }
-
-  if (err) return { error: err };
-  const nombres = (gateHTML.match(/gate-name/g) || []).length;
-  const resultado = (gateOculto === true) ? 'captura' : (nombres ? 'elegir' : 'atascado');
-  return { resultado, nombres, vendedor: el('vendLabel').textContent,
+  return { resultado, nombres, vendedor: ent.el('vendLabel').textContent,
            tieneSalida: gateHTML.indexOf('index.html') >= 0 };
 }
 
