@@ -1603,12 +1603,32 @@ function cardApartado(a){
             a.promesa ? ' · ' + (a.diasTarde > 0
               ? `<b class="tarde">prometido hace ${a.diasTarde} día${a.diasTarde!==1?'s':''}</b>`
               : 'para el '+esc(a.promesa)) : ''}</div>` : ''}
-        ${a.entregado ? `<div style="font-size:10.5px;color:#aaa;margin-top:3px">Entregado el ${esc(a.entregado)}${a.entregadoPor?' por '+esc(a.entregadoPor):''}</div>` : ''}
+        <div style="font-size:10.5px;color:#aaa;margin-top:3px">
+          ${a.fecha ? `💵 Cobrado el ${esc(fechaCortaAp_(a.fecha))}` : ''}
+
+          ${a.entregado ? `${a.fecha ? ' · ' : ''}📦 Entregado el ${esc(fechaCortaAp_(a.entregado))}${a.entregadoPor?' por '+esc(a.entregadoPor):''}` : ''}
+        </div>
       </div>
       <span class="ap-est${cls}">${esc(est)}</span>
     </div>
     ${acciones}
   </div>`;
+}
+
+/* «2026-07-31 14:23» o «2026-07-31» -> «31 jul». Lo importante de estas dos
+   fechas es la DISTANCIA entre ellas, no la hora: un apartado cobrado en julio
+   y entregado en agosto se lee de un vistazo, y esa diferencia es la que
+   explica por qué su ticket no está en el corte de hoy.
+
+   Se parte el texto en vez de usar `new Date(...)`: la cadena viene sin zona
+   horaria, y el navegador la interpretaría como UTC — en México eso adelanta
+   la fecha seis horas y una venta de las 8 pm sale al día siguiente. Es el
+   mismo motivo por el que las fechas se calculan en hora de México en la base. */
+function fechaCortaAp_(txt){
+  const m = String(txt || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(!m) return String(txt || '');
+  const MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  return Number(m[3]) + ' ' + (MESES[Number(m[2]) - 1] || m[2]);
 }
 
 /* ---- Ligar la pieza física al cliente ----
