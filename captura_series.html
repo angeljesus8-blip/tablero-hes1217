@@ -1457,7 +1457,9 @@ async function cargarVentasDia(dia){
                vend:v.vendedor||'', hora: v.vendida_en ? String(v.vendida_en).slice(11,16) : '',
                captura_id: v.captura_id||'', foto: !!v.tiene_foto,
                // 'preventa' | 'traspaso' | '' — ver la etiqueta en pintarVentasDia
-               entrega: v.entrega || '' };
+               entrega: v.entrega || '',
+               // Cuándo se cobró el apartado: dice en qué corte está su ticket
+               cobrado: v.cobrado_en ? String(v.cobrado_en).slice(0,10) : '' };
     });
     _vdFecha  = dia;
     pintarVentasDia();
@@ -1478,6 +1480,17 @@ function vdBotonesNav(activos){
   $('vdHoy').style.visibility = vien < hoy ? 'visible' : 'hidden';
 }
 
+/* «2026-07-20T…» -> «20 jul». Se parte del texto y NO con `new Date(...)`: la
+   cadena viene sin zona horaria y el navegador la tomaría como UTC, que en
+   México adelanta el día — un cobro de las 8 pm saldría con la fecha siguiente.
+   Mismo criterio que `fechaCortaAp_` en el tablero y que las fechas de la base. */
+function fechaCortaCS_(txt){
+  const m = String(txt || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(!m) return String(txt || '');
+  const MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  return Number(m[3]) + ' ' + (MESES[Number(m[2]) - 1] || m[2]);
+}
+
 function pintarVentasDia(){
   const dia = _vdFecha || new Date();
   const ya  = copiadasDe(fechaGas(dia));
@@ -1486,7 +1499,7 @@ function pintarVentasDia(){
   $('vdLista').innerHTML = _vdVentas.length
     ? _vdVentas.map((v, i) => `<div class="vd-fila${ya.indexOf(v.serie) >= 0 ? ' hecha' : ''}${v.entrega ? ' entrega' : ''}" id="vdf${i}" onclick="copiarSerie(${i})">
         <div class="txt">
-          <div class="vd-serie">${v.serie}${v.entrega ? `<span class="vd-ent">${v.entrega === 'traspaso' ? '🚚 traspaso' : '📦 preventa'}</span>` : ''}</div>
+          <div class="vd-serie">${v.serie}${v.entrega ? `<span class="vd-ent">${v.entrega === 'traspaso' ? '🚚 traspaso' : '📦 preventa'}${v.cobrado ? ' · cobrado ' + fechaCortaCS_(v.cobrado) : ''}</span>` : ''}</div>
           <div class="vd-det">
             <span class="sku">${v.sku || '—'}</span>
             <span>${v.desc || 'sin descripción'}</span>
