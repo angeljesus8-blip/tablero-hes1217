@@ -267,12 +267,16 @@ const ok = (t, c, extra) => { if(!c) fallos.push(t + (extra ? ' -> ' + extra : '
     s.correr(`
       _vdVentas = [
         { serie:'S-NORMAL', sku:'900001', desc:'Venta normal', precio:'1000',
-          vend:'X', hora:'10:00', captura_id:'i1', foto:false, entrega:'' },
+          vend:'X', hora:'10:00', captura_id:'i1', foto:false, entrega:'', clase:'venta' },
         { serie:'S-PREVENTA', sku:'900002', desc:'Entrega de preventa', precio:'2000',
           vend:'Y', hora:'11:00', captura_id:'', foto:false, entrega:'preventa',
-          cobrado:'2026-07-20' },
+          cobrado:'2026-07-20', clase:'entrega' },
         { serie:'S-TRASPASO', sku:'900003', desc:'Entrega de traspaso', precio:'3000',
-          vend:'Z', hora:'12:00', captura_id:'', foto:false, entrega:'traspaso' }
+          vend:'Z', hora:'12:00', captura_id:'', foto:false, entrega:'traspaso',
+          clase:'entrega' },
+        { serie:'', sku:'900004', desc:'Apartado cobrado hoy', precio:'4000',
+          vend:'W', hora:'13:00', captura_id:'', foto:false, entrega:'preventa',
+          cobrado:'2026-08-17', clase:'cobro' }
       ];
       _vdFecha = new Date();
       pintarVentasDia();
@@ -282,9 +286,17 @@ const ok = (t, c, extra) => { if(!c) fallos.push(t + (extra ? ' -> ' + extra : '
     ok('la entrega de preventa se marca', lista.indexOf('preventa') >= 0);
     ok('y la de traspaso también, con su propia etiqueta',
        lista.indexOf('traspaso') >= 0);
-    ok('exactamente dos filas llevan distintivo, no las tres',
-       (lista.match(/vd-ent/g) || []).length === 2,
+    ok('las tres filas de apartado llevan distintivo, la venta normal no',
+       (lista.match(/vd-ent/g) || []).length === 3,
        'salieron ' + (lista.match(/vd-ent/g) || []).length);
+
+    /* El cobro es lo contrario de la entrega: el dinero entró HOY y el Assurant
+       ya lo cuenta. Si no sale en la lista, el porcentaje del día sube y las
+       filas no lo explican — el descuadre que esto cierra. */
+    ok('el apartado cobrado hoy se marca como tal',
+       lista.indexOf('apartado cobrado hoy') >= 0);
+    ok('y como todavía no tiene equipo, se dice en vez de dejar el hueco',
+       lista.indexOf('sin equipo todavía') >= 0);
     ok('solo la venta normal ofrece el ✏️ de corregir',
        (lista.match(/abrirEditarVenta/g) || []).length === 1,
        'salieron ' + (lista.match(/abrirEditarVenta/g) || []).length);
@@ -297,6 +309,17 @@ const ok = (t, c, extra) => { if(!c) fallos.push(t + (extra ? ' -> ' + extra : '
     const pie = s.el('vdAyuda').innerHTML || '';
     ok('y el pie dice cuántas no están en el corte de hoy',
        pie.indexOf('2 son entregas') >= 0, pie);
+    ok('y cuántos apartados se cobraron hoy, que sí cuentan',
+       pie.indexOf('1 apartado cobrado hoy') >= 0, pie);
+
+    /* El contador de arriba separa lo que SALIÓ de la tienda de lo que se
+       COBRÓ. Sumarlos daría un número que no es ni una cosa ni la otra. */
+    ok('el contador no cuenta un cobro como equipo entregado',
+       (s.el('vdN').textContent || '').indexOf('3 equipos') === 0,
+       s.el('vdN').textContent);
+    ok('y dice aparte cuántos cobros hubo',
+       (s.el('vdN').textContent || '').indexOf('1 cobro') > 0,
+       s.el('vdN').textContent);
   }
 }
 
