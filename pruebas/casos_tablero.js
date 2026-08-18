@@ -220,3 +220,34 @@ aplicarTodo(Object.assign(_deSupabase(JSON.parse(JSON.stringify(TIENDA))), { __s
 
 // Y se deja otra vez con los datos buenos.
 aplicarTodo(Object.assign(_deSupabase(JSON.parse(JSON.stringify(TIENDA))), { __sb:true }));
+
+
+/* ── 10 · Un apartado dice CUÁNDO se cobró, no solo cuándo se entregó ────
+   17-ago-2026. La tarjeta enseñaba «Entregado el …» y nada más. Falta la otra
+   fecha, y es la que explica todo lo demás: el cliente pagó semanas antes, así
+   que su ticket está en el corte de ESE día —a veces de otro mes— y por eso la
+   entrega no cuenta para el Assurant ni descuenta stock.
+
+   Con las dos fechas juntas, la distancia entre ellas se lee de un vistazo. */
+{
+  const T = JSON.parse(JSON.stringify(TIENDA));
+  const ap = (T.apartados || []).find(function(a){ return a.estatus === 'Entregado'; });
+  ap.creado_en    = '2026-07-20T10:00:00Z';   // cobrado en julio
+  ap.entregado_en = '2026-08-17T17:00:00Z';   // entregado en agosto
+  aplicarTodo(Object.assign(_deSupabase(T), { __sb:true }));
+
+  const tarjeta = cardApartado(APARTADOS.find(function(a){ return a.estatus === 'Entregado'; }));
+  ok('la tarjeta dice cuándo se cobró', tarjeta.indexOf('Cobrado el 20 jul') >= 0, tarjeta.slice(0,300));
+  ok('y sigue diciendo cuándo se entregó', tarjeta.indexOf('Entregado el 17 ago') >= 0);
+
+  /* La fecha se parte del texto, NO con `new Date(...)`: la cadena viene sin
+     zona horaria y el navegador la tomaría como UTC. En México eso adelanta el
+     día, así que un apartado cobrado a las 8 pm saldría con la fecha siguiente
+     — el mismo error que ya obligó a calcular todas las fechas en hora de
+     México dentro de la base. */
+  ok('y una hora de la noche no se va al día siguiente',
+     fechaCortaAp_('2026-07-20 20:30') === '20 jul',
+     fechaCortaAp_('2026-07-20 20:30'));
+}
+
+aplicarTodo(Object.assign(_deSupabase(JSON.parse(JSON.stringify(TIENDA))), { __sb:true }));
