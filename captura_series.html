@@ -1752,7 +1752,8 @@ window.abrirAcc = async function(){
   }
   $('accProd').innerHTML = _accCat.length
     ? '<option value="">— elige el producto —</option>' +
-      _accCat.map(c => '<option data-p="' + (c.precio_ref||'') + '">' + esc(c.nombre) + '</option>').join('')
+      _accCat.map(c => '<option data-p="' + (c.precio_ref||'') + '" data-sku="' +
+        esc(c.sku || '43739') + '">' + esc(c.nombre) + '</option>').join('')
     : '<option value="">(no se pudo cargar el catálogo)</option>';
 
   $('accPanel').classList.add('show');
@@ -1835,8 +1836,15 @@ window.guardarAcc = async function(){
   const btn = $('accGuardar');
   btn.disabled = true; btn.textContent = 'Guardando…';
   try{
+    /* El SKU sale del producto elegido, no se da por hecho. No todo se cobra
+       con el generico: OFFICE PERSONAL lleva 63602 y FAMILIA 57518, y los dos
+       entran igual en el reporte — cada uno con el suyo. Es la columna E del
+       Excel, asi que suponerlo llenaria mal una columna de cada dos. */
+    const opSel = $('accProd').selectedOptions[0];
+    const skuSel = (opSel && opSel.dataset && opSel.dataset.sku) || '43739';
+
     const r = await sbCallCS('accesorio_guardar', {
-      p_token: GAS_TOKEN, p_ticket: ticket, p_producto: prod,
+      p_token: GAS_TOKEN, p_ticket: ticket, p_producto: prod, p_sku: skuSel,
       p_cantidad: cant, p_precio: precio,
       p_vendedor: $('accVend').value,
       p_fecha: $('accFecha').value || null,
