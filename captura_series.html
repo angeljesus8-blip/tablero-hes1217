@@ -1692,9 +1692,25 @@ function accExtraer(txt){
    una lectura mala eligiera sola el producto, se registraría una mica como
    cargador sin que nadie lo viera. La lista se queda, con la sugerencia ya
    marcada. */
+/* Las confusiones del OCR en matriz de puntos, aplanadas.
+
+   Medido en piso: `CARGA100WTS` se leyó `CARGATOONTS 2 77`. O sea 1→T, 0→O,
+   W→N. Con `CARGA` coincidiendo pero `100W` no, empataba con CARGADOR 66W y no
+   proponía nada — correcto pero inútil.
+
+   La clave es aplicar el mismo mapa a LOS DOS lados: así las confusiones se
+   cancelan en vez de tener que acertarlas. `CARGA100W` y `CARGATOONTS` acaban
+   los dos en `CAR6A100W…` y el prefijo común pasa de 5 a 9.
+
+   Se aplanan solo los pares que de verdad se confunden en esta impresora. Meter
+   más no es más listo: dos artículos distintos podrían acabar iguales, y ahí la
+   propuesta sería peor que no proponer. */
+const ACC_OCR = { O:'0', D:'0', Q:'0', I:'1', L:'1', T:'1', '|':'1', ']':'1',
+                  Z:'2', S:'5', B:'8', G:'6', N:'W', M:'W' };
 function accClave(s){
   return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
-           .replace(/^43739/, '');          // el prefijo lo llevan casi todos
+           .replace(/^43739/, '')           // el prefijo lo llevan casi todos
+           .replace(/[ODQILT|\]ZSBGNM]/g, c => ACC_OCR[c] || c);
 }
 /* Devuelve los codigos que trae el ticket en «SERVICIO:». Se separa de la
    adivinanza para poder ENSENARLOS: cuando no se propone producto, lo primero
