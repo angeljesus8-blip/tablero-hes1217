@@ -234,8 +234,15 @@ def r_version(staged):
 
     cambiados = git_cambiados(staged)
     if not cambiados: return
+    # Solo los archivos que SIRVE el service worker. Un .html que no está en
+    # `HTML` ni en el precache no llega a ningún celular por esa vía, así que
+    # exigir que suba VERSION es hacer saltar la regla por algo correcto — y una
+    # regla que avisa de lo correcto se acaba ignorando. (17-ago-2026, con
+    # `prueba_ticket.html`, que es una página suelta de medición.)
+    precache = set(re.findall(r"'\./([^']+)'", sw))
     tocaron_app = [c for c in cambiados
-                   if c.endswith('.html') or c.endswith('datos.js')]
+                   if (c.endswith('.html') or c.endswith('datos.js'))
+                   and (c in HTML or c in precache)]
     if tocaron_app and 'sw.js' not in cambiados:
         falla('sw', 'cambiaron %s pero VERSION sigue en %s. Súbela en sw.js o los '
                     'celulares no reciben nada.' % (', '.join(tocaron_app[:3]), ver))
