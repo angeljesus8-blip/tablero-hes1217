@@ -161,6 +161,9 @@
     max-width:560px; margin:0 auto; box-shadow:0 -4px 18px rgba(0,0,0,.06); }
   .footbar .btn{ font-size:14px; padding:13px; }
   .btn-csv{ background:var(--azul); color:#fff; flex:1; }
+  /* Accesorios (18-ago-2026). Naranja para que no se confunda con capturar una
+     venta con serie: es otro flujo y otra tabla. */
+  .btn-acc{ background:var(--naranja); color:#fff; flex:1; }
   .lock-msg{ flex:1; text-align:center; font-size:12.5px; color:var(--gris); font-weight:600;
     padding:13px; background:#f6f6f7; border-radius:12px; }
   .lock-msg b{ color:var(--rojo); }
@@ -393,6 +396,7 @@
 </main>
 
 <div class="footbar">
+  <button class="btn btn-acc" id="btnAcc" title="Cargadores, micas y demás accesorios">🔌 Accesorio</button>
   <button class="btn btn-csv" id="btnCsv">📋 Ventas del día</button>
   <div class="lock-msg" id="lockMsg">🔒 Solo <b>Laura</b> abre la hoja de ventas</div>
 </div>
@@ -1426,6 +1430,8 @@ function marcarCopiada(fechaTxt, serie){
   catch(e){}                     // sin espacio: se pierde la marca, no la venta
 }
 
+$('btnAcc').onclick = () => abrirAcc();
+
 $('btnCsv').onclick = async () => {
   if(!puedeVerVentas_()){ toast('No tienes permiso para ver las ventas', 'warn'); return; }
   /* Primero sube lo que falte de este teléfono, y a SUPABASE: el panel de abajo
@@ -1552,6 +1558,245 @@ function pintarVentasDia(){
   vdBotonesNav(true);
   vdContar();
 }
+
+/* ---------- Accesorios · SKU genérico 43739 (18-ago-2026) ----------
+
+   Cargadores, micas y kits se venden con un SKU genérico y no pasan por
+   Captura de Series, que es para equipos con número de serie. Su reporte
+   mensual se llenaba desde fotos del POS: en julio, 24 de ~85 tickets no se
+   pudieron resolver desde la foto y hubo que abrirlos uno por uno.
+
+   EL ORDEN IMPORTA MÁS QUE LA VELOCIDAD. El OCR tarda ~9 s medidos en el
+   celular de piso, así que arranca EN CUANTO se toma la foto y corre mientras
+   el asesor elige el producto de la lista. Para cuando termina de elegir, ya
+   está. Si se hiciera al revés —esperar el OCR y luego preguntar— serían nueve
+   segundos mirando una barra con el cliente delante.
+
+   Lo que el OCR NO hace es decir qué producto es: devolvió `CARGATOOWTS` por
+   `CARGA100WTS`, y en un ticket de ocho artículos agarró el IMEI del MatePad.
+   Por eso el producto se ELIGE, y de paso muere la ambigüedad de las dos micas
+   de $149 y las dos de $299, que fueron 19 de los 24 tickets de julio. */
+let _accOcr = null;          // promesa del OCR en curso
+let _accCat = [];            // catálogo de accesorios
+
+const ACC_ANCLAS = [/437\s?39/, /atendido/i, /productos/i, /1217/,
+                    /articulo/i, /importe/i, /reimprimir/i];
+
+/* El precio unitario del POS lleva TRES decimales: «999.000» son 999 pesos.
+   Leerlo como separador de miles daba $999,000 y la comprobación de abajo no
+   cerraba nunca — la app habría mandado a revisar el 100% de las líneas hasta
+   que alguien se cansara de revisar. El importe, en cambio, lleva dos
+   decimales y coma de miles. Son formatos distintos y se leen distinto. */
+function accNum3(x){
+  if(x == null) return null;
+  const s = String(x).replace(/,/g, '.');
+  const m = s.match(/^(\d+)\.(\d{3})$/);
+  const v = m ? Number(m[1]) + Number(m[2]) / 1000 : Number(s.replace(/[^\d.]/g, ''));
+  return isFinite(v) ? v : null;
+}
+function accNum(x){
+  if(x == null) return null;
+  const v = Number(String(x).replace(/,/g, '').replace(/[^\d.]/g, ''));
+  return isFinite(v) ? v : null;
+}
+
+function accPreparar(img, giro, escala){
+  const vert = (giro === 90 || giro === 270);
+  const w = Math.round((vert ? img.height : img.width) * escala);
+  const h = Math.round((vert ? img.width : img.height) * escala);
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const cx = cv.getContext('2d');
+  cx.translate(w/2, h/2); cx.rotate(giro * Math.PI / 180);
+  const dw = Math.round(img.width * escala), dh = Math.round(img.height * escala);
+  cx.drawImage(img, -dw/2, -dh/2, dw, dh);
+  const d = cx.getImageData(0,0,w,h), a = d.data;
+  for(let i=0;i<a.length;i+=4){
+    let g = (a[i]*0.299 + a[i+1]*0.587 + a[i+2]*0.114);
+    g = Math.max(0, Math.min(255, (g - 128) * 1.45 + 128));
+    a[i]=a[i+1]=a[i+2]=g;
+  }
+  cx.putImageData(d,0,0);
+  return cv;
+}
+
+/* Lee el ticket. La orientación se resuelve probando las cuatro con una
+   MINIATURA y quedándose con la que encuentre tres anclas: el asesor no puede
+   encuadrar igual siempre y no se le va a pedir. Medido: 3 s cuando acierta a
+   la primera, y con la foto entera —sin recortar nada. */
+async function accLeerTicket(file){
+  await loadTesseract();
+  const img = await new Promise((res, rej) => {
+    const i = new Image(); i.onload = () => res(i); i.onerror = rej;
+    i.src = URL.createObjectURL(file);
+  });
+  const worker = await Tesseract.createWorker('spa');
+  try{
+    let mejor = { giro:0, anclas:-1 };
+    for(const giro of [0, 90, 180, 270]){
+      const cv = accPreparar(img, giro, 900 / Math.max(img.width, img.height));
+      const { data } = await worker.recognize(cv);
+      const n = ACC_ANCLAS.filter(re => re.test(data.text)).length;
+      if(n > mejor.anclas) mejor = { giro, anclas:n };
+      if(n >= 3) break;
+    }
+    const cv = accPreparar(img, mejor.giro,
+                 Math.min(2.2, 2200 / Math.max(img.width, img.height)));
+    const { data } = await worker.recognize(cv);
+    return accExtraer(data.text);
+  } finally { await worker.terminate(); }
+}
+
+/* Saca lo que importa del texto leído.
+
+   EL IMPORTE SALE DE LA LÍNEA DEL 43739, no del total del ticket. Un ticket de
+   ocho artículos por $16,962.50 puede llevar un kit de limpieza de $169; el
+   total no dice nada del accesorio.
+
+   Y la comprobación `precio × cantidad = importe` es la que avisa de un dígito
+   mal leído — y dice EN QUÉ LÍNEA, que es lo que la verificación por
+   subtotales del reporte mensual nunca pudo decir. */
+function accExtraer(txt){
+  const idl = txt.match(/1217\s+\d\s+(\d{1,2}\/\d{1,2}\/\d{2})\s+[\d:]+\s*[APap][MmHh]?\s+(\d{4,6})/);
+  // La cantidad acepta ] I l | : el OCR los confunde con 1 en matriz de puntos.
+  const lin = txt.match(/0{0,6}43\s?739\D{0,6}([\dIl\]|]{1,3})\s+([\d.,]+)\s+\$?\s?([\d.,]+)/);
+  const cant = lin ? accNum(String(lin[1]).replace(/[Il\]|]/g, '1')) : null;
+  const pUni = lin ? accNum3(lin[2]) : null;
+  const imp  = lin ? accNum(lin[3])  : null;
+  return {
+    ticket: idl ? idl[2] : (txt.match(/\b(3\d{4})\b/) || [])[1] || '',
+    fecha:  idl ? idl[1] : '',
+    // «Atendido por» es quien VENDIÓ. El número del final del ticket es quien
+    // cobró en caja, y no son la misma persona. La comisión es del que vendió.
+    vend:   ((txt.match(/Atendido\s*por\s*:?\s*([^\r\n]{3,40})/i) || [])[1] || '').trim(),
+    cant, precio: pUni, importe: imp,
+    cuadra: (cant != null && pUni != null && imp != null)
+            && Math.abs(pUni * cant - imp) < 0.02,
+    texto: txt
+  };
+}
+
+function accHoyISO(){
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' +
+         String(d.getDate()).padStart(2,'0');
+}
+
+window.abrirAcc = async function(){
+  _accOcr = null;
+  $('accEstado').textContent = '';
+  $('accLeido').style.display = 'none';
+  $('accError').style.display = 'none';
+  $('accTicket').value = ''; $('accPrecio').value = ''; $('accCant').value = '1';
+  $('accFecha').value = accHoyISO();
+  $('accVend').innerHTML = VENDEDORES.map(n => '<option>' + esc(n) + '</option>').join('');
+  if(currentVend) $('accVend').value = currentVend;
+
+  // El catálogo, de la nube. Si no llega, no se puede elegir producto y se dice.
+  if(!_accCat.length){
+    const filas = await sbCallCS('accesorios_catalogo_lista', {}, 10000);
+    _accCat = Array.isArray(filas) ? filas : [];
+  }
+  $('accProd').innerHTML = _accCat.length
+    ? '<option value="">— elige el producto —</option>' +
+      _accCat.map(c => '<option data-p="' + (c.precio_ref||'') + '">' + esc(c.nombre) + '</option>').join('')
+    : '<option value="">(no se pudo cargar el catálogo)</option>';
+
+  $('accPanel').classList.add('show');
+};
+window.cerrarAcc = function(){ $('accPanel').classList.remove('show'); };
+
+/* Al elegir producto se sugiere su precio de referencia, pero SOLO si el OCR no
+   trajo uno: el del ticket es lo que se cobró de verdad y el de referencia es
+   lo que costaría hoy. El mismo cargador 100W se ha vendido a $999, $899.10,
+   $699 y $1,299. */
+window.accProdCambio = function(){
+  const op = $('accProd').selectedOptions[0];
+  const ref = op && op.dataset ? op.dataset.p : '';
+  if(ref && !$('accPrecio').value) $('accPrecio').value = ref;
+};
+
+/* `onclick`/`onchange` van en el HTML del panel, NO aquí: este <script>
+   termina antes de que exista ese <div>, así que `$('accFoto')` sería null al
+   cargar y `null.onclick` tumbaría la captura entera al arrancar — no el panel,
+   toda la pantalla. Lo cazó `pruebas/cola_ventas.js`, que respeta el orden del
+   documento; es el mismo fallo del 17-ago con `edSku`. */
+window.accTomarFoto = function(){ $('accFile').click(); };
+window.accFotoElegida = function(e){
+  const f = e.target.files[0];
+  if(!f) return;
+  $('accEstado').textContent = 'Leyendo el ticket… puedes ir eligiendo el producto';
+  // Corre EN PARALELO. Nadie espera mirando una barra.
+  _accOcr = accLeerTicket(f).then(function(r){
+    $('accEstado').textContent = '';
+    if(r.ticket && !$('accTicket').value) $('accTicket').value = r.ticket;
+    if(r.importe != null && !$('accPrecio').value) $('accPrecio').value = r.precio != null ? r.precio : r.importe;
+    if(r.cant && Number(r.cant) > 0) $('accCant').value = r.cant;
+    if(r.fecha){
+      const m = r.fecha.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/);
+      if(m) $('accFecha').value = '20' + m[3] + '-' + m[2].padStart(2,'0') + '-' + m[1].padStart(2,'0');
+    }
+    if(r.vend){
+      const flojo = VENDEDORES.filter(v => _sinAcentos(v).indexOf(_sinAcentos(r.vend.split(',')[0])) >= 0);
+      if(flojo.length === 1) $('accVend').value = flojo[0];
+    }
+    const el = $('accLeido');
+    el.innerHTML = 'Del ticket: <b>' + esc(r.ticket || '—') + '</b>'
+      + (r.fecha ? ' · ' + esc(r.fecha) : '')
+      + (r.vend ? ' · ' + esc(r.vend) : '')
+      + (r.importe != null ? '<br>Importe leído: <b>$' + r.importe + '</b>' : '')
+      + (r.cuadra
+          ? ' — la cuenta del ticket cuadra ✓'
+          : '<br><b>Ojo:</b> no pude comprobar el importe contra la línea del ticket. '
+            + 'Míralo antes de guardar.');
+    el.style.display = 'block';
+    return r;
+  }).catch(function(){
+    $('accEstado').textContent = '';
+    const el = $('accError');
+    el.textContent = 'No se pudo leer el ticket. Escribe los datos a mano — la venta se guarda igual.';
+    el.style.display = 'block';
+    return null;
+  });
+};
+
+window.guardarAcc = async function(){
+  const err = m => { const e = $('accError'); e.textContent = m; e.style.display = 'block'; };
+  $('accError').style.display = 'none';
+
+  const prod = $('accProd').value.trim();
+  const ticket = $('accTicket').value.trim();
+  const precio = Number(String($('accPrecio').value).replace(/[^0-9.]/g, ''));
+  const cant = Math.max(1, Number($('accCant').value) || 1);
+
+  if(!prod)   return err('Elige qué producto fue. Es lo que el ticket no dice.');
+  if(!ticket) return err('Falta el número de ticket.');
+  if(!(precio > 0)) return err('Falta el precio.');
+
+  const btn = $('accGuardar');
+  btn.disabled = true; btn.textContent = 'Guardando…';
+  try{
+    const r = await sbCallCS('accesorio_guardar', {
+      p_token: GAS_TOKEN, p_ticket: ticket, p_producto: prod,
+      p_cantidad: cant, p_precio: precio,
+      p_vendedor: $('accVend').value,
+      p_fecha: $('accFecha').value || null,
+      p_quien: MI_EMPNO,
+      p_captura_id: 'a' + Date.now() + Math.random().toString(36).slice(2,6),
+      p_ocr: _accOcr ? ((await _accOcr) || {}).texto || null : null
+    }, 15000);
+
+    if(!r || r.ok !== true) return err((r && r.error) || 'No se pudo guardar. Revisa la conexión.');
+    if(r.duplicada) return err(r.error || 'Ese ticket ya tenía registrado ese producto.');
+
+    cerrarAcc();
+    toast('Accesorio registrado ✓ $' + (r.importe != null ? r.importe : precio), 'ok');
+  }catch(e){
+    err('No se pudo guardar · ' + ((e && e.message) || 'sin conexión'));
+  }finally{
+    btn.disabled = false; btn.textContent = 'Guardar';
+  }
+};
 
 /* ---------- Corregir una venta (17-ago-2026) ----------
    Lo último que se hacía en la hoja de cálculo. Desde la fase 6 la hoja no
@@ -2178,6 +2423,60 @@ refreshEolVenta(); // trae los EOL con 50% activo (solo exhibición)
       <div id="vdAyuda" style="font-size:12.5px;color:var(--gris);text-align:center;line-height:1.45">
         Haz clic en una serie para copiarla
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Accesorios del SKU genérico 43739 (18-ago-2026). Cargadores, micas, kits.
+     No van a la tabla `ventas`: ahí contaminarían el inventario y el Assurant. -->
+<div id="accPanel" class="vd" style="z-index:75">
+  <div class="vd-box" style="max-height:94vh">
+    <div class="vd-top">
+      <h2>Accesorio vendido</h2>
+      <button class="vd-cerrar" onclick="cerrarAcc()" aria-label="Cerrar">×</button>
+    </div>
+    <div class="vd-lista" style="padding:14px 16px">
+
+      <input type="file" accept="image/*" capture="environment" id="accFile" hidden onchange="accFotoElegida(event)">
+      <button class="btn" id="accFoto" onclick="accTomarFoto()" style="background:var(--azul);color:#fff;width:100%">
+        📷 Foto del ticket</button>
+      <div id="accEstado" style="font-size:12.5px;color:var(--azul);font-weight:700;
+           margin-top:8px;min-height:18px"></div>
+
+      <label class="ed-l">Producto</label>
+      <select id="accProd" class="ed-i" onchange="accProdCambio()"></select>
+
+      <div style="display:flex;gap:10px">
+        <div style="flex:1">
+          <label class="ed-l">Precio</label>
+          <input id="accPrecio" class="ed-i" inputmode="decimal" autocomplete="off">
+        </div>
+        <div style="width:88px">
+          <label class="ed-l">Piezas</label>
+          <input id="accCant" class="ed-i" inputmode="numeric" value="1" autocomplete="off">
+        </div>
+      </div>
+
+      <label class="ed-l">N° de ticket</label>
+      <input id="accTicket" class="ed-i" inputmode="numeric" autocomplete="off">
+
+      <label class="ed-l">Lo vendió</label>
+      <select id="accVend" class="ed-i"></select>
+
+      <label class="ed-l">Fecha</label>
+      <input id="accFecha" class="ed-i" type="date">
+
+      <!-- Lo que el OCR entendió, para poder desmentirlo de un vistazo -->
+      <div id="accLeido" style="display:none;margin-top:12px;padding:10px 12px;
+           border-radius:9px;border-left:4px solid var(--azul);background:#eef4fb;
+           font-size:12.5px;line-height:1.45;color:#24507f"></div>
+      <div id="accError" style="display:none;margin-top:12px;padding:10px 12px;
+           border-radius:9px;border-left:4px solid var(--rojo);background:#fdeaea;
+           font-size:12.5px;line-height:1.45;color:#8a1f1f"></div>
+    </div>
+    <div class="vd-pie" style="display:flex;gap:10px;padding:12px 16px">
+      <button class="btn" style="flex:1;background:#eee;color:#444" onclick="cerrarAcc()">Cancelar</button>
+      <button class="btn" style="flex:2" id="accGuardar" onclick="guardarAcc()">Guardar</button>
     </div>
   </div>
 </div>
