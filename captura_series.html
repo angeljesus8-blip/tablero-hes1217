@@ -274,6 +274,13 @@
     color:var(--azul); background:#eaf1fa; border-radius:5px; padding:2px 7px;
     white-space:nowrap; }
   .vd-fila.entrega{ background:#fbfdff; }
+  /* Un cobro es dinero que entró HOY: verde, como el precio. La entrega es azul
+     porque es mercancía que sale de una venta vieja. Son cosas distintas y en
+     esta lista conviven. */
+  .vd-ent.vd-cobro{ color:#1c6b34; background:#eaf7ee; }
+  .vd-fila.cobro{ background:#fbfffc; }
+  .vd-sinserie{ color:#bbb; font-style:italic; font-weight:600;
+    font-family:Montserrat,sans-serif; letter-spacing:0; }
   .vd-fila.hecha .vd-ent{ color:#cfcfcf; background:#f7f7f7; }
   .vd-pie{ padding:12px 18px 16px; border-top:1px solid var(--linea); }
   .vd-vacio{ padding:28px 18px; text-align:center; color:#aaa; font-size:13px; }
@@ -1459,7 +1466,9 @@ async function cargarVentasDia(dia){
                // 'preventa' | 'traspaso' | '' — ver la etiqueta en pintarVentasDia
                entrega: v.entrega || '',
                // Cuándo se cobró el apartado: dice en qué corte está su ticket
-               cobrado: v.cobrado_en ? String(v.cobrado_en).slice(0,10) : '' };
+               cobrado: v.cobrado_en ? String(v.cobrado_en).slice(0,10) : '',
+               // 'venta' | 'entrega' | 'cobro' — un cobro todavía no tiene equipo
+               clase: v.clase || 'venta' };
     });
     _vdFecha  = dia;
     pintarVentasDia();
@@ -1491,15 +1500,41 @@ function fechaCortaCS_(txt){
   return Number(m[3]) + ' ' + (MESES[Number(m[2]) - 1] || m[2]);
 }
 
+/* La pastilla que dice qué es cada renglón. Tres cosas distintas:
+
+     cobro    – se pagó HOY y todavía no hay equipo. Cuenta para el Assurant de
+                hoy, y por eso tiene que estar en la lista: si no, el porcentaje
+                sube y las filas de abajo no lo explican.
+     entrega  – el equipo sale hoy, pero se cobró otro día. NO cuenta para hoy;
+                la fecha dice en qué corte está su ticket.
+     venta    – lo normal, sin pastilla. */
+function etiquetaVenta_(v){
+  if(v.clase === 'cobro'){
+    return '<span class="vd-ent vd-cobro">💵 apartado cobrado hoy'
+         + (v.entrega === 'traspaso' ? ' · traspaso' : '') + '</span>';
+  }
+  if(v.entrega){
+    return '<span class="vd-ent">' + (v.entrega === 'traspaso' ? '🚚 traspaso' : '📦 preventa')
+         + (v.cobrado ? ' · cobrado ' + fechaCortaCS_(v.cobrado) : '') + '</span>';
+  }
+  return '';
+}
+
 function pintarVentasDia(){
   const dia = _vdFecha || new Date();
   const ya  = copiadasDe(fechaGas(dia));
   $('vdFechaTxt').textContent = fechaBonita(dia);
-  $('vdN').textContent = _vdVentas.length + (_vdVentas.length === 1 ? ' equipo' : ' equipos');
+  /* Los cobros no son equipos que hayan salido de la tienda: se cuentan aparte.
+     Meterlos en «N equipos» haría que el número no cuadre con lo que se entregó
+     ni con lo que se cobró — ni una cosa ni la otra. */
+  const _nCobros = _vdVentas.filter(v => v.clase === 'cobro').length;
+  const _nEquipos = _vdVentas.length - _nCobros;
+  $('vdN').textContent = _nEquipos + (_nEquipos === 1 ? ' equipo' : ' equipos')
+                       + (_nCobros ? ' · ' + _nCobros + ' cobro' + (_nCobros===1?'':'s') : '');
   $('vdLista').innerHTML = _vdVentas.length
-    ? _vdVentas.map((v, i) => `<div class="vd-fila${ya.indexOf(v.serie) >= 0 ? ' hecha' : ''}${v.entrega ? ' entrega' : ''}" id="vdf${i}" onclick="copiarSerie(${i})">
+    ? _vdVentas.map((v, i) => `<div class="vd-fila${ya.indexOf(v.serie) >= 0 ? ' hecha' : ''}${v.clase === 'cobro' ? ' cobro' : (v.entrega ? ' entrega' : '')}" id="vdf${i}" onclick="copiarSerie(${i})">
         <div class="txt">
-          <div class="vd-serie">${v.serie}${v.entrega ? `<span class="vd-ent">${v.entrega === 'traspaso' ? '🚚 traspaso' : '📦 preventa'}${v.cobrado ? ' · cobrado ' + fechaCortaCS_(v.cobrado) : ''}</span>` : ''}</div>
+          <div class="vd-serie">${v.serie || '<span class="vd-sinserie">sin equipo todavía</span>'}${etiquetaVenta_(v)}</div>
           <div class="vd-det">
             <span class="sku">${v.sku || '—'}</span>
             <span>${v.desc || 'sin descripción'}</span>
@@ -1731,8 +1766,13 @@ async function verFoto(capturaId, serie){
 function vdContar(){
   if(!_vdVentas.length){ $('vdAyuda').innerHTML = ''; return; }
   const ya = copiadasDe(fechaGas(_vdFecha || new Date()));
-  const faltan = _vdVentas.filter(v => ya.indexOf(v.serie) < 0).length;
-  const txt = faltan === _vdVentas.length
+  /* Solo se cuentan las que TIENEN serie: un apartado cobrado hoy no tiene
+     equipo, así que no hay nada que copiar y sumarlo dejaría el contador
+     pidiendo copiar algo que no existe. */
+  const conSerie = _vdVentas.filter(v => v.serie);
+  const faltan = conSerie.filter(v => ya.indexOf(v.serie) < 0).length;
+  const txt = !conSerie.length ? ''
+    : faltan === conSerie.length
     ? 'Haz clic en una serie para copiarla'
     : faltan ? faltan + (faltan === 1 ? ' serie por copiar' : ' series por copiar')
              : '✓ Todas copiadas';
@@ -1741,12 +1781,18 @@ function vdContar(){
      cuadrar contra el POS: el cliente pagó semanas antes, así que esos tickets
      no están en el corte de hoy. Sin esto, quien cuadra la caja busca renglones
      que no va a encontrar y no sabe por qué. */
-  const ent = _vdVentas.filter(v => v.entrega).length;
-  $('vdAyuda').innerHTML = txt + (ent
-    ? `<div style="margin-top:6px;font-size:11.5px;color:var(--azul);line-height:1.4">`
-      + `${ent} ${ent === 1 ? 'es una entrega' : 'son entregas'} de apartado · `
-      + `se cobraron antes, no están en el corte de hoy</div>`
-    : '');
+  const ent    = _vdVentas.filter(v => v.clase === 'entrega').length;
+  const cobros = _vdVentas.filter(v => v.clase === 'cobro').length;
+  const nota = (t, color) => `<div style="margin-top:6px;font-size:11.5px;color:${color};line-height:1.4">${t}</div>`;
+  $('vdAyuda').innerHTML = txt
+    + (ent ? nota(`${ent} ${ent === 1 ? 'es una entrega' : 'son entregas'} de apartado · `
+                + `se cobraron antes, no están en el corte de hoy`, 'var(--azul)') : '')
+    /* Al revés que las entregas: el dinero SÍ entró hoy y el Assurant ya las
+       cuenta. Sin este renglón, el porcentaje del día sube y la lista no lo
+       explica — que es el descuadre que esto viene a cerrar. */
+    + (cobros ? nota(`${cobros} apartado${cobros===1?'':'s'} cobrado${cobros===1?'':'s'} hoy · `
+                   + `sí cuenta${cobros===1?'':'n'} para el Assurant, el equipo se entrega después`,
+                   'var(--verde)') : '');
 }
 
 function vdMover(dias){
@@ -1765,6 +1811,10 @@ function cerrarVentasDia(){ $('vdPanel').classList.remove('show'); }
 async function copiarSerie(i){
   const v = _vdVentas[i];
   if(!v) return;
+  /* Un apartado cobrado hoy todavía no tiene equipo, así que no hay serie que
+     copiar. Se dice, en vez de copiar una cadena vacía y dejar al asesor
+     pegando nada en el POS sin saber por qué. */
+  if(!v.serie){ toast('Ese apartado aún no tiene equipo asignado', 'warn'); return; }
   const fila = document.getElementById('vdf' + i);
   let ok = false;
   try{

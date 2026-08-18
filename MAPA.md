@@ -314,6 +314,38 @@ Lo cubren los bloques 5 y 6 de `pruebas/cola_ventas.js` —que la marca llegue a
 cuerpo que va a Supabase, y que una venta normal salga explícitamente como **no**
 de exhibición—, comprobados rompiendo el paso del dato.
 
+### Los apartados cobrados hoy salen en «Ventas del día» *(17-ago-2026, v182)*
+
+**Esto cerró un descuadre que ya existía.** `ventas_hoy` —el Assurant del día—
+cuenta los apartados pagados hoy desde el 8-ago: un apartado es una venta
+cobrada aunque el equipo no exista todavía. Pero `ventas_detalle` no los
+enseñaba, así que el día que se cobraba uno, **el porcentaje subía y las filas
+de abajo no lo explicaban**. Es lo mismo que se arregló con el attach manual: la
+suma de las filas tiene que dar el total y poder comprobarse de un vistazo.
+
+`ventas_detalle` devuelve ahora `clase`, y son tres cosas distintas:
+
+| clase | qué es | ¿cuenta hoy? | serie |
+|---|---|---|---|
+| `venta` | capturada en la app | sí | sí |
+| `entrega` | equipo que sale de un apartado viejo | **no** | sí |
+| `cobro` | apartado pagado hoy | **sí** | todavía no |
+
+Los cancelados no salen — mismo criterio que `ventas_hoy`, para que las dos
+cuenten lo mismo. Si una se toca, se toca la otra.
+
+**Un cobro no tiene equipo, y eso se dice en tres sitios**: la fila pone «sin
+equipo todavía» en vez de dejar el hueco, tocarla avisa en lugar de copiar una
+cadena vacía al portapapeles, y el contador de arriba los separa —«3 equipos ·
+1 cobro»—, porque sumarlos daría un número que no es ni lo entregado ni lo
+cobrado.
+
+Tampoco traen `captura_id`, así que la app no les ofrece el ✏️ ni el borrado. Es
+lo correcto: un apartado se corrige desde Preventa.
+
+Para comprobar que la lista y el KPI siguen cuadrando está el punto 1-bis de
+`supabase_ventas_detalle_entrega.sql`.
+
 ### Corregir una venta *(17-ago-2026, v171)*
 
 Lo último que se hacía en la hoja. Vive en el panel **Ventas del día** de
