@@ -269,7 +269,8 @@ const ok = (t, c, extra) => { if(!c) fallos.push(t + (extra ? ' -> ' + extra : '
         { serie:'S-NORMAL', sku:'900001', desc:'Venta normal', precio:'1000',
           vend:'X', hora:'10:00', captura_id:'i1', foto:false, entrega:'' },
         { serie:'S-PREVENTA', sku:'900002', desc:'Entrega de preventa', precio:'2000',
-          vend:'Y', hora:'11:00', captura_id:'', foto:false, entrega:'preventa' },
+          vend:'Y', hora:'11:00', captura_id:'', foto:false, entrega:'preventa',
+          cobrado:'2026-07-20' },
         { serie:'S-TRASPASO', sku:'900003', desc:'Entrega de traspaso', precio:'3000',
           vend:'Z', hora:'12:00', captura_id:'', foto:false, entrega:'traspaso' }
       ];
@@ -287,6 +288,11 @@ const ok = (t, c, extra) => { if(!c) fallos.push(t + (extra ? ' -> ' + extra : '
     ok('solo la venta normal ofrece el ✏️ de corregir',
        (lista.match(/abrirEditarVenta/g) || []).length === 1,
        'salieron ' + (lista.match(/abrirEditarVenta/g) || []).length);
+
+    /* La fecha del cobro es lo que dice EN QUÉ CORTE está el ticket. Sin ella,
+       la etiqueta avisa de que la venta es rara pero no dónde buscarla. */
+    ok('y la entrega dice cuándo se cobró',
+       lista.indexOf('cobrado 20 jul') >= 0, lista.slice(0, 400));
 
     const pie = s.el('vdAyuda').innerHTML || '';
     ok('y el pie dice cuántas no están en el corte de hoy',
