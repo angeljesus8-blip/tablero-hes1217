@@ -1676,6 +1676,59 @@ function accExtraer(txt){
   };
 }
 
+/* ── Adivinar QUÉ producto fue, desde el código del ticket ───────────────
+   18-ago-2026, con el catálogo oficial delante.
+
+   El campo «IMEI / SERIE / SERVICIO» del ticket no es texto libre: lleva el
+   CÓDIGO del artículo, abreviado a mano por el cajero. `CARGA100WTS` es
+   `43739-CARGA-100W`. Así que se puede proponer el producto en vez de hacer
+   buscar entre veintidós.
+
+   Se compara con todo reducido a letras y números —el OCR se come guiones y
+   espacios— y por PREFIJO en los dos sentidos, porque el cajero abrevia por
+   delante y el OCR se come el final.
+
+   PROPONE, NO DECIDE. El OCR leyó `CARGATOOWTS` en vez de `CARGA100WTS`: si
+   una lectura mala eligiera sola el producto, se registraría una mica como
+   cargador sin que nadie lo viera. La lista se queda, con la sugerencia ya
+   marcada. */
+function accClave(s){
+  return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+           .replace(/^43739/, '');          // el prefijo lo llevan casi todos
+}
+function accAdivinar(textoTicket){
+  const m = String(textoTicket || '').match(/SERVICIO\s*:?\s*([A-Z0-9\- ]{3,30})/ig);
+  if(!m) return null;
+  // Puede haber varios «SERVICIO:» (un ticket de 8 artículos trae el IMEI de
+  // cada equipo). Se prueban todos y gana el que se parezca a un accesorio.
+  for(const trozo of m){
+    const leido = accClave(trozo.replace(/SERVICIO\s*:?/i, ''));
+    if(leido.length < 4) continue;
+    /* Gana el prefijo MÁS LARGO, y solo si le saca ventaja al segundo.
+
+       Antes se aceptaba el primero que llegara a cinco letras, y con
+       `CARGA100WTS` proponía CARGADOR 66W: los dos empiezan por `CARGA` y el
+       de 66W salía antes en la lista. Son $500 de diferencia en un reporte de
+       comisiones, propuestos con toda confianza.
+
+       El empate NO propone nada. Con `CARGATOOWTS` —lo que el OCR leyó de
+       verdad— los dos cargadores empatan en `CARGA`, y ahí lo correcto es
+       callarse: proponer al azar es peor que no proponer, porque el asesor
+       tiende a aceptar lo que ya viene puesto. */
+    let mejor = null, largo = 0, segundo = 0;
+    for(const c of _accCat){
+      const cod = accClave(c.articulo);
+      if(!cod || cod.length < 4) continue;
+      const corto = Math.min(cod.length, leido.length);
+      let i = 0; while(i < corto && cod[i] === leido[i]) i++;
+      if(i > largo){ segundo = largo; largo = i; mejor = c.nombre; }
+      else if(i > segundo){ segundo = i; }
+    }
+    if(largo >= 6 && largo > segundo) return mejor;
+  }
+  return null;
+}
+
 function accHoyISO(){
   const d = new Date();
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' +
@@ -1740,8 +1793,14 @@ window.accFotoElegida = function(e){
       const flojo = VENDEDORES.filter(v => _sinAcentos(v).indexOf(_sinAcentos(r.vend.split(',')[0])) >= 0);
       if(flojo.length === 1) $('accVend').value = flojo[0];
     }
+    // El producto, propuesto desde el código del artículo. Se marca en la
+    // lista pero el asesor lo ve y lo puede cambiar.
+    const sugerido = accAdivinar(r.texto);
+    if(sugerido && !$('accProd').value) $('accProd').value = sugerido;
+
     const el = $('accLeido');
-    el.innerHTML = 'Del ticket: <b>' + esc(r.ticket || '—') + '</b>'
+    el.innerHTML = (sugerido ? 'Parece <b>' + esc(sugerido) + '</b> — compruébalo.<br>' : '')
+      + 'Del ticket: <b>' + esc(r.ticket || '—') + '</b>'
       + (r.fecha ? ' · ' + esc(r.fecha) : '')
       + (r.vend ? ' · ' + esc(r.vend) : '')
       + (r.importe != null ? '<br>Importe leído: <b>$' + r.importe + '</b>' : '')

@@ -54,8 +54,16 @@
 CREATE TABLE IF NOT EXISTS public.accesorios_catalogo (
   id         bigserial   PRIMARY KEY,
   store_id   text        NOT NULL REFERENCES public.tiendas(store_id) ON DELETE CASCADE,
+  -- El codigo del articulo, tal como viene en el catalogo oficial. NO es
+  -- decorativo: es lo que el cajero teclea en el campo «N. de serie» del
+  -- ticket, asi que sirve para PRESELECCIONAR el producto tras leerlo.
+  -- «CARGA100WTS» del ticket es este «43739-CARGA-100W» abreviado a mano.
+  articulo   text,
   nombre     text        NOT NULL,
   precio_ref numeric(12,2),
+  -- Del SKU generico 43739, o sea que va al reporte de comisiones. OFFICE y
+  -- las licencias tienen caja propia y NO cuentan para ese reporte.
+  generico   boolean     NOT NULL DEFAULT true,
   orden      integer     NOT NULL DEFAULT 100,
   activo     boolean     NOT NULL DEFAULT true,
   creado_en  timestamptz NOT NULL DEFAULT now(),
@@ -65,20 +73,59 @@ CREATE TABLE IF NOT EXISTS public.accesorios_catalogo (
 ALTER TABLE public.accesorios_catalogo ENABLE ROW LEVEL SECURITY;
 
 COMMENT ON TABLE public.accesorios_catalogo IS
-  'Nombres de accesorios que se venden con el SKU generico 43739. El precio de '
-  'referencia es una ayuda: el real sale del ticket, y varia por promocion.';
+  'Productos que se venden con el SKU generico 43739. El precio de referencia '
+  'es una ayuda: el real sale del ticket y varia por promocion. `articulo` es '
+  'el codigo que el cajero teclea en el campo de serie, y sirve para adivinar '
+  'el producto al leer el ticket.';
 
--- Los que ya se conocen, de los tickets y del reporte de julio. Se completan
--- desde Admin; aqui van para no arrancar con la lista vacia.
-INSERT INTO public.accesorios_catalogo (store_id, nombre, precio_ref, orden)
-VALUES ('1217', 'Mica hidrogel transparente',   149,  10),
-       ('1217', 'Mica hidrogel mate',           149,  20),
-       ('1217', 'Mica de privacidad',           299,  30),
-       ('1217', 'Mica para tablet',             299,  40),
-       ('1217', 'Cargador 66W',                 499,  50),
-       ('1217', 'Cargador 100W',                999,  60),
-       ('1217', 'Kit de limpieza',              169,  70)
-ON CONFLICT (store_id, nombre) DO NOTHING;
+ALTER TABLE public.accesorios_catalogo ADD COLUMN IF NOT EXISTS articulo text;
+ALTER TABLE public.accesorios_catalogo ADD COLUMN IF NOT EXISTS generico boolean NOT NULL DEFAULT true;
+
+/* EL CATALOGO REAL, de los dos documentos oficiales (18-ago-2026):
+     · «Productos Mr Fix 180526.pdf» — accesorios de computo
+     · la tabla de accesorios Huawei (micas, cargadores, licencias)
+
+   Sustituye a una lista que se habia puesto a ojo y estaba mal: los nombres
+   verdaderos son MICA HR / MATTE / BLUE / PRIV, no «hidrogel transparente» ni
+   «para tablet». La colision de $149 es entre HR y MATTE — las 19 lineas que
+   en julio hubo que abrir una por una. Y hay una a $199 que no se sabia. */
+INSERT INTO public.accesorios_catalogo (store_id, articulo, nombre, precio_ref, generico, orden)
+VALUES
+  ('1217','43739-MICAHR',        'MICA HR',                              149, true,  10),
+  ('1217','43739-MICAMATTE',     'MICA MATTE',                           149, true,  20),
+  ('1217','43739-MICABLUE',      'MICA BLUE',                            199, true,  30),
+  ('1217','43739-MICAPRIV',      'MICA PRIV',                            299, true,  40),
+  ('1217','43739-CARGA-66W',     'CARGADOR 66W',                         499, true,  50),
+  ('1217','43739-CARGA-100W',    'CARGADOR 100W',                        999, true,  60),
+  ('1217','W-1999',              'LICENCIA WINDOWS',                    1999, true,  70),
+  ('1217','80066',               'MEMORIA OTG 32GB ADATA ANDROID',        99, true, 100),
+  ('1217','AUV250-64G-RBK',      'MEM USB ADATA 64GB UV250',             189, true, 110),
+  ('1217','AUSDX64GUICL10-RA1',  'TARJETA MICROSD ADATA 64GB CLASE 10',  249, true, 120),
+  ('1217','91273',               'MEMORIA USB ADATA 128GB',              329, true, 130),
+  ('1217','P5116',               'MOUSEPAD PC KENSIN P511 RJ/GR',        329, true, 140),
+  ('1217','65960',               'MOUSE PAD FOAM AZUL CON DESCANSA MUNECA', 349, true, 150),
+  ('1217','HX-MPFS-S-XL',        'MOUSEPAD HYPERX FURY S SPEED EXTRA LARGO', 399, true, 160),
+  ('1217','80050',               'BATERIA RESPALDO ADATA 10,000 MAH',    399, true, 170),
+  ('1217','91276',               'MICRO SD ADATA 128GB CLASE 10',        499, true, 180),
+  ('1217','100011',              'DISCO DURO ADATA 500GB 2.5',           799, true, 190),
+  ('1217','80065',               'DISCO DURO EXTERNO ADATA 1 TB',       2099, true, 200),
+  ('1217','AHD710P-2TU31-CBK',   'DISCO DURO ADATA HD710 2TB',          2699, true, 210),
+  ('1217','HDTX140XK3CA',        'DISCO DURO TOSHIBA GAMER 4TB NG',     3699, true, 220),
+  -- Caja propia (63602 / 57518): NO son del generico y no van al reporte.
+  ('1217','63602',               'OFFICE PERSONAL',                     2249, false, 300),
+  ('1217','57518',               'OFFICE FAMILIA',                      2699, false, 310)
+ON CONFLICT (store_id, nombre) DO UPDATE
+  SET articulo = excluded.articulo, precio_ref = excluded.precio_ref,
+      generico = excluded.generico, orden = excluded.orden, activo = true;
+
+/* La lista que se puso a ojo antes de tener los documentos. Se da de baja, no
+   se borra: si alguna venta se guardo con esos nombres, se quedaria apuntando
+   a un producto inexistente. */
+UPDATE public.accesorios_catalogo SET activo = false
+ WHERE store_id = '1217'
+   AND nombre IN ('Mica hidrogel transparente','Mica hidrogel mate',
+                  'Mica de privacidad','Mica para tablet','Cargador 66W',
+                  'Cargador 100W','Kit de limpieza');
 
 
 -- ── 2 · Las ventas ──────────────────────────────────────────
@@ -212,11 +259,12 @@ END $fn$;
 
 
 -- ── 4 · Leer ────────────────────────────────────────────────
-CREATE OR REPLACE FUNCTION public.accesorios_catalogo_lista(p_store text)
-RETURNS TABLE (id bigint, nombre text, precio_ref numeric)
+DROP FUNCTION IF EXISTS public.accesorios_catalogo_lista(text);
+CREATE FUNCTION public.accesorios_catalogo_lista(p_store text)
+RETURNS TABLE (id bigint, nombre text, precio_ref numeric, articulo text, generico boolean)
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
 AS $$
-  SELECT c.id, c.nombre, c.precio_ref
+  SELECT c.id, c.nombre, c.precio_ref, c.articulo, c.generico
   FROM public.accesorios_catalogo c
   WHERE c.store_id = p_store AND c.activo
   ORDER BY c.orden, c.nombre;
