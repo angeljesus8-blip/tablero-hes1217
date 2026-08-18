@@ -1,6 +1,6 @@
 -- ============================================================
 --  DISTINGUIR LAS ENTREGAS EN «VENTAS DEL DÍA»
---  17-ago-2026
+--  17-ago-2026  ·  ampliado el mismo dia con `cobrado_en`
 -- ============================================================
 --
 --  En la lista de Ventas del día, una entrega de preventa o de traspaso se ve
@@ -40,7 +40,10 @@ RETURNS TABLE (serie text, sku text, descripcion text, precio numeric,
                vendedor text, con_seguro boolean, vendida_en timestamptz,
                captura_id text, tiene_foto boolean,
                -- NULL = venta normal. 'preventa' / 'traspaso' = sale de un apartado.
-               entrega text)
+               entrega text,
+               -- Cuando se COBRO el apartado. NULL en una venta normal, porque
+               -- ahi cobro y entrega son el mismo momento y ya lo dice vendida_en.
+               cobrado_en timestamptz)
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
 AS $$
   SELECT v.serie, v.sku, v.descripcion, v.precio, v.vendedor, v.con_seguro,
@@ -51,7 +54,12 @@ AS $$
             vínculo que usan `inventario_vivo`, `ventas_hoy`, `cargar_cortes` y
             `comparar_ventas` para excluirlas: `a.venta_id = v.id`. Aquí no se
             excluye nada — se enseña, que es justo lo que faltaba. */
-         (SELECT a.tipo FROM public.apartados a WHERE a.venta_id = v.id LIMIT 1)
+         (SELECT a.tipo      FROM public.apartados a WHERE a.venta_id = v.id LIMIT 1),
+         /* La fecha del cobro. Es la que dice en QUE CORTE esta el ticket: el
+            cliente pago semanas antes, a veces en otro mes, asi que buscarlo en
+            el de hoy es no encontrarlo. Sale del apartado, no de la venta —
+            `vendida_en` es el dia de la ENTREGA. */
+         (SELECT a.creado_en FROM public.apartados a WHERE a.venta_id = v.id LIMIT 1)
   FROM public.ventas v
   WHERE v.store_id = p_store
     AND (v.vendida_en AT TIME ZONE 'America/Mexico_City')::date
@@ -73,8 +81,10 @@ COMMENT ON FUNCTION public.ventas_detalle(text,date) IS
 --  COMPROBAR
 -- ============================================================
 --
---  1) Un día con entregas — las de apartado traen `entrega` y las normales no:
---       select serie, vendedor, entrega from public.ventas_detalle('1217','2026-08-16');
+--  1) Un día con entregas — las de apartado traen `entrega` y `cobrado_en`;
+--     las ventas normales, ninguno de los dos:
+--       select serie, vendedor, entrega, cobrado_en
+--         from public.ventas_detalle('1217','2026-08-16');
 --
 --  2) Que cuadre con los apartados entregados de ese día:
 --       select a.tipo, count(*) from public.apartados a
