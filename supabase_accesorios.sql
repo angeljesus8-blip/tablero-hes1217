@@ -61,9 +61,12 @@ CREATE TABLE IF NOT EXISTS public.accesorios_catalogo (
   articulo   text,
   nombre     text        NOT NULL,
   precio_ref numeric(12,2),
-  -- Del SKU generico 43739, o sea que va al reporte de comisiones. OFFICE y
-  -- las licencias tienen caja propia y NO cuentan para ese reporte.
-  generico   boolean     NOT NULL DEFAULT true,
+  /* El SKU con el que se COBRA, o sea la columna «Caja» del catalogo oficial.
+     No todo va con el generico: OFFICE PERSONAL se cobra con 63602 y FAMILIA
+     con 57518, y los dos SI entran en el reporte de comisiones — cada uno con
+     el suyo. La columna E del Excel pide precisamente esto, asi que dar por
+     hecho que todo es 43739 llenaria mal una de cada dos columnas. */
+  sku        text        NOT NULL DEFAULT '43739',
   orden      integer     NOT NULL DEFAULT 100,
   activo     boolean     NOT NULL DEFAULT true,
   creado_en  timestamptz NOT NULL DEFAULT now(),
@@ -79,7 +82,10 @@ COMMENT ON TABLE public.accesorios_catalogo IS
   'el producto al leer el ticket.';
 
 ALTER TABLE public.accesorios_catalogo ADD COLUMN IF NOT EXISTS articulo text;
-ALTER TABLE public.accesorios_catalogo ADD COLUMN IF NOT EXISTS generico boolean NOT NULL DEFAULT true;
+ALTER TABLE public.accesorios_catalogo ADD COLUMN IF NOT EXISTS sku text NOT NULL DEFAULT '43739';
+-- `generico` se sustituyo por `sku` el 18-ago: no era «entra o no al reporte»
+-- sino «con que SKU se cobra». Se quita si quedo de la version anterior.
+ALTER TABLE public.accesorios_catalogo DROP COLUMN IF EXISTS generico;
 
 /* EL CATALOGO REAL, de los dos documentos oficiales (18-ago-2026):
      · «Productos Mr Fix 180526.pdf» — accesorios de computo
@@ -89,34 +95,34 @@ ALTER TABLE public.accesorios_catalogo ADD COLUMN IF NOT EXISTS generico boolean
    verdaderos son MICA HR / MATTE / BLUE / PRIV, no «hidrogel transparente» ni
    «para tablet». La colision de $149 es entre HR y MATTE — las 19 lineas que
    en julio hubo que abrir una por una. Y hay una a $199 que no se sabia. */
-INSERT INTO public.accesorios_catalogo (store_id, articulo, nombre, precio_ref, generico, orden)
+INSERT INTO public.accesorios_catalogo (store_id, articulo, nombre, precio_ref, sku, orden)
 VALUES
-  ('1217','43739-MICAHR',        'MICA HR',                              149, true,  10),
-  ('1217','43739-MICAMATTE',     'MICA MATTE',                           149, true,  20),
-  ('1217','43739-MICABLUE',      'MICA BLUE',                            199, true,  30),
-  ('1217','43739-MICAPRIV',      'MICA PRIV',                            299, true,  40),
-  ('1217','43739-CARGA-66W',     'CARGADOR 66W',                         499, true,  50),
-  ('1217','43739-CARGA-100W',    'CARGADOR 100W',                        999, true,  60),
-  ('1217','W-1999',              'LICENCIA WINDOWS',                    1999, true,  70),
-  ('1217','80066',               'MEMORIA OTG 32GB ADATA ANDROID',        99, true, 100),
-  ('1217','AUV250-64G-RBK',      'MEM USB ADATA 64GB UV250',             189, true, 110),
-  ('1217','AUSDX64GUICL10-RA1',  'TARJETA MICROSD ADATA 64GB CLASE 10',  249, true, 120),
-  ('1217','91273',               'MEMORIA USB ADATA 128GB',              329, true, 130),
-  ('1217','P5116',               'MOUSEPAD PC KENSIN P511 RJ/GR',        329, true, 140),
-  ('1217','65960',               'MOUSE PAD FOAM AZUL CON DESCANSA MUNECA', 349, true, 150),
-  ('1217','HX-MPFS-S-XL',        'MOUSEPAD HYPERX FURY S SPEED EXTRA LARGO', 399, true, 160),
-  ('1217','80050',               'BATERIA RESPALDO ADATA 10,000 MAH',    399, true, 170),
-  ('1217','91276',               'MICRO SD ADATA 128GB CLASE 10',        499, true, 180),
-  ('1217','100011',              'DISCO DURO ADATA 500GB 2.5',           799, true, 190),
-  ('1217','80065',               'DISCO DURO EXTERNO ADATA 1 TB',       2099, true, 200),
-  ('1217','AHD710P-2TU31-CBK',   'DISCO DURO ADATA HD710 2TB',          2699, true, 210),
-  ('1217','HDTX140XK3CA',        'DISCO DURO TOSHIBA GAMER 4TB NG',     3699, true, 220),
-  -- Caja propia (63602 / 57518): NO son del generico y no van al reporte.
-  ('1217','63602',               'OFFICE PERSONAL',                     2249, false, 300),
-  ('1217','57518',               'OFFICE FAMILIA',                      2699, false, 310)
+  ('1217','43739-MICAHR',        'MICA HR',                              149, '43739',  10),
+  ('1217','43739-MICAMATTE',     'MICA MATTE',                           149, '43739',  20),
+  ('1217','43739-MICABLUE',      'MICA BLUE',                            199, '43739',  30),
+  ('1217','43739-MICAPRIV',      'MICA PRIV',                            299, '43739',  40),
+  ('1217','43739-CARGA-66W',     'CARGADOR 66W',                         499, '43739',  50),
+  ('1217','43739-CARGA-100W',    'CARGADOR 100W',                        999, '43739',  60),
+  ('1217','W-1999',              'LICENCIA WINDOWS',                    1999, '43739',  70),
+  ('1217','80066',               'MEMORIA OTG 32GB ADATA ANDROID',        99, '43739', 100),
+  ('1217','AUV250-64G-RBK',      'MEM USB ADATA 64GB UV250',             189, '43739', 110),
+  ('1217','AUSDX64GUICL10-RA1',  'TARJETA MICROSD ADATA 64GB CLASE 10',  249, '43739', 120),
+  ('1217','91273',               'MEMORIA USB ADATA 128GB',              329, '43739', 130),
+  ('1217','P5116',               'MOUSEPAD PC KENSIN P511 RJ/GR',        329, '43739', 140),
+  ('1217','65960',               'MOUSE PAD FOAM AZUL CON DESCANSA MUNECA', 349, '43739', 150),
+  ('1217','HX-MPFS-S-XL',        'MOUSEPAD HYPERX FURY S SPEED EXTRA LARGO', 399, '43739', 160),
+  ('1217','80050',               'BATERIA RESPALDO ADATA 10,000 MAH',    399, '43739', 170),
+  ('1217','91276',               'MICRO SD ADATA 128GB CLASE 10',        499, '43739', 180),
+  ('1217','100011',              'DISCO DURO ADATA 500GB 2.5',           799, '43739', 190),
+  ('1217','80065',               'DISCO DURO EXTERNO ADATA 1 TB',       2099, '43739', 200),
+  ('1217','AHD710P-2TU31-CBK',   'DISCO DURO ADATA HD710 2TB',          2699, '43739', 210),
+  ('1217','HDTX140XK3CA',        'DISCO DURO TOSHIBA GAMER 4TB NG',     3699, '43739', 220),
+  -- Caja propia. SI van al reporte, pero cada uno con SU sku.
+  ('1217','63602',               'OFFICE PERSONAL',                     2249, '63602', 300),
+  ('1217','57518',               'OFFICE FAMILIA',                      2699, '57518', 310)
 ON CONFLICT (store_id, nombre) DO UPDATE
   SET articulo = excluded.articulo, precio_ref = excluded.precio_ref,
-      generico = excluded.generico, orden = excluded.orden, activo = true;
+      sku = excluded.sku, orden = excluded.orden, activo = true;
 
 /* La lista que se puso a ojo antes de tener los documentos. Se da de baja, no
    se borra: si alguna venta se guardo con esos nombres, se quedaria apuntando
@@ -139,6 +145,11 @@ CREATE TABLE IF NOT EXISTS public.accesorios_ventas (
   dia        date,
   ticket     text        NOT NULL,
   producto   text        NOT NULL,
+  -- El SKU con el que se cobro. Va a la columna E del Excel. Se guarda AQUI y
+  -- no se saca del catalogo al exportar: si manana cambia el SKU de un
+  -- producto, las ventas viejas tienen que seguir diciendo con cual se
+  -- cobraron — el reporte de julio no se reescribe.
+  sku        text        NOT NULL DEFAULT '43739',
   cantidad   integer     NOT NULL DEFAULT 1 CHECK (cantidad > 0),
   precio     numeric(12,2) NOT NULL CHECK (precio >= 0),
   importe    numeric(12,2) NOT NULL CHECK (importe >= 0),
@@ -151,6 +162,8 @@ CREATE TABLE IF NOT EXISTS public.accesorios_ventas (
   -- dos asesores registrando la misma venta al cerrar el dia.
   UNIQUE (store_id, ticket, producto)
 );
+
+ALTER TABLE public.accesorios_ventas ADD COLUMN IF NOT EXISTS sku text NOT NULL DEFAULT '43739';
 
 ALTER TABLE public.accesorios_ventas ENABLE ROW LEVEL SECURITY;
 
@@ -177,11 +190,16 @@ COMMENT ON TABLE public.accesorios_ventas IS
 
 
 -- ── 3 · Guardar ─────────────────────────────────────────────
-CREATE OR REPLACE FUNCTION public.accesorio_guardar(
+-- La firma cambia (entra `p_sku`), asi que DROP explicito ANTES del CREATE: si
+-- fuera despues borraria la funcion recien creada, y sin el, Postgres dejaria
+-- las dos conviviendo y PostgREST responderia PGRST203.
+DROP FUNCTION IF EXISTS public.accesorio_guardar(text,text,text,text,integer,numeric,text,date,text,text,text,text);
+CREATE FUNCTION public.accesorio_guardar(
   p_store      text,
   p_token      text,
   p_ticket     text,
   p_producto   text,
+  p_sku        text,
   p_cantidad   integer,
   p_precio     numeric,
   p_vendedor   text,
@@ -234,9 +252,10 @@ BEGIN
   v_importe := round(p_precio * greatest(1, coalesce(p_cantidad,1)), 2);
 
   INSERT INTO public.accesorios_ventas
-    (store_id, vendida_en, ticket, producto, cantidad, precio, importe,
+    (store_id, vendida_en, ticket, producto, sku, cantidad, precio, importe,
      vendedor, capturado_por, captura_id, ocr_texto)
   VALUES (p_store, v_cuando, trim(p_ticket), trim(p_producto),
+          coalesce(nullif(trim(coalesce(p_sku,'')),''), '43739'),
           greatest(1, coalesce(p_cantidad,1)), p_precio, v_importe,
           trim(p_vendedor), nullif(trim(coalesce(p_quien,'')),''),
           nullif(trim(coalesce(p_captura_id,'')),''),
@@ -259,12 +278,15 @@ END $fn$;
 
 
 -- ── 4 · Leer ────────────────────────────────────────────────
+-- Las dos cambian de firma o de tipo de retorno: DROP explicito, o Postgres
+-- deja la version vieja conviviendo y PostgREST responde PGRST203.
 DROP FUNCTION IF EXISTS public.accesorios_catalogo_lista(text);
+DROP FUNCTION IF EXISTS public.accesorios_lista(text,date,date);
 CREATE FUNCTION public.accesorios_catalogo_lista(p_store text)
-RETURNS TABLE (id bigint, nombre text, precio_ref numeric, articulo text, generico boolean)
+RETURNS TABLE (id bigint, nombre text, precio_ref numeric, articulo text, sku text)
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
 AS $$
-  SELECT c.id, c.nombre, c.precio_ref, c.articulo, c.generico
+  SELECT c.id, c.nombre, c.precio_ref, c.articulo, c.sku
   FROM public.accesorios_catalogo c
   WHERE c.store_id = p_store AND c.activo
   ORDER BY c.orden, c.nombre;
@@ -272,14 +294,14 @@ $$;
 
 -- Las ventas de un rango. Sin rango: el mes en curso, que es como se entrega
 -- el reporte.
-CREATE OR REPLACE FUNCTION public.accesorios_lista(
+CREATE FUNCTION public.accesorios_lista(
   p_store text, p_desde date DEFAULT NULL, p_hasta date DEFAULT NULL
-) RETURNS TABLE (id bigint, dia date, ticket text, producto text,
+) RETURNS TABLE (id bigint, dia date, ticket text, sku text, producto text,
                  cantidad integer, precio numeric, importe numeric,
                  vendedor text, captura_id text, tiene_foto boolean)
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
 AS $$
-  SELECT a.id, a.dia, a.ticket, a.producto, a.cantidad, a.precio, a.importe,
+  SELECT a.id, a.dia, a.ticket, a.sku, a.producto, a.cantidad, a.precio, a.importe,
          a.vendedor, a.captura_id,
          EXISTS (SELECT 1 FROM public.venta_fotos f
                   WHERE f.store_id = a.store_id AND f.captura_id = a.captura_id)
@@ -347,14 +369,14 @@ END $fn$;
 
 
 -- ── 6 · Permisos ────────────────────────────────────────────
-REVOKE ALL ON FUNCTION public.accesorio_guardar(text,text,text,text,integer,numeric,text,date,text,text,text,text) FROM public;
+REVOKE ALL ON FUNCTION public.accesorio_guardar(text,text,text,text,text,integer,numeric,text,date,text,text,text,text) FROM public;
 REVOKE ALL ON FUNCTION public.accesorios_lista(text,date,date)            FROM public;
 REVOKE ALL ON FUNCTION public.accesorios_catalogo_lista(text)             FROM public;
 REVOKE ALL ON FUNCTION public.accesorio_eliminar(text,text,bigint)        FROM public;
 REVOKE ALL ON FUNCTION public.accesorio_catalogo_guardar(text,text,text,numeric,integer) FROM public;
 REVOKE ALL ON FUNCTION public.accesorio_catalogo_baja(text,text,bigint)   FROM public;
 
-GRANT EXECUTE ON FUNCTION public.accesorio_guardar(text,text,text,text,integer,numeric,text,date,text,text,text,text) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.accesorio_guardar(text,text,text,text,text,integer,numeric,text,date,text,text,text,text) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.accesorios_lista(text,date,date)            TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.accesorios_catalogo_lista(text)             TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.accesorio_eliminar(text,text,bigint)        TO anon, authenticated;
