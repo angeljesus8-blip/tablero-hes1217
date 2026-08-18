@@ -1696,6 +1696,14 @@ function accClave(s){
   return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
            .replace(/^43739/, '');          // el prefijo lo llevan casi todos
 }
+/* Devuelve los codigos que trae el ticket en «SERVICIO:». Se separa de la
+   adivinanza para poder ENSENARLOS: cuando no se propone producto, lo primero
+   que hay que saber es si el OCR leyo algo y qué. */
+function accCodigos(textoTicket){
+  const m = String(textoTicket || '').match(/SERVICIO\s*:?\s*([A-Z0-9\- ]{3,30})/ig);
+  return (m || []).map(x => x.replace(/SERVICIO\s*:?/i, '').trim()).filter(Boolean);
+}
+
 function accAdivinar(textoTicket){
   const m = String(textoTicket || '').match(/SERVICIO\s*:?\s*([A-Z0-9\- ]{3,30})/ig);
   if(!m) return null;
@@ -1794,13 +1802,34 @@ window.accFotoElegida = function(e){
       const flojo = VENDEDORES.filter(v => _sinAcentos(v).indexOf(_sinAcentos(r.vend.split(',')[0])) >= 0);
       if(flojo.length === 1) $('accVend').value = flojo[0];
     }
-    // El producto, propuesto desde el código del artículo. Se marca en la
-    // lista pero el asesor lo ve y lo puede cambiar.
+    /* El producto, propuesto desde el código del artículo. Se marca en la
+       lista pero el asesor lo ve y lo puede cambiar.
+
+       Si NO se propone hay que decir POR QUÉ, y son tres motivos distintos con
+       tres arreglos distintos: que el catálogo no cargó, que el OCR no encontró
+       ningún código, o que lo leyó tan mal que no se parece a ninguno. Un «no
+       salió propuesto» a secas no se puede depurar en piso. */
+    const codigos = accCodigos(r.texto);
     const sugerido = accAdivinar(r.texto);
-    if(sugerido && !$('accProd').value) $('accProd').value = sugerido;
+    const yaElegido = $('accProd').value;      // pudo elegir mientras leía
+    if(sugerido && !yaElegido) $('accProd').value = sugerido;
+
+    let nota;
+    /* Si ya habías elegido —que es lo que pide el diseño, elegir mientras lee—
+       la sugerencia NO pisa tu elección, pero se dice. Y si no coinciden, se
+       dice más fuerte: uno de los dos está mal y es mejor mirarlo ahora que
+       cuando la región revise el reporte. */
+    if(sugerido && yaElegido && yaElegido !== sugerido)
+      nota = '⚠️ Tú elegiste <b>' + esc(yaElegido) + '</b> y el ticket dice <b>'
+           + esc(sugerido) + '</b>. Mira cuál es.';
+    else if(sugerido)       nota = 'Parece <b>' + esc(sugerido) + '</b> — compruébalo.';
+    else if(!_accCat.length) nota = '<b>El catálogo no cargó</b>, por eso no puedo proponer producto.';
+    else if(!codigos.length) nota = 'No encontré el código del artículo en el ticket. Elige el producto.';
+    else nota = 'Leí <b>' + esc(codigos.join(' · ')) + '</b>, que no se parece lo bastante a '
+              + 'ningún artículo del catálogo. Elige el producto.';
 
     const el = $('accLeido');
-    el.innerHTML = (sugerido ? 'Parece <b>' + esc(sugerido) + '</b> — compruébalo.<br>' : '')
+    el.innerHTML = nota + '<br>'
       + 'Del ticket: <b>' + esc(r.ticket || '—') + '</b>'
       + (r.fecha ? ' · ' + esc(r.fecha) : '')
       + (r.vend ? ' · ' + esc(r.vend) : '')
