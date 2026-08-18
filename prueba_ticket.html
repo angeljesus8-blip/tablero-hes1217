@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Prueba · leer ticket</title>
+<!--
+  PRUEBA DESECHABLE — 17-ago-2026. NO forma parte de la app.
+
+  Sirve para contestar UNA pregunta antes de construir nada: ¿cuánto tarda
+  Tesseract en un celular de piso? Todo lo demás (guardar, catálogo, Excel)
+  queda fuera a propósito.
+
+  No está enlazada desde ningún menú ni va en el precache del service worker.
+  Se borra cuando la pregunta esté contestada.
+-->
+<style>
+  :root{ --rojo:#D12026; --naranja:#F37021; --azul:#336BB4; --verde:#1c9c4f; --gris:#777; }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body{ margin:0; background:#fff; color:#222; font-family:Montserrat,-apple-system,
+        "Segoe UI",Roboto,sans-serif; padding:14px; padding-bottom:40px; }
+  h1{ font-size:17px; font-weight:800; margin:0 0 2px; }
+  .sub{ font-size:12px; color:var(--gris); margin-bottom:14px; line-height:1.4; }
+  .btn{ display:block; width:100%; padding:16px; border:none; border-radius:12px;
+        background:var(--rojo); color:#fff; font-size:16px; font-weight:800;
+        font-family:inherit; cursor:pointer; margin-bottom:12px; }
+  .btn.sec{ background:#eee; color:#444; font-size:14px; padding:12px; }
+  .btn:disabled{ opacity:.5; }
+  #foto{ width:100%; border-radius:10px; display:none; margin-bottom:12px; }
+  .caja{ border:1.5px solid #eee; border-radius:12px; padding:12px 14px; margin-bottom:12px; }
+  .caja h2{ font-size:12px; font-weight:800; color:var(--gris); margin:0 0 8px;
+            text-transform:uppercase; letter-spacing:.04em; }
+  .fila{ display:flex; justify-content:space-between; gap:10px; padding:5px 0;
+         border-bottom:1px solid #f4f4f4; font-size:14px; align-items:baseline; }
+  .fila:last-child{ border:none; }
+  .fila b{ font-family:ui-monospace,monospace; font-size:13px; text-align:right;
+           word-break:break-all; }
+  .ok{ color:var(--verde); } .mal{ color:var(--rojo); }
+  .t{ font-size:26px; font-weight:800; }
+  .t small{ font-size:13px; font-weight:600; color:var(--gris); }
+  #paso{ font-size:13px; color:var(--azul); font-weight:700; min-height:20px;
+         margin-bottom:10px; }
+  pre{ background:#fafafa; border:1px solid #eee; border-radius:8px; padding:10px;
+       font-size:10.5px; line-height:1.35; overflow:auto; max-height:260px;
+       white-space:pre-wrap; word-break:break-word; }
+  details{ margin-top:10px; } summary{ font-size:12px; color:#999; cursor:pointer; }
+</style>
+</head>
+<body>
+
+<h1>Prueba · leer ticket</h1>
+<div class="sub">Solo mide. No guarda nada, no toca el tablero.<br>
+Toma la foto como la tomarías normalmente — torcida está bien.</div>
+
+<input type="file" accept="image/*" capture="environment" id="file" hidden>
+<button class="btn" id="btnFoto">📷 Tomar foto del ticket</button>
+<img id="foto" alt="">
+<div id="paso"></div>
+<div id="res"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const paso = t => { $('paso').textContent = t; };
+
+$('btnFoto').onclick = () => $('file').click();
+$('file').onchange = e => { const f = e.target.files[0]; if(f) medir(f); };
+
+/* ── El importe EN LETRA ────────────────────────────────────────────────
+   Es la parte más fiable del ticket, y no por casualidad: son palabras del
+   diccionario español —lo que el OCR hace bien— mientras que los dígitos de
+   matriz de puntos son lo que hace mal.
+
+   Medido sobre un ticket real: el número decía «Total 99.0» (noventa y nueve)
+   cuando el importe era 999. La letra lo dijo bien. Fiarse del número habría
+   calculado la comisión sobre la décima parte, sin dar ningún error. */
+const UNI = { uno:1, un:1, una:1, dos:2, tres:3, cuatro:4, cinco:5, seis:6,
+  siete:7, ocho:8, nueve:9, diez:10, once:11, doce:12, trece:13, catorce:14,
+  quince:15, dieciseis:16, diecisiete:17, dieciocho:18, diecinueve:19,
+  veinte:20, veintiuno:21, veintidos:22, veintitres:23, veinticuatro:24,
+  veinticinco:25, veintiseis:26, veintisiete:27, veintiocho:28, veintinueve:29,
+  treinta:30, cuarenta:40, cincuenta:50, sesenta:60, setenta:70, ochenta:80,
+  noventa:90 };
+const CIEN = { cien:100, ciento:100, doscientos:200, trescientos:300,
+  cuatrocientos:400, quinientos:500, seiscientos:600, setecientos:700,
+  ochocientos:800, novecientos:900 };
+
+function sinAcentos(s){
+  return String(s||'').normalize('NFD').replace(new RegExp('[\\u0300-\\u036f]','g'),'').toLowerCase();
+}
+
+function importeDeLetra(texto){
+  const t = sinAcentos(texto);
+  // La línea del importe siempre acaba en "PESOS xx/100"
+  const m = t.match(/([a-z\s]+?)\s+pesos\s+(\d{2})\s*\/\s*100/);
+  if(!m) return null;
+  const palabras = m[1].split(/\s+/).filter(Boolean);
+  const centavos = Number(m[2]) || 0;
+
+  let total = 0, bloque = 0;
+  for(const p of palabras){
+    if(p === 'y') continue;
+    if(p === 'mil'){ bloque = (bloque || 1) * 1000; total += bloque; bloque = 0; continue; }
+    if(CIEN[p] != null){ bloque += CIEN[p]; continue; }
+    if(UNI[p] != null){ bloque += UNI[p]; continue; }
+    // Una palabra que no reconozco: mejor no adivinar el importe.
+    if(p.length > 2) return null;
+  }
+  total += bloque;
+  return total > 0 ? total + centavos/100 : null;
+}
+
+/* Rota y prepara la imagen en un canvas. `escala` sirve para probar la
+   orientación con una miniatura (rápido) y hacer la lectura buena en grande. */
+function preparar(img, giro, escala){
+  const vert = (giro === 90 || giro === 270);
+  const w = Math.round((vert ? img.height : img.width) * escala);
+  const h = Math.round((vert ? img.width : img.height) * escala);
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const cx = cv.getContext('2d');
+  cx.translate(w/2, h/2);
+  cx.rotate(giro * Math.PI / 180);
+  const dw = Math.round(img.width * escala), dh = Math.round(img.height * escala);
+  cx.drawImage(img, -dw/2, -dh/2, dw, dh);
+  // Gris + contraste: el papel térmico tiene poco.
+  const d = cx.getImageData(0,0,w,h), a = d.data;
+  for(let i=0;i<a.length;i+=4){
+    let g = (a[i]*0.299 + a[i+1]*0.587 + a[i+2]*0.114);
+    g = Math.max(0, Math.min(255, (g - 128) * 1.45 + 128));
+    a[i]=a[i+1]=a[i+2]=g;
+  }
+  cx.putImageData(d,0,0);
+  return cv;
+}
+
+// Lo que ESTE ticket trae siempre. Sirve para saber qué orientación es la buena.
+const ANCLAS = [/437\s?39/, /atendido/i, /productos/i, /huawei/i, /1217/];
+function cuentaAnclas(t){ return ANCLAS.filter(re => re.test(t)).length; }
+
+async function medir(file){
+  $('btnFoto').disabled = true;
+  $('res').innerHTML = '';
+  const t0 = performance.now();
+
+  const img = await new Promise((res, rej) => {
+    const i = new Image();
+    i.onload = () => res(i);
+    i.onerror = rej;
+    i.src = URL.createObjectURL(file);
+  });
+  $('foto').src = img.src; $('foto').style.display = 'block';
+
+  paso('Arrancando el lector…');
+  const tW = performance.now();
+  const worker = await Tesseract.createWorker('spa');
+  const msWorker = performance.now() - tW;
+
+  // ── 1 · Qué orientación es, con una MINIATURA ────────────────────────
+  paso('Buscando cómo está la foto…');
+  const tOri = performance.now();
+  let mejor = { giro:0, anclas:-1 };
+  for(const giro of [0, 90, 180, 270]){
+    const cv = preparar(img, giro, 900 / Math.max(img.width, img.height));
+    const { data } = await worker.recognize(cv);
+    const n = cuentaAnclas(data.text);
+    if(n > mejor.anclas) mejor = { giro, anclas:n };
+    if(n === ANCLAS.length) break;      // sin dudas: no hace falta probar más
+  }
+  const msOri = performance.now() - tOri;
+
+  // ── 2 · La lectura buena, en grande ──────────────────────────────────
+  paso('Leyendo el ticket…');
+  const tLee = performance.now();
+  const cv = preparar(img, mejor.giro, Math.min(2.2, 2200 / Math.max(img.width, img.height)));
+  const { data } = await worker.recognize(cv);
+  const msLee = performance.now() - tLee;
+  await worker.terminate();
+
+  const txt = data.text;
+  const msTotal = performance.now() - t0;
+
+  // ── 3 · Sacar lo que importa ─────────────────────────────────────────
+  const linea  = txt.match(/1217\s+\d\s+(\d{1,2}\/\d{1,2}\/\d{2})\s+[\d:]+\s*[APap][MmHh]?\s+(\d{4,6})/);
+  const fecha  = linea ? linea[1] : null;
+  const ticket = linea ? linea[2] : (txt.match(/\b(3\d{4})\b/) || [])[1] || null;
+  const vend   = (txt.match(/Atendido\s*por\s*:?\s*([A-ZÁÉÍÓÚÑ,\.\s]{4,40})/i) || [])[1];
+  const letra  = importeDeLetra(txt);
+  const nums   = [...txt.matchAll(/\$?\s?(\d{1,3}(?:[.,]\d{3})*[.,]\d{2})\b/g)]
+                   .map(m => Number(m[1].replace(/[.,](?=\d{3})/g,'').replace(',','.')));
+  const cuadra = letra != null && nums.some(n => Math.abs(n - letra) < 0.01);
+
+  const fila = (k, v, bien) =>
+    '<div class="fila"><span>' + k + '</span><b class="' +
+    (bien === true ? 'ok' : bien === false ? 'mal' : '') + '">' + (v || '—') + '</b></div>';
+
+  $('res').innerHTML =
+    '<div class="caja"><h2>Cuánto tardó</h2>' +
+      '<div class="t">' + (msTotal/1000).toFixed(1) + '<small> segundos en total</small></div>' +
+      fila('arrancar el lector', (msWorker/1000).toFixed(1) + ' s') +
+      fila('averiguar la orientación', (msOri/1000).toFixed(1) + ' s') +
+      fila('leer el ticket', (msLee/1000).toFixed(1) + ' s') +
+      fila('giro que ganó', mejor.giro + '° (' + mejor.anclas + '/5 anclas)') +
+    '</div>' +
+    '<div class="caja"><h2>Qué entendió</h2>' +
+      fila('N° de ticket', ticket, !!ticket) +
+      fila('fecha', fecha, !!fecha) +
+      fila('atendido por', vend && vend.trim(), !!vend) +
+      fila('importe EN LETRA', letra != null ? '$' + letra.toFixed(2) : null, letra != null) +
+      fila('importes en número', nums.length ? nums.map(n=>'$'+n).join('  ') : null) +
+      fila('¿letra y número coinciden?', cuadra ? 'SÍ' : 'no', cuadra) +
+    '</div>' +
+    '<div class="caja"><h2>Confianza del OCR</h2>' +
+      fila('Tesseract dice', Math.round(data.confidence) + ' / 100') +
+      '<div style="font-size:11.5px;color:#777;line-height:1.45;margin-top:8px">' +
+      'El <b>producto</b> (CARGA100WTS) no se mide aquí: ya sabemos que el OCR no ' +
+      'lo lee, y por eso iría en una lista que toca el asesor.</div>' +
+    '</div>' +
+    '<details><summary>🔍 Ver todo el texto leído</summary><pre>' +
+      txt.replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])) +
+    '</pre></details>';
+
+  paso('');
+  $('btnFoto').disabled = false;
+  $('btnFoto').textContent = '📷 Probar con otro ticket';
+}
+</script>
+</body>
+</html>
