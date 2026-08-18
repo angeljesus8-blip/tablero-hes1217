@@ -134,8 +134,17 @@ function preparar(img, giro, escala){
   return cv;
 }
 
-// Lo que ESTE ticket trae siempre. Sirve para saber qué orientación es la buena.
-const ANCLAS = [/437\s?39/, /atendido/i, /productos/i, /huawei/i, /1217/];
+/* Anclas para saber qué orientación es la buena.
+
+   `HUAWEI` estaba y se quitó: vive en el encabezado, y el asesor a veces
+   encuadra más abajo. Exigir 5 de 5 con un ancla que puede faltar
+   legítimamente hizo probar las cuatro rotaciones — 12 segundos, medido.
+
+   Ahora basta con 3: son textos que no aparecen por casualidad, así que tres
+   juntos ya no dejan duda. Con 5/5 el corte casi nunca saltaba. */
+const ANCLAS = [/437\s?39/, /atendido/i, /productos/i, /1217/,
+                /articulo/i, /importe/i, /reimprimir/i];
+const BASTA = 3;
 function cuentaAnclas(t){ return ANCLAS.filter(re => re.test(t)).length; }
 
 async function medir(file){
@@ -165,7 +174,7 @@ async function medir(file){
     const { data } = await worker.recognize(cv);
     const n = cuentaAnclas(data.text);
     if(n > mejor.anclas) mejor = { giro, anclas:n };
-    if(n === ANCLAS.length) break;      // sin dudas: no hace falta probar más
+    if(n >= BASTA) break;               // sin dudas: no hace falta probar más
   }
   const msOri = performance.now() - tOri;
 
@@ -181,14 +190,77 @@ async function medir(file){
   const msTotal = performance.now() - t0;
 
   // ── 3 · Sacar lo que importa ─────────────────────────────────────────
-  const linea  = txt.match(/1217\s+\d\s+(\d{1,2}\/\d{1,2}\/\d{2})\s+[\d:]+\s*[APap][MmHh]?\s+(\d{4,6})/);
-  const fecha  = linea ? linea[1] : null;
-  const ticket = linea ? linea[2] : (txt.match(/\b(3\d{4})\b/) || [])[1] || null;
-  const vend   = (txt.match(/Atendido\s*por\s*:?\s*([A-ZÁÉÍÓÚÑ,\.\s]{4,40})/i) || [])[1];
-  const letra  = importeDeLetra(txt);
-  const nums   = [...txt.matchAll(/\$?\s?(\d{1,3}(?:[.,]\d{3})*[.,]\d{2})\b/g)]
-                   .map(m => Number(m[1].replace(/[.,](?=\d{3})/g,'').replace(',','.')));
-  const cuadra = letra != null && nums.some(n => Math.abs(n - letra) < 0.01);
+  const lineaId = txt.match(/1217\s+\d\s+(\d{1,2}\/\d{1,2}\/\d{2})\s+[\d:]+\s*[APap][MmHh]?\s+(\d{4,6})/);
+  const fecha  = lineaId ? lineaId[1] : null;
+  const ticket = lineaId ? lineaId[2] : (txt.match(/(3\d{4})/) || [])[1] || null;
+
+  /* El nombre, cortado en el FIN DE LÍNEA. Sin eso siguió leyendo y devolvió
+     «AGUILAR, ARTURO eee ig A lu Ahorraste» — el ticket trae más texto debajo
+     y el patrón se lo tragaba entero. */
+  const vend = (txt.match(/Atendido\s*por\s*:?\s*([^\r\n]{3,40})/i) || [])[1];
+
+  /* ── LA LÍNEA DEL ACCESORIO ────────────────────────────────────────────
+     Aquí estaba el error de diseño. El primer ticket tenía UN artículo, así
+     que el total y el precio del accesorio eran el mismo número y la línea en
+     letra servía. En un ticket de varios artículos NO:
+
+       PRODUCTOS VARIOS 000043739  1  169.000  $169.00   <- el accesorio
+       ...
+       *DIECISEIS MIL NOVECIENTOS SESENTA Y DOS PESOS*   <- el TOTAL, $16,962.50
+
+     Fiarse de la letra ahí habría registrado $16,962.50 de un kit de limpieza
+     de $169. Hay que localizar la línea del SKU y leer SU importe. */
+  /* La cantidad acepta los caracteres que el OCR confunde con un 1. Medido: en
+     el ticket de $999 leyó «000043739 ] 999,000» — el `1` salió como `]`, y el
+     patrón estricto no encontraba la línea. En matriz de puntos el 1 sale como
+     ], I, l o | con toda naturalidad. */
+  const lAcc = txt.match(/0{0,6}43\s?739\D{0,6}([\dIl\]|]{1,3})\s+([\d.,]+)\s+\$?\s?([\d.,]+)/);
+  const aNum = c => String(c).replace(/[Il\]|]/g, '1');
+  /* ── Los dos numeros de la linea se escriben DISTINTO ──────────────────
+     Y confundirlos es el fallo que casi se cuela:
+
+       precio unitario   999.000     <- 3 DECIMALES. Son 999 pesos.
+       importe          $1,299.00    <- 2 decimales y coma de miles.
+
+     Tratar el «.000» del precio como separador de miles daba 999000, o sea
+     novecientos noventa y nueve mil pesos por un cargador. La aritmetica no
+     cerraba NUNCA y la app habria mandado a revisar el 100% de las lineas,
+     hasta que alguien se cansara de revisar y las diera por buenas.
+
+     Se leen con reglas separadas porque son formatos separados. */
+  const num3dec = x => {                       // precio unitario del POS
+    if(x == null) return null;
+    const s = String(x).replace(/,/g, '.');
+    const m = s.match(/^(\d+)\.(\d{3})$/);     // 999.000 -> 999
+    const v = m ? Number(m[1]) + Number(m[2]) / 1000
+                : Number(s.replace(/[^\d.]/g, ''));
+    return isFinite(v) ? v : null;
+  };
+  const num = x => {                           // importes: 1,299.00 -> 1299
+    if(x == null) return null;
+    const v = Number(String(x).replace(/,/g, '').replace(/[^\d.]/g, ''));
+    return isFinite(v) ? v : null;
+  };
+  const cant = lAcc ? num(aNum(lAcc[1])) : null;
+  const pUni = lAcc ? num3dec(lAcc[2]) : null;
+  const imp  = lAcc ? num(lAcc[3]) : null;
+
+  /* LA RED, y esta sí dice DÓNDE falla: importe = precio x cantidad. Si el OCR
+     se come un dígito en cualquiera de los tres, la cuenta no cierra. La
+     verificación del reporte mensual detecta que algo está mal pero no dónde;
+     ésta señala la línea. */
+  const cuadraLinea = (cant != null && pUni != null && imp != null)
+                      && Math.abs(pUni * cant - imp) < 0.02;
+
+  // El producto, para ver cuánto acierta (sabemos que poco: iría en una lista).
+  const prod = (txt.match(/SERVICIO\s*:?\s*([A-Z0-9 ]{3,30})/i) || [])[1];
+
+  const letra = importeDeLetra(txt);
+  const nums  = [...txt.matchAll(/\$?\s?(\d{1,3}(?:[.,]\d{3})*[.,]\d{2})/g)]
+                  .map(m => num(m[1]));
+  // La letra es del TOTAL del ticket: solo vale de red si hay un solo artículo.
+  const unSolo = (txt.match(/vendidos\s*=\s*(\d+)/i) || [])[1];
+  const letraSirve = unSolo === '1';
 
   const fila = (k, v, bien) =>
     '<div class="fila"><span>' + k + '</span><b class="' +
@@ -200,15 +272,32 @@ async function medir(file){
       fila('arrancar el lector', (msWorker/1000).toFixed(1) + ' s') +
       fila('averiguar la orientación', (msOri/1000).toFixed(1) + ' s') +
       fila('leer el ticket', (msLee/1000).toFixed(1) + ' s') +
-      fila('giro que ganó', mejor.giro + '° (' + mejor.anclas + '/5 anclas)') +
+      fila('giro que ganó', mejor.giro + '° (' + mejor.anclas + ' anclas)') +
     '</div>' +
     '<div class="caja"><h2>Qué entendió</h2>' +
       fila('N° de ticket', ticket, !!ticket) +
       fila('fecha', fecha, !!fecha) +
       fila('atendido por', vend && vend.trim(), !!vend) +
-      fila('importe EN LETRA', letra != null ? '$' + letra.toFixed(2) : null, letra != null) +
-      fila('importes en número', nums.length ? nums.map(n=>'$'+n).join('  ') : null) +
-      fila('¿letra y número coinciden?', cuadra ? 'SÍ' : 'no', cuadra) +
+      fila('producto (no se usará)', prod && prod.trim()) +
+    '</div>' +
+    '<div class="caja"><h2>La línea del accesorio (43739)</h2>' +
+      fila('¿encontró la línea?', lAcc ? 'SÍ' : 'no', !!lAcc) +
+      fila('cantidad', cant) +
+      fila('precio unitario', pUni != null ? '$' + pUni : null) +
+      fila('importe', imp != null ? '$' + imp : null, imp != null) +
+      fila('¿precio × cantidad = importe?', cuadraLinea ? 'SÍ' : 'no', cuadraLinea) +
+      '<div style="font-size:11.5px;color:#777;line-height:1.45;margin-top:8px">' +
+      'Este importe es el que va al reporte. El total del ticket no sirve cuando ' +
+      'se vendieron varias cosas.</div>' +
+    '</div>' +
+    '<div class="caja"><h2>Comprobaciones extra</h2>' +
+      fila('artículos en el ticket', unSolo) +
+      fila('importe en letra', letra != null ? '$' + letra.toFixed(2) : null) +
+      fila('¿la letra sirve de red?', letraSirve ? 'sí, 1 artículo' : 'no, varios artículos') +
+      fila('¿letra = importe del 43739?',
+           (letraSirve && letra != null && imp != null && Math.abs(letra - imp) < 0.02) ? 'SÍ' : '—',
+           (letraSirve && letra != null && imp != null && Math.abs(letra - imp) < 0.02) ? true : null) +
+      fila('todos los importes leídos', nums.length ? nums.map(n=>'$'+n).join('  ') : null) +
     '</div>' +
     '<div class="caja"><h2>Confianza del OCR</h2>' +
       fila('Tesseract dice', Math.round(data.confidence) + ' / 100') +
