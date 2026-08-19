@@ -193,11 +193,17 @@ COMMENT ON TABLE public.accesorios_ventas IS
 
 
 -- ── 3 · Guardar ─────────────────────────────────────────────
--- La firma cambia (entra `p_sku`), asi que DROP explicito ANTES del CREATE: si
--- fuera despues borraria la funcion recien creada, y sin el, Postgres dejaria
--- las dos conviviendo y PostgREST responderia PGRST203.
+/* La firma cambio (entro `p_sku`), asi que hay que soltar la VIEJA antes de
+   crear la nueva: sin eso Postgres deja las dos conviviendo y PostgREST
+   responde PGRST203.
+
+   Y la nueva va con CREATE OR REPLACE, no con CREATE a secas. Con CREATE, este
+   archivo solo se podia pegar UNA vez: al repegarlo fallaba con «already
+   exists with same argument types», porque el DROP de arriba solo apunta a la
+   firma vieja. Un archivo que dice ser idempotente y no lo es se descubre a
+   mitad de un pegado, con parte aplicada y parte no. */
 DROP FUNCTION IF EXISTS public.accesorio_guardar(text,text,text,text,integer,numeric,text,date,text,text,text,text);
-CREATE FUNCTION public.accesorio_guardar(
+CREATE OR REPLACE FUNCTION public.accesorio_guardar(
   p_store      text,
   p_token      text,
   p_ticket     text,
@@ -281,8 +287,9 @@ END $fn$;
 
 
 -- ── 4 · Leer ────────────────────────────────────────────────
--- Las dos cambian de firma o de tipo de retorno: DROP explicito, o Postgres
--- deja la version vieja conviviendo y PostgREST responde PGRST203.
+/* Estas dos NO cambian de firma, cambian lo que DEVUELVEN, y Postgres no deja
+   cambiar el tipo de retorno con CREATE OR REPLACE. El DROP acierta la firma
+   —es la misma— asi que repegar el archivo funciona siempre. */
 DROP FUNCTION IF EXISTS public.accesorios_catalogo_lista(text);
 DROP FUNCTION IF EXISTS public.accesorios_lista(text,date,date);
 CREATE FUNCTION public.accesorios_catalogo_lista(p_store text)
