@@ -106,12 +106,16 @@ AS $$
          v.ticket, v.sku, v.producto, v.cantidad, v.precio,
          coalesce(e.nombre_reporte, v.vendedor),
          (e.nombre_reporte IS NULL)
-  FROM public.accesorios_ventas v, r
+  /* CROSS JOIN explicito y DESPUES del LEFT JOIN. Con `FROM v, r LEFT JOIN e`
+     el join se asocia a `r`, no a `v`, y Postgres responde «invalid reference
+     to FROM-clause entry for table v». */
+  FROM public.accesorios_ventas v
   -- Por nombre y no por empno: `vendedor` guarda a quien ATENDIO, que puede no
   -- ser quien capturo. Es el mismo criterio que el ticket.
   LEFT JOIN public.empleados e
          ON e.store_id = v.store_id
         AND upper(unaccent_(e.nombre)) = upper(unaccent_(v.vendedor))
+  CROSS JOIN r
   WHERE v.store_id = p_store
     AND extract(year  from v.dia)::int = r.a
     AND extract(month from v.dia)::int = r.m

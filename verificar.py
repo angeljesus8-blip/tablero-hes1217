@@ -7,7 +7,7 @@
 
 Cada regla existe porque un error real llegó a producción. La fecha dice cuál.
 """
-import io, json, os, re, subprocess, sys, tempfile
+import glob, io, json, os, re, subprocess, sys, tempfile
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 HTML = ['index.html', 'tablero.html', 'captura_series.html', 'admin.html',
@@ -434,6 +434,37 @@ def r_porteros():
                               'deja pasar.' % (arch, const, usos))
 
 
+def r_join_sql():
+    """`FROM a, b LEFT JOIN c` asocia el JOIN a `b`, no a `a`.
+
+    Cometido DOS VECES en dos días (18 y 19-ago-2026), en
+    `supabase_venta_exhibicion.sql` y en `supabase_accesorios_reporte.sql`. La
+    coma y el JOIN mezclados leen bien pero significan otra cosa: Postgres
+    responde «invalid reference to FROM-clause entry for table a».
+
+    Al menos este falla ruidosamente al pegar. Se vigila igual porque cuesta un
+    viaje de ida y vuelta cada vez, y el arreglo siempre es el mismo: CROSS
+    JOIN explícito, después del JOIN."""
+    for p in sorted(glob.glob(os.path.join(BASE, '*.sql'))):
+        s = leer(os.path.basename(p))
+        if s is None: continue
+        sin_com = re.sub(r'/\*[\s\S]*?\*/', '', s)
+        sin_com = re.sub(r'(?m)^\s*--.*$', '', sin_com)
+        # `FROM tabla alias, …` y nada más. Sin acotarlo así, el `from` de
+        # `extract(year from …)` se toma por una cláusula FROM y la regla salta
+        # sobre SQL correcto — que es como se acaba ignorando una regla.
+        for m in re.finditer(r'(?i)\bFROM\s+(?:public\.)?\w+\s+\w+\s*,[^;\n]*', sin_com):
+            cola = sin_com[m.end():m.end() + 400]
+            corte = re.search(r'(?i)\b(WHERE|GROUP\s+BY|ORDER\s+BY|HAVING|\)\s*$)', cola)
+            if corte: cola = cola[:corte.start()]
+            if re.search(r'(?i)\b(LEFT|RIGHT|INNER|FULL)?\s*JOIN\b', cola):
+                falla('join', '%s: «%s…» mezcla coma y JOIN. El JOIN se asocia a la '
+                              'ÚLTIMA tabla de la coma, no a la primera. Usa CROSS JOIN '
+                              'explícito y ponlo DESPUÉS del JOIN.'
+                              % (os.path.basename(p), m.group(0).strip()[:60]))
+                break
+
+
 def r_contrato_sql():
     """Aviso: si cambia lo que DEVUELVE una función SQL, mirar quién la consume.
 
@@ -762,7 +793,7 @@ def main():
     staged = '--staged' in sys.argv
     r_sintaxis(); r_helpers(); r_version(staged); r_copias(); r_cupo()
     r_preventa_sb(); r_preventa_stock(); r_cargas_sb(); r_lectura_con_escritura()
-    r_porteros(); r_contrato_sql()
+    r_porteros(); r_contrato_sql(); r_join_sql()
     r_personales(); r_secretos(); r_silencios(); r_cadenas(); r_precache(); r_pruebas()
 
     for regla, msg in avisos:
