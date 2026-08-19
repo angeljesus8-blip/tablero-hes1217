@@ -388,6 +388,38 @@ equivocado.
 `UNIQUE (store_id, ticket, producto)` frena la doble captura — dos asesores
 registrando el mismo ticket al cerrar el día.
 
+#### El reporte al Excel regional *(18-ago-2026, v188)*
+
+`Registro_Ventas_MrFix_Odemas_2026.xlsx` en SharePoint, 128 hojas (tienda ×
+mes). La de este mes es **`1217 AGOS 26`** — agosto va abreviado, y confundirlo
+es pegar en la hoja de otro mes.
+
+**La hoja está protegida y solo 7 columnas se pueden escribir**, leído del
+archivo y no supuesto:
+
+```
+B día · D ticket · E SKU · F producto · G cantidad · H precio · N empleado
+     C, I, J, K, L, M  →  fórmulas (tienda, sin IVA, total, comisión, PUESTO)
+```
+
+Por eso son **tres pegados** —B, luego D:H, luego N— y no uno: un bloque
+contiguo B:N chocaría con la protección. Los datos empiezan en la **fila 6**.
+
+⚠️ **El nombre tiene que coincidir letra por letra.** La columna M no se
+escribe: la deduce un `INDEX/MATCH` que busca el nombre en la lista del equipo.
+Si no coincide, **el puesto sale vacío y esa comisión no se suma a nadie**, sin
+dar error. Y no coincide sola: en el Excel van apellidos primero, en mayúsculas
+y sin acentos, y uno está escrito distinto —`Aguilar rosette` en la app,
+`AGUILAR ROSETE` en el Excel—. De ahí `empleados.nombre_reporte`, mapeado
+**explícito por número de empleado**: una regla automática acertaría hoy y
+fallaría con el primer apellido compuesto, un mes después.
+
+`accesorios_reporte` marca con `sin_nombre` las ventas cuyo vendedor no tiene
+ese mapeo, y la pantalla las enseña en rojo en vez de esconderlas.
+
+**Se copia al portapapeles, no se genera el .xlsx**: el archivo lo comparten
+diez tiendas y sobreescribirlo pisaría el trabajo de las demás.
+
 ### Corregir una venta *(17-ago-2026, v171)*
 
 Lo último que se hacía en la hoja. Vive en el panel **Ventas del día** de
