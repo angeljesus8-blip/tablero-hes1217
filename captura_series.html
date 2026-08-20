@@ -1753,6 +1753,50 @@ function accAdivinar(textoTicket){
   return null;
 }
 
+/* ── La lista, ordenada por lo que SÍ se lee bien: el precio ─────────────
+   20-ago-2026, tras probarlo en piso: «le cuesta leer bien lo del producto».
+
+   El código del artículo se lee a trompicones —`CARGATOONTS 2 77`— pero el
+   precio sale exacto, y con la comprobación `precio × cantidad = importe`
+   detrás. Así que en vez de insistir en adivinar el nombre, se usa el precio
+   para ACORTAR la lista: de 23 productos a los que cuestan eso, que casi
+   siempre son uno o dos.
+
+   No se filtra, se ORDENA. Filtrar escondería el producto correcto el día que
+   se venda con descuento —el cargador 100W se ha cobrado a $999, $899.10, $699
+   y $1,299— y entonces no habría forma de elegirlo. Arriba los que cuadran,
+   debajo todos los demás. */
+function accPintarLista(precioLeido, sugerido){
+  const sel = $('accProd');
+  if(!_accCat.length){
+    sel.innerHTML = '<option value="">(no se pudo cargar el catálogo)</option>';
+    return;
+  }
+  const p = Number(precioLeido) || 0;
+  const cuadran = p ? _accCat.filter(c => Math.abs(Number(c.precio_ref || 0) - p) < 0.5) : [];
+  const resto = _accCat.filter(c => cuadran.indexOf(c) < 0);
+
+  const opt = c => '<option data-p="' + (c.precio_ref || '') + '" data-sku="' +
+    esc(c.sku || '43739') + '"' + (sugerido === c.nombre ? ' selected' : '') + '>' +
+    esc(c.nombre) + '</option>';
+
+  let html = '<option value="">— elige el producto —</option>';
+  if(cuadran.length){
+    html += '<optgroup label="Cuestan $' + p + '">' + cuadran.map(opt).join('') + '</optgroup>';
+    html += '<optgroup label="Los demás">' + resto.map(opt).join('') + '</optgroup>';
+  } else {
+    html += _accCat.map(opt).join('');
+  }
+  sel.innerHTML = html;
+
+  /* Con UN solo producto a ese precio y sin código que lo contradiga, se marca.
+     Con dos —las micas de $149 son HR y MATTE— NO: son justo los 19 tickets
+     que en julio hubo que abrir uno por uno, y elegir al azar entre ellos es
+     exactamente el error que esto vino a evitar. */
+  if(!sugerido && cuadran.length === 1) sel.value = cuadran[0].nombre;
+  return cuadran;
+}
+
 function accHoyISO(){
   const d = new Date();
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' +
@@ -1774,11 +1818,7 @@ window.abrirAcc = async function(){
     const filas = await sbCallCS('accesorios_catalogo_lista', {}, 10000);
     _accCat = Array.isArray(filas) ? filas : [];
   }
-  $('accProd').innerHTML = _accCat.length
-    ? '<option value="">— elige el producto —</option>' +
-      _accCat.map(c => '<option data-p="' + (c.precio_ref||'') + '" data-sku="' +
-        esc(c.sku || '43739') + '">' + esc(c.nombre) + '</option>').join('')
-    : '<option value="">(no se pudo cargar el catálogo)</option>';
+  accPintarLista(0, null);
 
   $('accPanel').classList.add('show');
 };
@@ -1828,7 +1868,11 @@ window.accFotoElegida = function(e){
     const codigos = accCodigos(r.texto);
     const sugerido = accAdivinar(r.texto);
     const yaElegido = $('accProd').value;      // pudo elegir mientras leía
-    if(sugerido && !yaElegido) $('accProd').value = sugerido;
+    /* Se repinta la lista poniendo arriba los que cuestan lo del ticket. Si ya
+       había elegido, se respeta su elección. */
+    const cuadran = accPintarLista(r.precio != null ? r.precio : r.importe,
+                                   sugerido || yaElegido) || [];
+    if(yaElegido) $('accProd').value = yaElegido;
 
     let nota;
     /* Si ya habías elegido —que es lo que pide el diseño, elegir mientras lee—
@@ -1840,6 +1884,12 @@ window.accFotoElegida = function(e){
            + esc(sugerido) + '</b>. Mira cuál es.';
     else if(sugerido)       nota = 'Parece <b>' + esc(sugerido) + '</b> — compruébalo.';
     else if(!_accCat.length) nota = '<b>El catálogo no cargó</b>, por eso no puedo proponer producto.';
+    else if(cuadran.length === 1)
+      nota = 'Por el precio solo puede ser <b>' + esc(cuadran[0].nombre) + '</b> — compruébalo.';
+    else if(cuadran.length > 1)
+      nota = 'A ese precio hay <b>' + cuadran.length + '</b>: ' +
+             esc(cuadran.map(c => c.nombre).join(', ')) + '. Elige cuál fue — '
+           + 'están arriba en la lista.';
     else if(!codigos.length) nota = 'No encontré el código del artículo en el ticket. Elige el producto.';
     else nota = 'Leí <b>' + esc(codigos.join(' · ')) + '</b>, que no se parece lo bastante a '
               + 'ningún artículo del catálogo. Elige el producto.';
