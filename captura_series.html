@@ -1822,6 +1822,8 @@ window.abrirAcc = async function(){
   }
   accPintarLista(0, null);
 
+  // El reporte es de gerente y subgerente. Mismo portero que el ✏️ de corregir.
+  $('accReporte').style.display = PUEDE_EDITAR ? 'block' : 'none';
   $('accPanel').classList.add('show');
 };
 window.cerrarAcc = function(){ $('accPanel').classList.remove('show'); };
@@ -1988,6 +1990,140 @@ window.guardarAcc = async function(){
     err('No se pudo guardar · ' + ((e && e.message) || 'sin conexión'));
   }finally{
     btn.disabled = false; btn.textContent = 'Guardar';
+  }
+};
+
+/* ---------- Reporte mensual de accesorios (20-ago-2026) ----------
+
+   Vivía en Admin y se movió aquí, donde se capturan. Solo gerente y
+   subgerente: el reporte mueve las comisiones de todo el equipo y se entrega a
+   la región.
+
+   El generador de Excel se carga BAJO DEMANDA, igual que el OCR. Captura de
+   Series es la app que más se abre en piso —muchas veces al día, con la señal
+   del centro comercial— y meterle medio megabyte que solo usa el gerente una
+   vez al mes la haría más lenta para todos. */
+const REP_MESES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO',
+                   'AGOS','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+let _repFilas = [];
+let _xlsxCargando = null;
+
+function cargarXLSX(){
+  if(window.XLSX) return Promise.resolve();
+  if(_xlsxCargando) return _xlsxCargando;
+  _xlsxCargando = new Promise(function(res, rej){
+    const e = document.createElement('script');
+    e.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+    e.onload = res; e.onerror = rej;
+    document.head.appendChild(e);
+  });
+  return _xlsxCargando;
+}
+
+window.abrirAccReporte = function(){
+  const sel = $('repMes');
+  if(!sel.options.length){
+    const hoy = new Date();
+    let html = '';
+    for(let i = 0; i < 6; i++){
+      const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
+      html += '<option value="' + d.getFullYear() + '-' + (d.getMonth()+1) + '">'
+            + REP_MESES[d.getMonth()] + ' ' + String(d.getFullYear()).slice(2) + '</option>';
+    }
+    sel.innerHTML = html;
+  }
+  $('repPanel').classList.add('show');
+  cargarRep();
+};
+window.cerrarAccReporte = function(){ $('repPanel').classList.remove('show'); };
+
+window.cargarRep = async function(){
+  const [anio, mes] = ($('repMes').value || '').split('-').map(Number);
+  $('repResumen').textContent = 'Consultando…';
+  $('repLista').innerHTML = '';
+  $('repAviso').style.display = 'none';
+  _repFilas = [];
+
+  const filas = await sbCallCS('accesorios_reporte', { p_anio: anio, p_mes: mes }, 15000);
+  const hoja = SB_STORE + ' ' + REP_MESES[mes-1] + ' ' + String(anio).slice(2);
+  if(!Array.isArray(filas) || !filas.length){
+    $('repResumen').innerHTML = 'No hay accesorios capturados en ese mes.<br>' +
+      '<span style="color:var(--gris);font-size:12px">La hoja sería <b>' + hoja + '</b>.</span>';
+    return;
+  }
+  _repFilas = filas;
+
+  const total = filas.reduce((s,f) => s + (Number(f.precio)||0) * (Number(f.cantidad)||1), 0);
+  const tickets = new Set(filas.map(f => f.ticket)).size;
+  $('repResumen').innerHTML = '<b>' + filas.length + '</b> línea(s) · <b>' + tickets +
+    '</b> ticket(s) · <b>$' + total.toLocaleString('es-MX',{minimumFractionDigits:2}) + '</b>' +
+    '<br><span style="color:var(--gris);font-size:12px">Va en la hoja <b>' + hoja +
+    '</b>, desde la fila 6.</span>';
+
+  /* Las ventas sin nombre de reporte se ENSEÑAN. Entrarían al Excel con un
+     nombre que la fórmula del PUESTO no reconoce, y esa comisión no se sumaría
+     a nadie — sin que el Excel avise. */
+  const malos = filas.filter(f => f.sin_nombre);
+  if(malos.length){
+    const quien = [...new Set(malos.map(f => f.empleado))];
+    $('repAviso').innerHTML = '⚠️ <b>' + malos.length + ' venta(s)</b> de <b>' +
+      esc(quien.join(', ')) + '</b> no tienen nombre para el reporte. Si las bajas así, ' +
+      'su comisión no se suma a nadie.';
+    $('repAviso').style.display = 'block';
+  }
+
+  $('repLista').innerHTML = filas.map(f =>
+    '<div style="display:flex;gap:8px;align-items:baseline;padding:6px 0;' +
+    'border-bottom:1px solid #f4f4f4;font-size:12.5px">' +
+      '<b style="width:22px;color:#bbb">' + f.dia + '</b>' +
+      '<span style="font-family:ui-monospace,monospace;color:var(--gris);font-size:11.5px">' +
+        esc(f.ticket) + '</span>' +
+      '<span style="flex:1">' + esc(f.producto) + '</span>' +
+      '<b style="color:var(--verde)">$' + f.precio + '</b>' +
+    '</div>').join('');
+};
+
+/* El Excel, con las columnas EN LA MISMA POSICIÓN que la hoja del reporte —B,
+   D, E, F, G, H, N— y desde la fila 6, igual que allí. Así se selecciona y se
+   pega en el mismo sitio sin contar columnas. C y de I a M van vacías porque
+   allí son fórmulas con candado. */
+window.bajarRepExcel = async function(){
+  if(!_repFilas.length){ toast('No hay nada que bajar en ese mes', 'warn'); return; }
+  const btn = $('repBajar');
+  btn.disabled = true; btn.textContent = 'Preparando…';
+  try{
+    await cargarXLSX();
+    const [anio, mes] = ($('repMes').value || '').split('-').map(Number);
+    const hoja = SB_STORE + ' ' + REP_MESES[mes-1] + ' ' + String(anio).slice(2);
+
+    const filas = [[],[],[],[]];
+    const cab = [];
+    cab[1]='DIA'; cab[3]='# TICKET'; cab[4]='SKU'; cab[5]='NOMBRE DEL PRODUCTO';
+    cab[6]='CANTIDAD'; cab[7]='PRECIO UNITARIO'; cab[13]='NOMBRE DEL EMPLEADO COMPLETO';
+    filas.push(cab);
+    for(const f of _repFilas){
+      const r = [];
+      r[1] = f.dia;
+      // Números como NÚMERO: el destino cuenta ventas únicas con un COUNTIFS
+      // sobre el ticket, y un ticket en texto no casa con los que ya están.
+      r[3] = Number(f.ticket) || f.ticket;
+      r[4] = Number(f.sku) || f.sku;
+      r[5] = f.producto;
+      r[6] = Number(f.cantidad);
+      r[7] = Number(f.precio);
+      r[13] = f.empleado;
+      filas.push(r);
+    }
+    const ws = XLSX.utils.aoa_to_sheet(filas);
+    ws['!cols'] = [{wch:3},{wch:6},{wch:8},{wch:11},{wch:9},{wch:34},{wch:10},
+                   {wch:14},{wch:4},{wch:4},{wch:4},{wch:4},{wch:4},{wch:32}];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, hoja.slice(0, 31));
+    XLSX.writeFile(wb, 'accesorios_' + hoja.replace(/ /g, '_') + '.xlsx');
+  }catch(e){
+    toast('No se pudo generar el Excel · ' + ((e && e.message) || 'sin conexión'), 'warn');
+  }finally{
+    btn.disabled = false; btn.textContent = '⬇️ Bajar Excel';
   }
 };
 
@@ -2630,6 +2766,12 @@ refreshEolVenta(); // trae los EOL con 50% activo (solo exhibición)
     </div>
     <div class="vd-lista" style="padding:14px 16px">
 
+      <!-- Solo gerente y subgerente. El reporte del mes es suyo: mueve las
+           comisiones de todo el equipo y se entrega a la región. -->
+      <button class="btn" id="accReporte" onclick="abrirAccReporte()"
+        style="display:none;background:#eee;color:#444;width:100%;font-size:13px;padding:11px;margin-bottom:12px">
+        📊 Reporte del mes · bajar Excel</button>
+
       <input type="file" accept="image/*" capture="environment" id="accFile" hidden onchange="accFotoElegida(event)">
       <button class="btn" id="accFoto" onclick="accTomarFoto()" style="background:var(--azul);color:#fff;width:100%">
         📷 Foto del ticket</button>
@@ -2670,6 +2812,30 @@ refreshEolVenta(); // trae los EOL con 50% activo (solo exhibición)
     <div class="vd-pie" style="display:flex;gap:10px;padding:12px 16px">
       <button class="btn" style="flex:1;background:#eee;color:#444" onclick="cerrarAcc()">Cancelar</button>
       <button class="btn" style="flex:2" id="accGuardar" onclick="guardarAcc()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Reporte mensual de accesorios (20-ago-2026). Vivía en Admin; se movió aquí
+     para tenerlo donde se capturan. Solo gerente y subgerente. -->
+<div id="repPanel" class="vd" style="z-index:78">
+  <div class="vd-box" style="max-height:94vh">
+    <div class="vd-top">
+      <h2>Accesorios del mes</h2>
+      <button class="vd-cerrar" onclick="cerrarAccReporte()" aria-label="Cerrar">×</button>
+    </div>
+    <div class="vd-lista" style="padding:14px 16px">
+      <label class="ed-l">Mes</label>
+      <select id="repMes" class="ed-i" onchange="cargarRep()"></select>
+      <div id="repResumen" style="font-size:13px;margin-top:12px;line-height:1.5"></div>
+      <div id="repAviso" style="display:none;margin-top:10px;padding:10px 12px;
+           border-radius:9px;border-left:4px solid var(--rojo);background:#fdeaea;
+           font-size:12.5px;line-height:1.45;color:#8a1f1f"></div>
+      <div id="repLista" style="margin-top:12px"></div>
+    </div>
+    <div class="vd-pie" style="display:flex;gap:10px;padding:12px 16px">
+      <button class="btn" style="flex:1;background:#eee;color:#444" onclick="cerrarAccReporte()">Cerrar</button>
+      <button class="btn" style="flex:2" id="repBajar" onclick="bajarRepExcel()">⬇️ Bajar Excel</button>
     </div>
   </div>
 </div>
