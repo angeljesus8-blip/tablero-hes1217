@@ -211,8 +211,8 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
     <button onclick="tab('eol',this)">🏷️ EOL</button>
     <button onclick="tab('avisos',this);cargarListaAvisos()">📢 Avisos</button>
     <button onclick="tab('comis',this);cargarComisionesCloud()">💰 Comisiones</button>
-    <button onclick="tab('acc',this);cargarAccReporte();cargarTecnicos()">🔌 Accesorios</button>
-    <button onclick="tab('equipo',this);cargarEquipo()">👥 Equipo</button>
+    <button onclick="tab('acc',this);cargarAccReporte()">🔌 Accesorios</button>
+    <button onclick="tab('equipo',this);cargarEquipo();cargarTecnicos()">👥 Equipo</button>
     <button onclick="tab('config',this);loadConfig()">⚙️ Config</button>
   </div>
 
@@ -467,19 +467,6 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
         <b>1)</b> columna B · <b>2)</b> columnas D a H · <b>3)</b> columna N</p>
     </div>
 
-    <div class="card">
-      <h2>🔧 Técnicos que pueden consultar</h2>
-      <p class="note">Externos de Mr&nbsp;Fix. Solo ven <b>estas ventas de accesorios</b> y
-        sus tickets: ni tablero, ni inventario, ni comisiones, ni nombres del equipo.
-        Entran en <code>accesorios_tecnico.html</code> con su clave.</p>
-      <div id="tecLista"><p class="note">Cargando…</p></div>
-      <div style="display:flex;gap:8px;margin-top:10px">
-        <input id="tecNombre" placeholder="Nombre del técnico" style="flex:1">
-        <button class="btn btn-sec" onclick="tecAlta()" style="width:auto;padding:10px 14px">＋ Alta</button>
-      </div>
-      <p class="note" style="margin-top:8px">Dar de baja corta el acceso al momento.
-        No se borra: así queda constancia de si esa clave llegó a usarse y hasta cuándo.</p>
-    </div>
 
     <div class="card" id="accCajasTxt" style="display:none">
       <h2>O copiar y pegar el texto</h2>
@@ -541,6 +528,22 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
       <label class="eq-check"><input type="checkbox" id="nuevoEmpAdmin"> Puede abrir <b>Admin</b> (subir catálogo, promos, EOL y comisiones)</label>
       <button class="btn-pri" onclick="altaEmpleado()">➕ Agregar al equipo</button>
       <div class="result" id="resEquipo"></div>
+    </div>
+
+    <div class="card">
+      <h2>🔧 Técnicos externos</h2>
+      <p class="note">No son del equipo ni entran con número de empleado: son de
+        Mr&nbsp;Fix y solo consultan <b>las ventas de accesorios</b> y sus tickets.
+        Ni tablero, ni inventario, ni comisiones, ni nombres del equipo.<br>
+        Entran por su cuenta en <code>accesorios_tecnico.html</code>, con la clave
+        que sale aquí.</p>
+      <div id="tecLista"><p class="note">Cargando…</p></div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <input id="tecNombre" placeholder="Nombre del técnico" style="flex:1">
+        <button class="btn btn-sec" onclick="tecAlta()" style="width:auto;padding:10px 14px">＋ Alta</button>
+      </div>
+      <p class="note" style="margin-top:8px">Dar de baja corta el acceso al momento.
+        No se borra: así queda constancia de si esa clave llegó a usarse y hasta cuándo.</p>
     </div>
   </div>
 
