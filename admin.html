@@ -456,10 +456,20 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
     </div>
 
     <div class="card" id="accCajas" style="display:none">
-      <h2>Para pegar en la hoja</h2>
-      <p class="note">La hoja está <b>protegida</b>: solo se puede escribir en algunas columnas,
-        y las de en medio son fórmulas. Por eso son <b>tres pegados</b> y no uno.
-        Empieza en la <b>fila 6</b>.</p>
+      <h2>Bajar el mes en Excel</h2>
+      <p class="note">Las columnas vienen <b>en la misma posición</b> que la hoja del reporte
+        y empiezan en la <b>fila 6</b>, igual que allí. Abres los dos archivos, seleccionas
+        y pegas en el mismo sitio, sin contar columnas.</p>
+      <button class="btn" onclick="accBajarExcel()" style="margin-bottom:6px">⬇️ Bajar Excel del mes</button>
+      <p class="note">Son <b>tres pegados</b> y no uno porque en el reporte las columnas
+        <b>C</b> y de <b>I</b> a <b>M</b> son fórmulas con candado: Excel rechaza pegar
+        un rango que las toque, aunque venga vacío.<br>
+        <b>1)</b> columna B · <b>2)</b> columnas D a H · <b>3)</b> columna N</p>
+    </div>
+
+    <div class="card" id="accCajasTxt" style="display:none">
+      <h2>O copiar y pegar el texto</h2>
+      <p class="note">Por si no tienes Excel a mano. Mismo resultado.</p>
 
       <div class="acc-blq">
         <label>1 · Columna <b>B</b> (día) — clic en <b>B6</b> y pega</label>
@@ -962,6 +972,7 @@ async function sbLeer(fn, params){
    Se copia al portapapeles en vez de generar el .xlsx a propósito: el archivo
    es compartido por diez tiendas y sobreescribirlo pisaría el trabajo de las
    demás. Pegar en la hoja propia no toca nada ajeno. */
+let _accFilas = [];
 const ACC_MESES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO',
                    'AGOS','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
 
@@ -987,6 +998,8 @@ async function cargarAccReporte(){
 
   document.getElementById('accResumen').textContent = 'Consultando…';
   document.getElementById('accCajas').style.display = 'none';
+  document.getElementById('accCajasTxt').style.display = 'none';
+  _accFilas = [];
   document.getElementById('accAvisoNombre').style.display = 'none';
 
   const filas = await sbLeer('accesorios_reporte', { p_anio: anio, p_mes: mes });
@@ -998,6 +1011,7 @@ async function cargarAccReporte(){
     return;
   }
 
+  _accFilas = filas;
   const total = filas.reduce((s, f) => s + (Number(f.precio) || 0) * (Number(f.cantidad) || 1), 0);
   const tickets = new Set(filas.map(f => f.ticket)).size;
   document.getElementById('accResumen').innerHTML =
@@ -1042,6 +1056,7 @@ async function cargarAccReporte(){
         [f.ticket, f.sku, f.producto, f.cantidad, f.precio].join('\t')).join('\n');
   document.getElementById('accN').value  = filas.map(f => f.empleado).join('\n');
   document.getElementById('accCajas').style.display = 'block';
+  document.getElementById('accCajasTxt').style.display = 'block';
 }
 
 /* Abre la foto del ticket guardada al capturar. Misma función que usa Captura
@@ -1070,6 +1085,61 @@ async function accVerFoto(capturaId, ticket){
     '<button class="btn btn-sec" onclick="cargarAccReporte()">← Volver a la lista</button>' +
     '<img src="data:' + (d.mime||'image/jpeg') + ';base64,' + d.imagen +
     '" style="width:100%;border-radius:10px;margin-top:8px"></div>';
+}
+
+/* ── Bajar el mes como Excel ─────────────────────────────────────────────
+   20-ago-2026, pedido por Angel: «no puede generarme de una vez un excel y ya
+   solo seleccionar desde el excel las filas?».
+
+   La clave es que las columnas van EN LA MISMA POSICION que la hoja destino
+   —B, D, E, F, G, H, N— y los datos empiezan en la FILA 6, igual que alli. Asi
+   se selecciona un rango y se pega en el mismo sitio, sin contar columnas.
+
+   Siguen siendo TRES pegados, y no por comodidad: en el destino C y de I a M
+   son formulas con candado, y Excel rechaza pegar un rango que las toque
+   aunque el origen venga vacio. Lo que cambia es que seleccionar una columna
+   en Excel es un clic, y en un cuadro de texto no.
+
+   SheetJS ya estaba cargado para leer los Excel de Sonar: no se anade nada. */
+function accBajarExcel(){
+  if(!window.XLSX){ alert('No se pudo cargar el generador de Excel.'); return; }
+  const sel = document.getElementById('accMes');
+  const [anio, mes] = (sel.value || '').split('-').map(Number);
+  const tienda = String((_cfg && _cfg.store_id) || '1217');
+  const hoja = tienda + ' ' + ACC_MESES[mes - 1] + ' ' + String(anio).slice(2);
+
+  if(!_accFilas.length){ alert('No hay nada que bajar en ese mes.'); return; }
+
+  /* Cada fila es un array por POSICION de columna: 0=A, 1=B, 2=C… 13=N. Las
+     que en el destino son formula se dejan vacias a proposito, para que el
+     archivo se vea igual que la hoja y no invite a pegarlas. */
+  const filas = [];
+  filas.push([]); filas.push([]); filas.push([]);            // 1, 2, 3
+  filas.push([]);                                            // 4
+  const cab = [];
+  cab[1]='DIA'; cab[3]='# TICKET'; cab[4]='SKU'; cab[5]='NOMBRE DEL PRODUCTO';
+  cab[6]='CANTIDAD'; cab[7]='PRECIO UNITARIO'; cab[13]='NOMBRE DEL EMPLEADO COMPLETO';
+  filas.push(cab);                                           // fila 5, como alli
+  for(const f of _accFilas){
+    const r = [];
+    r[1] = f.dia;               // B
+    r[3] = Number(f.ticket) || f.ticket;   // D — numero si lo es, como el destino
+    r[4] = Number(f.sku) || f.sku;         // E
+    r[5] = f.producto;          // F
+    r[6] = Number(f.cantidad);  // G
+    r[7] = Number(f.precio);    // H
+    r[13] = f.empleado;         // N
+    filas.push(r);              // desde la fila 6
+  }
+
+  const ws = XLSX.utils.aoa_to_sheet(filas);
+  ws['!cols'] = [{wch:3},{wch:6},{wch:8},{wch:11},{wch:9},{wch:34},{wch:10},
+                 {wch:14},{wch:4},{wch:4},{wch:4},{wch:4},{wch:4},{wch:32}];
+  const wb = XLSX.utils.book_new();
+  // El nombre de hoja lleva el mismo que el destino: al tener los dos abiertos,
+  // saber cual es cual sin pensarlo evita pegar en el mes equivocado.
+  XLSX.utils.book_append_sheet(wb, ws, hoja.slice(0, 31));
+  XLSX.writeFile(wb, 'accesorios_' + hoja.replace(/ /g, '_') + '.xlsx');
 }
 
 async function accCopiar(id, btn){
