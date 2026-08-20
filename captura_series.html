@@ -1577,6 +1577,7 @@ function pintarVentasDia(){
    Por eso el producto se ELIGE, y de paso muere la ambigüedad de las dos micas
    de $149 y las dos de $299, que fueron 19 de los 24 tickets de julio. */
 let _accOcr = null;          // promesa del OCR en curso
+let _accFoto = null;         // la foto del ticket, para guardarla de evidencia
 let _accCat = [];            // catálogo de accesorios
 
 const ACC_ANCLAS = [/437\s?39/, /atendido/i, /productos/i, /1217/,
@@ -1810,6 +1811,7 @@ window.abrirAcc = async function(){
   $('accError').style.display = 'none';
   $('accTicket').value = ''; $('accPrecio').value = ''; $('accCant').value = '1';
   $('accFecha').value = accHoyISO();
+  _accFoto = null;
   $('accVend').innerHTML = VENDEDORES.map(n => '<option>' + esc(n) + '</option>').join('');
   if(currentVend) $('accVend').value = currentVend;
 
@@ -1854,6 +1856,17 @@ window.accFotoElegida = function(e){
   $('accLeido').style.display = 'none';
   $('accError').style.display = 'none';
   $('accEstado').textContent = 'Leyendo el ticket… puedes ir eligiendo el producto';
+
+  /* La foto se guarda como EVIDENCIA, comprimida igual que las de venta.
+     Cuando el OCR lee mal el producto —y lee mal, según se vio en piso— la
+     única forma de comprobar después qué se vendió de verdad es el ticket.
+     Sin ella, una captura equivocada es indistinguible de una correcta.
+
+     Va sin `await` y sin bloquear: una foto que no comprime es una molestia,
+     una venta que espera por ella es tiempo con el cliente delante. */
+  _accFoto = null;
+  compressImage(f).then(function(d){ _accFoto = d; })
+    .catch(function(){});   // sin foto se guarda igual: la venta importa mas que la evidencia
   // Corre EN PARALELO. Nadie espera mirando una barra.
   _accOcr = accLeerTicket(f).then(function(r){
     $('accEstado').textContent = '';
@@ -1947,6 +1960,9 @@ window.guardarAcc = async function(){
        Excel, asi que suponerlo llenaria mal una columna de cada dos. */
     const opSel = $('accProd').selectedOptions[0];
     const skuSel = (opSel && opSel.dataset && opSel.dataset.sku) || '43739';
+    // El id se genera ANTES de guardar: la venta y su foto tienen que llevar el
+    // mismo, y generarlo dos veces las dejaría sin ligar.
+    const capturaId = 'a' + Date.now() + Math.random().toString(36).slice(2,6);
 
     const r = await sbCallCS('accesorio_guardar', {
       p_token: GAS_TOKEN, p_ticket: ticket, p_producto: prod, p_sku: skuSel,
@@ -1954,12 +1970,17 @@ window.guardarAcc = async function(){
       p_vendedor: $('accVend').value,
       p_fecha: $('accFecha').value || null,
       p_quien: MI_EMPNO,
-      p_captura_id: 'a' + Date.now() + Math.random().toString(36).slice(2,6),
+      p_captura_id: capturaId,
       p_ocr: _accOcr ? ((await _accOcr) || {}).texto || null : null
     }, 15000);
 
     if(!r || r.ok !== true) return err((r && r.error) || 'No se pudo guardar. Revisa la conexión.');
     if(r.duplicada) return err(r.error || 'Ese ticket ya tenía registrado ese producto.');
+
+    /* La foto, con el mismo id que liga la venta. DESPUÉS de que la venta
+       quede guardada y sin await: si la foto falla, la venta ya está — al
+       revés se perdería la venta por no poder subir una imagen. */
+    if(_accFoto) subirFoto(capturaId, _accFoto);
 
     cerrarAcc();
     toast('Accesorio registrado ✓ $' + (r.importe != null ? r.importe : precio), 'ok');

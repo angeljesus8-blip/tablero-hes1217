@@ -190,10 +190,20 @@ def r_sintaxis():
         if s is None: continue
         f = tempfile.NamedTemporaryFile('w', suffix='.js', delete=False, encoding='utf-8')
         f.write(scripts_de(s)); f.close()
-        r = subprocess.run([node, '--check', f.name], capture_output=True, text=True)
+        # Sin text=True: en Windows lo decodifica en cp1252 y REVIENTA si el
+        # mensaje trae un emoji o un acento — o sea justo cuando hay un error
+        # que reportar. El verificador se caía con un traceback en vez de decir
+        # dónde estaba el fallo. (20-ago-2026)
+        r = subprocess.run([node, '--check', f.name], capture_output=True)
         os.unlink(f.name)
         if r.returncode:
-            falla('sintaxis', '%s: %s' % (p, (r.stderr.strip().splitlines() or [''])[0][:110]))
+            err = r.stderr.decode('utf-8', 'replace')
+            # La 1ª línea es la ruta del temporal; la 2ª, el código con el fallo,
+            # y la que dice QUÉ pasa viene después. Se dan las dos útiles.
+            lineas = [l.strip() for l in err.splitlines() if l.strip()]
+            detalle = next((l for l in lineas if 'Error' in l), '')
+            donde = lineas[1][:70] if len(lineas) > 1 else ''
+            falla('sintaxis', '%s: %s  —  cerca de: %s' % (p, detalle[:90], donde))
 
 
 # ── 2 · Funciones usadas sin definir ────────────────────────

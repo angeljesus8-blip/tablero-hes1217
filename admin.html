@@ -450,6 +450,7 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
         <button class="btn btn-sec" onclick="cargarAccReporte()" style="width:auto;padding:10px 14px">↻</button>
       </div>
       <div id="accResumen" class="note"></div>
+      <div id="accDetalle" style="margin-top:10px"></div>
       <div id="accAvisoNombre" class="note"
            style="display:none;background:#fdeaea;border-color:#f3b6b6;color:#8a1f1f"></div>
     </div>
@@ -1019,12 +1020,56 @@ async function cargarAccReporte(){
     el.style.display = 'block';
   }
 
+  /* El detalle, con la foto del ticket donde la haya. Es lo que permite
+     comprobar una captura dudosa: el OCR lee mal el producto a veces, y sin el
+     ticket delante no hay forma de saber si se eligió el correcto. */
+  document.getElementById('accDetalle').innerHTML = filas.map(f => `
+    <div style="display:flex;gap:8px;align-items:baseline;padding:5px 0;
+                border-bottom:1px solid #f2f2f2;font-size:12px">
+      <b style="width:26px;color:#999">${f.dia}</b>
+      <span style="font-family:ui-monospace,monospace;color:#666">${f.ticket}</span>
+      <span style="flex:1">${f.producto}</span>
+      <b>$${f.precio}</b>
+      ${f.tiene_foto
+        ? `<button class="btn btn-sec" style="width:auto;padding:2px 8px;font-size:11px"
+             onclick="accVerFoto('${f.captura_id}','${f.ticket}')">ver ticket</button>`
+        : '<span style="width:60px"></span>'}
+    </div>`).join('');
+
   // Cada bloque en el orden EXACTO de las columnas del Excel.
   document.getElementById('accB').value  = filas.map(f => f.dia).join('\n');
   document.getElementById('accDH').value = filas.map(f =>
         [f.ticket, f.sku, f.producto, f.cantidad, f.precio].join('\t')).join('\n');
   document.getElementById('accN').value  = filas.map(f => f.empleado).join('\n');
   document.getElementById('accCajas').style.display = 'block';
+}
+
+/* Abre la foto del ticket guardada al capturar. Misma función que usa Captura
+   de Series para las fotos de venta: la imagen vive en `venta_fotos`, ligada
+   por `captura_id`. */
+async function accVerFoto(capturaId, ticket){
+  const cont = document.getElementById('accDetalle');
+  const antes = cont.innerHTML;
+  cont.innerHTML = '<p class="note">Abriendo la foto del ticket ' + ticket + '…</p>';
+  let d = null;
+  try{
+    const r = await fetch(SB_URL + '/rest/v1/rpc/venta_foto_leer', {
+      method:'POST',
+      headers:{ apikey:SB_KEY, Authorization:'Bearer '+SB_KEY, 'Content-Type':'application/json' },
+      body: JSON.stringify({ p_store:String((_cfg&&_cfg.store_id)||''),
+                             p_token:String((_cfg&&_cfg.gas_token)||''),
+                             p_captura_id:String(capturaId) })
+    });
+    d = await r.json();
+  }catch(e){}   // el mensaje de abajo lo cubre: si no hay imagen, se dice
+  if(!d || !d.imagen){
+    cont.innerHTML = '<p class="note" style="color:var(--rojo)">No se pudo abrir esa foto.</p>' + antes;
+    return;
+  }
+  cont.innerHTML = '<div style="margin-bottom:10px">' +
+    '<button class="btn btn-sec" onclick="cargarAccReporte()">← Volver a la lista</button>' +
+    '<img src="data:' + (d.mime||'image/jpeg') + ';base64,' + d.imagen +
+    '" style="width:100%;border-radius:10px;margin-top:8px"></div>';
 }
 
 async function accCopiar(id, btn){
