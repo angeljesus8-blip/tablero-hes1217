@@ -175,3 +175,82 @@ GRANT EXECUTE ON FUNCTION public.accesorios_tecnico_foto(text,text,text)        
 -- ============================================================
 --  Odemas · Grupo Gigante — uso interno HES 1217
 -- ============================================================
+
+
+-- ============================================================
+--  ── 6 · Darlos de alta desde Admin (20-ago-2026) ──────────
+-- ============================================================
+--
+--  Estas TRES si piden el gas_token: las usa el gerente desde Admin, no el
+--  tecnico. La clave del tecnico no sirve aqui, y el token del gerente no
+--  sirve para consultar las ventas — cada uno abre lo suyo.
+
+-- La clave la genera la BASE, no el navegador. Escrita a mano acabaria siendo
+-- «mrfix1» o el nombre de la tienda; aqui sale aleatoria y no se puede adivinar.
+CREATE OR REPLACE FUNCTION public.tecnico_guardar(
+  p_store text, p_token text, p_nombre text
+) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, extensions
+AS $fn$
+DECLARE v_clave text;
+BEGIN
+  IF NOT public.escritura_ok_(p_store, p_token) THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'no_autorizado');
+  END IF;
+  IF coalesce(trim(p_nombre),'') = '' THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'falta el nombre');
+  END IF;
+
+  v_clave := 'mrfix-' || p_store || '-' ||
+             substr(md5(random()::text || clock_timestamp()::text), 1, 12);
+
+  INSERT INTO public.tecnicos_acceso (store_id, nombre, clave)
+  VALUES (p_store, trim(p_nombre), v_clave);
+
+  -- La clave se devuelve UNA vez, al crearla: es lo que hay que darle al
+  -- tecnico. Despues se puede volver a ver en la lista, porque quien entra a
+  -- Admin ya puede leerla de la tabla igual — esconderla seria teatro.
+  RETURN jsonb_build_object('ok', true, 'clave', v_clave);
+EXCEPTION
+  WHEN OTHERS THEN
+    RETURN jsonb_build_object('ok', false, 'error', SQLSTATE || ': ' || left(SQLERRM, 120));
+END $fn$;
+
+CREATE OR REPLACE FUNCTION public.tecnicos_lista(p_store text, p_token text)
+RETURNS TABLE (id bigint, nombre text, clave text, activo boolean,
+               ultimo_acceso timestamptz)
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public
+AS $fn$
+BEGIN
+  IF NOT public.escritura_ok_(p_store, p_token) THEN
+    RETURN;
+  END IF;
+  RETURN QUERY
+    SELECT t.id, t.nombre, t.clave, t.activo, t.ultimo_acceso
+      FROM public.tecnicos_acceso t
+     WHERE t.store_id = p_store
+     ORDER BY t.activo DESC, t.nombre;
+END $fn$;
+
+CREATE OR REPLACE FUNCTION public.tecnico_baja(
+  p_store text, p_token text, p_id bigint, p_activo boolean DEFAULT false
+) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+AS $fn$
+BEGIN
+  IF NOT public.escritura_ok_(p_store, p_token) THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'no_autorizado');
+  END IF;
+  /* Se da de baja, NO se borra: la fila guarda el ultimo acceso, y borrarla
+     tira la unica pista de si esa clave llego a usarse y hasta cuando. */
+  UPDATE public.tecnicos_acceso SET activo = coalesce(p_activo, false)
+   WHERE store_id = p_store AND id = p_id;
+  RETURN jsonb_build_object('ok', true);
+END $fn$;
+
+REVOKE ALL ON FUNCTION public.tecnico_guardar(text,text,text)              FROM public;
+REVOKE ALL ON FUNCTION public.tecnicos_lista(text,text)                    FROM public;
+REVOKE ALL ON FUNCTION public.tecnico_baja(text,text,bigint,boolean)       FROM public;
+GRANT EXECUTE ON FUNCTION public.tecnico_guardar(text,text,text)            TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.tecnicos_lista(text,text)                  TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.tecnico_baja(text,text,bigint,boolean)     TO anon, authenticated;
