@@ -1842,7 +1842,17 @@ window.accProdCambio = function(){
 window.accTomarFoto = function(){ $('accFile').click(); };
 window.accFotoElegida = function(e){
   const f = e.target.files[0];
+  /* El input se vacía SIEMPRE, incluso si no hay archivo. Sin esto, volver a
+     elegir la misma foto no dispara `onchange` —el valor no cambió— y parece
+     que el botón dejó de responder justo cuando quieres reintentar. */
+  e.target.value = '';
   if(!f) return;
+
+  /* Y se borra lo de la lectura anterior. Si la primera foto salió mal, su
+     aviso se quedaba en pantalla mientras la segunda leía bien: dos mensajes
+     contradictorios a la vez, y el malo era el más visible. */
+  $('accLeido').style.display = 'none';
+  $('accError').style.display = 'none';
   $('accEstado').textContent = 'Leyendo el ticket… puedes ir eligiendo el producto';
   // Corre EN PARALELO. Nadie espera mirando una barra.
   _accOcr = accLeerTicket(f).then(function(r){
