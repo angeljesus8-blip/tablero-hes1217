@@ -211,7 +211,7 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
     <button onclick="tab('eol',this)">🏷️ EOL</button>
     <button onclick="tab('avisos',this);cargarListaAvisos()">📢 Avisos</button>
     <button onclick="tab('comis',this);cargarComisionesCloud()">💰 Comisiones</button>
-    <button onclick="tab('acc',this);cargarAccReporte()">🔌 Accesorios</button>
+    <button onclick="tab('acc',this);cargarAccReporte();cargarTecnicos()">🔌 Accesorios</button>
     <button onclick="tab('equipo',this);cargarEquipo()">👥 Equipo</button>
     <button onclick="tab('config',this);loadConfig()">⚙️ Config</button>
   </div>
@@ -465,6 +465,20 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
         <b>C</b> y de <b>I</b> a <b>M</b> son fórmulas con candado: Excel rechaza pegar
         un rango que las toque, aunque venga vacío.<br>
         <b>1)</b> columna B · <b>2)</b> columnas D a H · <b>3)</b> columna N</p>
+    </div>
+
+    <div class="card">
+      <h2>🔧 Técnicos que pueden consultar</h2>
+      <p class="note">Externos de Mr&nbsp;Fix. Solo ven <b>estas ventas de accesorios</b> y
+        sus tickets: ni tablero, ni inventario, ni comisiones, ni nombres del equipo.
+        Entran en <code>accesorios_tecnico.html</code> con su clave.</p>
+      <div id="tecLista"><p class="note">Cargando…</p></div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <input id="tecNombre" placeholder="Nombre del técnico" style="flex:1">
+        <button class="btn btn-sec" onclick="tecAlta()" style="width:auto;padding:10px 14px">＋ Alta</button>
+      </div>
+      <p class="note" style="margin-top:8px">Dar de baja corta el acceso al momento.
+        No se borra: así queda constancia de si esa clave llegó a usarse y hasta cuándo.</p>
     </div>
 
     <div class="card" id="accCajasTxt" style="display:none">
@@ -1140,6 +1154,59 @@ function accBajarExcel(){
   // saber cual es cual sin pensarlo evita pegar en el mes equivocado.
   XLSX.utils.book_append_sheet(wb, ws, hoja.slice(0, 31));
   XLSX.writeFile(wb, 'accesorios_' + hoja.replace(/ /g, '_') + '.xlsx');
+}
+
+/* ── Técnicos externos (20-ago-2026) ─────────────────────────────────────
+   La clave la genera la BASE, no esta pantalla: escrita a mano acabaría siendo
+   «mrfix1». Y se enseña entera en la lista a propósito — quien entra a Admin
+   puede leerla de la tabla igual, así que taparla sería teatro y solo estorbaría
+   para dársela al técnico. */
+async function cargarTecnicos(){
+  const filas = await sbLeer('tecnicos_lista', { p_token: String((_cfg&&_cfg.gas_token)||'') });
+  const cont = document.getElementById('tecLista');
+  if(!filas.length){ cont.innerHTML = '<p class="note">Todavía no hay ninguno.</p>'; return; }
+  cont.innerHTML = filas.map(t => `
+    <div style="display:flex;gap:8px;align-items:center;padding:8px 0;
+                border-bottom:1px solid #f2f2f2;font-size:12.5px;
+                opacity:${t.activo ? 1 : .45}">
+      <div style="flex:1">
+        <b>${t.nombre}</b>${t.activo ? '' : ' <span style="color:#999">(dado de baja)</span>'}
+        <div style="font-family:ui-monospace,monospace;font-size:11px;color:#888;
+                    word-break:break-all">${t.clave}</div>
+        <div style="font-size:11px;color:#aaa">${t.ultimo_acceso
+          ? 'último acceso: ' + String(t.ultimo_acceso).slice(0,10)
+          : 'nunca ha entrado'}</div>
+      </div>
+      <button class="btn btn-sec" style="width:auto;padding:4px 10px;font-size:11px"
+        onclick="tecCopiar('${t.clave}',this)">copiar</button>
+      <button class="btn btn-sec" style="width:auto;padding:4px 10px;font-size:11px"
+        onclick="tecBaja(${t.id},${!t.activo})">${t.activo ? 'baja' : 'alta'}</button>
+    </div>`).join('');
+}
+
+async function tecAlta(){
+  const n = document.getElementById('tecNombre').value.trim();
+  if(!n){ alert('Escribe el nombre del técnico.'); return; }
+  const r = await sbEscribir('tecnico_guardar', { p_nombre: n });
+  if(!r || r.ok !== true){ alert((r && r.error) || 'No se pudo dar de alta.'); return; }
+  document.getElementById('tecNombre').value = '';
+  await cargarTecnicos();
+  alert("Listo. Su clave es:\n\n" + r.clave + "\n\nDasela junto con el enlace de la consulta.");
+}
+
+async function tecBaja(id, activar){
+  if(!activar && !confirm('¿Cortar el acceso de este técnico?')) return;
+  const r = await sbEscribir('tecnico_baja', { p_id: id, p_activo: !!activar });
+  if(!r || r.ok !== true){ alert((r && r.error) || 'No se pudo cambiar.'); return; }
+  cargarTecnicos();
+}
+
+async function tecCopiar(clave, btn){
+  try{ await navigator.clipboard.writeText(clave); }
+  catch(e){ alert(clave); return; }   // sin portapapeles: se enseña para copiarla a mano
+  const antes = btn.textContent;
+  btn.textContent = '✓';
+  setTimeout(() => { btn.textContent = antes; }, 1400);
 }
 
 async function accCopiar(id, btn){
