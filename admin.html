@@ -211,7 +211,6 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
     <button onclick="tab('eol',this)">🏷️ EOL</button>
     <button onclick="tab('avisos',this);cargarListaAvisos()">📢 Avisos</button>
     <button onclick="tab('comis',this);cargarComisionesCloud()">💰 Comisiones</button>
-    <button onclick="tab('acc',this);cargarAccReporte()">🔌 Accesorios</button>
     <button onclick="tab('equipo',this);cargarEquipo();cargarTecnicos()">👥 Equipo</button>
     <button onclick="tab('config',this);loadConfig()">⚙️ Config</button>
   </div>
@@ -440,61 +439,6 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
   <!-- CONFIG TIENDA -->
   <!-- EQUIPO -->
   <!-- Reporte de accesorios (SKU genérico 43739) para el Excel regional -->
-  <div class="pane" id="pane-acc">
-    <div class="card">
-      <h2>🔌 Ventas de accesorios del mes</h2>
-      <p class="note">Lo que el equipo capturó con <b>🔌 Accesorio</b> en Captura de Series,
-        listo para pegar en <code>Registro_Ventas_MrFix_Odemas_2026.xlsx</code>.</p>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
-        <select id="accMes" onchange="cargarAccReporte()" style="flex:1"></select>
-        <button class="btn btn-sec" onclick="cargarAccReporte()" style="width:auto;padding:10px 14px">↻</button>
-      </div>
-      <div id="accResumen" class="note"></div>
-      <div id="accDetalle" style="margin-top:10px"></div>
-      <div id="accAvisoNombre" class="note"
-           style="display:none;background:#fdeaea;border-color:#f3b6b6;color:#8a1f1f"></div>
-    </div>
-
-    <div class="card" id="accCajas" style="display:none">
-      <h2>Bajar el mes en Excel</h2>
-      <p class="note">Las columnas vienen <b>en la misma posición</b> que la hoja del reporte
-        y empiezan en la <b>fila 6</b>, igual que allí. Abres los dos archivos, seleccionas
-        y pegas en el mismo sitio, sin contar columnas.</p>
-      <button class="btn" onclick="accBajarExcel()" style="margin-bottom:6px">⬇️ Bajar Excel del mes</button>
-      <p class="note">Son <b>tres pegados</b> y no uno porque en el reporte las columnas
-        <b>C</b> y de <b>I</b> a <b>M</b> son fórmulas con candado: Excel rechaza pegar
-        un rango que las toque, aunque venga vacío.<br>
-        <b>1)</b> columna B · <b>2)</b> columnas D a H · <b>3)</b> columna N</p>
-    </div>
-
-
-    <div class="card" id="accCajasTxt" style="display:none">
-      <h2>O copiar y pegar el texto</h2>
-      <p class="note">Por si no tienes Excel a mano. Mismo resultado.</p>
-
-      <div class="acc-blq">
-        <label>1 · Columna <b>B</b> (día) — clic en <b>B6</b> y pega</label>
-        <textarea id="accB" readonly rows="4"></textarea>
-        <button class="btn btn-sec" onclick="accCopiar('accB',this)">📋 Copiar columna B</button>
-      </div>
-
-      <div class="acc-blq">
-        <label>2 · Columnas <b>D a H</b> (ticket, SKU, producto, cantidad, precio) — clic en <b>D6</b></label>
-        <textarea id="accDH" readonly rows="5"></textarea>
-        <button class="btn btn-sec" onclick="accCopiar('accDH',this)">📋 Copiar D:H</button>
-      </div>
-
-      <div class="acc-blq">
-        <label>3 · Columna <b>N</b> (empleado) — clic en <b>N6</b> y pega</label>
-        <textarea id="accN" readonly rows="4"></textarea>
-        <button class="btn btn-sec" onclick="accCopiar('accN',this)">📋 Copiar columna N</button>
-      </div>
-
-      <p class="note" style="margin-top:12px">Después de pegar, comprueba que la columna
-        <b>M (PUESTO)</b> se llenó sola. Si alguna fila sale vacía ahí, el nombre no coincide
-        con la lista del equipo y <b>esa comisión no se suma a nadie</b>.</p>
-    </div>
-  </div>
 
   <div class="pane" id="pane-equipo">
     <div class="card">
@@ -989,120 +933,9 @@ async function sbLeer(fn, params){
    Se copia al portapapeles en vez de generar el .xlsx a propósito: el archivo
    es compartido por diez tiendas y sobreescribirlo pisaría el trabajo de las
    demás. Pegar en la hoja propia no toca nada ajeno. */
-let _accFilas = [];
-const ACC_MESES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO',
-                   'AGOS','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
 
-function accLlenarMeses(){
-  const sel = document.getElementById('accMes');
-  if(sel.options.length) return;
-  const hoy = new Date();
-  let html = '';
-  // Los últimos seis meses: el reporte es mensual y a veces se cierra tarde.
-  for(let i = 0; i < 6; i++){
-    const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
-    html += '<option value="' + d.getFullYear() + '-' + (d.getMonth()+1) + '">'
-          + ACC_MESES[d.getMonth()] + ' ' + String(d.getFullYear()).slice(2) + '</option>';
-  }
-  sel.innerHTML = html;
-}
 
-async function cargarAccReporte(){
-  accLlenarMeses();
-  const sel = document.getElementById('accMes');
-  const [anio, mes] = (sel.value || '').split('-').map(Number);
-  const tienda = String((_cfg && _cfg.store_id) || '1217');
 
-  document.getElementById('accResumen').textContent = 'Consultando…';
-  document.getElementById('accCajas').style.display = 'none';
-  document.getElementById('accCajasTxt').style.display = 'none';
-  _accFilas = [];
-  document.getElementById('accAvisoNombre').style.display = 'none';
-
-  const filas = await sbLeer('accesorios_reporte', { p_anio: anio, p_mes: mes });
-
-  const hoja = tienda + ' ' + ACC_MESES[mes - 1] + ' ' + String(anio).slice(2);
-  if(!filas.length){
-    document.getElementById('accResumen').innerHTML =
-      'No hay accesorios capturados en ese mes.<br>La hoja sería <b>' + hoja + '</b>.';
-    return;
-  }
-
-  _accFilas = filas;
-  const total = filas.reduce((s, f) => s + (Number(f.precio) || 0) * (Number(f.cantidad) || 1), 0);
-  const tickets = new Set(filas.map(f => f.ticket)).size;
-  document.getElementById('accResumen').innerHTML =
-    '<b>' + filas.length + '</b> línea(s) · <b>' + tickets + '</b> ticket(s) · '
-    + '$' + total.toLocaleString('es-MX', {minimumFractionDigits:2})
-    + '<br>Pegar en la hoja <b>' + hoja + '</b>, a partir de la fila 6.';
-
-  /* Las ventas cuyo vendedor no tiene nombre de reporte se enseñan, no se
-     esconden: entrarían al Excel con un nombre que la fórmula del PUESTO no
-     reconoce, y su comisión no se sumaría a nadie. Un reporte corto que nadie
-     nota es peor que uno que avisa. */
-  const malos = filas.filter(f => f.sin_nombre);
-  if(malos.length){
-    const quien = [...new Set(malos.map(f => f.empleado))];
-    const el = document.getElementById('accAvisoNombre');
-    el.innerHTML = '⚠️ <b>' + malos.length + ' venta(s)</b> de <b>' + quien.join(', ')
-      + '</b> no tienen nombre para el reporte. Si las pegas así, la columna '
-      + 'PUESTO saldrá vacía y esa comisión no se suma a nadie. '
-      + 'Se arregla poniendo su <code>nombre_reporte</code> en la tabla de empleados.';
-    el.style.display = 'block';
-  }
-
-  /* El detalle, con la foto del ticket donde la haya. Es lo que permite
-     comprobar una captura dudosa: el OCR lee mal el producto a veces, y sin el
-     ticket delante no hay forma de saber si se eligió el correcto. */
-  document.getElementById('accDetalle').innerHTML = filas.map(f => `
-    <div style="display:flex;gap:8px;align-items:baseline;padding:5px 0;
-                border-bottom:1px solid #f2f2f2;font-size:12px">
-      <b style="width:26px;color:#999">${f.dia}</b>
-      <span style="font-family:ui-monospace,monospace;color:#666">${f.ticket}</span>
-      <span style="flex:1">${f.producto}</span>
-      <b>$${f.precio}</b>
-      ${f.tiene_foto
-        ? `<button class="btn btn-sec" style="width:auto;padding:2px 8px;font-size:11px"
-             onclick="accVerFoto('${f.captura_id}','${f.ticket}')">ver ticket</button>`
-        : '<span style="width:60px"></span>'}
-    </div>`).join('');
-
-  // Cada bloque en el orden EXACTO de las columnas del Excel.
-  document.getElementById('accB').value  = filas.map(f => f.dia).join('\n');
-  document.getElementById('accDH').value = filas.map(f =>
-        [f.ticket, f.sku, f.producto, f.cantidad, f.precio].join('\t')).join('\n');
-  document.getElementById('accN').value  = filas.map(f => f.empleado).join('\n');
-  document.getElementById('accCajas').style.display = 'block';
-  document.getElementById('accCajasTxt').style.display = 'block';
-}
-
-/* Abre la foto del ticket guardada al capturar. Misma función que usa Captura
-   de Series para las fotos de venta: la imagen vive en `venta_fotos`, ligada
-   por `captura_id`. */
-async function accVerFoto(capturaId, ticket){
-  const cont = document.getElementById('accDetalle');
-  const antes = cont.innerHTML;
-  cont.innerHTML = '<p class="note">Abriendo la foto del ticket ' + ticket + '…</p>';
-  let d = null;
-  try{
-    const r = await fetch(SB_URL + '/rest/v1/rpc/venta_foto_leer', {
-      method:'POST',
-      headers:{ apikey:SB_KEY, Authorization:'Bearer '+SB_KEY, 'Content-Type':'application/json' },
-      body: JSON.stringify({ p_store:String((_cfg&&_cfg.store_id)||''),
-                             p_token:String((_cfg&&_cfg.gas_token)||''),
-                             p_captura_id:String(capturaId) })
-    });
-    d = await r.json();
-  }catch(e){}   // el mensaje de abajo lo cubre: si no hay imagen, se dice
-  if(!d || !d.imagen){
-    cont.innerHTML = '<p class="note" style="color:var(--rojo)">No se pudo abrir esa foto.</p>' + antes;
-    return;
-  }
-  cont.innerHTML = '<div style="margin-bottom:10px">' +
-    '<button class="btn btn-sec" onclick="cargarAccReporte()">← Volver a la lista</button>' +
-    '<img src="data:' + (d.mime||'image/jpeg') + ';base64,' + d.imagen +
-    '" style="width:100%;border-radius:10px;margin-top:8px"></div>';
-}
 
 /* ── Bajar el mes como Excel ─────────────────────────────────────────────
    20-ago-2026, pedido por Angel: «no puede generarme de una vez un excel y ya
@@ -1117,47 +950,6 @@ async function accVerFoto(capturaId, ticket){
    aunque el origen venga vacio. Lo que cambia es que seleccionar una columna
    en Excel es un clic, y en un cuadro de texto no.
 
-   SheetJS ya estaba cargado para leer los Excel de Sonar: no se anade nada. */
-function accBajarExcel(){
-  if(!window.XLSX){ alert('No se pudo cargar el generador de Excel.'); return; }
-  const sel = document.getElementById('accMes');
-  const [anio, mes] = (sel.value || '').split('-').map(Number);
-  const tienda = String((_cfg && _cfg.store_id) || '1217');
-  const hoja = tienda + ' ' + ACC_MESES[mes - 1] + ' ' + String(anio).slice(2);
-
-  if(!_accFilas.length){ alert('No hay nada que bajar en ese mes.'); return; }
-
-  /* Cada fila es un array por POSICION de columna: 0=A, 1=B, 2=C… 13=N. Las
-     que en el destino son formula se dejan vacias a proposito, para que el
-     archivo se vea igual que la hoja y no invite a pegarlas. */
-  const filas = [];
-  filas.push([]); filas.push([]); filas.push([]);            // 1, 2, 3
-  filas.push([]);                                            // 4
-  const cab = [];
-  cab[1]='DIA'; cab[3]='# TICKET'; cab[4]='SKU'; cab[5]='NOMBRE DEL PRODUCTO';
-  cab[6]='CANTIDAD'; cab[7]='PRECIO UNITARIO'; cab[13]='NOMBRE DEL EMPLEADO COMPLETO';
-  filas.push(cab);                                           // fila 5, como alli
-  for(const f of _accFilas){
-    const r = [];
-    r[1] = f.dia;               // B
-    r[3] = Number(f.ticket) || f.ticket;   // D — numero si lo es, como el destino
-    r[4] = Number(f.sku) || f.sku;         // E
-    r[5] = f.producto;          // F
-    r[6] = Number(f.cantidad);  // G
-    r[7] = Number(f.precio);    // H
-    r[13] = f.empleado;         // N
-    filas.push(r);              // desde la fila 6
-  }
-
-  const ws = XLSX.utils.aoa_to_sheet(filas);
-  ws['!cols'] = [{wch:3},{wch:6},{wch:8},{wch:11},{wch:9},{wch:34},{wch:10},
-                 {wch:14},{wch:4},{wch:4},{wch:4},{wch:4},{wch:4},{wch:32}];
-  const wb = XLSX.utils.book_new();
-  // El nombre de hoja lleva el mismo que el destino: al tener los dos abiertos,
-  // saber cual es cual sin pensarlo evita pegar en el mes equivocado.
-  XLSX.utils.book_append_sheet(wb, ws, hoja.slice(0, 31));
-  XLSX.writeFile(wb, 'accesorios_' + hoja.replace(/ /g, '_') + '.xlsx');
-}
 
 /* ── Técnicos externos (20-ago-2026) ─────────────────────────────────────
    La clave la genera la BASE, no esta pantalla: escrita a mano acabaría siendo
@@ -1212,20 +1004,6 @@ async function tecCopiar(clave, btn){
   setTimeout(() => { btn.textContent = antes; }, 1400);
 }
 
-async function accCopiar(id, btn){
-  const ta = document.getElementById(id);
-  try{
-    await navigator.clipboard.writeText(ta.value);
-  }catch(e){
-    // Sin permiso de portapapeles: se selecciona para que copie a mano.
-    ta.focus(); ta.select();
-    btn.textContent = 'Selecciónalo y copia con Ctrl+C';
-    return;
-  }
-  const antes = btn.textContent;
-  btn.textContent = '✓ Copiado';
-  setTimeout(() => { btn.textContent = antes; }, 1600);
-}
 
 async function sbCargaAdmin(fn, params){
   const r = await sbEscribir(fn, params);
