@@ -15,6 +15,12 @@ HTML = ['index.html', 'tablero.html', 'captura_series.html', 'admin.html',
 # horarios.html no se edita aquí: es copia de 02_Equipo/horario_semanal.html, que
 # se publica también en el repo planeador-odemas para las demás tiendas.
 COPIAS = {'horarios.html': os.path.join('..', '02_Equipo', 'horario_semanal.html')}
+# Páginas que se PUBLICAN pero no son la app: no las sirve el service worker ni
+# se enlazan desde el menú. No entran en HTML porque no deben obligar a subir
+# VERSION —no llegan a ningún celular por esa vía— pero sí tienen que pasar por
+# sintaxis, secretos y datos personales: se publican igual de expuestas.
+# (20-ago-2026: `accesorios_tecnico.html` se subió sin que nada la revisara.)
+SUELTOS = ['prueba_ticket.html', 'accesorios_tecnico.html']
 # Copias del Apps Script. No se ejecutan aquí, pero se publican igual que lo
 # demás: si traen una llave, queda expuesta lo mismo que en un .html.
 GS = ['GAS_Codigo.gs', 'GAS_ventas_detalle.gs', 'GAS_arreglo_apartados.gs',
@@ -185,7 +191,7 @@ def r_sintaxis():
     if not node:
         aviso('sintaxis', 'node no está instalado: no se pudo validar el JS')
         return
-    for p in HTML:
+    for p in HTML + SUELTOS:
         s = leer(p)
         if s is None: continue
         f = tempfile.NamedTemporaryFile('w', suffix='.js', delete=False, encoding='utf-8')
@@ -555,7 +561,7 @@ def r_personales():
         (r'(?i)\b(perea arias|garcia gutierrez|garcía gutiérrez|aguilar rosete|'
          r'gonzalez arrieta|gonzález arrieta|bonilla gal)', 'apellidos del equipo'),
     ]
-    for p in HTML + ['datos.js']:
+    for p in HTML + SUELTOS + ['datos.js']:
         s = leer(p)
         if s is None: continue
         for rx, que in patrones:
@@ -578,7 +584,7 @@ def r_secretos():
                 (r'os_v2_app_[A-Za-z0-9]{16,}', 'API key de OneSignal'),
                 (r"ONESIGNAL_(?:KEY|APP_ID)['\"]?\s*:\s*['\"][A-Za-z0-9-]{8,}",
                  'credencial de OneSignal escrita en el código')]
-    for p in HTML + ['sw.js', 'datos.js'] + GS:
+    for p in HTML + SUELTOS + ['sw.js', 'datos.js'] + GS:
         s = leer(p)
         if s is None: continue
         for rx, que in patrones:
@@ -609,7 +615,7 @@ def r_silencios():
         línea inmediatamente anterior, así que estrecharlo a una no molesta a
         ninguno y cierra la puerta.
     """
-    for p in HTML:
+    for p in HTML + SUELTOS:
         s = leer(p)
         if s is None: continue
         L = s.split('\n')
