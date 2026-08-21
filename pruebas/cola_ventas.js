@@ -323,6 +323,81 @@ const ok = (t, c, extra) => { if(!c) fallos.push(t + (extra ? ' -> ' + extra : '
   }
 }
 
+/* ── 9 · Agrupar por venta NO cambia lo que se cuenta ───────────────────
+   20-ago-2026. El asesor cierra la venta a mano y los articulos capturados
+   antes quedan juntos. Es SOLO presentacion.
+
+   Lo que se comprueba es lo que se rompe sin ruido: que cada articulo siga
+   siendo una fila con SU seguro. Si alguien «simplificara» mandando una fila
+   por venta, el Assurant —que cuenta por articulo— se movería solo, y la regla
+   de combos de la tienda («2 articulos = 1 con seguro») dejaría de tener
+   sentido. Nadie ataría ese cambio de KPI a esto meses despues. */
+{
+  const s = arrancar();
+  if(!s.err){
+    s.caja.setVend(EQUIPO[1]);
+
+    const capturar = (serie, sku, precio, seguro) => {
+      s.el('serie').value  = serie;
+      s.el('sku').value    = sku;
+      s.el('precio').value = precio;
+      s.el('desc').value   = 'Equipo ' + sku;
+      s.el('btnAdd').onclick();
+      s.caja.finalizarVenta(seguro);
+    };
+
+    // Un cliente que se lleva dos equipos: uno con seguro y otro sin él.
+    capturar('S-GRUPO-1', '900001', '9999', true);
+    capturar('S-GRUPO-2', '900002', '4999', false);
+
+    const cola = s.colaSb();
+    ok('los dos articulos se guardan por separado', cola.length === 2,
+       'la cola quedo con ' + cola.length);
+    ok('y comparten el mismo grupo',
+       cola.length === 2 && !!cola[0].p_grupo && cola[0].p_grupo === cola[1].p_grupo,
+       cola.length === 2 ? (cola[0].p_grupo + ' vs ' + cola[1].p_grupo) : '');
+    /* LA MITAD QUE IMPORTA: cada uno conserva SU seguro. Agrupar no puede
+       convertir dos articulos en «una venta con seguro». */
+    ok('cada articulo conserva su propio seguro',
+       cola.length === 2 && cola[0].p_seguro === true && cola[1].p_seguro === false,
+       cola.length === 2 ? (cola[0].p_seguro + ' / ' + cola[1].p_seguro) : '');
+    ok('y su propio SKU, para que el stock descuente los dos',
+       cola.length === 2 && cola[0].p_sku === '900001' && cola[1].p_sku === '900002');
+
+    // Al cerrar la venta, el siguiente articulo empieza otra.
+    s.caja.cerrarVentaGrupo();
+    capturar('S-GRUPO-3', '900001', '9999', true);
+    const c2 = s.colaSb();
+    ok('tras cerrar, el siguiente articulo abre una venta nueva',
+       c2.length === 3 && c2[2].p_grupo !== c2[0].p_grupo,
+       c2.length === 3 ? (c2[2].p_grupo + ' vs ' + c2[0].p_grupo) : 'cola de ' + c2.length);
+  }
+}
+
+/* ── 10 · La venta abierta no se hereda entre vendedores ────────────────
+   Olvidarse de cerrar es el unico fallo de este diseno y no da error: pega la
+   compra del siguiente cliente a la anterior. El olvido mas probable es el
+   cambio de asesor en el mostrador, asi que ahi se cierra sola. */
+{
+  const s = arrancar();
+  if(!s.err){
+    s.caja.setVend(EQUIPO[1]);
+    s.el('serie').value = 'S-VEND-1'; s.el('sku').value = '900001';
+    s.el('precio').value = '999';
+    s.el('btnAdd').onclick(); s.caja.finalizarVenta(true);
+    const g1 = s.colaSb()[0].p_grupo;
+
+    s.caja.setVend(EQUIPO[0]);            // entra otro asesor
+    s.el('serie').value = 'S-VEND-2'; s.el('sku').value = '900001';
+    s.el('precio').value = '999';
+    s.el('btnAdd').onclick(); s.caja.finalizarVenta(true);
+    const g2 = s.colaSb()[1].p_grupo;
+
+    ok('al cambiar de vendedor, la venta abierta no se hereda', g1 !== g2,
+       g1 + ' vs ' + g2);
+  }
+}
+
 if(fallos.length){
   console.log('cola de ventas: ' + fallos.length + ' fallo(s)');
   fallos.forEach(f => console.log('   · ' + f));
