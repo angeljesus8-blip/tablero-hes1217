@@ -91,6 +91,18 @@ async function bloque1(){
      s.el('catAccLista').innerHTML.indexOf('MICA HR') >= 0,
      s.el('catAccLista').innerHTML.slice(0, 140));
 
+  /* LA LECTURA TAMBIÉN LLEVA CREDENCIAL, y esto se comprueba porque ya falló:
+     `sbLeer` manda `p_store` y nada más —el token lo añade `sbEscribir`, no
+     él—, así que la primera versión pedía el catálogo sin token. El servidor
+     devolvía cero filas, y la pantalla lo achacaba a falta de permiso o de red
+     estando las dos en orden. Un fallo de permisos que se disfraza de otra
+     cosa cuesta el doble de encontrar. */
+  const l = s.llamadas().filter(x => x.fn === 'accesorios_catalogo_admin')[0];
+  ok('la lectura del catálogo manda el token', !!l && !!l.body.p_token,
+     'llegó: ' + JSON.stringify(l && l.body));
+  ok('y dice quién pregunta', !!l && l.body.p_quien === '<empno>',
+     'llegó: ' + JSON.stringify(l && l.body.p_quien));
+
   // ── Alta ──
   s.caja.catAccNuevo();
   s.el('catAccNombre').value = 'MEMORIA USB ADATA 256GB';
