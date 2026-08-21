@@ -417,8 +417,59 @@ fallaría con el primer apellido compuesto, un mes después.
 `accesorios_reporte` marca con `sin_nombre` las ventas cuyo vendedor no tiene
 ese mapeo, y la pantalla las enseña en rojo en vez de esconderlas.
 
-**Se copia al portapapeles, no se genera el .xlsx**: el archivo lo comparten
-diez tiendas y sobreescribirlo pisaría el trabajo de las demás.
+**Se baja un .xlsx aparte y se pega en el archivo regional**, nunca se
+sobreescribe: ese archivo lo comparten diez tiendas y reemplazarlo pisaría el
+trabajo de las demás. El .xlsx que genera la app trae las columnas **en la
+misma posición** que el regional, para que el pegado caiga donde debe.
+
+#### Mantener el catálogo sin escribir SQL *(20-ago-2026, v197)*
+
+Los 23 productos se sembraron a mano, y Mr Fix mete producto cada temporada.
+Ahora se editan en **Captura → 🔌 Accesorio → 🧾 Catálogo**, con el mismo
+portero que el reporte y que el ✏️ de corregir: gerente y subgerente.
+
+⚠️ **Había una versión rota de esto en el servidor, sin usar.**
+`accesorio_catalogo_guardar` se escribió el 18-ago, **el día antes** de que el
+catálogo tuviera `articulo` y `sku`, y solo guardaba (nombre, precio, orden).
+Nunca se llamó desde ninguna pantalla, así que el fallo no llegó a pasar; pero
+ponerle un botón encima lo habría activado. Un producto dado de alta con ella:
+
+- **sin `articulo`** — `accAdivinar` se salta las filas sin código, así que ese
+  producto **no se propondría nunca** al leer un ticket. Parecería que el OCR
+  empeoró, sin nada que lo ligue al alta.
+- **con `sku` 43739 por omisión** — cierto para micas y cargadores, falso para
+  los Office (63602 y 57518), que van al reporte con **su** código. La columna E
+  del Excel saldría mal en cada venta de ese producto.
+
+Ninguna de las dos da error. Por eso se rehízo la función entera
+(`supabase_accesorios_catalogo.sql`) en vez de llamar a la que había, y por eso
+`pruebas/catalogo_accesorios.js` comprueba que el alta manda los dos campos.
+
+**Dos avisos que no bloquean**, porque los dos casos son legítimos y aun así
+degradan la captura:
+
+- **Código parecido.** `accAdivinar` gana por prefijo más largo y **calla si hay
+  empate**. Dar de alta `43739-MICAHRPLUS` teniendo `43739-MICAHR` hace que, al
+  capturar una MICA HR normal, empaten en seis letras y no se proponga ninguna.
+- **Precio repetido.** La lista se ordena por precio y se marca sola cuando solo
+  hay un producto a ese precio. MICA HR y MICA MATTE cuestan las dos $149 y por
+  eso ninguna se marca: son los 19 tickets que en julio hubo que abrir uno a uno.
+
+El aviso del código usa `accPrefijo` y `ACC_MIN_PREFIJO`, **las mismas** que la
+adivinanza. Estaban en línea dentro de `accAdivinar` y se sacaron aparte a
+propósito: dos copias de esa regla acabarían diciendo cosas distintas, y el
+aviso daría por bueno un código que la adivinanza va a empatar.
+
+**Renombrar no arrastra el histórico** — las ventas guardan el nombre del
+producto como texto. No se impide, porque a veces hay que corregir una falta;
+la ficha enseña **cuántas ventas** llevan ese nombre antes de tocarlo.
+
+**Dar de baja nunca borra.** Además de conservar el histórico, así vuelve a
+activarse sin volver a teclearlo cuando el producto regresa.
+
+Al cerrar el panel se vacía `_accCat` para que el catálogo de capturar se vuelva
+a pedir: sin eso, quien acaba de dar de alta un producto no lo vería en la lista
+hasta recargar la app, y lo daría de alta otra vez.
 
 ### Los artículos de una compra van juntos *(20-ago-2026, v196)*
 
@@ -1263,6 +1314,12 @@ antes de abrir el panel, así que comprobar justo después daba un falso rojo.
   diciendo qué pantallas lo leen. No puede decidir por nadie, pero pone delante
   la pregunta que costó el fallo del aparador: **¿siguen significando lo mismo
   esos campos?**
+
+Y una tercera *(20-ago-2026)*: **un `.js` en `pruebas/` que no esté en la lista
+de `verificar.py` bloquea el commit**. La lista es explícita para que se note si
+falta un archivo, pero eso dejaba el hueco contrario —una prueba escrita y no
+registrada no corre nunca, y el repo aparenta cubrir algo que no cubre—. Las
+bibliotecas (`dom.js`, `entorno.js`, `casos_tablero.js`) están exentas.
 
 ## Antes de dar algo por terminado
 
