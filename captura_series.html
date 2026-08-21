@@ -133,6 +133,16 @@
   .ed-i{ width:100%; padding:11px 12px; border:1.5px solid #ddd; border-radius:9px;
     font-size:15px; font-family:inherit; background:#fff; color:#222; }
   .ed-i:focus{ outline:none; border-color:var(--azul); }
+  .ed-n{ font-size:11.5px; color:var(--gris); line-height:1.45; margin:5px 0 0; }
+  /* Una fila del catálogo de accesorios */
+  .cat-f{ display:flex; gap:9px; align-items:center; padding:9px 2px;
+    border-bottom:1px solid #f2f2f2; font-size:13px; cursor:pointer; }
+  .cat-f.off{ opacity:.45; }
+  .cat-f .cn{ flex:1; font-weight:700; }
+  .cat-f .ca{ font-family:ui-monospace,monospace; font-size:11px; color:var(--gris); }
+  .cat-f .cp{ font-weight:800; color:var(--verde); white-space:nowrap; }
+  .cat-f .cb{ background:none; border:1.5px solid #ddd; border-radius:7px;
+    font-size:11px; padding:3px 8px; color:var(--gris); cursor:pointer; }
   .ed-seg{ display:flex; gap:8px; }
   .ed-seg button{ flex:1; padding:11px 8px; border-radius:9px; font-size:14px;
     font-weight:700; font-family:inherit; cursor:pointer; border:1.5px solid #ddd;
@@ -1840,6 +1850,20 @@ function accCodigos(textoTicket){
   return (m || []).map(x => x.replace(/SERVICIO\s*:?/i, '').trim()).filter(Boolean);
 }
 
+/* Cuántas letras comparten dos códigos DESDE EL PRINCIPIO.
+
+   Se saca aparte porque la usan dos sitios: la adivinanza de aquí abajo y el
+   aviso del editor de catálogo, que le advierte al gerente cuando el código que
+   está escribiendo va a empatar con otro. Si fueran dos copias, el aviso podría
+   decir que todo está bien mientras la adivinanza empata —o al revés— y no
+   habría forma de notarlo hasta ver un reporte mal. */
+function accPrefijo(a, b){
+  const corto = Math.min(a.length, b.length);
+  let i = 0; while(i < corto && a[i] === b[i]) i++;
+  return i;
+}
+const ACC_MIN_PREFIJO = 6;
+
 function accAdivinar(textoTicket){
   const m = String(textoTicket || '').match(/SERVICIO\s*:?\s*([A-Z0-9\- ]{3,30})/ig);
   if(!m) return null;
@@ -1863,12 +1887,11 @@ function accAdivinar(textoTicket){
     for(const c of _accCat){
       const cod = accClave(c.articulo);
       if(!cod || cod.length < 4) continue;
-      const corto = Math.min(cod.length, leido.length);
-      let i = 0; while(i < corto && cod[i] === leido[i]) i++;
+      const i = accPrefijo(cod, leido);
       if(i > largo){ segundo = largo; largo = i; mejor = c.nombre; }
       else if(i > segundo){ segundo = i; }
     }
-    if(largo >= 6 && largo > segundo) return mejor;
+    if(largo >= ACC_MIN_PREFIJO && largo > segundo) return mejor;
   }
   return null;
 }
@@ -1941,8 +1964,9 @@ window.abrirAcc = async function(){
   }
   accPintarLista(0, null);
 
-  // El reporte es de gerente y subgerente. Mismo portero que el ✏️ de corregir.
-  $('accReporte').style.display = PUEDE_EDITAR ? 'block' : 'none';
+  // Reporte y catálogo son de gerente y subgerente. Mismo portero que el ✏️ de
+  // corregir, y el servidor lo vuelve a comprobar por su cuenta: esto esconde.
+  $('accGestion').style.display = PUEDE_EDITAR ? 'flex' : 'none';
   $('accPanel').classList.add('show');
 };
 window.cerrarAcc = function(){ $('accPanel').classList.remove('show'); };
@@ -2155,6 +2179,190 @@ window.abrirAccReporte = function(){
   cargarRep();
 };
 window.cerrarAccReporte = function(){ $('repPanel').classList.remove('show'); };
+
+
+/* ═══ EL CATÁLOGO DE ACCESORIOS (20-ago-2026) ════════════════════════════
+   Hasta hoy los 23 productos solo se tocaban escribiendo SQL, y Mr Fix mete
+   producto nuevo cada temporada.
+
+   Trae `articulo` y `sku` a propósito, que es lo que le faltaba a la versión
+   que había en el servidor sin usar: sin `articulo` el producto no se propone
+   nunca al leer un ticket, y con el `sku` equivocado entra torcido al reporte
+   de comisiones. Ninguna de las dos cosas avisa. */
+let _cat = [];              // el catálogo completo, activos y de baja
+let _catId = null;          // qué producto se está editando; null = alta
+
+window.abrirAccCat = async function(){
+  $('catPanel').classList.add('show');
+  $('catLista').innerHTML = '<p style="color:var(--gris);font-size:12.5px">Cargando…</p>';
+  catFicha(null);
+
+  const filas = await sbCallCS('accesorios_catalogo_admin',
+                               { p_token: GAS_TOKEN, p_quien: MI_EMPNO }, 12000);
+  /* Cero filas puede ser «no hay catálogo» o «no tienes permiso»: la función
+     devuelve vacío en los dos casos, a propósito, para no decirle a nadie qué
+     existe. Aquí sí hay que distinguirlo, porque el catálogo NUNCA está vacío
+     de verdad —los 23 están sembrados— y un gerente viendo una lista en blanco
+     creería que se le borró. */
+  if(!Array.isArray(filas)){
+    $('catLista').innerHTML = '<p style="color:var(--rojo);font-size:12.5px">' +
+      'No se pudo consultar el catálogo. Revisa la conexión.</p>';
+    return;
+  }
+  if(!filas.length){
+    $('catLista').innerHTML = '<p style="color:var(--rojo);font-size:12.5px">' +
+      'No tienes permiso para ver el catálogo, o todavía no se ha cargado en la nube.</p>';
+    return;
+  }
+  _cat = filas;
+  catPintar();
+};
+
+window.cerrarAccCat = function(){
+  $('catPanel').classList.remove('show');
+  /* El catálogo de capturar se vacía para que se vuelva a pedir: si no, quien
+     acaba de dar de alta un producto no lo vería en la lista hasta recargar la
+     app, y lo daría de alta otra vez. */
+  _accCat = [];
+};
+
+function catPintar(){
+  $('catLista').innerHTML =
+    '<button class="btn" onclick="catNuevo()" style="width:100%;background:var(--azul);' +
+    'color:#fff;font-size:13px;padding:11px;margin-bottom:10px">＋ Producto nuevo</button>' +
+    _cat.map((c, i) => `
+      <div class="cat-f${c.activo ? '' : ' off'}" onclick="catElegir(${i})">
+        <span class="cn">${esc(c.nombre)}${c.activo ? '' : ' · de baja'}<br>
+          <span class="ca">${esc(c.articulo || 'sin código')}${
+            String(c.sku) !== '43739' ? ' · SKU ' + esc(c.sku) : ''}</span></span>
+        <span class="cp">${c.precio_ref ? '$' + Number(c.precio_ref).toLocaleString('es-MX') : '—'}</span>
+        <button class="cb" onclick="event.stopPropagation();catBaja(${i})">${
+          c.activo ? 'baja' : 'activar'}</button>
+      </div>`).join('');
+}
+
+function catFicha(c){
+  _catId = c ? c.id : null;
+  $('catErr').style.display = 'none';
+  $('catAvisoArt').style.display = 'none';
+  $('catAvisoPrecio').style.display = 'none';
+  $('catNombre').value = c ? (c.nombre || '') : '';
+  $('catArt').value    = c ? (c.articulo || '') : '';
+  $('catPrecio').value = c && c.precio_ref != null ? c.precio_ref : '';
+  $('catSku').value    = c ? (c.sku || '43739') : '43739';
+  $('catOrden').value  = c ? (c.orden != null ? c.orden : 100) : 100;
+  $('catFicha').style.display = c ? 'block' : 'none';
+
+  /* Renombrar NO arrastra el histórico: cada venta guardó el nombre como texto.
+     No se impide —a veces hay que corregir una falta de ortografía— pero se
+     dice cuántas ventas van a quedar con el nombre viejo. */
+  const u = c ? Number(c.usos || 0) : 0;
+  $('catUsos').style.display = u ? 'block' : 'none';
+  if(u) $('catUsos').innerHTML = '<b>' + u + ' venta' + (u === 1 ? '' : 's') +
+    '</b> registrada' + (u === 1 ? '' : 's') + ' con este nombre. Si lo cambias, ' +
+    'esas ventas se quedan con el nombre anterior: el reporte ya entregado no se mueve.';
+}
+
+window.catNuevo = function(){
+  catFicha({ id: null, nombre: '', articulo: '', precio_ref: '', sku: '43739',
+             orden: 100, usos: 0 });
+  _catId = null;
+  $('catFicha').style.display = 'block';
+  $('catNombre').focus();
+};
+
+window.catElegir = function(i){
+  const c = _cat[i];
+  if(!c) return;
+  catFicha(c);
+  $('catFicha').style.display = 'block';
+};
+
+/* Aviso, no candado: el servidor rechaza el código repetido, pero el empate de
+   PREFIJO es legal y aun así rompe la propuesta. `CARGA-100W` y `CARGA-66W`
+   comparten cinco letras y por eso ninguno se propone solo. */
+window.catMirarArt = function(){
+  const cod = accClave($('catArt').value);
+  const caja = $('catAvisoArt');
+  caja.style.display = 'none';
+  if(cod.length < 4) return;
+  for(const c of _cat){
+    if(!c.activo || c.id === _catId || !c.articulo) continue;
+    if(accPrefijo(accClave(c.articulo), cod) >= ACC_MIN_PREFIJO){
+      caja.innerHTML = 'Se parece demasiado a <b>' + esc(c.nombre) + '</b> (' +
+        esc(c.articulo) + '). Cuando dos códigos empiezan igual, la app <b>no ' +
+        'propone ninguno</b> de los dos y hay que elegirlos a mano. Se puede ' +
+        'guardar así, pero cambiando alguna letra del principio se evita.';
+      caja.style.display = 'block';
+      return;
+    }
+  }
+};
+
+/* Dos productos al mismo precio dejan de marcarse solos: es el caso de MICA HR
+   y MICA MATTE, los $149 que en julio hubo que abrir uno por uno. */
+window.catMirarPrecio = function(){
+  const p = Number(String($('catPrecio').value).replace(/[^0-9.]/g, '')) || 0;
+  const caja = $('catAvisoPrecio');
+  caja.style.display = 'none';
+  if(!p) return;
+  const otro = _cat.find(c => c.activo && c.id !== _catId &&
+                              Math.abs(Number(c.precio_ref || 0) - p) < 0.5);
+  if(otro){
+    caja.innerHTML = '<b>' + esc(otro.nombre) + '</b> cuesta lo mismo. Al leer un ' +
+      'ticket de $' + p + ' la app mostrará los dos arriba, pero no marcará ' +
+      'ninguno: hay que elegir a mano cuál fue.';
+    caja.style.display = 'block';
+  }
+};
+
+window.catGuardar = async function(){
+  const err = $('catErr');
+  err.style.display = 'none';
+  const nombre = $('catNombre').value.trim();
+  if(!nombre){
+    err.textContent = 'Ponle nombre al producto.';
+    err.style.display = 'block';
+    return;
+  }
+  const btn = $('catGuardar');
+  btn.disabled = true; btn.textContent = 'Guardando…';
+
+  const r = await sbCallCS('accesorio_catalogo_guardar', {
+    p_token:    GAS_TOKEN,
+    p_nombre:   nombre,
+    p_precio:   $('catPrecio').value === '' ? null
+                : Number(String($('catPrecio').value).replace(/[^0-9.]/g, '')),
+    p_orden:    Number($('catOrden').value) || 100,
+    p_id:       _catId,
+    p_articulo: $('catArt').value.trim(),
+    p_sku:      $('catSku').value.trim() || '43739',
+    p_quien:    MI_EMPNO
+  }, 12000);
+
+  btn.disabled = false; btn.textContent = 'Guardar';
+  if(!r || r.ok !== true){
+    err.textContent = (r && r.error) ? r.error
+      : 'No se pudo guardar. Revisa la conexión e inténtalo otra vez.';
+    err.style.display = 'block';
+    return;
+  }
+  toast(_catId ? 'Producto actualizado' : 'Producto agregado', 'ok');
+  await abrirAccCat();          // se relee: así se ve tal como quedó guardado
+};
+
+window.catBaja = async function(i){
+  const c = _cat[i];
+  if(!c) return;
+  const r = await sbCallCS('accesorio_catalogo_baja',
+    { p_token: GAS_TOKEN, p_id: c.id, p_activo: !c.activo, p_quien: MI_EMPNO }, 12000);
+  if(!r || r.ok !== true){
+    toast((r && r.error) || 'No se pudo cambiar', 'warn');
+    return;
+  }
+  toast(c.activo ? 'Producto dado de baja' : 'Producto activado', 'ok');
+  await abrirAccCat();
+};
 
 window.cargarRep = async function(){
   const [anio, mes] = ($('repMes').value || '').split('-').map(Number);
@@ -2891,10 +3099,17 @@ refreshEolVenta(); // trae los EOL con 50% activo (solo exhibición)
     <div class="vd-lista" style="padding:14px 16px">
 
       <!-- Solo gerente y subgerente. El reporte del mes es suyo: mueve las
-           comisiones de todo el equipo y se entrega a la región. -->
-      <button class="btn" id="accReporte" onclick="abrirAccReporte()"
-        style="display:none;background:#eee;color:#444;width:100%;font-size:13px;padding:11px;margin-bottom:12px">
-        📊 Reporte del mes · bajar Excel</button>
+           comisiones de todo el equipo y se entrega a la región. El catálogo va
+           en la misma fila y por la misma razón: el precio de referencia ordena
+           esta lista, y el SKU decide con qué código entra al reporte. -->
+      <div id="accGestion" style="display:none;gap:8px;margin-bottom:12px">
+        <button class="btn" onclick="abrirAccReporte()"
+          style="flex:1;background:#eee;color:#444;font-size:12.5px;padding:11px">
+          📊 Reporte del mes</button>
+        <button class="btn" onclick="abrirAccCat()"
+          style="flex:1;background:#eee;color:#444;font-size:12.5px;padding:11px">
+          🧾 Catálogo</button>
+      </div>
 
       <input type="file" accept="image/*" capture="environment" id="accFile" hidden onchange="accFotoElegida(event)">
       <button class="btn" id="accFoto" onclick="accTomarFoto()" style="background:var(--azul);color:#fff;width:100%">
@@ -2960,6 +3175,71 @@ refreshEolVenta(); // trae los EOL con 50% activo (solo exhibición)
     <div class="vd-pie" style="display:flex;gap:10px;padding:12px 16px">
       <button class="btn" style="flex:1;background:#eee;color:#444" onclick="cerrarAccReporte()">Cerrar</button>
       <button class="btn" style="flex:2" id="repBajar" onclick="bajarRepExcel()">⬇️ Bajar Excel</button>
+    </div>
+  </div>
+</div>
+
+<!-- El catálogo de accesorios (20-ago-2026). Hasta hoy solo se tocaba por SQL.
+     z-index 79: encima del panel de Accesorios (75), debajo de Corregir (80). -->
+<div id="catPanel" class="vd" style="z-index:79">
+  <div class="vd-box" style="max-height:94vh">
+    <div class="vd-top">
+      <h2>Catálogo de accesorios</h2>
+      <button class="vd-cerrar" onclick="cerrarAccCat()" aria-label="Cerrar">×</button>
+    </div>
+    <div class="vd-lista" style="padding:14px 16px">
+      <div id="catLista"><p style="color:var(--gris);font-size:12.5px">Cargando…</p></div>
+
+      <!-- La ficha. Se llena al tocar un producto, o vacía para dar de alta. -->
+      <div id="catFicha" style="display:none;margin-top:14px;padding-top:14px;
+           border-top:2px solid #eee">
+        <div id="catUsos" style="display:none;font-size:12px;color:var(--gris);
+             background:#f7f7f8;border-radius:8px;padding:9px 11px;
+             margin-bottom:10px;line-height:1.45"></div>
+
+        <label class="ed-l">Nombre del producto</label>
+        <input id="catNombre" class="ed-i" autocapitalize="characters" autocomplete="off"
+               placeholder="MICA HR">
+
+        <label class="ed-l">Código de artículo</label>
+        <input id="catArt" class="ed-i" autocapitalize="characters" autocomplete="off"
+               placeholder="43739-MICAHR" oninput="catMirarArt()">
+        <p class="ed-n">El que teclea el cajero en «N. de serie». De aquí sale la
+          propuesta automática al leer el ticket: sin él, este producto nunca se
+          propondrá solo.</p>
+        <div id="catAvisoArt" style="display:none;margin:6px 0 0;padding:9px 11px;
+             border-radius:8px;border-left:4px solid var(--naranja);background:#fff4ec;
+             font-size:12px;line-height:1.45;color:#8a4a1f"></div>
+
+        <label class="ed-l">Precio de referencia</label>
+        <input id="catPrecio" class="ed-i" inputmode="decimal" autocomplete="off"
+               oninput="catMirarPrecio()">
+        <p class="ed-n">Es una ayuda para ordenar la lista, no el precio de venta:
+          el real sale del ticket.</p>
+        <div id="catAvisoPrecio" style="display:none;margin:6px 0 0;padding:9px 11px;
+             border-radius:8px;border-left:4px solid var(--naranja);background:#fff4ec;
+             font-size:12px;line-height:1.45;color:#8a4a1f"></div>
+
+        <label class="ed-l">SKU con el que se cobra</label>
+        <input id="catSku" class="ed-i" inputmode="numeric" autocomplete="off"
+               placeholder="43739">
+        <p class="ed-n">Casi todo va con el genérico <b>43739</b>. Los Office no:
+          Personal es 63602 y Familia 57518. Es la columna E del Excel.</p>
+
+        <label class="ed-l">Orden en la lista</label>
+        <input id="catOrden" class="ed-i" inputmode="numeric" autocomplete="off"
+               placeholder="100">
+
+        <div id="catErr" style="display:none;margin-top:10px;padding:10px 12px;
+             border-radius:9px;border-left:4px solid var(--rojo);background:#fdeaea;
+             font-size:12.5px;line-height:1.45;color:#8a1f1f"></div>
+      </div>
+    </div>
+    <div class="vd-pie" style="display:flex;gap:10px;padding:12px 16px">
+      <button class="btn" style="flex:1;background:#eee;color:#444"
+              onclick="cerrarAccCat()">Cerrar</button>
+      <button class="btn" style="flex:2" id="catGuardar"
+              onclick="catGuardar()">Guardar</button>
     </div>
   </div>
 </div>

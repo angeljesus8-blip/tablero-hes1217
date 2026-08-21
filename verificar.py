@@ -783,9 +783,25 @@ def r_pruebas():
     if not node:
         aviso('pruebas', 'node no está instalado: no se pudo ejecutar la app')
         return
-    for guion in ('humo_tablero.js', 'humo_captura.js', 'humo_menu.js',
-                  'login_a_captura.js', 'navegacion.js', 'actualizacion.js',
-                  'cola_ventas.js'):
+    # Bibliotecas, no pruebas: no se ejecutan solas.
+    APOYO = ('dom.js', 'entorno.js', 'casos_tablero.js')
+    GUIONES = ('humo_tablero.js', 'humo_captura.js', 'humo_menu.js',
+               'login_a_captura.js', 'navegacion.js', 'actualizacion.js',
+               'cola_ventas.js', 'catalogo_accesorios.js')
+
+    # La lista de arriba es explícita a propósito —así falta un archivo y se
+    # nota—, pero eso deja el hueco contrario: una prueba escrita y no añadida
+    # aquí no corre nunca, y nada lo dice. Se pasa por escrito y no se usa.
+    try:
+        sueltas = [f for f in sorted(os.listdir(os.path.join(BASE, 'pruebas')))
+                   if f.endswith('.js') and f not in GUIONES and f not in APOYO]
+    except OSError:
+        sueltas = []
+    for f in sueltas:
+        falla('pruebas', 'pruebas/%s existe pero no está en la lista de '
+                         'verificar.py: no se ejecuta, y parece que sí' % f)
+
+    for guion in GUIONES:
         ruta = os.path.join(BASE, 'pruebas', guion)
         if not os.path.exists(ruta):
             falla('pruebas', 'falta pruebas/%s — es lo que impide publicar una app '
