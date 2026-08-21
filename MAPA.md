@@ -422,11 +422,29 @@ sobreescribe: ese archivo lo comparten diez tiendas y reemplazarlo pisaría el
 trabajo de las demás. El .xlsx que genera la app trae las columnas **en la
 misma posición** que el regional, para que el pegado caiga donde debe.
 
-#### Mantener el catálogo sin escribir SQL *(20-ago-2026, v197)*
+#### Mantener el catálogo sin escribir SQL *(20-ago-2026, v198)*
 
 Los 23 productos se sembraron a mano, y Mr Fix mete producto cada temporada.
-Ahora se editan en **Captura → 🔌 Accesorio → 🧾 Catálogo**, con el mismo
-portero que el reporte y que el ✏️ de corregir: gerente y subgerente.
+Ahora se editan en **Admin → 📦 Catálogo**, al final de la pestaña.
+
+**Estuvo unas horas en Captura**, junto al Excel del mes, con este argumento: el
+momento en que se descubre que falta un producto es *capturando un ticket*, y
+mandar al gerente a otra pantalla y de vuelta es fricción justo cuando hay un
+cliente delante. Pesó más el argumento contrario, de Ángel: **quien no se
+acuerda de dónde estaba lo busca donde están todos los catálogos**, y nadie va a
+Captura de Series a mantener una lista. La fricción se paga una vez por producto;
+no encontrar la pantalla se paga cada vez.
+
+Lo que queda de aquello es una línea en el panel de Captura, debajo del selector
+de producto, que dice dónde se agregan. **Se ve siempre, también para el asesor**:
+si el producto no está, la venta no se puede capturar, y quedarse mirando la
+lista sin saber qué hacer es peor que no poder agregarlo uno mismo.
+
+El permiso lo comprueba el servidor con `puede_gestionar_` —gerente y
+subgerente—, igual que el ✏️ de corregir. Admin ya exige `puede_admin` para
+abrirse, así que son dos puertas distintas: **entrar a Admin no da derecho a
+tocar este catálogo**, y hoy coinciden solo porque los dos que tienen Admin son
+el gerente y el subgerente.
 
 ⚠️ **Había una versión rota de esto en el servidor, sin usar.**
 `accesorio_catalogo_guardar` se escribió el 18-ago, **el día antes** de que el
@@ -455,10 +473,19 @@ degradan la captura:
   hay un producto a ese precio. MICA HR y MICA MATTE cuestan las dos $149 y por
   eso ninguna se marca: son los 19 tickets que en julio hubo que abrir uno a uno.
 
-El aviso del código usa `accPrefijo` y `ACC_MIN_PREFIJO`, **las mismas** que la
-adivinanza. Estaban en línea dentro de `accAdivinar` y se sacaron aparte a
-propósito: dos copias de esa regla acabarían diciendo cosas distintas, y el
-aviso daría por bueno un código que la adivinanza va a empatar.
+⚠️ **La regla de los códigos vive en `acc_codigos.js`, no en cada página.**
+`ACC_OCR`, `accClave`, `accPrefijo` y `accChoca` estaban dentro de
+`captura_series.html`; al mover el editor a Admin habrían quedado **dos copias**
+de la misma idea en dos archivos. Y esa copia falla en silencio: el aviso de
+Admin daría por bueno un código que la adivinanza de Captura va a empatar, y se
+vería meses después como un producto que «dejó de proponerse solo».
+
+Eso trajo una dependencia nueva entre archivos, que también falla mal: un
+`<script src>` que no llega **no rompe la página al abrirla**, rompe la primera
+función que use lo que traía —aquí, al teclear un código—. Por eso
+`verificar.py` comprueba ahora que todo `./x.js` que carga una página exista
+**y esté en `ARCHIVOS` de `sw.js`**: si falta lo segundo, funciona con red y
+falla sin ella, que es el peor de los dos mundos porque pasa las pruebas.
 
 **Renombrar no arrastra el histórico** — las ventas guardan el nombre del
 producto como texto. No se impide, porque a veces hay que corregir una falta;
