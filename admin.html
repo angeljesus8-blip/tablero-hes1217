@@ -1213,7 +1213,13 @@ async function cargarCatAcc(){
   caja.innerHTML = '<p class="note">Cargando…</p>';
   catAccFicha(null);
 
-  const filas = await sbLeer('accesorios_catalogo_admin', { p_quien: _miEmpno() });
+  /* `p_token` va explícito: `sbLeer` NO lo manda solo —solo `sbEscribir` lo
+     hace—, y esta función lo exige como cualquier escritura, porque enseña el
+     catálogo entero. Sin él llegaba sin credencial y el servidor devolvía cero
+     filas: la pantalla decía «revisa la conexión o pide permiso» con las dos
+     cosas en orden. */
+  const filas = await sbLeer('accesorios_catalogo_admin',
+                             { p_token: GAS_TOKEN, p_quien: _miEmpno() });
   /* `sbLeer` devuelve [] tanto si no hay red como si no hay permiso. Aquí sí hay
      que decir algo: el catálogo NUNCA está vacío de verdad —los 23 están
      sembrados—, así que una lista en blanco es siempre un problema, y en
