@@ -13,26 +13,25 @@
      · con `sku` 43739 → cierto para micas, falso para los Office, que van al
        reporte de comisiones con SU código. La columna E del Excel saldría mal.
 
-   Nunca llegó a usarse porque no había pantalla. Ahora la hay, así que estas
-   comprobaciones son lo único que impide que vuelva:
+   Nunca llegó a usarse porque no había pantalla. Ahora la hay —en Admin →
+   Catálogo, con el resto de catálogos— así que esto es lo que impide que vuelva:
 
      1. El alta manda `p_articulo` y `p_sku`; editar manda el id.
-     2. El aviso de códigos parecidos usa LA MISMA regla que la adivinanza.
-     3. Un asesor no ve el botón.
+     2. El aviso de códigos parecidos y la adivinanza dicen LO MISMO.
+     3. Sin permiso, la lista vacía se explica en vez de quedarse en blanco.
 
-   La 2 importa porque son dos usos de la misma idea en sitios distintos: si el
-   aviso dijera «todo bien» con un código que la adivinanza va a empatar, el
-   gerente lo guardaría confiado y el producto dejaría de proponerse solo.
+   La 2 se comprueba a caballo entre los dos archivos a propósito: son dos usos
+   de la misma regla en pantallas distintas, y desde el 20-ago viven juntos en
+   `acc_codigos.js` justo para que no se separen.
    ============================================================ */
 'use strict';
 const fs = require('fs'), path = require('path');
-const html = fs.readFileSync(path.join(__dirname, '..', 'captura_series.html'), 'utf8');
+const raiz  = path.join(__dirname, '..');
+const admin = fs.readFileSync(path.join(raiz, 'admin.html'), 'utf8');
 
 const { crearEntorno } = require('./dom.js');
 
-const EQUIPO = ['Jorge Medina Rejón', 'Ana Ramírez Solís'];
-const STORE  = { store_id:'1217', nombre:'Angelopolis', gas_url:'https://gas.example/exec',
-                 gas_token:'t', vendedores:EQUIPO };
+const STORE = { store_id:'1217', nombre:'Angelopolis', gas_token:'t', vendedores:[] };
 
 /* Lo que devolvería `accesorios_catalogo_admin`: productos reales del catálogo
    sembrado, con la colisión de $149 que ya existe en la tienda. */
@@ -45,54 +44,61 @@ const CATALOGO = [
 const fallos = [];
 const ok = (t, c, extra) => { if(!c) fallos.push(t + (extra ? ' -> ' + extra : '')); };
 
-/* Solo se contesta a las funciones de catálogo. Todo lo demás rechaza, igual
-   que en el resto de pruebas: así el arranque de la pantalla es el que ya está
-   probado y esto no acaba midiendo otra cosa sin querer. */
-function arrancar(puesto, catCaptura){
-  const llamadas = [];
+/* Admin habla con Supabase por el SDK del CDN, que aquí no existe. Se le pone
+   uno falso que apunta lo que se le pide: es lo único que permite comprobar QUÉ
+   campos se mandan, que es justo donde estuvo el fallo. */
+function arrancar(empno, filas){
   const ent = crearEntorno({
-    html,
-    ruta: '/t/captura_series.html',
-    ls: { hes_store: JSON.stringify(STORE),
-          hes_empleado: JSON.stringify({ empno:'<empno>',
-                                         nombre:'Ana Ramírez Solís',
-                                         puesto: puesto }) },
-    fetch: function(url, opt){
-      const fn = String(url).split('/rpc/')[1] || '';
-      let body = {};
-      try{ body = JSON.parse((opt && opt.body) || '{}'); }catch(e){}
-      let data;
-      if(fn.indexOf('accesorios_catalogo_admin') === 0)      data = CATALOGO;
-      else if(fn.indexOf('accesorios_catalogo_lista') === 0) data = catCaptura || CATALOGO;
-      else if(fn.indexOf('accesorio_catalogo_') === 0)       data = { ok:true, id:99 };
-      else return Promise.reject(new Error('sin red'));
-      llamadas.push({ fn: fn, body: body });
-      return Promise.resolve({ ok:true, json: () => Promise.resolve(data) });
-    }
+    html: admin,
+    ruta: '/t/admin.html',
+    ls: { hes_store: JSON.stringify(STORE), hes_role: 'gerente',
+          hes_empleado: JSON.stringify({ empno: empno, nombre:'Quien sea',
+                                         puesto:'Gerente de Tienda', admin:true }) }
   });
+  if(!ent.err){
+    /* `acc_codigos.js` entra por <script src>, que el entorno no baja: se
+       inyecta a mano, igual que hace el navegador antes del script de la
+       página. Si faltara de verdad, `catAccMirarArt` lanzaría ReferenceError
+       al teclear — por eso el verificador comprueba aparte que el archivo
+       exista y esté en el service worker. */
+    ent.correr(fs.readFileSync(path.join(raiz, 'acc_codigos.js'), 'utf8'));
+    ent.correr(
+      'var __llamadas = [];\n' +
+      'var __filas = ' + JSON.stringify(filas === undefined ? CATALOGO : filas) + ';\n' +
+      'window.supabase = { createClient: function(){ return { rpc: function(fn, p){\n' +
+      '  __llamadas.push({ fn: fn, body: p });\n' +
+      '  if(fn === "accesorios_catalogo_admin") return Promise.resolve({ data: __filas, error: null });\n' +
+      '  return Promise.resolve({ data: { ok: true, id: 99 }, error: null });\n' +
+      '} }; } };');
+  }
   return Object.assign(ent, {
-    llamadas: llamadas,
-    guardados: () => llamadas.filter(x => x.fn.indexOf('accesorio_catalogo_guardar') === 0)
+    llamadas: () => JSON.parse(ent.correr('JSON.stringify(__llamadas)')),
+    guardados: function(){
+      return this.llamadas().filter(x => x.fn === 'accesorio_catalogo_guardar');
+    },
+    limpiar: () => ent.correr('__llamadas.length = 0;')
   });
 }
 
+/* ── 1 · El alta guarda el código de artículo y el SKU ──────────────────── */
 async function bloque1(){
-  const s = arrancar('Gerente de Tienda');
-  ok('la pantalla arranca', !s.err, s.err);
+  const s = arrancar('<empno>');
+  ok('Admin arranca', !s.err, s.err);
   if(s.err) return;
 
-  await s.caja.abrirAccCat();
-  ok('el catálogo se pinta', s.el('catLista').innerHTML.indexOf('MICA HR') >= 0,
-     s.el('catLista').innerHTML.slice(0, 120));
+  await s.caja.cargarCatAcc();
+  ok('el catálogo se pinta',
+     s.el('catAccLista').innerHTML.indexOf('MICA HR') >= 0,
+     s.el('catAccLista').innerHTML.slice(0, 140));
 
   // ── Alta ──
-  s.caja.catNuevo();
-  s.el('catNombre').value = 'MEMORIA USB ADATA 256GB';
-  s.el('catArt').value    = '43739-USB256';
-  s.el('catPrecio').value = '649';
-  s.el('catSku').value    = '43739';
-  s.el('catOrden').value  = '135';
-  await s.caja.catGuardar();
+  s.caja.catAccNuevo();
+  s.el('catAccNombre').value = 'MEMORIA USB ADATA 256GB';
+  s.el('catAccArt').value    = '43739-USB256';
+  s.el('catAccPrecio').value = '649';
+  s.el('catAccSku').value    = '43739';
+  s.el('catAccOrden').value  = '135';
+  await s.caja.catAccGuardar();
 
   const g = s.guardados()[0];
   ok('el alta llega al servidor', !!g, 'no se llamó a accesorio_catalogo_guardar');
@@ -107,22 +113,23 @@ async function bloque1(){
        g.body.p_precio === 649, JSON.stringify(g.body.p_precio));
     ok('y sin id, porque es un alta',
        g.body.p_id === null || g.body.p_id === undefined, 'llegó id ' + g.body.p_id);
+    /* El servidor decide con esto si quien lo hace es gerente o subgerente.
+       Vacío pasaría como «la sesión del dueño» y saltaría la comprobación. */
     ok('y diciendo quién lo hace, que es lo que el servidor comprueba',
-       g.body.p_quien === '<empno>', g.body.p_quien);
+       g.body.p_quien === '<empno>', JSON.stringify(g.body.p_quien));
   }
 
   // ── Editar: manda el id, no crea un duplicado ──
-  s.llamadas.length = 0;
-  await s.caja.abrirAccCat();
-  s.caja.catElegir(0);                        // MICA HR
+  s.limpiar();
+  s.caja.catAccElegir(0);                      // MICA HR
   ok('al elegir un producto se llena su código',
-     s.el('catArt').value === '43739-MICAHR', s.el('catArt').value);
+     s.el('catAccArt').value === '43739-MICAHR', s.el('catAccArt').value);
   ok('y se avisa de cuántas ventas llevan ese nombre, antes de renombrarlo',
-     s.el('catUsos').style.display === 'block' &&
-     s.el('catUsos').innerHTML.indexOf('7') >= 0, s.el('catUsos').innerHTML);
+     s.el('catAccUsos').style.display === 'block' &&
+     s.el('catAccUsos').innerHTML.indexOf('7') >= 0, s.el('catAccUsos').innerHTML);
 
-  s.el('catPrecio').value = '159';            // subió de precio
-  await s.caja.catGuardar();
+  s.el('catAccPrecio').value = '159';          // subió de precio
+  await s.caja.catAccGuardar();
   const e = s.guardados()[0];
   ok('editar manda el id del producto', !!e && e.body.p_id === 1,
      'llegó id ' + (e && e.body.p_id));
@@ -132,89 +139,121 @@ async function bloque1(){
      !!e && e.body.p_articulo === '43739-MICAHR', e && e.body.p_articulo);
 
   // ── Dar de baja NO borra: manda activo=false ──
-  s.llamadas.length = 0;
-  await s.caja.catBaja(0);
-  const b = s.llamadas.filter(x => x.fn.indexOf('accesorio_catalogo_baja') === 0)[0];
-  ok('la baja manda el id y activo=false', !!b && b.body.p_id === 1 && b.body.p_activo === false,
-     JSON.stringify(b && b.body));
+  s.limpiar();
+  await s.caja.catAccBaja(0);
+  const b = s.llamadas().filter(x => x.fn === 'accesorio_catalogo_baja')[0];
+  ok('la baja manda el id y activo=false',
+     !!b && b.body.p_id === 1 && b.body.p_activo === false, JSON.stringify(b && b.body));
 }
 
-/* ── 2 · El aviso coincide con la adivinanza ────────────────────────────── */
-async function bloque2(){
-  /* El catálogo de CAPTURAR se sirve con los dos códigos que empiezan igual:
-     así se puede comprobar, sobre el mismo dato, que el aviso advierte de algo
-     real. Se pasa por la RPC y no tocando `_accCat` porque las `let` del script
-     no son alcanzables desde fuera del contexto. */
-  const s = arrancar('Gerente de Tienda', [
-    { articulo:'43739-MICAHR',     nombre:'MICA HR',      precio_ref:149, sku:'43739' },
-    { articulo:'43739-MICAHRPLUS', nombre:'MICA HR PLUS', precio_ref:199, sku:'43739' }
-  ]);
-  if(s.err){ fallos.push('la pantalla no arranca (bloque 2): ' + s.err); return; }
+/* ── 2 · El aviso de Admin y la adivinanza de Captura dicen lo mismo ────── */
+function bloque2(){
+  const { accChoca } = require(path.join(raiz, 'acc_codigos.js'));
 
-  await s.caja.abrirAccCat();
-  s.caja.catNuevo();
+  const cat = [
+    { id:1, articulo:'43739-MICAHR',     nombre:'MICA HR',      precio_ref:149, sku:'43739', activo:true },
+    { id:2, articulo:'43739-MICAHRPLUS', nombre:'MICA HR PLUS', precio_ref:199, sku:'43739', activo:true }
+  ];
 
-  // Un código que no choca con nadie.
-  s.el('catArt').value = '43739-USB256';
-  s.caja.catMirarArt();
-  ok('un código distinto no dispara el aviso',
-     s.el('catAvisoArt').style.display === 'none',
-     'avisó de más: ' + s.el('catAvisoArt').innerHTML);
+  ok('un código que empieza igual que otro se detecta',
+     (accChoca('43739-MICAHRPLUS', [cat[0]], null) || {}).nombre === 'MICA HR',
+     'no lo detectó');
+  ok('uno distinto no da falsa alarma',
+     accChoca('43739-USB256', cat, null) === null, 'avisó de más');
+  /* Un producto no se acusa a sí mismo al editarlo: sin esto, abrir MICA HR
+     para cambiarle el precio avisaría de que choca con MICA HR, y un aviso que
+     sale siempre se acaba ignorando —incluso cuando dice algo cierto. */
+  ok('y un producto no choca consigo mismo al editarlo',
+     accChoca('43739-MICAHR', [cat[0]], 1) === null, 'se acusó a sí mismo');
+  /* Pero sí con OTRO parecido, aunque sea el que se está editando el que ya
+     existía: el empate rompe la propuesta en los dos sentidos. */
+  ok('y sí avisa del otro parecido al editar',
+     (accChoca('43739-MICAHR', cat, 1) || {}).nombre === 'MICA HR PLUS',
+     'no avisó del parecido');
 
-  // Uno que sí: comparte «MICAHR» con la mica que ya existe.
-  s.el('catArt').value = '43739-MICAHRPLUS';
-  s.caja.catMirarArt();
-  ok('un código que empieza igual que otro SÍ avisa',
-     s.el('catAvisoArt').style.display === 'block',
-     'no avisó, y este es el caso que rompe la propuesta');
-  ok('y dice con cuál choca',
-     s.el('catAvisoArt').innerHTML.indexOf('MICA HR') >= 0, s.el('catAvisoArt').innerHTML);
+  /* La comprobación de verdad, y la razón de que la regla viva en un solo
+     archivo: con esos dos códigos en el catálogo, Captura DEJA de proponer al
+     leer un ticket de MICA HR —empatan en seis letras—. Eso es exactamente de
+     lo que avisa Admin. Si esto empezara a proponer algo, el aviso estaría
+     advirtiendo de un problema que ya no existe; si dejara de avisar teniendo
+     el empate, sería peor. */
+  const captura = fs.readFileSync(path.join(raiz, 'captura_series.html'), 'utf8');
+  const ent = crearEntorno({
+    html: captura,
+    ruta: '/t/captura_series.html',
+    ls: { hes_store: JSON.stringify(STORE),
+          hes_empleado: JSON.stringify({ empno:'<empno>', nombre:'Quien sea',
+                                         puesto:'Gerente de Tienda' }) }
+  });
+  if(ent.err){ fallos.push('Captura no arranca (bloque 2): ' + ent.err); return; }
 
-  /* La comprobación de verdad: que el aviso no se haya separado de la
-     adivinanza. Con los dos códigos en el catálogo de capturar, un ticket de
-     MICA HR ya no se resuelve solo —empatan en 6 letras—, que es exactamente
-     de lo que avisa la caja de arriba. Si esto empezara a proponer algo, el
-     aviso estaría advirtiendo de un problema que ya no existe. */
-  await s.caja.abrirAcc();
-  const propuesta = s.caja.accAdivinar('SERVICIO: 43739-MICAHR');
-  ok('y con ese empate la app deja de proponer, que es de lo que avisa',
-     propuesta === null, 'propuso: ' + propuesta);
+  /* `acc_codigos.js` es un <script src>, que el entorno no baja: se inyecta a
+     mano, igual que hace el navegador antes del script de la página. */
+  ent.correr(fs.readFileSync(path.join(raiz, 'acc_codigos.js'), 'utf8'));
+  ent.correr('_accCat = ' + JSON.stringify(cat) + ';');
 
-  /* El precio repetido es aviso distinto: MICA HR y MICA MATTE cuestan las dos
-     $149 y por eso ninguna se marca sola al leer el ticket. */
-  await s.caja.abrirAccCat();
-  s.caja.catNuevo();
-  s.el('catPrecio').value = '149';
-  s.caja.catMirarPrecio();
-  ok('un precio que ya tiene otro producto avisa',
-     s.el('catAvisoPrecio').style.display === 'block', 'no avisó del precio repetido');
+  ok('con el empate, Captura no propone nada',
+     ent.caja.accAdivinar('SERVICIO: 43739-MICAHR') === null,
+     'propuso: ' + ent.caja.accAdivinar('SERVICIO: 43739-MICAHR'));
+  /* Y sin empate sí propone: si no, la comprobación de arriba pasaría también
+     con una adivinanza rota que no propone nunca. */
+  ent.correr('_accCat = ' + JSON.stringify([cat[0]]) + ';');
+  ok('y sin empate sí propone',
+     ent.caja.accAdivinar('SERVICIO: 43739-MICAHR') === 'MICA HR',
+     'propuso: ' + ent.caja.accAdivinar('SERVICIO: 43739-MICAHR'));
 }
 
-/* ── 3 · Un asesor no ve el botón ───────────────────────────────────────── */
+/* ── 3 · Los avisos de la ficha, sobre datos reales ─────────────────────── */
 async function bloque3(){
-  const s = arrancar('Asesor de Tienda');
-  if(s.err){ fallos.push('la pantalla no arranca (bloque 3): ' + s.err); return; }
-  await s.caja.abrirAcc();
-  /* Esconde, no impide: el servidor lo vuelve a comprobar con
-     `puede_gestionar_`. Pero si el botón se viera, un asesor podría cambiarle
-     el precio de referencia a todo el catálogo creyendo que puede. */
-  ok('el asesor no ve reporte ni catálogo',
-     s.el('accGestion').style.display === 'none',
-     'quedó en ' + s.el('accGestion').style.display);
+  const s = arrancar('<empno>');
+  if(s.err){ fallos.push('Admin no arranca (bloque 3): ' + s.err); return; }
+  await s.caja.cargarCatAcc();
+  s.caja.catAccNuevo();
 
-  const s2 = arrancar('Subgerente de Tienda');
-  if(!s2.err){
-    await s2.caja.abrirAcc();
-    /* Y el subgerente SÍ: es quien cubre los días que el gerente libra. Se
-       comprueba en los dos sentidos porque un portero que dice que no a todo
-       también «pasa» la prueba de que el asesor no entra. */
-    ok('el subgerente sí los ve', s2.el('accGestion').style.display === 'flex',
-       'quedó en ' + s2.el('accGestion').style.display);
-  }
+  s.el('catAccArt').value = '43739-USB256';
+  s.caja.catAccMirarArt();
+  ok('un código distinto no dispara el aviso',
+     s.el('catAccAvisoArt').style.display === 'none',
+     'avisó de más: ' + s.el('catAccAvisoArt').innerHTML);
+
+  s.el('catAccArt').value = '43739-MICAHRPLUS';
+  s.caja.catAccMirarArt();
+  ok('un código parecido a otro SÍ avisa, y dice a cuál',
+     s.el('catAccAvisoArt').style.display === 'block' &&
+     s.el('catAccAvisoArt').innerHTML.indexOf('MICA HR') >= 0,
+     s.el('catAccAvisoArt').innerHTML || '(no avisó)');
+
+  /* MICA HR y MICA MATTE cuestan las dos $149: por eso ninguna se marca sola al
+     leer el ticket. Son los 19 tickets que en julio hubo que abrir uno a uno. */
+  s.el('catAccPrecio').value = '149';
+  s.caja.catAccMirarPrecio();
+  ok('un precio que ya tiene otro producto avisa',
+     s.el('catAccAvisoPrecio').style.display === 'block', 'no avisó del precio repetido');
+
+  s.el('catAccPrecio').value = '777';
+  s.caja.catAccMirarPrecio();
+  ok('y un precio libre no', s.el('catAccAvisoPrecio').style.display === 'none',
+     'avisó de más');
+}
+
+/* ── 4 · Sin permiso, la lista vacía se explica ─────────────────────────── */
+async function bloque4(){
+  /* El servidor devuelve cero filas tanto si no hay permiso como si no hay red,
+     a propósito. Pero el catálogo NUNCA está vacío de verdad —los 23 están
+     sembrados—, así que dejar la lista en blanco haría creer que se borró. */
+  const s = arrancar('<empno>', []);            // Maria, asesor: sin permiso
+  if(s.err){ fallos.push('Admin no arranca (bloque 4): ' + s.err); return; }
+  await s.caja.cargarCatAcc();
+  const html = s.el('catAccLista').innerHTML;
+  ok('una lista vacía dice por qué, en vez de quedarse en blanco',
+     html.indexOf('permiso') >= 0 || html.indexOf('conexión') >= 0,
+     'quedó: ' + html.slice(0, 120));
+  ok('y no se ofrece la ficha como si se pudiera guardar',
+     s.el('catAccFicha').style.display === 'none', 'la ficha quedó abierta');
 }
 
 Promise.resolve()
-  .then(bloque1).then(bloque2).then(bloque3)
+  .then(bloque1).then(bloque2).then(bloque3).then(bloque4)
   .then(function(){
     if(fallos.length){
       console.log('FALLOS en el catálogo de accesorios:');
@@ -223,6 +262,6 @@ Promise.resolve()
     }
     console.log('catálogo de accesorios: bien');
   }, function(err){
-    console.log('FALLO en el catálogo de accesorios: ' + (err && err.stack || err));
+    console.log('FALLO en el catálogo de accesorios: ' + ((err && err.stack) || err));
     process.exit(1);
   });

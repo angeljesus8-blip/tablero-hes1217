@@ -106,6 +106,14 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
 .item-info strong { font-size:13px;font-weight:700;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
 .item-info span { font-size:11.5px;color:#888;margin-top:2px;display:block;line-height:1.4; }
 .btn-del { background:#fff5f5;border:1.5px solid #ffd5d5;color:var(--rojo);border-radius:8px;padding:7px 10px;font-size:14px;cursor:pointer;flex-shrink:0; }
+/* Catálogo de accesorios: una fila por producto, y los avisos que no bloquean */
+.cat-f { display:flex;gap:9px;align-items:center;padding:9px 2px;border-bottom:1px solid #f2f2f2;font-size:13px;cursor:pointer; }
+.cat-f.off { opacity:.45; }
+.cat-f .cn { flex:1;font-weight:700;line-height:1.35; }
+.cat-f .ca { font-family:ui-monospace,monospace;font-size:11px;color:#aaa;font-weight:600; }
+.cat-f .cp { font-weight:800;color:#1a8c4e;white-space:nowrap; }
+.cat-f .cb { background:none;border:1.5px solid #e0e0e0;border-radius:7px;font-size:11px;padding:3px 8px;color:#888;cursor:pointer;flex-shrink:0;font-family:inherit;font-weight:700; }
+.cat-av { margin:6px 0 0;padding:9px 11px;border-radius:8px;border-left:4px solid var(--naranja);background:#fff4ec;font-size:12px;line-height:1.45;color:#8a4a1f; }
 .empty { text-align:center;color:#ccc;font-size:13px;padding:24px; }
 
 /* COMISIONES — vista previa editable */
@@ -175,6 +183,7 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
 </head>
 <body>
 <script src="./continuidad.js"></script>
+<script src="./acc_codigos.js"></script>
 
 
 <!-- PIN -->
@@ -200,7 +209,7 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
        dos lados que comparar. Ver el comentario de `revisarCuadre` abajo. -->
 
   <div class="tab-bar">
-    <button class="on" onclick="tab('cat',this)">📦 Catálogo</button>
+    <button class="on" onclick="tab('cat',this);cargarCatAcc()">📦 Catálogo</button>
     <button onclick="tab('promos',this)">🔥 Promos</button>
     <!-- Bundles retirado el 4-ago-2026: la tienda dejó de manejar paquetes.
          Sin este botón no hay forma de llegar a #pane-bundles, así que ya no se
@@ -248,6 +257,65 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
       </div>
       <button class="btn-pri" id="btnCatRef" onclick="subirCatalogoRef()" disabled style="margin-top:14px">Subir catálogo de referencia</button>
       <div class="result" id="resCatRef"></div>
+    </div>
+
+    <!-- Accesorios del SKU genérico (20-ago-2026, v198).
+         Estuvo unas horas en Captura de Series, junto al Excel del mes, porque
+         el momento en que se descubre que falta un producto es capturando un
+         ticket. Se movió aquí por una razón que pesa más: quien no se acuerda
+         de dónde estaba busca los catálogos donde están todos los catálogos.
+         En Captura queda una línea que dice dónde se agregan. -->
+    <div class="card" style="margin-top:14px">
+      <h2>🔌 Accesorios · SKU genérico</h2>
+      <p class="note">Micas, cargadores, kits y los productos de Mr&nbsp;Fix. Este
+        <b>no se sube, se escribe</b>: son dos docenas y cambian de uno en uno.
+        Es la lista que sale al capturar un ticket de accesorio.</p>
+      <div id="catAccLista"><p class="note">Abre esta pestaña para cargar…</p></div>
+      <button class="btn-pri" onclick="catAccNuevo()"
+              style="width:auto;padding:10px 14px;margin-top:10px">＋ Producto nuevo</button>
+
+      <!-- La ficha. Se llena al tocar un producto, o vacía para dar de alta. -->
+      <div id="catAccFicha" style="display:none;margin-top:14px;padding-top:14px;
+           border-top:2px solid #eee">
+        <div id="catAccUsos" class="note" style="display:none;background:#f7f7f8;
+             border-radius:8px;padding:9px 11px;margin-bottom:10px"></div>
+
+        <div class="field">
+          <label>Nombre del producto</label>
+          <input id="catAccNombre" autocapitalize="characters" autocomplete="off"
+                 placeholder="MICA HR">
+        </div>
+        <div class="field">
+          <label>Código de artículo</label>
+          <input id="catAccArt" autocapitalize="characters" autocomplete="off"
+                 placeholder="43739-MICAHR" oninput="catAccMirarArt()">
+          <p class="note" style="margin:5px 0 0">El que teclea el cajero en «N. de
+            serie». De aquí sale la propuesta automática al leer el ticket: sin él,
+            este producto <b>nunca se propondrá solo</b>.</p>
+          <div id="catAccAvisoArt" class="cat-av" style="display:none"></div>
+        </div>
+        <div class="field">
+          <label>Precio de referencia</label>
+          <input id="catAccPrecio" inputmode="decimal" autocomplete="off"
+                 oninput="catAccMirarPrecio()">
+          <p class="note" style="margin:5px 0 0">Ayuda a ordenar la lista, no es el
+            precio de venta: el real sale del ticket.</p>
+          <div id="catAccAvisoPrecio" class="cat-av" style="display:none"></div>
+        </div>
+        <div class="field">
+          <label>SKU con el que se cobra</label>
+          <input id="catAccSku" inputmode="numeric" autocomplete="off" placeholder="43739">
+          <p class="note" style="margin:5px 0 0">Casi todo va con el genérico
+            <b>43739</b>. Los Office no: Personal es 63602 y Familia 57518. Es la
+            columna E del Excel de comisiones.</p>
+        </div>
+        <div class="field">
+          <label>Orden en la lista</label>
+          <input id="catAccOrden" inputmode="numeric" autocomplete="off" placeholder="100">
+        </div>
+        <button class="btn-pri" onclick="catAccGuardar()">Guardar producto</button>
+        <div class="result" id="resCatAcc"></div>
+      </div>
     </div>
   </div>
 
@@ -484,7 +552,7 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
       <div id="tecLista"><p class="note">Cargando…</p></div>
       <div style="display:flex;gap:8px;margin-top:10px">
         <input id="tecNombre" placeholder="Nombre del técnico" style="flex:1">
-        <button class="btn btn-sec" onclick="tecAlta()" style="width:auto;padding:10px 14px">＋ Alta</button>
+        <button class="btn-pri" onclick="tecAlta()" style="width:auto;padding:10px 14px;margin:0">＋ Alta</button>
       </div>
       <p class="note" style="margin-top:8px">Dar de baja corta el acceso al momento.
         No se borra: así queda constancia de si esa clave llegó a usarse y hasta cuándo.</p>
@@ -611,6 +679,10 @@ function abrirAdmin(){
   // loadBundles() se quitó con la pestaña (4-ago-2026): era un viaje al Apps
   // Script en cada apertura de Admin para pintar un panel al que ya no se llega.
   loadEol();
+  /* El catálogo de accesorios se carga aquí y no solo al pulsar la pestaña,
+     porque 📦 Catálogo es la que está abierta al entrar: quien no la vuelva a
+     pulsar nunca vería más que «Abre esta pestaña para cargar…». */
+  cargarCatAcc();
 }
 
 /* `revisarCuadre` se retiró en la fase 6 (17-ago-2026, v170).
@@ -1108,6 +1180,156 @@ async function subirExhibicion(){
   }catch(err){ showResult('resExhib',false,'Error al subir: '+err.message); }
   btn.textContent='Actualizar exhibición'; btn.disabled=false;
 }
+
+/* ================================================================
+   TAB CATÁLOGO — Accesorios del SKU genérico (20-ago-2026, v198)
+   ================================================================
+   Los 23 productos se sembraron a mano y hasta hoy solo se tocaban por SQL.
+
+   ⚠️ Había una versión rota de esto en el servidor, sin usar:
+   `accesorio_catalogo_guardar` se escribió el 18-ago, el día ANTES de que el
+   catálogo tuviera `articulo` y `sku`, y solo guardaba (nombre, precio, orden).
+   Un alta hecha con ella quedaba sin código de artículo —y entonces el producto
+   NO se propone nunca al leer un ticket— y con SKU 43739 por omisión, falso
+   para los Office. Ninguna de las dos cosas da error. Se rehízo entera en
+   `supabase_accesorios_catalogo.sql`.
+
+   El aviso de códigos parecidos usa `accChoca` de `acc_codigos.js`, la MISMA
+   regla que usa Captura para adivinar el producto. Si fueran dos copias, esto
+   podría dar por bueno un código que allá va a empatar. */
+let _catAcc = [];        // el catálogo completo, activos y de baja
+let _catAccId = null;    // qué producto se edita; null = alta
+
+// El número de empleado de quien está usando Admin. El servidor comprueba con
+// él que sea gerente o subgerente: `puede_admin` deja entrar a Admin, pero
+// tocar el catálogo de accesorios es un permiso aparte.
+function _miEmpno(){
+  try{ const e = JSON.parse(localStorage.getItem('hes_empleado')||'null');
+       return (e && e.empno) ? String(e.empno) : ''; }catch(e){ return ''; }
+}
+
+async function cargarCatAcc(){
+  const caja = document.getElementById('catAccLista');
+  caja.innerHTML = '<p class="note">Cargando…</p>';
+  catAccFicha(null);
+
+  const filas = await sbLeer('accesorios_catalogo_admin', { p_quien: _miEmpno() });
+  /* `sbLeer` devuelve [] tanto si no hay red como si no hay permiso. Aquí sí hay
+     que decir algo: el catálogo NUNCA está vacío de verdad —los 23 están
+     sembrados—, así que una lista en blanco es siempre un problema, y en
+     silencio parecería que se borró. */
+  if(!filas.length){
+    caja.innerHTML = '<p class="note" style="color:var(--rojo)">No se pudo cargar el ' +
+      'catálogo de accesorios: revisa la conexión, o pide que te den permiso de ' +
+      'gerente o subgerente.</p>';
+    return;
+  }
+  _catAcc = filas;
+  pintarCatAcc();
+}
+
+function pintarCatAcc(){
+  document.getElementById('catAccLista').innerHTML = _catAcc.map((c, i) =>
+    '<div class="cat-f' + (c.activo ? '' : ' off') + '" onclick="catAccElegir(' + i + ')">' +
+      '<span class="cn">' + escHtml(c.nombre) + (c.activo ? '' : ' · de baja') +
+        '<br><span class="ca">' + escHtml(c.articulo || 'sin código') +
+        (String(c.sku) !== '43739' ? ' · SKU ' + escHtml(c.sku) : '') + '</span></span>' +
+      '<span class="cp">' + (c.precio_ref ? money(c.precio_ref) : '—') + '</span>' +
+      '<button class="cb" onclick="event.stopPropagation();catAccBaja(' + i + ')">' +
+        (c.activo ? 'baja' : 'activar') + '</button>' +
+    '</div>').join('');
+}
+
+function catAccFicha(c){
+  _catAccId = c ? c.id : null;
+  document.getElementById('catAccFicha').style.display = c ? 'block' : 'none';
+  document.getElementById('catAccAvisoArt').style.display = 'none';
+  document.getElementById('catAccAvisoPrecio').style.display = 'none';
+  document.getElementById('resCatAcc').className = 'result';
+  if(!c) return;
+
+  document.getElementById('catAccNombre').value = c.nombre || '';
+  document.getElementById('catAccArt').value    = c.articulo || '';
+  document.getElementById('catAccPrecio').value = c.precio_ref != null ? c.precio_ref : '';
+  document.getElementById('catAccSku').value    = c.sku || '43739';
+  document.getElementById('catAccOrden').value  = c.orden != null ? c.orden : 100;
+
+  /* Renombrar NO arrastra el histórico: cada venta guardó el nombre como texto.
+     No se impide —a veces hay que corregir una falta— pero se dice cuántas
+     ventas van a quedar con el nombre viejo. */
+  const u = Number(c.usos || 0), av = document.getElementById('catAccUsos');
+  av.style.display = u ? 'block' : 'none';
+  if(u) av.innerHTML = '<b>' + u + ' venta' + (u === 1 ? '' : 's') + '</b> registrada' +
+    (u === 1 ? '' : 's') + ' con este nombre. Si lo cambias, esas ventas se quedan ' +
+    'con el nombre anterior: el reporte ya entregado no se mueve.';
+}
+
+function catAccNuevo(){
+  catAccFicha({ id:null, nombre:'', articulo:'', precio_ref:'', sku:'43739',
+                orden:100, usos:0 });
+  document.getElementById('catAccNombre').focus();
+}
+
+function catAccElegir(i){ if(_catAcc[i]) catAccFicha(_catAcc[i]); }
+
+/* Aviso, no candado: el servidor rechaza el código REPETIDO, pero el empate de
+   PREFIJO es legal y aun así rompe la propuesta automática. */
+function catAccMirarArt(){
+  const caja = document.getElementById('catAccAvisoArt');
+  const otro = accChoca(document.getElementById('catAccArt').value, _catAcc, _catAccId);
+  caja.style.display = otro ? 'block' : 'none';
+  if(otro) caja.innerHTML = 'Se parece demasiado a <b>' + escHtml(otro.nombre) + '</b> (' +
+    escHtml(otro.articulo) + '). Cuando dos códigos empiezan igual, la app <b>no ' +
+    'propone ninguno</b> de los dos al leer el ticket y hay que elegirlos a mano. ' +
+    'Se puede guardar así, pero cambiando alguna letra del principio se evita.';
+}
+
+/* Dos productos al mismo precio dejan de marcarse solos: es el caso de MICA HR
+   y MICA MATTE, los $149 que en julio hubo que abrir uno por uno. */
+function catAccMirarPrecio(){
+  const p = Number(String(document.getElementById('catAccPrecio').value)
+                     .replace(/[^0-9.]/g, '')) || 0;
+  const caja = document.getElementById('catAccAvisoPrecio');
+  const otro = p ? _catAcc.find(c => c.activo && c.id !== _catAccId &&
+                        Math.abs(Number(c.precio_ref || 0) - p) < 0.5) : null;
+  caja.style.display = otro ? 'block' : 'none';
+  if(otro) caja.innerHTML = '<b>' + escHtml(otro.nombre) + '</b> cuesta lo mismo. Al ' +
+    'leer un ticket de ' + money(p) + ' la app mostrará los dos arriba, pero no ' +
+    'marcará ninguno: habrá que elegir a mano cuál fue.';
+}
+
+async function catAccGuardar(){
+  const nombre = document.getElementById('catAccNombre').value.trim();
+  if(!nombre) return showResult('resCatAcc', false, 'Ponle nombre al producto.');
+
+  const precioTxt = document.getElementById('catAccPrecio').value;
+  const r = await sbEscribir('accesorio_catalogo_guardar', {
+    p_nombre:   nombre,
+    p_precio:   precioTxt === '' ? null : Number(String(precioTxt).replace(/[^0-9.]/g, '')),
+    p_orden:    Number(document.getElementById('catAccOrden').value) || 100,
+    p_id:       _catAccId,
+    p_articulo: document.getElementById('catAccArt').value.trim(),
+    p_sku:      document.getElementById('catAccSku').value.trim() || '43739',
+    p_quien:    _miEmpno()
+  });
+  if(!r || r.ok !== true){
+    return showResult('resCatAcc', false, (r && r.error) ? escHtml(String(r.error))
+      : 'No se pudo guardar. Revisa la conexión.');
+  }
+  showResult('resCatAcc', true, '✅ ' + escHtml(nombre) + (_catAccId ? ' actualizado.' : ' agregado.'));
+  await cargarCatAcc();          // se relee: así se ve tal como quedó guardado
+}
+
+async function catAccBaja(i){
+  const c = _catAcc[i];
+  if(!c) return;
+  const r = await sbEscribir('accesorio_catalogo_baja',
+    { p_id: c.id, p_activo: !c.activo, p_quien: _miEmpno() });
+  if(!r || r.ok !== true) return toast((r && r.error) || 'No se pudo cambiar', false);
+  toast(c.activo ? 'Producto dado de baja' : 'Producto activado', true);
+  await cargarCatAcc();
+}
+
 
 /* ================================================================
    TAB CATÁLOGO — Catálogo de referencia (SKU + desc + EAN/UPC)

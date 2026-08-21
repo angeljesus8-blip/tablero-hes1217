@@ -763,6 +763,38 @@ def r_precache():
                       'publicados, y la app servira una version vieja sin avisar')
 
 
+# ── 13-bis · Los .js que carga cada página existen y se precachean ──────
+# 20-ago-2026, al sacar `accClave`/`accPrefijo` de captura_series.html a
+# `acc_codigos.js` para que Admin usara LA MISMA regla y no una copia.
+#
+# Compartir código entre páginas crea una dependencia que antes no había, y
+# falla de la peor manera: el <script src> que no llega no rompe la página al
+# abrirla —rompe la primera función que use lo que traía—. Aquí sería al
+# teclear un código de artículo, con un ReferenceError que solo se ve en la
+# consola del teléfono.
+#
+# Y si el archivo existe pero no está en ARCHIVOS del service worker, funciona
+# con red y falla sin ella: el peor de los dos mundos, porque pasa las pruebas.
+def r_scripts_locales():
+    sw = leer('sw.js') or ''
+    for pagina in ('index.html', 'tablero.html', 'captura_series.html',
+                   'admin.html', 'comisiones.html', 'horarios.html',
+                   'actualizar_datos.html'):
+        s = leer(pagina)
+        if s is None:
+            continue
+        for src in re.findall(r'<script[^>]+src="\./([^"]+\.js)"', s):
+            if not os.path.exists(os.path.join(BASE, src)):
+                falla('scripts', '%s carga ./%s y ese archivo no existe: la '
+                                 'pagina abre igual y revienta al usar lo que '
+                                 'traia' % (pagina, src))
+                continue
+            if ("'./%s'" % src) not in sw and ('"./%s"' % src) not in sw:
+                falla('scripts', './%s lo carga %s pero no esta en ARCHIVOS de '
+                                 'sw.js: funciona con red y falla sin ella'
+                                 % (src, pagina))
+
+
 # ── 14 · Que la app FUNCIONE, no solo que compile ───────────
 # Las reglas de arriba leen el código. Éstas lo ejecutan: pintan las seis
 # pantallas del tablero con una tienda inventada y recorren las 64 formas de
@@ -826,7 +858,7 @@ def main():
     r_sintaxis(); r_helpers(); r_version(staged); r_copias(); r_cupo()
     r_preventa_sb(); r_preventa_stock(); r_cargas_sb(); r_lectura_con_escritura()
     r_porteros(); r_contrato_sql(); r_join_sql()
-    r_personales(); r_secretos(); r_silencios(); r_cadenas(); r_precache(); r_pruebas()
+    r_personales(); r_secretos(); r_silencios(); r_cadenas(); r_precache(); r_scripts_locales(); r_pruebas()
 
     for regla, msg in avisos:
         print('  aviso  [%s] %s' % (regla, msg))
