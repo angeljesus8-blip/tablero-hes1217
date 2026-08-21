@@ -99,6 +99,15 @@
   .dup-tag{ font-size:9px; font-weight:800; color:var(--naranja); background:#fff5ee;
     padding:2px 6px; border-radius:5px; margin-left:6px; }
 
+  /* Venta abierta (20-ago-2026) */
+  .venta-abierta{ display:none; align-items:center; gap:10px; margin-top:10px;
+    padding:10px 12px; border-radius:10px; background:#eaf7ee;
+    border:1.5px solid var(--verde); font-size:13px; color:#1c6b34; font-weight:700; }
+  .venta-abierta.show{ display:flex; }
+  .venta-abierta span{ flex:1; }
+  .venta-abierta button{ background:var(--verde); color:#fff; border:none;
+    border-radius:8px; padding:8px 12px; font-size:12.5px; font-weight:800;
+    font-family:inherit; cursor:pointer; white-space:nowrap; }
   .recon-warn{ display:none; background:#fff5ee; color:#a8480f; border:1.5px solid #f7c9a6;
     border-radius:10px; padding:9px 12px; font-size:12.5px; font-weight:600; margin:2px 0 10px; line-height:1.4; }
   .recon-warn.show{ display:block; }
@@ -282,6 +291,13 @@
      esta lista conviven. */
   .vd-ent.vd-cobro{ color:#1c6b34; background:#eaf7ee; }
   .vd-fila.cobro{ background:#fbfffc; }
+  /* Venta con varios artículos: cabecera y un filete a la izquierda que los ata
+     visualmente. Las de un solo artículo no llevan cabecera — seria ruido en la
+     mayoria de las filas. */
+  .vd-cab{ display:flex; gap:8px; font-size:11.5px; font-weight:800; color:var(--azul);
+    background:#eef4fb; padding:5px 12px; margin-top:6px; border-radius:8px 8px 0 0; }
+  .vd-cab b{ margin-left:auto; }
+  .vd-fila.engrupo{ border-left:3px solid #cfe0f3; padding-left:9px; }
   .vd-sinserie{ color:#bbb; font-style:italic; font-weight:600;
     font-family:Montserrat,sans-serif; letter-spacing:0; }
   .vd-fila.hecha .vd-ent{ color:#cfcfcf; background:#f7f7f7; }
@@ -374,6 +390,14 @@
     </label>
     <div class="recon-warn" id="reconWarn">⚠ Producto NO reconocido — pudo ser mala lectura. Revisa o re-toma la foto.</div>
     <button class="btn btn-add" id="btnAdd" style="margin-top:6px;">＋ Agregar al reporte</button>
+
+    <!-- Venta abierta: se ve SIEMPRE mientras lo esté. Olvidarse de cerrar es
+         el único fallo de este diseño y no da error — pega la compra del
+         siguiente cliente a la anterior. Que esté a la vista es el arreglo. -->
+    <div class="venta-abierta" id="ventaAbierta">
+      <span id="ventaAbiertaTxt"></span>
+      <button onclick="cerrarVentaGrupo()">✓ Cerrar venta</button>
+    </div>
   </div>
 
   <!-- Modo preventa: se enciende con ?apartado=<id>&accion=asignar|entregar -->
@@ -544,7 +568,8 @@ function _sbCuerpo(row){
     /* De dónde salió la pieza. `false` explícito y no undefined: la función SQL
        tiene DEFAULT false, pero mandarlo siempre deja la venta diciendo lo que
        es en vez de depender de un valor por omisión que alguien podría cambiar. */
-    p_de_exhibicion: row.exhibicion === true
+    p_de_exhibicion: row.exhibicion === true,
+    p_grupo: row.grupo || null
   };
 }
 
@@ -946,6 +971,68 @@ window.del = i => {
   toast('Captura eliminada', 'warn');
 };
 
+/* ── La venta abierta (20-ago-2026) ──────────────────────────────────────
+   Un cliente que se lleva un teléfono y un reloj hacía DOS ventas en el
+   reporte, y al revisar el día no había forma de saber que fue una compra.
+   Ahora los artículos se acumulan hasta que el asesor cierra la venta.
+
+   AGRUPA Y NADA MÁS. El seguro se sigue marcando por artículo, la foto sigue
+   siendo por artículo, el Assurant se sigue contando por artículo y el
+   inventario descuenta por artículo. Si eso cambiara, el attach se movería
+   solo — y la regla de combos de la tienda («2 artículos = 1 con seguro») dejaría
+   de tener sentido.
+
+   Vive en localStorage porque la PWA se cierra y se relanza cada vez que el
+   asesor manda un precio por WhatsApp (cadena 5-bis del MAPA). Perder el grupo
+   ahí partiría la venta en dos sin que nadie lo note. */
+const GKEY_VENTA = 'hes1217_venta_abierta';
+let _venta = null;      // { id, n, vend }
+
+function cargarVentaAbierta(){
+  try{ _venta = JSON.parse(localStorage.getItem(GKEY_VENTA) || 'null'); }
+  catch(e){ _venta = null; }   // ilegible: se empieza una venta nueva y ya
+  /* Si la abrió otra persona, no es la misma venta. Cerrarla sola aquí evita
+     el olvido más probable: el cambio de turno o de asesor en el mostrador. */
+  if(_venta && currentVend && _venta.vend && _venta.vend !== currentVend) _venta = null;
+  pintarVentaAbierta();
+}
+
+function guardarVentaAbierta(){
+  try{
+    if(_venta) localStorage.setItem(GKEY_VENTA, JSON.stringify(_venta));
+    else localStorage.removeItem(GKEY_VENTA);
+  }catch(e){}   // sin localStorage la venta no se agrupa, pero se guarda igual
+  pintarVentaAbierta();
+}
+
+function pintarVentaAbierta(){
+  const el = $('ventaAbierta');
+  if(!el) return;
+  const hay = !!(_venta && _venta.n > 0);
+  el.classList.toggle('show', hay);
+  if(hay){
+    $('ventaAbiertaTxt').textContent = 'Venta abierta · ' + _venta.n +
+      (_venta.n === 1 ? ' artículo' : ' artículos');
+  }
+}
+
+/* El id lo genera la app; el NÚMERO legible («venta 3») lo calcula la base al
+   leer. Así dos teléfonos capturando a la vez no pelean por el mismo número. */
+function grupoActual(){
+  if(!_venta){
+    _venta = { id: 'g' + Date.now() + Math.random().toString(36).slice(2,6),
+               n: 0, vend: currentVend || '' };
+  }
+  return _venta.id;
+}
+
+window.cerrarVentaGrupo = function(){
+  const n = _venta ? _venta.n : 0;
+  _venta = null;
+  guardarVentaAbierta();
+  if(n) toast('Venta cerrada · ' + n + (n===1?' artículo':' artículos'), 'ok');
+};
+
 // Datos capturados al hacer clic, antes del modal
 let _pendingVenta = null;
 
@@ -978,7 +1065,9 @@ window.finalizarVenta = function(conSeguro){
   const v = _pendingVenta; _pendingVenta = null;
   const item = { id:v.id, serie:v.serie, sku:v.sku, precio:v.precio,
     desc:v.desc, vend:v.vend, fecha:v.fecha, hora:v.hora, seguro:conSeguro,
-    exhibicion: v.exhibicion === true };
+    exhibicion: v.exhibicion === true,
+    // Agrupa los artículos de una misma compra. Ver `cargarVentaAbierta`.
+    grupo: grupoActual() };
   items.unshift(item); save();
   /* `exhibicion` viaja hasta el final: si se cayera aquí, la venta se guardaría
      como de bodega y descontaría una caja que sigue en el almacén, dejando
@@ -986,7 +1075,7 @@ window.finalizarVenta = function(conSeguro){
      MAPA otra vez — lo que no se nombra se pierde en silencio. */
   const pend = { id:item.id, fecha:item.fecha, hora:item.hora, serie:item.serie,
     sku:item.sku, desc:item.desc, precio:item.precio, vend:item.vend, seguro:item.seguro,
-    exhibicion: item.exhibicion };
+    exhibicion: item.exhibicion, grupo: item.grupo };
   if(v._foto){ photoMap[item.id] = v._foto; pend.foto = true; }
   /* SUPABASE PRIMERO, y por su cuenta (17-ago-2026, fase 5).
 
@@ -1000,6 +1089,7 @@ window.finalizarVenta = function(conSeguro){
      puede tumbar a la otra. La de Supabase es la que manda —de ella salen el
      stock, el Assurant y las comisiones—; la del Sheet queda de respaldo
      mientras dure la doble escritura, y es lo que se borrará en la fase 6. */
+  if(_venta){ _venta.n = (_venta.n || 0) + 1; _venta.vend = item.vend; guardarVentaAbierta(); }
   sbPend.push(_sbCuerpo(pend)); saveSbPend(); flushSupabase();
   render();
   ['serie','sku','precio','desc'].forEach(f=> $(f).value='');
@@ -1474,7 +1564,9 @@ async function cargarVentasDia(dia){
                // Cuándo se cobró el apartado: dice en qué corte está su ticket
                cobrado: v.cobrado_en ? String(v.cobrado_en).slice(0,10) : '',
                // 'venta' | 'entrega' | 'cobro' — un cobro todavía no tiene equipo
-               clase: v.clase || 'venta' };
+               clase: v.clase || 'venta',
+               // El número de venta del día: agrupa los artículos de una compra
+               num: v.venta_num || 0 };
     });
     _vdFecha  = dia;
     pintarVentasDia();
@@ -1537,23 +1629,50 @@ function pintarVentasDia(){
   const _nEquipos = _vdVentas.length - _nCobros;
   $('vdN').textContent = _nEquipos + (_nEquipos === 1 ? ' equipo' : ' equipos')
                        + (_nCobros ? ' · ' + _nCobros + ' cobro' + (_nCobros===1?'':'s') : '');
+  /* AGRUPADO POR VENTA (20-ago-2026). Un cliente que se lleva dos equipos sale
+     como una venta con sus dos artículos, y cada artículo conserva su serie,
+     su descripción y su precio: es lo que se coteja contra el ticket.
+
+     Las ventas de un solo artículo NO llevan cabecera: poner «Venta 4» encima
+     de una sola línea es ruido en la mayoría de las filas. */
+  const grupos = [];
+  for(const v of _vdVentas){
+    const ult = grupos[grupos.length - 1];
+    if(ult && ult.num === v.num && v.num) ult.items.push(v);
+    else grupos.push({ num: v.num, items: [v] });
+  }
+
   $('vdLista').innerHTML = _vdVentas.length
-    ? _vdVentas.map((v, i) => `<div class="vd-fila${ya.indexOf(v.serie) >= 0 ? ' hecha' : ''}${v.clase === 'cobro' ? ' cobro' : (v.entrega ? ' entrega' : '')}" id="vdf${i}" onclick="copiarSerie(${i})">
-        <div class="txt">
-          <div class="vd-serie">${v.serie || '<span class="vd-sinserie">sin equipo todavía</span>'}${etiquetaVenta_(v)}</div>
-          <div class="vd-det">
-            <span class="sku">${v.sku || '—'}</span>
-            <span>${v.desc || 'sin descripción'}</span>
-            <span class="precio">$${Number(String(v.precio).replace(/[^0-9.]/g,'')||0).toLocaleString('es-MX')}</span>
-            ${v.vend ? '<span>· ' + v.vend + '</span>' : ''}
-          </div>
-        </div>
-        ${v.foto ? `<button class="vd-lupa" title="Ver la foto de esta captura"
-             onclick="event.stopPropagation(); verFoto('${v.captura_id}','${(v.serie||'').replace(/'/g,'')}')">🔍</button>` : ''}
-        ${PUEDE_EDITAR && v.captura_id ? `<button class="vd-lupa" title="Corregir esta venta"
-             onclick="event.stopPropagation(); abrirEditarVenta(${i})">✏️</button>` : ''}
-        <div class="vd-check">✓</div>
-      </div>`).join('')
+    ? grupos.map(g => {
+        const varios = g.items.length > 1;
+        const tot = g.items.reduce((s, v) =>
+          s + (Number(String(v.precio).replace(/[^0-9.]/g,'')) || 0), 0);
+        const cab = varios
+          ? `<div class="vd-cab">Venta ${g.num} · ${g.items.length} artículos
+               <b>$${tot.toLocaleString('es-MX')}</b></div>`
+          : '';
+        return cab + g.items.map(v => {
+          const i = _vdVentas.indexOf(v);
+          return `<div class="vd-fila${ya.indexOf(v.serie) >= 0 ? ' hecha' : ''}${
+              v.clase === 'cobro' ? ' cobro' : (v.entrega ? ' entrega' : '')}${
+              varios ? ' engrupo' : ''}" id="vdf${i}" onclick="copiarSerie(${i})">
+            <div class="txt">
+              <div class="vd-serie">${v.serie || '<span class="vd-sinserie">sin equipo todavía</span>'}${etiquetaVenta_(v)}</div>
+              <div class="vd-det">
+                <span class="sku">${v.sku || '—'}</span>
+                <span>${v.desc || 'sin descripción'}</span>
+                <span class="precio">$${Number(String(v.precio).replace(/[^0-9.]/g,'')||0).toLocaleString('es-MX')}</span>
+                ${v.vend ? '<span>· ' + v.vend + '</span>' : ''}
+              </div>
+            </div>
+            ${v.foto ? `<button class="vd-lupa" title="Ver la foto de esta captura"
+                 onclick="event.stopPropagation(); verFoto('${v.captura_id}','${(v.serie||'').replace(/'/g,'')}')">🔍</button>` : ''}
+            ${PUEDE_EDITAR && v.captura_id ? `<button class="vd-lupa" title="Corregir esta venta"
+                 onclick="event.stopPropagation(); abrirEditarVenta(${i})">✏️</button>` : ''}
+            <div class="vd-check">✓</div>
+          </div>`;
+        }).join('');
+      }).join('')
     : `<div class="vd-vacio">Sin ventas registradas ${fechaBonita(dia) === 'hoy' ? 'hoy' : 'el ' + fechaBonita(dia)}.</div>`;
   vdBotonesNav(true);
   vdContar();
@@ -2500,7 +2619,12 @@ function updateDownloadAccess(){
   $('btnCsv').style.display = ok ? '' : 'none';
   $('lockMsg').style.display = ok ? 'none' : '';
 }
-function setVend(n){ currentVend = n || ''; $('vendLabel').textContent = currentVend || '—'; updateDownloadAccess(); }
+function setVend(n){
+  currentVend = n || '';
+  $('vendLabel').textContent = currentVend || '—';
+  updateDownloadAccess();
+  cargarVentaAbierta();   // si la venta abierta era de otro, se cierra sola
+}
 function hideGate(){ $('gate').classList.add('hide'); }
 function buildGate(){
   const cur = currentVend || localStorage.getItem(VKEY) || '';

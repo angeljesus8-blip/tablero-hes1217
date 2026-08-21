@@ -420,6 +420,42 @@ ese mapeo, y la pantalla las enseña en rojo en vez de esconderlas.
 **Se copia al portapapeles, no se genera el .xlsx**: el archivo lo comparten
 diez tiendas y sobreescribirlo pisaría el trabajo de las demás.
 
+### Los artículos de una compra van juntos *(20-ago-2026, v196)*
+
+Un cliente que se llevaba un teléfono y un reloj salía como **dos ventas**, y al
+revisar el día no había forma de saber que fue una sola compra. Ahora el asesor
+**cierra la venta a mano** y lo capturado antes queda agrupado.
+
+⚠️ **AGRUPA Y NADA MÁS.** El seguro se marca por artículo, la foto es por
+artículo, **el Assurant cuenta por artículo** y el inventario descuenta por
+artículo. Si alguien "simplificara" contando una venta con seguro en vez de dos
+artículos con uno, **el attach se movería solo** —el KPI con meta del 25 %— y la
+regla de combos de la tienda («2 artículos = 1 con seguro») dejaría de tener
+sentido. Nadie ataría ese cambio a esto meses después.
+
+Por eso `venta_guardar` es la única función que toca el grupo: ni
+`inventario_vivo`, ni `ventas_hoy`, ni `cargar_cortes` lo miran siquiera.
+
+**El número de venta no se guarda: se calcula al leer** con un `dense_rank` por
+día. Guardarlo obligaría a que alguien lo asignara, y dos teléfonos capturando a
+la vez pedirían el mismo. Calculado no hay carrera posible.
+
+**Las ventas anteriores no se reinterpretan:** sin grupo, cada una es la suya y
+se ve igual que antes.
+
+**El único fallo posible es olvidar cerrar**, y no da error: pega la compra del
+siguiente cliente a la anterior. Se cubre con dos cosas — el aviso verde
+«venta abierta · N artículos» siempre a la vista, y el cierre automático **al
+cambiar de vendedor**, que es el olvido más probable. Nada de cerrar por tiempo:
+un cliente que se lo piensa veinte minutos sigue siendo la misma venta.
+
+El grupo vive en `localStorage` porque la PWA se relanza cada vez que el asesor
+manda un precio por WhatsApp (cadena 5-bis): perderlo ahí partiría la venta en
+dos sin que nadie lo note.
+
+Lo cubren los bloques 9 y 10 de `cola_ventas.js`, comprobados rompiendo las dos
+guardias.
+
 ### Corregir una venta *(17-ago-2026, v171)*
 
 Lo último que se hacía en la hoja. Vive en el panel **Ventas del día** de
