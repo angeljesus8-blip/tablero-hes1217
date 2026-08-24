@@ -498,6 +498,56 @@ Al cerrar el panel se vacía `_accCat` para que el catálogo de capturar se vuel
 a pedir: sin eso, quien acaba de dar de alta un producto no lo vería en la lista
 hasta recargar la app, y lo daría de alta otra vez.
 
+#### La consulta de Mr Fix decía «no hay conexión» *(24-ago-2026)*
+
+*(Sin número de versión: esta página no la sirve el service worker ni llega a ningún celular del equipo, así que no sube `VERSION`.)*
+
+El técnico metía su clave y le salía **«No hay conexión»** con la red perfecta.
+No era la red: era un **405** del servidor que la pantalla llamaba así.
+
+`accesorios_tecnico_lista` y `accesorios_tecnico_foto` iban marcadas **`STABLE`**
+y llaman a `tecnico_ok_`, que sella `ultimo_acceso` con un `UPDATE`. **PostgREST
+corre las funciones `STABLE` en transacción de solo lectura**, así que el sello
+reventaba con `25006: cannot execute UPDATE in a read-only transaction`.
+
+⚠️ **Falla solo con la clave BUENA.** Con una mala, `tecnico_ok_` sale en el
+`SELECT` —antes del `UPDATE`— y devuelve cero filas tan tranquila. O sea que
+probarlo con una clave inventada, que es lo primero que hace cualquiera, **sale
+bien**; el único que ve el fallo es el técnico de verdad, que no puede
+depurarlo y cuyo mensaje le dice que el problema es suyo. Así se subió el 20-ago
+sin que nadie lo notara.
+
+**Dos cosas se arreglan, no una:**
+
+1. **La causa** — fuera el `STABLE` de las dos. Escriben: declararlo era falso.
+2. **El disfraz** — `rpc()` devolvía `null` igual sin red que con un 405, y el
+   mensaje elegía el más inocente de los dos. Ahora `RPC_FALLO` distingue
+   `'red'` de `'servidor'`, y un fallo del servidor dice **«avisa en la
+   tienda»**: reintentar es lo único que se le ocurre a quien lee «no hay
+   conexión», y aquí reintentar no arregla nada. El status queda en `console`
+   porque el 405 no dejaba rastro en ningún sitio.
+
+Es el mismo patrón de v199 —un fallo de servidor haciéndose pasar por otra cosa—
+tres commits después. Por eso esta vez la regla la vigila `verificar.py`:
+**`r_sql_volatilidad`** falla si una función marcada `STABLE`/`IMMUTABLE`
+escribe, mirando también **a quién llama**, no solo su cuerpo: ninguna de las dos
+tenía un `UPDATE` a la vista —estaba una llamada más abajo—, y esa es justo la
+razón de que se marcaran `STABLE` sin que chirriara.
+
+⚠️ **La primera versión de esa regla no cazaba el fallo que venía a cazar.**
+`UPDATE\s+\w\b` **no casa nunca**: la `\w` se come la primera letra del nombre de
+la tabla y entre esa y la segunda no hay límite de palabra. `INSERT INTO\b` sí
+casaba, así que la regla parecía funcionar —señalaba `tecnico_guardar`— mientras
+daba por buenas las dos funciones del bug. Se vio al probarla contra el fallo
+real en vez de contra uno parecido. **Una regla verde que no se ha roto a
+propósito no es evidencia de nada.**
+
+De paso, la siembra de claves: iba con `ON CONFLICT (store_id, clave) DO NOTHING`,
+que no protege de lo que importa. Una vez rotada una clave, el conflicto ya no
+salta y repegar el archivo **resucita la vieja como un tercer técnico activo** —
+reabrir un acceso retirado, sin dar error y sin que nadie mire esa tabla. Ahora
+solo siembra si la tienda no tiene ningún técnico.
+
 ### Los artículos de una compra van juntos *(20-ago-2026, v196)*
 
 Un cliente que se llevaba un teléfono y un reloj salía como **dos ventas**, y al

@@ -55,12 +55,21 @@ COMMENT ON TABLE public.tecnicos_acceso IS
   'NO es el gas_token y no sirve para escribir: solo la aceptan '
   'accesorios_tecnico_lista y accesorios_tecnico_foto.';
 
-/* Las dos claves. Se cambian con un UPDATE cuando haga falta; darlas de baja es
-   poner activo=false, que corta el acceso sin borrar el rastro de quien entro. */
+/* Siembra de arranque. Se cambian con un UPDATE cuando haga falta; darlas de
+   baja es poner activo=false, que corta el acceso sin borrar el rastro.
+
+   SOLO SIEMBRA SI LA TIENDA NO TIENE NINGUN TECNICO. Antes iba con
+   ON CONFLICT (store_id, clave) DO NOTHING, que no protege de lo que importa:
+   una vez rotada la clave, el conflicto ya no salta y repegar este archivo
+   RESUCITA la clave vieja como un tercer tecnico activo. Reabrir un acceso
+   retirado, sin dar error y sin que nadie mire esa tabla. */
 INSERT INTO public.tecnicos_acceso (store_id, nombre, clave)
-VALUES ('1217', 'Tecnico Mr Fix 1', 'mrfix-1217-a7k2m9x4qp'),
-       ('1217', 'Tecnico Mr Fix 2', 'mrfix-1217-t5w8n3z6vb')
-ON CONFLICT (store_id, clave) DO NOTHING;
+SELECT v.store_id, v.nombre, v.clave
+  FROM (VALUES ('1217', 'Tecnico Mr Fix 1', 'mrfix-1217-a7k2m9x4qp'),
+               ('1217', 'Tecnico Mr Fix 2', 'mrfix-1217-t5w8n3z6vb'))
+       AS v(store_id, nombre, clave)
+ WHERE NOT EXISTS (SELECT 1 FROM public.tecnicos_acceso t
+                    WHERE t.store_id = v.store_id);
 
 
 -- ── 2 · La clave vale, y se anota quien mira ────────────────
@@ -90,7 +99,12 @@ CREATE OR REPLACE FUNCTION public.accesorios_tecnico_lista(
 ) RETURNS TABLE (dia date, ticket text, producto text,
                  cantidad integer, precio numeric, importe numeric,
                  captura_id text, tiene_foto boolean)
-LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public
+-- VOLATILE (por omision), y NO STABLE: `tecnico_ok_` sella `ultimo_acceso` con
+-- un UPDATE. PostgREST corre las funciones STABLE en transaccion de SOLO
+-- LECTURA, asi que marcarla STABLE la reventaba con 405 / 25006.
+-- Y solo con la clave BUENA: con una mala se sale en el SELECT, antes del
+-- UPDATE, y devuelve cero filas tan tranquila.
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
 AS $fn$
 BEGIN
   IF NOT public.tecnico_ok_(p_store, p_clave) THEN
@@ -120,7 +134,8 @@ END $fn$;
 CREATE OR REPLACE FUNCTION public.accesorios_tecnico_foto(
   p_store text, p_clave text, p_captura_id text
 ) RETURNS jsonb
-LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public
+-- VOLATILE por lo mismo que la de arriba: `tecnico_ok_` escribe.
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
 AS $fn$
 DECLARE r record;
 BEGIN
