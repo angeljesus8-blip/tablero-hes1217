@@ -91,9 +91,22 @@ COMMENT ON TABLE public.reparaciones IS
 ALTER TABLE public.tiendas ADD COLUMN IF NOT EXISTS sku_reparacion text;
 
 COMMENT ON COLUMN public.tiendas.sku_reparacion IS
-  'Codigo de articulo con el que la caja cobra una reparacion de Mr Fix. Lo lee '
-  'Captura de Series del ticket para saber sola si la linea es reparacion o '
-  'accesorio. Vacio = el asesor lo elige a mano.';
+  'Codigos de articulo con los que la caja cobra una reparacion de Mr Fix, '
+  'separados por coma. Los lee Captura de Series del ticket para saber sola si '
+  'la linea es reparacion o accesorio. Vacio = el asesor lo elige a mano.';
+
+/* Los de la 1217, dichos por Angel el 24-ago-2026. SON DOS, no uno: con un solo
+   codigo configurado, las reparaciones cobradas con el otro se habrian guardado
+   como ACCESORIO y habrian entrado en el Excel de comisiones. Por eso la
+   configuracion es una lista.
+
+   Solo se siembran si la columna esta vacia: si el gerente ya los cambio desde
+   Admin —porque Mr Fix cambio de codigo—, repegar este archivo no debe
+   devolverle los viejos. */
+UPDATE public.tiendas
+   SET sku_reparacion = '100175537,100175545'
+ WHERE store_id = '1217'
+   AND coalesce(trim(sku_reparacion), '') = '';
 
 
 -- ── 2 · Guardar una, desde Captura ──────────────────────────

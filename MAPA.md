@@ -642,7 +642,13 @@ Preguntarle el tipo al asesor era pedirle que repitiera algo que **ya está
 impreso en el papel**. Los accesorios se reconocían desde el 18-ago por su
 código de artículo (`43739` y los dos de Office); faltaba el de la reparación.
 
-Ahora lo pone el gerente en **Admin → ⚙️ Configuración → Código de reparación**,
+**Son DOS códigos, no uno** —en la 1217, `100175537` y `100175545`—, y por eso
+la configuración es una **lista** separada por comas. Con uno solo, las
+reparaciones cobradas con el otro se habrían guardado como accesorio y habrían
+entrado en el Excel de comisiones. La prueba deja ese caso escrito: configurar
+solo uno **no es inofensivo**.
+
+Los pone el gerente en **Admin → ⚙️ Configuración → Códigos de reparación**,
 y al leer la foto el selector se mueve solo. **Va en la configuración de tienda y
 no escrito en la app**: Mr Fix mete producto cada temporada, y el día que cambie
 ese código tiene que poder arreglarlo el gerente sin esperar a nadie.

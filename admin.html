@@ -597,10 +597,11 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
            codigo (43739 y los dos de Office); este es el del servicio tecnico.
            Vacio = el asesor lo elige a mano, que es como estaba. -->
       <div class="field">
-        <label>Código de reparación (Mr Fix)</label>
-        <input id="cfgSkuRep" placeholder="el código con el que la caja cobra una reparación">
+        <label>Códigos de reparación (Mr Fix)</label>
+        <input id="cfgSkuRep" placeholder="100175537, 100175545">
         <p class="note" style="margin-top:6px">Sale en el ticket después de
           <code>SERVICIO:</code>, igual que el <code>43739</code> de los accesorios.
+          <b>Si son varios, sepáralos con coma.</b>
           Con él puesto, Captura de Series distingue sola las reparaciones de los
           accesorios. <b>Si lo dejas vacío</b>, el asesor lo elige a mano.</p>
       </div>
@@ -3399,7 +3400,7 @@ async function guardarConfig(){
      viene asi, y compararlos con distinto formato no casaria nunca — y no daria
      error, solo dejaria de detectar reparaciones en silencio. */
   const sku_reparacion = document.getElementById('cfgSkuRep').value
-    .trim().toUpperCase().replace(/\s+/g, '');
+    .trim().toUpperCase();
 
   const btn = document.getElementById('btnConfig');
   btn.disabled = true;
