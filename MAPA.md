@@ -553,12 +553,16 @@ La validación de la clave mira **las dos listas**. Con solo los accesorios, un
 técnico cuyo mes llevara únicamente reparaciones —que para él es un mes normal—
 leería «esa clave no es válida» y dejaría de intentarlo.
 
-⚠️ **La foto del ticket dura 7 días.** `venta_foto_guardar` limpia las más viejas
-en cada guardado, y eso vale igual para accesorios y reparaciones. Al cotejar el
-mes, lo de la primera semana **ya no se abre**. La pantalla lo dice al fallar, en
-vez de un «no se pudo abrir» que invita a reintentar toda la tarde algo que no va
-a volver. Queda pendiente decidir si la evidencia de un corte mensual merece más
-retención que la de una serie dudosa, que es para lo que se pensaron los 7 días.
+**La foto del ticket dura 90 días** *(24-ago-2026; eran 7)*. Los 7 se pensaron
+para una serie dudosa, que se reclama en caliente o no se reclama. Pero la misma
+tabla guarda los tickets de accesorio y de reparación, que son la evidencia de un
+**corte mensual**: el técnico coteja su mes el día 25 y los de la primera semana
+ya no existían. **Una evidencia que caduca antes del momento de usarla no es
+evidencia.** El coste es de espacio y está medido: a ~10 ventas al día y ~150 KB
+por foto, 90 días son unos **135 MB** contra los 10 MB de antes.
+
+La pantalla sigue diciendo el plazo al fallar, en vez de un «no se pudo abrir» que
+invita a reintentar toda la tarde algo que no va a volver.
 
 #### El ticket del accesorio, también desde la galería *(24-ago-2026, v200)*
 

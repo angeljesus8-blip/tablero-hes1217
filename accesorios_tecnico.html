@@ -296,12 +296,12 @@ async function verTicket(tipo, i){
   cont.innerHTML = '<p class="nota">Abriendo el ticket ' + esc(f.ticket) + '…</p>';
   const d = await rpc('accesorios_tecnico_foto', { p_captura_id: f.captura_id }, 20000);
   if(!d || d.ok !== true){
-    /* La foto dura 7 días —`venta_foto_guardar` limpia las viejas en cada
-       guardado—, así que al cotejar el mes lo de la primera semana ya no está.
-       Se dice, porque «no se pudo abrir» invita a reintentar toda la tarde algo
-       que no va a volver. */
+    /* La foto dura 90 días —`venta_foto_guardar` limpia las más viejas en cada
+       guardado—, que cubre el mes entero y el tiempo de cotejarlo. Se dice
+       igual, porque «no se pudo abrir» a secas invita a reintentar toda la
+       tarde algo que no va a volver. */
     cont.innerHTML = '<p class="err">No se pudo abrir ese ticket. Las fotos se ' +
-      'guardan 7 días; si el ticket es de hace más, ya no está.</p>' + antes;
+      'guardan 90 días; si el ticket es de hace más, ya no está.</p>' + antes;
     return;
   }
   cont.innerHTML = '<button class="btn sec" onclick="cargar()">← Volver</button>' +
