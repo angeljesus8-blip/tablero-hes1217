@@ -555,7 +555,10 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
         <button class="btn-pri" onclick="tecAlta()" style="width:auto;padding:10px 14px;margin:0">＋ Alta</button>
       </div>
       <p class="note" style="margin-top:8px">Dar de baja corta el acceso al momento.
-        No se borra: así queda constancia de si esa clave llegó a usarse y hasta cuándo.</p>
+        No se borra: así queda constancia de si esa clave llegó a usarse y hasta cuándo.<br>
+        <b>clave</b> le pone la que tú elijas, y la anterior deja de servir en el acto.
+        Mínimo 8 caracteres con letras y números: esa consulta está abierta en
+        internet y una corta se adivina probando.</p>
     </div>
 
     <!-- Reparaciones del mes (24-ago-2026).
@@ -1069,8 +1072,36 @@ async function cargarTecnicos(){
       <button class="btn btn-sec" style="width:auto;padding:4px 10px;font-size:11px"
         onclick="tecCopiar('${t.clave}',this)">copiar</button>
       <button class="btn btn-sec" style="width:auto;padding:4px 10px;font-size:11px"
+        onclick="tecClave(${t.id},'${String(t.nombre).replace(/'/g, "\\'")}')">clave</button>
+      <button class="btn btn-sec" style="width:auto;padding:4px 10px;font-size:11px"
         onclick="tecBaja(${t.id},${!t.activo})">${t.activo ? 'baja' : 'alta'}</button>
     </div>`).join('');
+}
+
+/* Ponerle al técnico una clave que tú eliges (24-ago-2026).
+
+   Antes solo se podía copiar la que inventaba el alta. Una clave que nadie
+   elige acaba apuntada en un papel pegado al mostrador, y no había forma de
+   cambiarla cuando un técnico dejaba de venir.
+
+   ⚠️ Las reglas de qué clave vale las pone EL SERVIDOR, no esto. Aquí se
+   comprueba lo mismo solo para no hacer ir y volver por una clave corta; si
+   esta comprobación se borrara, `tecnico_clave_poner` seguiría rechazándola.
+   Al revés —fiarlo a la pantalla— cualquiera con la consola abierta se salta el
+   mínimo, y la pantalla del técnico está abierta en internet. */
+async function tecClave(id, nombre){
+  const c = prompt('Clave nueva para ' + nombre + ':\n\n' +
+                   'Mínimo 8 caracteres, con letras y números, sin espacios.\n' +
+                   'Esta consulta está abierta en internet: una clave corta se adivina probando.');
+  if(c === null) return;                       // canceló
+  const clave = String(c).trim();
+  if(clave.length < 8){ alert('Muy corta: hacen falta 8 caracteres o más.'); return; }
+
+  const r = await sbEscribir('tecnico_clave_poner', { p_id: id, p_clave: clave });
+  if(!r || r.ok !== true){ alert((r && r.error) || 'No se pudo cambiar la clave.'); return; }
+  await cargarTecnicos();
+  alert('Listo. La clave de ' + (r.nombre || nombre) + ' es ahora:\n\n' + clave +
+        '\n\nDásela junto con el enlace de la consulta. La anterior ya no sirve.');
 }
 
 async function tecAlta(){
