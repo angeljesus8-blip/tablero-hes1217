@@ -88,6 +88,17 @@ $$;
 -- `sin_nombre` avisa de las ventas cuyo vendedor no tiene nombre de reporte.
 -- Se devuelven IGUAL, con el nombre de la app, para que se vean y se puedan
 -- arreglar — esconderlas seria entregar el reporte corto sin saberlo.
+/* DROP antes del CREATE. `CREATE OR REPLACE` NO puede cambiar el tipo de
+   retorno, y el 24-ago-2026 se le anadieron `captura_id` y `tiene_foto` al
+   RETURNS TABLE: sin esto el pegado muere con
+   `42P13: cannot change return type of existing function` y el archivo deja de
+   ser idempotente justo el dia que hay que repegarlo.
+
+   Los GRANT del final del archivo son los que lo hacen seguro: un DROP se lleva
+   los permisos por delante, y una funcion sin GRANT existe pero no la puede
+   llamar nadie — la pantalla diria «sin permiso» con todo bien puesto. */
+DROP FUNCTION IF EXISTS public.accesorios_reporte(text,integer,integer);
+
 CREATE OR REPLACE FUNCTION public.accesorios_reporte(
   p_store text,
   p_anio  integer DEFAULT NULL,

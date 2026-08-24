@@ -498,6 +498,47 @@ Al cerrar el panel se vacía `_accCat` para que el catálogo de capturar se vuel
 a pedir: sin eso, quien acaba de dar de alta un producto no lo vería en la lista
 hasta recargar la app, y lo daría de alta otra vez.
 
+#### El pegado que murió con 42P13 *(24-ago-2026)*
+
+Añadirle `captura_id` y `tiene_foto` a `accesorios_reporte` pasó todas las
+reglas, se dio por bueno, y el error salió **en el SQL Editor** con el pegado a
+medias:
+
+```
+42P13: cannot change return type of existing function
+```
+
+`CREATE OR REPLACE` **no puede cambiar el tipo de retorno**. Hace falta un
+`DROP FUNCTION` delante, y ahora lo lleva.
+
+Es de los pocos fallos que no se pueden ver leyendo el archivo, porque dependen
+de lo que **ya hay en el servidor**. Pero sí se puede ver que el `RETURNS TABLE`
+cambió respecto al último commit, y eso basta: lo vigila **`r_returns_table_drop`**.
+
+⚠️ **El `DROP` se lleva los GRANT por delante**, así que la regla exige también
+que el archivo vuelva a darlos. Una función sin `GRANT` existe pero no la puede
+llamar nadie, y la pantalla lo enseña como falta de permiso — que es exactamente
+el fallo de v199, tres días antes.
+
+**Esa regla falló dos veces antes de servir, y las dos en silencio:**
+
+1. **`git show` con `text=True`** decodifica en cp1252 en Windows y revienta con
+   el primer acento del archivo. `stdout` llegaba vacío, la regla comparaba
+   contra nada, no veía ningún cambio y **daba permiso**. Peor: un parche previo
+   —`r.stdout or ''`— había convertido ese error ruidoso en el silencio. Ahora va
+   con `encoding='utf-8'` explícito.
+2. **El extractor de columnas** era `^\s*(\w+)\s+\w`, heredado de
+   `r_contrato_sql`, que coge solo el primero de **cada línea**. Con
+   `dia integer, ticket text` en un renglón veía `dia` y se perdía `ticket`. Para
+   un aviso que enseña una muestra da igual; aquí se comparan dos listas, y **una
+   columna añadida al final de una línea que ya existía no cambiaba nada** — el
+   caso exacto que la regla venía a cazar. Ahora parte por comas de nivel
+   superior, respetando los paréntesis de `numeric(12,2)`.
+
+**Una regla que calla por no saber leer el archivo es peor que no tenerla**,
+porque además da permiso. Las dos veces se vio probándola contra el fallo real;
+ninguna se habría visto leyéndola.
+
 #### La vista del gerente *(24-ago-2026, v204)*
 
 Hasta hoy, sobre la misma venta de accesorio, **el técnico externo de Mr Fix podía
