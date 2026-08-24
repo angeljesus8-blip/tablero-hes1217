@@ -498,6 +498,57 @@ Al cerrar el panel se vacía `_accCat` para que el catálogo de capturar se vuel
 a pedir: sin eso, quien acaba de dar de alta un producto no lo vería en la lista
 hasta recargar la app, y lo daría de alta otra vez.
 
+#### La clave del técnico la pone el gerente *(24-ago-2026, v206)*
+
+Hasta hoy la clave la inventaba el alta y el gerente solo podía **copiarla**. Una
+clave que nadie elige acaba apuntada en un papel pegado al mostrador, y no había
+forma de cambiarla cuando un técnico dejaba de venir.
+
+Ahora, en **Admin → 👥 Equipo → Técnicos externos**, cada técnico tiene un botón
+**`clave`**. La anterior deja de servir en el acto.
+
+**Esto cierra además el agujero que quedaba abierto**: las dos claves estaban
+**sembradas en `supabase_tecnicos.sql`**, en un repo público que sirve la app por
+GitHub Pages. Cualquiera que diera con el repositorio las tenía, y cada push las
+volvía a publicar. Con ellas se entra a ver las ventas de la tienda y las fotos
+de los tickets. La siembra se retiró: los técnicos se dan de alta desde Admin y
+ninguna clave vuelve a pasar por el repo. Mismo motivo por el que se borró
+`comisiones_datos.js` el 1-ago.
+
+⚠️ **El mínimo son 8 caracteres y no un PIN de 4**, y no es celo: esa pantalla
+está **abierta en internet**, sin sesión ni segundo factor, así que cualquiera
+puede probar claves contra ella. 10.000 combinaciones se agotan en un rato. Se
+rechazan también las que son solo dígitos —un número de 8 cifras se prueba
+entero—, las que llevan espacios, las obvias, y las repetidas entre técnicos:
+dos con la misma clave hacen imposible saber quién entró, que es justo para lo
+que sirve `ultimo_acceso`.
+
+**Las reglas las pone el servidor, no la pantalla.** Admin comprueba la longitud
+solo para no hacer ir y volver; si esa comprobación se borrara,
+`tecnico_clave_poner` seguiría rechazando la clave. Al revés —fiarlo al
+navegador— cualquiera con la consola abierta se salta el mínimo.
+
+#### Una función definida en dos archivos *(el mismo día)*
+
+Al ir a pedir que se repegara `supabase_tecnicos.sql` se vio que
+**`accesorios_tecnico_foto` estaba definida dos veces**: allí en su versión
+original —solo accesorios— y en `supabase_reparaciones.sql` ampliada para servir
+también los tickets de reparación.
+
+**No da error: gana la última que se pegue.** Repegar el primero por un motivo
+completamente ajeno —dar de alta un técnico, cambiar una clave— habría devuelto
+la versión vieja y roto las fotos de las reparaciones, sin tocar nada
+relacionado. La función se quitó de `supabase_tecnicos.sql`, y **sus permisos se
+fueron con ella**: un `GRANT` sobre algo que ese archivo ya no crea mata el
+pegado en una base donde el otro archivo no esté todavía.
+
+Lo avisa **`r_funcion_repetida`**, y es **aviso y no falla** a propósito: en este
+repo redefinir una función en un archivo posterior *es* el mecanismo de
+migración —`ventas_detalle`, `inventario_vivo` y `apartados_lista` viven así
+desde hace meses—, y bloquear el commit obligaría a limpiar todo eso de golpe.
+Solo habla de los archivos que se tocan en ese commit, que es cuando la pregunta
+sale barata.
+
 #### El pegado que murió con 42P13 *(24-ago-2026)*
 
 Añadirle `captura_id` y `tiene_foto` a `accesorios_reporte` pasó todas las

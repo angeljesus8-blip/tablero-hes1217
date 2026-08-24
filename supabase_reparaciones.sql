@@ -267,5 +267,12 @@ REVOKE ALL ON FUNCTION public.reparaciones_tecnico_lista(text,text,integer,integ
 REVOKE ALL ON FUNCTION public.reparaciones_lista(text,text,integer,integer)                       FROM public;
 GRANT EXECUTE ON FUNCTION public.reparaciones_lista(text,text,integer,integer)                     TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.reparacion_guardar(text,text,text,numeric,date,text,text,text,text) TO anon, authenticated;
+-- `accesorios_tecnico_foto` se define AQUI (arriba), asi que sus permisos van
+-- aqui tambien: estaban en supabase_tecnicos.sql, donde ya no esta la funcion.
+-- Un GRANT sobre algo que ese archivo no crea muere al pegarlo en una base
+-- nueva, y los permisos separados de su funcion se pierden en la siguiente
+-- mudanza.
+REVOKE ALL ON FUNCTION public.accesorios_tecnico_foto(text,text,text) FROM public;
+GRANT EXECUTE ON FUNCTION public.accesorios_tecnico_foto(text,text,text) TO anon;
 -- Solo `anon`: la pantalla del tecnico entra con la clave publicable, sin sesion.
 GRANT EXECUTE ON FUNCTION public.reparaciones_tecnico_lista(text,text,integer,integer)              TO anon;
