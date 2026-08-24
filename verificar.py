@@ -948,12 +948,61 @@ def r_galeria():
                       'y eso no da error en ningún sitio.' % (p, idm.group(1)))
 
 
+# ── 18 · Las reparaciones NO entran en el Excel regional ────
+def r_reparaciones_fuera():
+    """Una reparación en el Excel de Mr Fix mueve comisiones de todo el equipo.
+
+    24-ago-2026. `accesorios_reporte` arma el pegado del Excel regional
+    —`Registro_Ventas_MrFix_Odemas_2026.xlsx`, hoja `1217 AGOS 26`, que
+    comparten diez tiendas— y lee `accesorios_ventas`. Las reparaciones viven en
+    su propia tabla justo para que no puedan colarse ahí.
+
+    Que hoy sean tablas distintas es la garantía; esta regla es la que avisa el
+    día que alguien la deshaga. Un JOIN «para verlo todo junto» en la función
+    del reporte, o un `reparaciones_lista` llamado desde la pantalla que baja el
+    Excel, no darían error: darían un Excel con importes de más y comisiones
+    para gente que no vendió nada. Y se vería, si se ve, al cuadrar la región.
+
+    Se comprueban los dos caminos, el del servidor y el de la app, porque cada
+    uno basta por su cuenta para contaminar el archivo."""
+    # A · ninguna función de reporte puede leer la tabla de reparaciones
+    for ruta in sorted(glob.glob(os.path.join(BASE, 'supabase_*.sql'))):
+        arch = os.path.basename(ruta)
+        s = leer(arch)
+        if s is None: continue
+        for m in re.finditer(r'CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+public\.(\w*reporte\w*)\s*\(',
+                             s, re.I):
+            cab = re.search(r'\bAS\s+(\$\w*\$)', s[m.end():], re.I)
+            if not cab: continue
+            tag = cab.group(1)
+            ini = m.end() + cab.end()
+            fin = s.find(tag, ini)
+            if fin < 0: continue
+            cuerpo = _sql_sin_comentarios(s[ini:fin])
+            if re.search(r'\breparaciones\b', cuerpo, re.I):
+                falla('excel-mrfix',
+                      '%s: `%s` arma el reporte del Excel regional y lee `reparaciones`. '
+                      'Esas no se cobran a la tienda: el Excel saldría con importes de más '
+                      'y comisiones para quien no vendió nada, sin dar error.'
+                      % (arch, m.group(1)))
+
+    # B · la pantalla que baja el Excel solo puede GUARDAR reparaciones, no leerlas
+    s = leer('captura_series.html')
+    if s is None: return
+    for m in re.finditer(r"sbCallCS\(\s*'(reparacion\w*|reparaciones\w*)'", s):
+        if m.group(1) != 'reparacion_guardar':
+            falla('excel-mrfix',
+                  'captura_series.html llama a `%s`, y esta es la pantalla que baja el '
+                  'Excel regional. Capturar una reparación aquí está bien; LEERLAS es lo '
+                  'que acaba metiéndolas en el pegado.' % m.group(1))
+
+
 def main():
     staged = '--staged' in sys.argv
     r_sintaxis(); r_helpers(); r_version(staged); r_copias(); r_cupo()
     r_preventa_sb(); r_preventa_stock(); r_cargas_sb(); r_lectura_con_escritura()
     r_porteros(); r_contrato_sql(); r_join_sql()
-    r_sql_volatilidad(); r_galeria()
+    r_sql_volatilidad(); r_galeria(); r_reparaciones_fuera()
     r_personales(); r_secretos(); r_silencios(); r_cadenas(); r_precache(); r_scripts_locales(); r_pruebas()
 
     for regla, msg in avisos:
