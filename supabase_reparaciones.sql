@@ -179,8 +179,9 @@ END $fn$;
 -- quedara corta seria la nueva, y nadie mira dos veces una funcion que ya
 -- existia.
 --
--- La foto dura 7 dias: `venta_foto_guardar` limpia las mas viejas en cada
--- guardado. Al cotejar el mes, lo de la primera semana ya no se abre.
+-- La foto dura 90 dias (24-ago-2026; eran 7). `venta_foto_guardar` limpia las
+-- mas viejas en cada guardado, y 90 cubre el mes entero mas el tiempo de
+-- cotejarlo, que es para lo que sirve este ticket.
 CREATE OR REPLACE FUNCTION public.accesorios_tecnico_foto(
   p_store text, p_clave text, p_captura_id text
 ) RETURNS jsonb
@@ -192,10 +193,19 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'error', 'no_autorizado');
   END IF;
 
+  /* ⚠️ El alias es `rp`, NO `r`. Esta funcion declara `r record`, y plpgsql
+     resuelve los nombres contra sus variables ANTES que contra las tablas: con
+     `FROM public.reparaciones r`, el `r.store_id` del WHERE se lee como un
+     campo de la variable —que aun no tiene valor— y la funcion entera revienta
+     con 55000 «record "r" is not assigned yet».
+
+     No falla solo la parte nueva: tumba TAMBIEN las fotos de accesorios, que
+     llevaban semanas funcionando. Un alias de dos letras que se cruza con una
+     variable, en un archivo distinto del que declara la variable. */
   IF NOT EXISTS (SELECT 1 FROM public.accesorios_ventas a
                   WHERE a.store_id = p_store AND a.captura_id = p_captura_id)
-     AND NOT EXISTS (SELECT 1 FROM public.reparaciones r
-                      WHERE r.store_id = p_store AND r.captura_id = p_captura_id) THEN
+     AND NOT EXISTS (SELECT 1 FROM public.reparaciones rp
+                      WHERE rp.store_id = p_store AND rp.captura_id = p_captura_id) THEN
     RETURN jsonb_build_object('ok', false, 'error',
                               'esa foto no es de un accesorio ni de una reparacion');
   END IF;
@@ -204,7 +214,12 @@ BEGIN
     FROM public.venta_fotos f
    WHERE f.store_id = p_store AND f.captura_id = p_captura_id;
 
-  IF r IS NULL THEN
+  /* NOT FOUND y no `r IS NULL`: si el SELECT no trajo fila, `r` se queda sin
+     asignar y preguntarle IS NULL lanza el mismo 55000 de arriba. Estaba asi
+     desde el 20-ago y no se habia visto porque la app solo enseña el boton del
+     ticket cuando `tiene_foto` es cierto — o sea que el unico camino que lo
+     alcanza es la venta cuya foto acaba de caducar a los 7 dias. */
+  IF NOT FOUND THEN
     RETURN jsonb_build_object('ok', false, 'error', 'sin foto');
   END IF;
   RETURN jsonb_build_object('ok', true, 'imagen', r.b64, 'mime', r.mime);
