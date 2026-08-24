@@ -855,6 +855,7 @@ def r_pruebas():
 
 # ── 16 · Una función que ESCRIBE no puede ir marcada STABLE ──
 def _sql_sin_comentarios(t):
+    if not t: return ''   # `git show` de un archivo que no estaba devuelve vacio
     # Los de bloque TAMBIEN: un comentario que explica por que un alias no debe
     # llamarse `r` contiene, por fuerza, el texto del alias malo. Sin quitarlos,
     # la regla se denuncia a si misma y el aviso real se pierde entre los falsos.
@@ -1064,12 +1065,103 @@ def r_alias_variable():
                       'sea valido. Cambiale el alias.' % (arch, m.group(1), alias, alias))
 
 
+# ── 20 · Cambiar el RETURNS TABLE exige DROP antes ───────────
+def _cols_returns_table(texto):
+    r"""{funcion: [columnas]} de cada RETURNS TABLE del archivo.
+
+    Se parte por comas de NIVEL SUPERIOR y se toma el primer identificador de
+    cada trozo. La version anterior usaba `^\s*(\w+)\s+\w`, que coge solo el
+    primero de cada LINEA: con `dia integer, ticket text` en un renglon veia
+    `dia` y se perdia `ticket`. Para el aviso de `r_contrato_sql` da igual
+    —enseña una muestra—, pero aqui se comparan dos listas, y una columna
+    añadida al final de una linea que ya existia no cambiaba nada. La regla
+    decia que todo estaba bien justo en el caso que venia a cazar.
+
+    Los parentesis se respetan porque `numeric(12,2)` lleva su propia coma."""
+    fuera = {}
+    for m in re.finditer(r'FUNCTION\s+public\.(\w+)\s*\([^)]*\)\s*\n?\s*RETURNS\s+TABLE\s*\(([^;]*?)\)\s*\n\s*(?:--[^\n]*\n\s*)*LANGUAGE',
+                         _sql_sin_comentarios(texto), re.I):
+        cols, trozo, hondo = [], '', 0
+        for ch in m.group(2):
+            if ch == '(': hondo += 1
+            elif ch == ')': hondo -= 1
+            if ch == ',' and hondo == 0:
+                cols.append(trozo); trozo = ''
+            else:
+                trozo += ch
+        cols.append(trozo)
+        nombres = []
+        for c in cols:
+            n = re.match(r'\s*(\w+)\s+\w', c)
+            if n: nombres.append(n.group(1).lower())
+        fuera[m.group(1)] = nombres
+    return fuera
+
+
+def r_returns_table_drop():
+    """`CREATE OR REPLACE` no puede cambiar el tipo de retorno. Da 42P13 al pegar.
+
+    24-ago-2026: a `accesorios_reporte` se le añadieron `captura_id` y
+    `tiene_foto` para poder abrir el ticket desde el reporte. El archivo pasó
+    todas las reglas, se dio por bueno y el error salió **en el SQL Editor**, con
+    el pegado a medias:
+
+        42P13: cannot change return type of existing function
+
+    Es de los pocos fallos que no se pueden ver leyendo el archivo, porque
+    dependen de lo que YA hay en el servidor. Pero sí se puede ver que el
+    RETURNS TABLE cambió respecto al último commit, y eso basta: si cambió, hace
+    falta un `DROP FUNCTION` delante.
+
+    ⚠️ `git show` va con `encoding='utf-8'` EXPLÍCITO. Con `text=True` a secas,
+    en Windows decodifica en cp1252, revienta con el primer acento del archivo y
+    deja `stdout` vacío: la regla comparaba contra nada, no encontraba ningún
+    cambio y decía que todo estaba bien. Una regla que calla por no saber leer el
+    archivo es peor que no tenerla, porque además da permiso.
+
+    ⚠️ El `DROP` se lleva los GRANT por delante. Por eso la regla exige también
+    que el archivo vuelva a dar permisos: una función sin `GRANT` existe pero no
+    la puede llamar nadie, y la pantalla dice «sin permiso» con todo bien puesto
+    —que es exactamente el fallo de v199, tres días antes—."""
+    staged = '--staged' in sys.argv
+    for arch in [c for c in git_cambiados(staged) if c.endswith('.sql')]:
+        ahora = leer(arch)
+        if ahora is None: continue
+        try:
+            ref = 'HEAD:./' + arch
+            r = subprocess.run(['git', 'show', ref], cwd=BASE,
+                               capture_output=True, timeout=20,
+                               encoding='utf-8', errors='replace')
+            if r.returncode != 0: continue      # archivo nuevo: nada que romper
+            antes = r.stdout or ''
+        except (OSError, subprocess.SubprocessError):
+            continue
+
+        viejas, nuevas = _cols_returns_table(antes), _cols_returns_table(ahora)
+        for fn, cols in nuevas.items():
+            if fn not in viejas or viejas[fn] == cols: continue
+            if not re.search(r'DROP\s+FUNCTION\s+(?:IF\s+EXISTS\s+)?public\.%s\b' % re.escape(fn),
+                             ahora, re.I):
+                falla('drop-returns',
+                      '%s: `%s` cambia sus columnas (%s -> %s) y no lleva un '
+                      'DROP FUNCTION delante. Al pegarlo saldra 42P13 y el archivo '
+                      'se quedara a medias.'
+                      % (arch, fn, ', '.join(viejas[fn]) or 'ninguna',
+                         ', '.join(cols) or 'ninguna'))
+            elif not re.search(r'GRANT\s+EXECUTE\s+ON\s+FUNCTION\s+public\.%s\b' % re.escape(fn),
+                               ahora, re.I):
+                falla('drop-returns',
+                      '%s: `%s` se DROPea pero el archivo no le vuelve a dar GRANT. '
+                      'Quedaria existiendo y sin que nadie pueda llamarla, y la '
+                      'pantalla lo ensena como falta de permiso.' % (arch, fn))
+
+
 def main():
     staged = '--staged' in sys.argv
     r_sintaxis(); r_helpers(); r_version(staged); r_copias(); r_cupo()
     r_preventa_sb(); r_preventa_stock(); r_cargas_sb(); r_lectura_con_escritura()
     r_porteros(); r_contrato_sql(); r_join_sql()
-    r_sql_volatilidad(); r_galeria(); r_reparaciones_fuera(); r_alias_variable()
+    r_sql_volatilidad(); r_galeria(); r_reparaciones_fuera(); r_alias_variable(); r_returns_table_drop()
     r_personales(); r_secretos(); r_silencios(); r_cadenas(); r_precache(); r_scripts_locales(); r_pruebas()
 
     for regla, msg in avisos:
