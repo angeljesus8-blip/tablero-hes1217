@@ -74,6 +74,28 @@ COMMENT ON TABLE public.reparaciones IS
   'llevan vendedor ni comision: la reparacion es del tecnico.';
 
 
+-- ── 1-bis · El codigo con el que se cobra una reparacion ────
+--
+-- Va en la configuracion de la tienda y NO escrito en el codigo de la app: el
+-- dia que Mr Fix lo cambie —cambian de producto cada temporada— tiene que
+-- poder arreglarlo el gerente desde Admin, sin esperar a nadie.
+--
+-- Con esto, al leer el ticket la app sabe SOLA si la linea es un accesorio o
+-- una reparacion, sin preguntarselo al asesor. Los accesorios se reconocen por
+-- su codigo de articulo (43739 y los dos de Office); este es el equivalente
+-- para el servicio tecnico.
+--
+-- Vacio = deteccion apagada, y entonces el asesor lo elige a mano como antes.
+-- Es el valor por omision a proposito: mas vale preguntar que adivinar mal, y
+-- adivinar mal aqui manda la venta a la tabla equivocada.
+ALTER TABLE public.tiendas ADD COLUMN IF NOT EXISTS sku_reparacion text;
+
+COMMENT ON COLUMN public.tiendas.sku_reparacion IS
+  'Codigo de articulo con el que la caja cobra una reparacion de Mr Fix. Lo lee '
+  'Captura de Series del ticket para saber sola si la linea es reparacion o '
+  'accesorio. Vacio = el asesor lo elige a mano.';
+
+
 -- ── 2 · Guardar una, desde Captura ──────────────────────────
 CREATE OR REPLACE FUNCTION public.reparacion_guardar(
   p_store      text,
