@@ -1156,12 +1156,54 @@ def r_returns_table_drop():
                       'pantalla lo ensena como falta de permiso.' % (arch, fn))
 
 
+# ── 21 · La misma funcion definida en dos archivos ──────────
+def r_funcion_repetida():
+    """Gana la ultima que se pegue, y repegar un archivo viejo revierte en silencio.
+
+    24-ago-2026: `accesorios_tecnico_foto` estaba definida en
+    `supabase_tecnicos.sql` —solo accesorios— y otra vez en
+    `supabase_reparaciones.sql`, ampliada para servir tambien los tickets de
+    reparacion. Repegar el primero por cualquier motivo ajeno —dar de alta un
+    tecnico, cambiar una clave— habria devuelto la version vieja y roto las
+    fotos de las reparaciones, sin tocar nada relacionado y sin dar error.
+
+    Es AVISO y no falla porque en este repo redefinir una funcion en un archivo
+    posterior es el mecanismo de migracion: `ventas_detalle`, `inventario_vivo`
+    y `apartados_lista` viven asi desde hace meses y funcionan. Bloquear el
+    commit obligaria a limpiar todo eso de golpe.
+
+    Solo habla de los archivos que se estan tocando en ESTE commit, que es
+    cuando la pregunta sale barata: si vas a pegar este archivo, mira si te
+    llevas por delante una version mas nueva de otro."""
+    tocados = set(c for c in git_cambiados('--staged' in sys.argv) if c.endswith('.sql'))
+    if not tocados: return
+
+    donde = {}
+    for ruta in sorted(glob.glob(os.path.join(BASE, 'supabase_*.sql'))):
+        arch = os.path.basename(ruta)
+        s = leer(arch)
+        if s is None: continue
+        for m in re.finditer(r'CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+public\.(\w+)\s*\(',
+                             _sql_sin_comentarios(s), re.I):
+            donde.setdefault(m.group(1), []).append(arch)
+
+    for fn, archivos in sorted(donde.items()):
+        otros = sorted(set(archivos))
+        if len(otros) < 2: continue
+        if not (tocados & set(otros)): continue
+        aviso('duplicada',
+              '`%s` se define en %d archivos: %s. Al pegar gana el ultimo, y '
+              'repegar el viejo revierte al otro sin dar error. Comprueba cual '
+              'es la version buena antes de pegar.'
+              % (fn, len(otros), ', '.join(otros)))
+
+
 def main():
     staged = '--staged' in sys.argv
     r_sintaxis(); r_helpers(); r_version(staged); r_copias(); r_cupo()
     r_preventa_sb(); r_preventa_stock(); r_cargas_sb(); r_lectura_con_escritura()
     r_porteros(); r_contrato_sql(); r_join_sql()
-    r_sql_volatilidad(); r_galeria(); r_reparaciones_fuera(); r_alias_variable(); r_returns_table_drop()
+    r_sql_volatilidad(); r_galeria(); r_reparaciones_fuera(); r_alias_variable(); r_returns_table_drop(); r_funcion_repetida()
     r_personales(); r_secretos(); r_silencios(); r_cadenas(); r_precache(); r_scripts_locales(); r_pruebas()
 
     for regla, msg in avisos:
