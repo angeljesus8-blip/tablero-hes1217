@@ -1863,6 +1863,49 @@ function accExtraer(txt){
 /* Devuelve los codigos que trae el ticket en «SERVICIO:». Se separa de la
    adivinanza para poder ENSENARLOS: cuando no se propone producto, lo primero
    que hay que saber es si el OCR leyo algo y qué. */
+/* ¿Qué es cada línea de este ticket? Lo dice EL PAPEL, no el asesor.
+
+   Los accesorios se reconocen por su código de artículo —`43739` y los dos de
+   Office— y la reparación por el suyo, que el gerente pone en
+   Admin → Configuración. Los dos salen del ticket después de `SERVICIO:`.
+
+   ⚠️ SOLO DECIDE CUANDO NO HAY DUDA. Si el ticket lleva las dos cosas, o si el
+   OCR no leyó ningún código reconocible, NO toca el selector y lo dice. El OCR
+   de esta impresora falla de verdad —`CARGA100WTS` se leyó `CARGATOONTS 2 77`—
+   y aquí equivocarse no es un campo mal puesto: manda la venta a la otra tabla.
+   Un accesorio guardado como reparación no entra en el Excel, y esa comisión no
+   se le paga a nadie sin que nada avise.
+
+   Con el código sin configurar (vacío) esto no hace nada y el asesor elige a
+   mano, como antes. Más vale preguntar que adivinar mal. */
+var SKU_REP = String((_cfgCS && _cfgCS.sku_reparacion) || '')
+                .trim().toUpperCase().replace(/\s+/g, '');
+
+function accQueEs(textoTicket){
+  if(!SKU_REP) return { tipo:null, porque:'' };
+  var codigos = accCodigos(textoTicket);
+  if(!codigos.length) return { tipo:null, porque:'' };
+
+  // Se comparan aplanados por las confusiones del OCR, igual que la adivinanza
+  // del producto: si no, un `SERVIC1O` mal leido no casaria con nada.
+  var claveRep = accClave(SKU_REP);
+  var hayRep = false, hayAcc = false;
+  for(var i = 0; i < codigos.length; i++){
+    var c = accClave(codigos[i]);
+    // El codigo de reparacion puede venir solo o con sufijo, como los de
+    // accesorio (`43739-MICAHR`): basta que empiece igual.
+    if(claveRep && c.indexOf(claveRep) === 0) hayRep = true;
+    else hayAcc = true;
+  }
+
+  if(hayRep && hayAcc){
+    return { tipo:null, porque:'Este ticket lleva accesorio Y reparación. ' +
+                                'Agrégalos uno por uno, empezando por el que quieras.' };
+  }
+  if(hayRep) return { tipo:'rep', porque:'Es una reparación: el ticket trae el código ' + SKU_REP + '.' };
+  return { tipo:'acc', porque:'' };     // accesorio es lo habitual: no hace falta decirlo
+}
+
 function accCodigos(textoTicket){
   const m = String(textoTicket || '').match(/SERVICIO\s*:?\s*([A-Z0-9\- ]{3,30})/ig);
   return (m || []).map(x => x.replace(/SERVICIO\s*:?/i, '').trim()).filter(Boolean);
@@ -2135,6 +2178,19 @@ window.accFotoElegida = function(e){
   _accOcr = accLeerTicket(f).then(function(r){
     $('accEstado').textContent = '';
     if(r.ticket && !$('accTicket').value) $('accTicket').value = r.ticket;
+
+    /* EL TICKET DECIDE QUÉ ES, no el asesor. Va antes de rellenar el importe,
+       porque de qué sea depende qué número se toma. Solo cambia el selector
+       cuando el ticket no deja lugar a dudas; si lleva las dos cosas, o si no
+       se reconoció ningún código, lo deja como está y lo dice. */
+    var que = accQueEs(r.texto);
+    if(que.tipo && que.tipo !== _accTipo) accTipo(que.tipo);
+    if(que.porque){
+      var av = $('accLeido');
+      av.innerHTML = '<b>' + esc(que.porque) + '</b>';
+      av.style.display = 'block';
+    }
+
     /* En la reparación se cobra el trabajo entero, así que manda el IMPORTE.
        En el accesorio manda el precio de LA LÍNEA del 43739: el total del
        ticket no sirve —uno de $16,962.50 llevaba un kit de $169—. Mismo campo

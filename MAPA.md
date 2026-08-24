@@ -636,6 +636,47 @@ Un mes sin reparaciones **es un resultado normal** y se dice nombrando el mes, a
 revés que el catálogo, que nunca está vacío de verdad y donde cero siempre es un
 problema.
 
+#### El ticket decide qué es, no el asesor *(24-ago-2026, v208)*
+
+Preguntarle el tipo al asesor era pedirle que repitiera algo que **ya está
+impreso en el papel**. Los accesorios se reconocían desde el 18-ago por su
+código de artículo (`43739` y los dos de Office); faltaba el de la reparación.
+
+Ahora lo pone el gerente en **Admin → ⚙️ Configuración → Código de reparación**,
+y al leer la foto el selector se mueve solo. **Va en la configuración de tienda y
+no escrito en la app**: Mr Fix mete producto cada temporada, y el día que cambie
+ese código tiene que poder arreglarlo el gerente sin esperar a nadie.
+
+⚠️ **Solo decide cuando el papel no deja dudas.** Hay tres casos en los que
+deliberadamente **no** decide y deja elegir:
+
+| caso | por qué no decide |
+|---|---|
+| El ticket lleva accesorio **y** reparación | Habría que adivinar cuál se está capturando |
+| No se reconoció ningún código | El OCR no leyó lo suficiente para saberlo |
+| El código no está configurado | Sin referencia, cualquier respuesta es inventada |
+
+**Equivocarse aquí no es un campo mal puesto: manda la venta a la otra tabla.**
+Un accesorio guardado como reparación **no entra en el Excel regional, y esa
+comisión no se le paga a nadie** — sin dar error, y sin que se vea hasta cuadrar
+la región. Al revés, una reparación colada como accesorio mueve las comisiones
+de todo el equipo.
+
+Y el OCR de esta impresora falla de verdad: `CARGA100WTS` se leyó
+`CARGATOONTS 2 77`. Por eso el código se compara **aplanado por las confusiones
+del OCR** (`accClave`), igual que la adivinanza del producto — si no, un
+`9OOOT` mal leído no casaría con `90001` y la detección se apagaría sola sin
+avisar.
+
+**Vacío = detección apagada**, y es el valor por omisión a propósito: más vale
+preguntar que adivinar mal.
+
+`pruebas/mrfix_detecta.js` corre seis tickets contra la regla, y lo que comprueba
+no es que acierte sino **cuándo se calla**. Ejecuta solo las piezas que deciden
+—`accClave`, `accCodigos`, `accQueEs`— y no la pantalla entera, para que falle
+por la regla y no por cualquier otra cosa del panel. Verificada rompiéndola por
+sus tres frenos.
+
 #### Un ticket, una foto, varios conceptos *(24-ago-2026, v207)*
 
 El selector de tipo decidía **toda la captura**, y eso rompía con el ticket más
