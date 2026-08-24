@@ -592,6 +592,18 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
         <label>URL del GAS (Apps Script)</label>
         <input id="cfgGas" type="url" placeholder="https://script.google.com/macros/s/…/exec">
       </div>
+      <!-- Con esto la app sabe SOLA, al leer el ticket, si la linea es una
+           reparacion o un accesorio. Los accesorios ya se reconocen por su
+           codigo (43739 y los dos de Office); este es el del servicio tecnico.
+           Vacio = el asesor lo elige a mano, que es como estaba. -->
+      <div class="field">
+        <label>Código de reparación (Mr Fix)</label>
+        <input id="cfgSkuRep" placeholder="el código con el que la caja cobra una reparación">
+        <p class="note" style="margin-top:6px">Sale en el ticket después de
+          <code>SERVICIO:</code>, igual que el <code>43739</code> de los accesorios.
+          Con él puesto, Captura de Series distingue sola las reparaciones de los
+          accesorios. <b>Si lo dejas vacío</b>, el asesor lo elige a mano.</p>
+      </div>
       <div class="field">
         <label>URL de la hoja de ventas (Google Sheets)</label>
         <input id="cfgSheet" type="url" placeholder="https://docs.google.com/spreadsheets/d/…/edit">
@@ -3374,6 +3386,7 @@ function loadConfig(){
   document.getElementById('cfgSheet').value = cfg.sheet_url || '';
   document.getElementById('cfgHoja').value  = cfg.hoja_auth || '';
   document.getElementById('cfgVend').value  = (cfg.vendedores||[]).join('\n');
+  document.getElementById('cfgSkuRep').value = cfg.sku_reparacion || '';
 }
 
 async function guardarConfig(){
@@ -3382,6 +3395,11 @@ async function guardarConfig(){
   const hoja_auth  = document.getElementById('cfgHoja').value.trim();
   const vendedores = document.getElementById('cfgVend').value
     .split('\n').map(s=>s.trim()).filter(Boolean);
+  /* En MAYUSCULAS y sin espacios, como los codigos del catalogo: el del ticket
+     viene asi, y compararlos con distinto formato no casaria nunca — y no daria
+     error, solo dejaria de detectar reparaciones en silencio. */
+  const sku_reparacion = document.getElementById('cfgSkuRep').value
+    .trim().toUpperCase().replace(/\s+/g, '');
 
   const btn = document.getElementById('btnConfig');
   btn.disabled = true;
@@ -3389,7 +3407,7 @@ async function guardarConfig(){
 
   try{
     const stored = JSON.parse(localStorage.getItem('hes_store')||'{}');
-    const updated = Object.assign({}, stored, {gas_url, sheet_url, hoja_auth, vendedores});
+    const updated = Object.assign({}, stored, {gas_url, sheet_url, hoja_auth, vendedores, sku_reparacion});
     localStorage.setItem('hes_store', JSON.stringify(updated));
   }catch(e){}   // cuota llena: lo que importa es que quede en Supabase, abajo
 
@@ -3408,7 +3426,7 @@ async function guardarConfig(){
         problema = 'no hay tienda en la sesión; vuelve a entrar desde el menú';
       }else{
         const { error } = await sb.from('tiendas')
-          .update({gas_url, sheet_url, hoja_auth, vendedores})
+          .update({gas_url, sheet_url, hoja_auth, vendedores, sku_reparacion})
           .eq('store_id', storeId);
         if(error) problema = error.message || 'Supabase rechazó el cambio';
       }
