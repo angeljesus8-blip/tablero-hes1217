@@ -100,19 +100,43 @@ const $ = id => document.getElementById(id);
 let CLAVE = '';
 let FILAS = [];
 
+/* POR QUE devolvio null la ultima llamada: 'red' o 'servidor'. Las dos daban
+   «No hay conexion», y esa mentira costo una tarde (20-ago-2026): las dos
+   funciones estaban marcadas STABLE y PostgREST las corre en transaccion de
+   solo lectura, asi que el sello de `ultimo_acceso` reventaba con 405 — y solo
+   con la clave BUENA, porque una mala se sale antes del UPDATE. El tecnico
+   estuvo buscando senal por el centro comercial con el fallo aqui. */
+let RPC_FALLO = '';
+
 async function rpc(fn, params, ms){
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), ms || 12000);
+  RPC_FALLO = '';
   try{
     const r = await fetch(SB_URL + '/rest/v1/rpc/' + fn, {
       method:'POST', signal: ctl.signal,
       headers:{ apikey:SB_KEY, Authorization:'Bearer '+SB_KEY, 'Content-Type':'application/json' },
       body: JSON.stringify(Object.assign({ p_store: TIENDA, p_clave: CLAVE }, params || {}))
     });
-    if(!r.ok) return null;
+    if(!r.ok){
+      RPC_FALLO = 'servidor';
+      // El detalle no se le enseña al tecnico externo, pero queda a mano de
+      // quien abra la consola: sin esto el 405 no dejaba rastro en ningun sitio.
+      console.error('rpc ' + fn + ' → HTTP ' + r.status);
+      return null;
+    }
     return await r.json();
-  }catch(e){ return null; }      // sin red o timeout: lo dice quien llama
+  }catch(e){ RPC_FALLO = 'red'; return null; }
   finally{ clearTimeout(t); }
+}
+
+// Lo que se le dice al tecnico. «Avisa en la tienda» porque un fallo del
+// servidor no lo arregla el reintentando, y reintentar es lo unico que se le
+// ocurre a quien lee «no hay conexion».
+function porQue(fallo){
+  return fallo === 'servidor'
+    ? 'La consulta no está disponible ahora mismo. Avisa en la tienda.'
+    : 'No hay conexión. Inténtalo otra vez en un momento.';
 }
 
 function llenarMeses(){
@@ -141,6 +165,7 @@ async function entrar(){
   const hoy = new Date();
   const a = await rpc('accesorios_tecnico_lista',
                       { p_anio: hoy.getFullYear(), p_mes: hoy.getMonth() + 1 });
+  const falloA = RPC_FALLO;      // la consulta del mes anterior lo sobreescribe
   const ant = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
   const b = (Array.isArray(a) && a.length) ? a
           : await rpc('accesorios_tecnico_lista',
@@ -149,7 +174,7 @@ async function entrar(){
   if(!Array.isArray(a) || (!a.length && (!Array.isArray(b) || !b.length))){
     CLAVE = '';
     $('errClave').textContent = (a === null)
-      ? 'No hay conexión. Inténtalo otra vez en un momento.'
+      ? porQue(falloA)
       : 'Esa clave no es válida, o no hay ventas registradas todavía.';
     $('errClave').style.display = 'block';
     return;
@@ -176,7 +201,7 @@ async function cargar(){
 
   const filas = await rpc('accesorios_tecnico_lista', { p_anio: anio, p_mes: mes });
   if(filas === null){
-    $('lista').innerHTML = '<p class="err">No hay conexión.</p>';
+    $('lista').innerHTML = '<p class="err">' + esc(porQue(RPC_FALLO)) + '</p>';
     return;
   }
   FILAS = filas;
