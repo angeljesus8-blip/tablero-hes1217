@@ -498,6 +498,26 @@ Al cerrar el panel se vacía `_accCat` para que el catálogo de capturar se vuel
 a pedir: sin eso, quien acaba de dar de alta un producto no lo vería en la lista
 hasta recargar la app, y lo daría de alta otra vez.
 
+#### El ticket del accesorio, también desde la galería *(24-ago-2026, v200)*
+
+`capture="environment"` no es una preferencia: en el celular **abre la cámara y
+deja fuera el carrete**. Así que el ticket que ya estaba en el teléfono —el que
+se captura al cerrar el día, o el que un compañero mandó por WhatsApp— no había
+forma de subirlo, y esa venta se quedaba sin evidencia. Que es justo la que hace
+falta cuando el OCR lee mal el producto.
+
+**Son dos inputs, no uno sin `capture`.** Quitarlo sin más arregla el caso raro
+y estropea el normal: el asesor con el cliente delante pasaría de disparar la
+cámara a elegir en un menú. Mismo par que ya tenían las series arriba
+(`fileCam` / `fileGal`), y las dos entradas acaban en `accFotoElegida`, para que
+no haya una foto de galería que se guarde distinto de una de cámara.
+
+⚠️ Lo vigila **`r_galeria`**: un input de galería con `capture` puesto es un
+botón que aparece, se pulsa, abre la cámara y no hace lo suyo. **No da error, no
+deja pantalla en blanco** — el asesor supone que el teléfono es así. Es el fallo
+de copiar el input de la cámara para hacer el de al lado. Comprobada rompiéndola
+en los dos inputs.
+
 #### La consulta de Mr Fix decía «no hay conexión» *(24-ago-2026)*
 
 *(Sin número de versión: esta página no la sirve el service worker ni llega a ningún celular del equipo, así que no sube `VERSION`.)*

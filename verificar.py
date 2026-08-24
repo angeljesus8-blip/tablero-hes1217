@@ -922,12 +922,38 @@ def r_sql_volatilidad():
                   % (arch, n, fija, fija))
 
 
+# ── 17 · Un botón de galería que abre la cámara ─────────────
+def r_galeria():
+    """`capture` en el input de la galería la anula, y no se ve por ningún lado.
+
+    24-ago-2026: el ticket del accesorio solo se podía fotografiar en el momento
+    —`capture="environment"` ABRE LA CÁMARA y deja fuera el carrete—, así que un
+    ticket ya guardado en el teléfono no había forma de subirlo.
+
+    El fallo que vigila esta regla es el de después: copiar el input de la cámara
+    para hacer el de la galería y dejarle el `capture` puesto. El botón aparece,
+    se pulsa, se abre la cámara y el asesor supone que el teléfono es así. No hay
+    error, no hay pantalla en blanco: hay una función que dice estar y no está."""
+    for p in HTML + SUELTOS:
+        s = leer(p)
+        if s is None: continue
+        for m in re.finditer(r'<input[^>]*type="file"[^>]*>', s, re.I):
+            tag = m.group(0)
+            idm = re.search(r'id="([^"]+)"', tag)
+            if not idm or 'image/' not in tag: continue
+            if re.search(r'gal', idm.group(1), re.I) and 'capture' in tag.lower():
+                falla('galeria',
+                      '%s: el input `%s` es el de la galería y lleva `capture`, '
+                      'que abre la cámara. El botón estaría ahí sin hacer lo suyo, '
+                      'y eso no da error en ningún sitio.' % (p, idm.group(1)))
+
+
 def main():
     staged = '--staged' in sys.argv
     r_sintaxis(); r_helpers(); r_version(staged); r_copias(); r_cupo()
     r_preventa_sb(); r_preventa_stock(); r_cargas_sb(); r_lectura_con_escritura()
     r_porteros(); r_contrato_sql(); r_join_sql()
-    r_sql_volatilidad()
+    r_sql_volatilidad(); r_galeria()
     r_personales(); r_secretos(); r_silencios(); r_cadenas(); r_precache(); r_scripts_locales(); r_pruebas()
 
     for regla, msg in avisos:
