@@ -170,6 +170,42 @@ BEGIN
 END $fn$;
 
 
+-- ── 3-bis · Las del mes, para el gerente ────────────────────
+--
+-- Una funcion aparte de la del tecnico y no la misma con dos porteros: el
+-- tecnico entra con su clave y el gerente con el token de la tienda, y meter
+-- las dos credenciales en un solo `IF ... OR ...` hace que aflojar el portero
+-- para uno se lo afloje al otro sin que se vea.
+--
+-- Devuelve `capturado_por` —quien la registro—, que el tecnico NO ve: a el le
+-- toca su dinero, no quien de la tienda tecleo el ticket.
+CREATE OR REPLACE FUNCTION public.reparaciones_lista(
+  p_store text, p_token text,
+  p_anio integer DEFAULT NULL, p_mes integer DEFAULT NULL
+) RETURNS TABLE (dia date, ticket text, importe numeric, capturado_por text,
+                 captura_id text, tiene_foto boolean)
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public
+AS $fn$
+BEGIN
+  -- STABLE aqui SI: `escritura_ok_` solo lee, no sella nada. La del tecnico no
+  -- puede serlo porque `tecnico_ok_` escribe el ultimo acceso.
+  IF NOT public.escritura_ok_(p_store, p_token) THEN
+    RETURN;
+  END IF;
+  RETURN QUERY
+    SELECT r.dia, r.ticket, r.importe, r.capturado_por, r.captura_id,
+           EXISTS (SELECT 1 FROM public.venta_fotos f
+                    WHERE f.store_id = r.store_id AND f.captura_id = r.captura_id)
+    FROM public.reparaciones r
+    WHERE r.store_id = p_store
+      AND extract(year  from r.dia)::int =
+          coalesce(p_anio, extract(year  from (now() AT TIME ZONE 'America/Mexico_City'))::int)
+      AND extract(month from r.dia)::int =
+          coalesce(p_mes,  extract(month from (now() AT TIME ZONE 'America/Mexico_City'))::int)
+    ORDER BY r.dia, r.recibida_en;
+END $fn$;
+
+
 -- ── 4 · La foto, ahora tambien de una reparacion ────────────
 --
 -- Se AMPLIA `accesorios_tecnico_foto` en vez de escribir una gemela: el candado
@@ -228,6 +264,8 @@ END $fn$;
 -- ── 5 · Permisos ────────────────────────────────────────────
 REVOKE ALL ON FUNCTION public.reparacion_guardar(text,text,text,numeric,date,text,text,text,text) FROM public;
 REVOKE ALL ON FUNCTION public.reparaciones_tecnico_lista(text,text,integer,integer)               FROM public;
+REVOKE ALL ON FUNCTION public.reparaciones_lista(text,text,integer,integer)                       FROM public;
+GRANT EXECUTE ON FUNCTION public.reparaciones_lista(text,text,integer,integer)                     TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.reparacion_guardar(text,text,text,numeric,date,text,text,text,text) TO anon, authenticated;
 -- Solo `anon`: la pantalla del tecnico entra con la clave publicable, sin sesion.
 GRANT EXECUTE ON FUNCTION public.reparaciones_tecnico_lista(text,text,integer,integer)              TO anon;

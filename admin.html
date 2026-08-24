@@ -220,7 +220,7 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
     <button onclick="tab('eol',this)">🏷️ EOL</button>
     <button onclick="tab('avisos',this);cargarListaAvisos()">📢 Avisos</button>
     <button onclick="tab('comis',this);cargarComisionesCloud()">💰 Comisiones</button>
-    <button onclick="tab('equipo',this);cargarEquipo();cargarTecnicos()">👥 Equipo</button>
+    <button onclick="tab('equipo',this);cargarEquipo();cargarTecnicos();repaMeses()">👥 Equipo</button>
     <button onclick="tab('config',this);loadConfig()">⚙️ Config</button>
   </div>
 
@@ -556,6 +556,28 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
       </div>
       <p class="note" style="margin-top:8px">Dar de baja corta el acceso al momento.
         No se borra: así queda constancia de si esa clave llegó a usarse y hasta cuándo.</p>
+    </div>
+
+    <!-- Reparaciones del mes (24-ago-2026).
+
+         AQUÍ y no en Captura de Series a propósito. Captura es la pantalla que
+         baja el Excel regional de comisiones, y las reparaciones no van a ese
+         Excel: que esa pantalla no pueda ni leerlas es lo que lo garantiza, y
+         lo vigila `r_reparaciones_fuera` en verificar.py. Revisar el mes es
+         además trabajo de gestión, no de piso con un cliente delante. -->
+    <div class="card">
+      <h2>🔧 Reparaciones del mes</h2>
+      <p class="note">Los tickets que el equipo captura en
+        <b>Captura&nbsp;→&nbsp;🔧&nbsp;Reparación</b>. <b>No entran en el Excel de
+        comisiones</b> ni cuentan como venta de la tienda: son de Mr&nbsp;Fix.
+        Es lo mismo que ve el técnico en su pantalla, más quién lo registró.</p>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+        <select id="repaMes" onchange="repaCargar()" style="flex:1"></select>
+        <button class="btn-pri" onclick="repaCargar()"
+                style="width:auto;padding:10px 14px;margin:0">Ver</button>
+      </div>
+      <div id="repaResumen" class="note" style="margin-bottom:8px"></div>
+      <div id="repaLista"><p class="note">Elige un mes para verlas.</p></div>
     </div>
   </div>
 
@@ -1059,6 +1081,104 @@ async function tecAlta(){
   document.getElementById('tecNombre').value = '';
   await cargarTecnicos();
   alert("Listo. Su clave es:\n\n" + r.clave + "\n\nDasela junto con el enlace de la consulta.");
+}
+
+
+/* ── Reparaciones del mes (24-ago-2026) ──────────────────────────────────
+
+   Lo que el gerente no tenía: hasta hoy el asesor las capturaba y el técnico
+   externo las consultaba, y el único sin pantalla era el dueño de la tienda.
+
+   Vive en Admin y no en Captura porque Captura es la pantalla que baja el Excel
+   regional, y las reparaciones no van a ese Excel. Que no pueda ni leerlas es
+   lo que lo garantiza; `r_reparaciones_fuera` lo vigila. */
+const REPA_MESES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO',
+                    'AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+let _repaFilas = [];
+
+function repaMeses(){
+  const s = document.getElementById('repaMes');
+  if(!s || s.options.length) return;
+  const hoy = new Date();
+  let html = '';
+  for(let i = 0; i < 12; i++){
+    const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
+    html += '<option value="' + d.getFullYear() + '-' + (d.getMonth()+1) + '">'
+          + REPA_MESES[d.getMonth()] + ' ' + d.getFullYear() + '</option>';
+  }
+  s.innerHTML = html;
+}
+
+async function repaCargar(){
+  repaMeses();
+  const sel = document.getElementById('repaMes');
+  const [anio, mes] = (sel.value || '').split('-').map(Number);
+  const cont = document.getElementById('repaLista');
+  const res = document.getElementById('repaResumen');
+  cont.innerHTML = '<p class="note">Consultando…</p>';
+  res.textContent = '';
+
+  /* `p_token` explícito: `sbLeer` no lo manda solo —solo `sbEscribir` lo hace—
+     y esta función lo exige. Es el fallo de v199 con el catálogo, que devolvía
+     cero filas y la pantalla lo achacaba a falta de permiso. */
+  const filas = await sbLeer('reparaciones_lista',
+                             { p_token: GAS_TOKEN, p_anio: anio, p_mes: mes });
+  _repaFilas = filas;
+
+  if(!filas.length){
+    /* Aquí cero SÍ es un resultado normal —un mes sin reparaciones es posible—,
+       al revés que en el catálogo, que nunca está vacío de verdad. Por eso se
+       dice el mes: así se ve que la consulta respondió y no que se colgó. */
+    cont.innerHTML = '<p class="note">No hay reparaciones en ' + REPA_MESES[mes-1] + '.</p>';
+    return;
+  }
+
+  const total = filas.reduce((s, f) => s + Number(f.importe || 0), 0);
+  res.innerHTML = '<b>' + filas.length + '</b> reparación(es) · <b>$' +
+    total.toLocaleString('es-MX', {minimumFractionDigits:2}) + '</b> ' +
+    '<span style="color:var(--gris)">— no entra en el Excel de comisiones</span>';
+
+  cont.innerHTML = filas.map((f, i) =>
+    '<div style="display:flex;gap:8px;align-items:baseline;padding:7px 0;' +
+    'border-bottom:1px solid #f4f4f4;font-size:12.5px">' +
+      '<b style="width:22px;color:#bbb">' + String(f.dia).slice(8,10) + '</b>' +
+      '<span style="font-family:ui-monospace,monospace;color:var(--gris);font-size:11.5px">' +
+        esc(f.ticket) + '</span>' +
+      '<span style="flex:1;color:var(--gris)">' +
+        (f.capturado_por ? 'capturó ' + esc(f.capturado_por) : '') + '</span>' +
+      '<b style="color:#1c9c4f">$' + Number(f.importe).toLocaleString('es-MX') + '</b>' +
+      (f.tiene_foto
+        ? '<button class="btn btn-sec" style="width:auto;padding:4px 10px;font-size:11px"' +
+          ' onclick="repaFoto(' + i + ')">ticket</button>'
+        : '<span style="width:56px"></span>') +
+    '</div>').join('');
+}
+
+/* Se pasa el ÍNDICE y no el captura_id: el id acabaría dentro de un onclick
+   como texto, y ahí una comilla en el dato rompe el atributo. Del índice no
+   sale nada que el navegador tenga que interpretar. */
+async function repaFoto(i){
+  const f = _repaFilas[i];
+  if(!f) return;
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:300;' +
+    'display:flex;align-items:center;justify-content:center;padding:16px';
+  box.innerHTML = '<div style="background:#fff;border-radius:14px;max-width:560px;width:100%;' +
+    'max-height:88vh;overflow:auto;padding:14px"><b>Ticket ' + esc(f.ticket) +
+    '</b><div id="repaFotoCuerpo" style="margin-top:10px">Cargando…</div></div>';
+  box.onclick = () => box.remove();
+  document.body.appendChild(box);
+
+  // Es una LECTURA, pero va por `sbEscribir` porque necesita el token de tienda
+  // y devuelve un objeto, no filas. `sbLeer` no manda token y exige un array.
+  const d = await sbEscribir('venta_foto_leer', { p_captura_id: String(f.captura_id) });
+  const c = document.getElementById('repaFotoCuerpo');
+  if(!c) return;                       // lo cerró antes de que llegara
+  c.innerHTML = (d && d.ok === true)
+    ? '<img src="data:' + (d.mime || 'image/jpeg') + ';base64,' + d.b64 +
+      '" style="width:100%;border-radius:10px">'
+    : '<p class="note">No se pudo abrir. Las fotos se guardan 31 días; ' +
+      'si el ticket es de hace más, ya no está.</p>';
 }
 
 async function tecBaja(id, activar){

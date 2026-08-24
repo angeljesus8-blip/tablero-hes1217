@@ -140,6 +140,12 @@
     background:#fff; color:#777; }
   .ed-seg button.on{ border-color:var(--verde); background:#eaf7ee; color:#1c6b34; }
   .ed-seg button.on.no{ border-color:var(--gris); background:#f0f0f0; color:#555; }
+  /* Botón discreto para abrir el ticket desde una lista, sin robarle peso a la
+     fila. Mismo aspecto que el de la pantalla del técnico de Mr Fix, que hace
+     lo mismo sobre los mismos datos. */
+  .lupa{ background:none; border:1.5px solid #ddd; border-radius:7px; cursor:pointer;
+    font-size:11px; padding:3px 8px; color:var(--gris); white-space:nowrap;
+    font-family:inherit; }
   .foto-modal{ position:fixed; inset:0; z-index:300; background:rgba(0,0,0,.72);
     display:flex; align-items:center; justify-content:center; padding:16px; }
   .foto-box{ background:#fff; border-radius:14px; max-width:560px; width:100%;
@@ -2304,6 +2310,14 @@ window.cargarRep = async function(){
     $('repAviso').style.display = 'block';
   }
 
+  /* El botón del ticket (24-ago-2026). Hasta hoy el técnico externo de Mr Fix
+     podía abrir la foto del ticket desde su pantalla y el gerente no, teniendo
+     los dos delante la misma venta. Reusa `verFoto`, que ya existe para las
+     series y ya sabe pedir la imagen con el token de la tienda.
+
+     Solo cuando `tiene_foto`: un botón que a veces abre y a veces dice «no hay»
+     enseña a no fiarse de él, y entonces deja de usarse también cuando sí está.
+     Las de más de 31 días no lo traen, porque la foto ya no existe. */
   $('repLista').innerHTML = filas.map(f =>
     '<div style="display:flex;gap:8px;align-items:baseline;padding:6px 0;' +
     'border-bottom:1px solid #f4f4f4;font-size:12.5px">' +
@@ -2312,6 +2326,10 @@ window.cargarRep = async function(){
         esc(f.ticket) + '</span>' +
       '<span style="flex:1">' + esc(f.producto) + '</span>' +
       '<b style="color:var(--verde)">$' + f.precio + '</b>' +
+      (f.tiene_foto
+        ? '<button class="lupa" onclick="verFoto(\'' + esc(f.captura_id) +
+          '\',\'Ticket ' + esc(f.ticket) + '\')">ticket</button>'
+        : '<span style="width:52px"></span>') +
     '</div>').join('');
 };
 
