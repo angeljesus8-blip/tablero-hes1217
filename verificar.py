@@ -853,11 +853,81 @@ def r_pruebas():
             print('  ok     %s' % salida.splitlines()[0])
 
 
+# ── 16 · Una función que ESCRIBE no puede ir marcada STABLE ──
+def _sql_sin_comentarios(t):
+    return re.sub(r'--[^\n]*', '', t)
+
+
+def r_sql_volatilidad():
+    """Marcar STABLE algo que escribe da un 405, y la app lo llama «sin conexión».
+
+    20-ago-2026: `accesorios_tecnico_lista` y `accesorios_tecnico_foto` iban
+    marcadas STABLE y llamaban a `tecnico_ok_`, que sella `ultimo_acceso` con un
+    UPDATE. PostgREST corre las funciones STABLE en transacción de SOLO LECTURA,
+    así que reventaban con `25006: cannot execute UPDATE in a read-only
+    transaction`.
+
+    Lo que lo hizo caro fue CUÁNDO falla: solo con la clave BUENA. Con una mala,
+    `tecnico_ok_` sale en el SELECT, antes del UPDATE, y devuelve cero filas tan
+    tranquila. O sea que probarlo con una clave inventada —lo primero que hace
+    cualquiera— sale bien, y el único que ve el fallo es el técnico de verdad.
+
+    Se mira también a QUIÉN llama cada función, no solo su cuerpo: aquí ninguna
+    de las dos tenía un UPDATE a la vista. El UPDATE estaba una llamada más
+    abajo, y esa es justo la razón de que se marcaran STABLE sin que chirriara."""
+    # El nombre de la tabla al final y NO un \b: `UPDATE\s+\w\b` no casa nunca
+    # —la \w se come la primera letra y entre esa y la segunda no hay límite—,
+    # y así la regla daba por buenas justo las funciones que venía a cazar.
+    # Pedir el identificador de después deja fuera el `FOR UPDATE` de un SELECT,
+    # que es un bloqueo de fila y no una escritura.
+    ESCRIBE = re.compile(r'\b(?:INSERT\s+INTO|DELETE\s+FROM|UPDATE)\s+[\w"]', re.I)
+    funcs = {}
+    for ruta in sorted(glob.glob(os.path.join(BASE, 'supabase_*.sql'))):
+        arch = os.path.basename(ruta)
+        s = leer(arch)
+        if s is None: continue
+        for m in re.finditer(r'CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+public\.(\w+)\s*\(',
+                             s, re.I):
+            cab = re.search(r'\bAS\s+(\$\w*\$)', s[m.end():], re.I)
+            if not cab: continue
+            tag = cab.group(1)
+            ini = m.end() + cab.end()
+            fin = s.find(tag, ini)
+            if fin < 0: continue
+            # Sin comentarios: la explicación de POR QUÉ una función no es STABLE
+            # lleva la palabra STABLE escrita, y la regla se delataría sola.
+            fija = re.search(r'\b(STABLE|IMMUTABLE)\b',
+                             _sql_sin_comentarios(s[m.end(): m.end() + cab.start()]), re.I)
+            funcs[m.group(1)] = (arch, fija.group(1).upper() if fija else '',
+                                 _sql_sin_comentarios(s[ini:fin]))
+
+    escriben = set(n for n, (_, _, c) in funcs.items() if ESCRIBE.search(c))
+    for _ in range(len(funcs) + 1):          # y quien las llama, y quien llama a esas
+        nuevas = set()
+        for n, (_, _, c) in funcs.items():
+            if n in escriben: continue
+            for otra in escriben:
+                if re.search(r'\b%s\s*\(' % re.escape(otra), c):
+                    nuevas.add(n); break
+        if not nuevas: break
+        escriben |= nuevas
+
+    for n in sorted(escriben):
+        arch, fija, _ = funcs[n]
+        if fija:
+            falla('sql-volatil',
+                  '%s: `%s` va marcada %s y escribe (o llama a algo que escribe). '
+                  'PostgREST la corre en transacción de solo lectura y devuelve 405; '
+                  'la pantalla lo enseña como «no hay conexión». Quítale %s.'
+                  % (arch, n, fija, fija))
+
+
 def main():
     staged = '--staged' in sys.argv
     r_sintaxis(); r_helpers(); r_version(staged); r_copias(); r_cupo()
     r_preventa_sb(); r_preventa_stock(); r_cargas_sb(); r_lectura_con_escritura()
     r_porteros(); r_contrato_sql(); r_join_sql()
+    r_sql_volatilidad()
     r_personales(); r_secretos(); r_silencios(); r_cadenas(); r_precache(); r_scripts_locales(); r_pruebas()
 
     for regla, msg in avisos:
