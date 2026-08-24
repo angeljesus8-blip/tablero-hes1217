@@ -192,6 +192,22 @@
      para que se vea de un vistazo qué se está capturando: es el único dato del
      panel que decide a qué tabla va, y el único que no se puede corregir
      después sin borrar y volver a capturar. */
+  /* Separador de las tres partes del panel: el ticket, lo que lleva, y lo que
+     se va a agregar. Sin algo que las corte, el asesor no ve que la foto y el
+     numero son del TICKET y el producto es de UNA LINEA. */
+  .acc-sep{ font-size:11.5px; font-weight:800; color:#999; text-transform:uppercase;
+    letter-spacing:.04em; margin:16px 0 8px; padding-bottom:6px;
+    border-bottom:1px solid var(--linea); }
+  .acc-li{ display:flex; gap:8px; align-items:baseline; padding:8px 0;
+    border-bottom:1px solid #f4f4f4; font-size:13px; }
+  .acc-li .q{ flex:1; }
+  .acc-li .m{ font-weight:800; color:var(--verde); white-space:nowrap; }
+  .acc-li .x{ background:none; border:none; color:#c33; font-size:16px;
+    cursor:pointer; padding:0 4px; font-family:inherit; }
+  .acc-li .et{ font-size:10px; font-weight:800; padding:2px 6px; border-radius:5px;
+    color:#fff; white-space:nowrap; }
+  .acc-li .et.acc{ background:var(--naranja); }
+  .acc-li .et.rep{ background:var(--rojo); }
   .tipo-sel{ display:flex; gap:8px; margin-bottom:14px; }
   .tipo-sel button{ flex:1; padding:11px 8px; border:2px solid var(--linea);
     background:#fff; color:#777; border-radius:11px; font-size:13px; font-weight:800;
@@ -1947,6 +1963,10 @@ function accHoyISO(){
    llega UN ticket de Mr Fix y decide qué fue, no elige antes por qué puerta
    entrar. */
 let _accTipo = 'acc';
+// Lo que lleva el ticket que se esta armando. Se vacia al abrir el panel y al
+// guardar: si sobreviviera, el siguiente cliente heredaria los conceptos del
+// anterior y nadie lo notaria hasta cuadrar el mes.
+let _accLineas = [];
 
 window.accTipo = function(t){
   _accTipo = t;
@@ -1954,20 +1974,94 @@ window.accTipo = function(t){
   document.querySelectorAll('.tipo-sel button').forEach(b => {
     b.classList.toggle('on', b.dataset.t === t);
   });
-  $('accTitulo').textContent = rep ? 'Reparación · Mr Fix' : 'Accesorio · Mr Fix';
   $('accSoloAcc').style.display    = rep ? 'none' : '';
   $('accSoloPiezas').style.display = rep ? 'none' : '';
-  $('accSoloVend').style.display   = rep ? 'none' : '';
   $('accNotaRep').style.display    = rep ? '' : 'none';
   // En una reparación se cobra el trabajo entero: no hay precio unitario que
   // multiplicar por piezas, así que el mismo campo cambia de nombre.
   $('accPrecioLabel').textContent  = rep ? 'Importe cobrado' : 'Precio';
-  $('accGuardar').textContent = 'Guardar';
   $('accError').style.display = 'none';
 };
 
+/* Agrega un concepto al ticket que se está armando. NO guarda nada todavía:
+   guardar es del ticket entero, con su foto, al final.
+
+   Así un ticket con una mica y un cambio de pantalla se captura UNA vez y se
+   fotografía UNA vez. Antes el tipo se elegía arriba del todo y decidía toda la
+   captura, así que ese ticket obligaba a hacerlo dos veces y a fotografiar el
+   mismo papel dos veces. Lo mismo pasaba, desde el 18-ago, con dos accesorios
+   en un ticket. */
+window.accAgregarLinea = function(){
+  const err = m => { const e = $('accError'); e.textContent = m; e.style.display = 'block'; };
+  $('accError').style.display = 'none';
+
+  const rep = (_accTipo === 'rep');
+  const precio = Number(String($('accPrecio').value).replace(/[^0-9.]/g, ''));
+  const prod = $('accProd').value.trim();
+  const cant = rep ? 1 : Math.max(1, Number($('accCant').value) || 1);
+
+  if(!rep && !prod) return err('Elige qué producto fue. Es lo que el ticket no dice.');
+  if(!(precio > 0)) return err(rep ? 'Falta el importe cobrado.' : 'Falta el precio.');
+
+  /* Dos veces el mismo producto en un ticket lo rechaza el servidor
+     —UNIQUE (store_id, ticket, producto)— y ahí ya sería tarde: la mitad del
+     ticket guardada y la otra mitad no. Se dice aquí, que es cuando se puede
+     arreglar cambiando las piezas. */
+  if(!rep && _accLineas.some(l => l.tipo === 'acc' && l.producto === prod)){
+    return err('«' + prod + '» ya está en este ticket. Si fueron dos, súbele las piezas.');
+  }
+  // Y una sola reparación por ticket: es el UNIQUE (store_id, ticket) de su tabla.
+  if(rep && _accLineas.some(l => l.tipo === 'rep')){
+    return err('Este ticket ya lleva una reparación. Solo cabe una por ticket.');
+  }
+
+  let sku = '43739';
+  if(!rep){
+    /* El SKU sale del producto elegido, no se da por hecho. No todo se cobra
+       con el generico: OFFICE PERSONAL lleva 63602 y FAMILIA 57518, y los dos
+       entran igual en el reporte — cada uno con el suyo. Es la columna E del
+       Excel, asi que suponerlo llenaria mal una columna de cada dos. */
+    const op = $('accProd').selectedOptions[0];
+    sku = (op && op.dataset && op.dataset.sku) || '43739';
+  }
+
+  _accLineas.push({ tipo: _accTipo, producto: rep ? '' : prod, sku: sku,
+                    cantidad: cant, precio: precio });
+  // Se limpia lo de la línea, NO lo del ticket: el número, la fecha, la foto y
+  // quién atendió siguen siendo los mismos para lo siguiente que se agregue.
+  $('accPrecio').value = ''; $('accCant').value = '1';
+  accPintarLineas();
+  return true;      // guardarAcc lo mira para no seguir si la linea no valia
+};
+
+window.accQuitarLinea = function(i){
+  _accLineas.splice(i, 1);
+  accPintarLineas();
+};
+
+function accPintarLineas(){
+  const n = _accLineas.length;
+  $('accVacio').style.display = n ? 'none' : '';
+  $('accLineas').innerHTML = _accLineas.map((l, i) => {
+    const imp = l.precio * l.cantidad;
+    return '<div class="acc-li">' +
+      '<span class="et ' + l.tipo + '">' + (l.tipo === 'rep' ? 'REPARACIÓN' : 'ACCESORIO') + '</span>' +
+      '<span class="q">' + (l.tipo === 'rep' ? 'Servicio' : esc(l.producto)) +
+        (l.cantidad > 1 ? ' ×' + l.cantidad : '') + '</span>' +
+      '<span class="m">$' + imp.toLocaleString('es-MX') + '</span>' +
+      '<button class="x" onclick="accQuitarLinea(' + i + ')" aria-label="Quitar">✕</button>' +
+    '</div>';
+  }).join('');
+
+  const total = _accLineas.reduce((s, l) => s + l.precio * l.cantidad, 0);
+  $('accGuardar').textContent = n
+    ? 'Guardar ' + n + (n === 1 ? ' concepto' : ' conceptos') + ' · $' + total.toLocaleString('es-MX')
+    : 'Guardar';
+}
+
 window.abrirAcc = async function(){
-  accTipo('acc');            // cada venta empieza en accesorio, que es lo habitual
+  accTipo('acc');            // cada ticket empieza en accesorio, que es lo habitual
+  _accLineas = []; accPintarLineas();
   _accOcr = null;
   $('accEstado').textContent = '';
   $('accLeido').style.display = 'none';
@@ -2123,75 +2217,87 @@ window.guardarAcc = async function(){
   const err = m => { const e = $('accError'); e.textContent = m; e.style.display = 'block'; };
   $('accError').style.display = 'none';
 
-  const rep = (_accTipo === 'rep');
-  const prod = $('accProd').value.trim();
   const ticket = $('accTicket').value.trim();
-  const precio = Number(String($('accPrecio').value).replace(/[^0-9.]/g, ''));
-  const cant = Math.max(1, Number($('accCant').value) || 1);
-
-  // El producto solo se exige en el accesorio: la reparación no tiene artículo
-  // del catálogo, y pedírselo la haría incapturable.
-  if(!rep && !prod) return err('Elige qué producto fue. Es lo que el ticket no dice.');
   if(!ticket) return err('Falta el número de ticket.');
-  if(!(precio > 0)) return err(rep ? 'Falta el importe cobrado.' : 'Falta el precio.');
+
+  /* Si hay algo escrito abajo y sin agregar, se agrega solo. El olvido de
+     pulsar «Agregar» antes de «Guardar» es el más probable de este panel, y
+     castigarlo perdiendo la línea sería peor que adivinar bien: los datos están
+     delante y se ven en la lista antes de guardar. */
+  if($('accPrecio').value.trim() && !accAgregarLinea()) return;
+
+  if(!_accLineas.length){
+    return err('Este ticket está vacío. Agrega al menos un accesorio o una reparación.');
+  }
 
   const btn = $('accGuardar');
+  const etiqueta = btn.textContent;
   btn.disabled = true; btn.textContent = 'Guardando…';
   try{
-    /* LA REPARACIÓN VA A SU PROPIA TABLA, por `reparacion_guardar`. Es la única
-       línea que decide si esto acaba o no en el Excel regional: `accesorios_
-       reporte` lee `accesorios_ventas` y nunca ve `reparaciones`. Compartir el
-       panel no las junta; lo que las juntaría es compartir la tabla. */
-    if(rep){
-      const capturaId = 'r' + Date.now() + Math.random().toString(36).slice(2,6);
-      const r = await sbCallCS('reparacion_guardar', {
-        p_token: GAS_TOKEN, p_ticket: ticket, p_importe: precio,
-        p_fecha: $('accFecha').value || null,
-        p_quien: MI_EMPNO,
-        p_captura_id: capturaId,
-        p_ocr: _accOcr ? ((await _accOcr) || {}).texto || null : null
-      }, 15000);
-      if(!r || r.ok !== true) return err((r && r.error) || 'No se pudo guardar. Revisa la conexión.');
-      // La foto DESPUÉS y sin await: si falla, la reparación ya está guardada.
-      if(_accFoto) subirFoto(capturaId, _accFoto);
-      cerrarAcc();
-      toast('Reparación registrada ✓ $' + precio, 'ok');
-      return;
+    /* UN SOLO captura_id PARA TODO EL TICKET, y una sola foto. Es lo que liga
+       la evidencia con lo capturado, y el papel es el mismo para todos los
+       conceptos: subirla una vez por línea guardaría la misma imagen dos veces
+       y `venta_fotos` tiene PRIMARY KEY (store_id, captura_id), así que la
+       segunda ni entraría. */
+    const capturaId = 'm' + Date.now() + Math.random().toString(36).slice(2,6);
+    const ocr = _accOcr ? ((await _accOcr) || {}).texto || null : null;
+    const fecha = $('accFecha').value || null;
+
+    /* SECUENCIAL y no en paralelo. Si una línea falla hay que saber CUÁLES
+       quedaron guardadas: con Promise.all se pierde ese orden y el asesor no
+       sabría qué recapturar sin duplicar lo que ya entró. */
+    const hechas = [];
+    for(const l of _accLineas){
+      /* CADA CONCEPTO A SU TABLA. Esta es la línea que decide si algo acaba en
+         el Excel regional: `accesorios_reporte` lee `accesorios_ventas` y nunca
+         ve `reparaciones`. Compartir ticket y foto no las junta; lo que las
+         juntaría es compartir la tabla. */
+      const r = (l.tipo === 'rep')
+        ? await sbCallCS('reparacion_guardar', {
+            p_token: GAS_TOKEN, p_ticket: ticket, p_importe: l.precio,
+            p_fecha: fecha, p_quien: MI_EMPNO, p_captura_id: capturaId, p_ocr: ocr
+          }, 15000)
+        : await sbCallCS('accesorio_guardar', {
+            p_token: GAS_TOKEN, p_ticket: ticket, p_producto: l.producto, p_sku: l.sku,
+            p_cantidad: l.cantidad, p_precio: l.precio,
+            p_vendedor: $('accVend').value,
+            p_fecha: fecha, p_quien: MI_EMPNO, p_captura_id: capturaId, p_ocr: ocr
+          }, 15000);
+
+      if(!r || r.ok !== true){
+        /* Se dice QUE entro y que no. Un «no se pudo guardar» a secas, con la
+           mitad del ticket dentro, lleva a recapturarlo entero y a duplicar lo
+           que ya estaba. Lo ya guardado se quita de la lista, para que darle a
+           Guardar otra vez mande SOLO lo que falta. */
+        const motivo = (r && r.error) || 'revisa la conexión';
+        _accLineas = _accLineas.filter(x => hechas.indexOf(x) < 0);
+        accPintarLineas();
+        if(hechas.length){
+          // La foto se sube igual: lo que entro ya tiene su captura_id y sin
+          // ella se quedaria sin evidencia para siempre.
+          if(_accFoto) subirFoto(capturaId, _accFoto);
+          return err('Se guardaron ' + hechas.length + ' de ' +
+                     (hechas.length + _accLineas.length) + ' · ' + motivo +
+                     '. Lo que falta sigue en la lista: dale a Guardar otra vez.');
+        }
+        return err('No se pudo guardar · ' + motivo);
+      }
+      hechas.push(l);
     }
-    /* El SKU sale del producto elegido, no se da por hecho. No todo se cobra
-       con el generico: OFFICE PERSONAL lleva 63602 y FAMILIA 57518, y los dos
-       entran igual en el reporte — cada uno con el suyo. Es la columna E del
-       Excel, asi que suponerlo llenaria mal una columna de cada dos. */
-    const opSel = $('accProd').selectedOptions[0];
-    const skuSel = (opSel && opSel.dataset && opSel.dataset.sku) || '43739';
-    // El id se genera ANTES de guardar: la venta y su foto tienen que llevar el
-    // mismo, y generarlo dos veces las dejaría sin ligar.
-    const capturaId = 'a' + Date.now() + Math.random().toString(36).slice(2,6);
 
-    const r = await sbCallCS('accesorio_guardar', {
-      p_token: GAS_TOKEN, p_ticket: ticket, p_producto: prod, p_sku: skuSel,
-      p_cantidad: cant, p_precio: precio,
-      p_vendedor: $('accVend').value,
-      p_fecha: $('accFecha').value || null,
-      p_quien: MI_EMPNO,
-      p_captura_id: capturaId,
-      p_ocr: _accOcr ? ((await _accOcr) || {}).texto || null : null
-    }, 15000);
-
-    if(!r || r.ok !== true) return err((r && r.error) || 'No se pudo guardar. Revisa la conexión.');
-    if(r.duplicada) return err(r.error || 'Ese ticket ya tenía registrado ese producto.');
-
-    /* La foto, con el mismo id que liga la venta. DESPUÉS de que la venta
-       quede guardada y sin await: si la foto falla, la venta ya está — al
-       revés se perdería la venta por no poder subir una imagen. */
+    /* La foto, DESPUÉS de que todo esté guardado y sin await: si la foto falla,
+       la venta ya está. Al revés se perdería la venta por no poder subir una
+       imagen. */
     if(_accFoto) subirFoto(capturaId, _accFoto);
 
+    const n = hechas.length;
     cerrarAcc();
-    toast('Accesorio registrado ✓ $' + (r.importe != null ? r.importe : precio), 'ok');
+    toast('Ticket ' + ticket + ' registrado ✓ ' + n + (n === 1 ? ' concepto' : ' conceptos'), 'ok');
   }catch(e){
     err('No se pudo guardar · ' + ((e && e.message) || 'sin conexión'));
   }finally{
-    btn.disabled = false; btn.textContent = 'Guardar';
+    btn.disabled = false;
+    if(btn.textContent === 'Guardando…') btn.textContent = etiqueta;
   }
 };
 
@@ -2987,18 +3093,10 @@ refreshEolVenta(); // trae los EOL con 50% activo (solo exhibición)
 <div id="accPanel" class="vd" style="z-index:75">
   <div class="vd-box" style="max-height:94vh">
     <div class="vd-top">
-      <h2 id="accTitulo">Venta Mr Fix</h2>
+      <h2 id="accTitulo">Ticket de Mr Fix</h2>
       <button class="vd-cerrar" onclick="cerrarAcc()" aria-label="Cerrar">×</button>
     </div>
     <div class="vd-lista" style="padding:14px 16px">
-
-      <!-- Qué se está capturando. Va ARRIBA DEL TODO y no escondido entre los
-           campos: es el único dato que decide a qué tabla va la venta, y el
-           único que no se puede corregir después sin borrar y recapturar. -->
-      <div class="tipo-sel">
-        <button type="button" data-t="acc" class="on" onclick="accTipo('acc')">🔌 Accesorio</button>
-        <button type="button" data-t="rep" onclick="accTipo('rep')">🔧 Reparación</button>
-      </div>
 
       <!-- Solo gerente y subgerente. El reporte del mes es suyo: mueve las
            comisiones de todo el equipo y se entrega a la región. -->
@@ -3008,6 +3106,12 @@ refreshEolVenta(); // trae los EOL con 50% activo (solo exhibición)
           📊 Reporte del mes · bajar Excel</button>
       </div>
 
+      <!-- ── 1 · EL TICKET. Uno solo, y una sola foto ──────────────────
+           La foto, el número y la fecha son del PAPEL, no de cada cosa que
+           lleva. Cuando el tipo se elegía arriba del todo, un ticket con una
+           mica y un cambio de pantalla obligaba a capturar dos veces y a
+           fotografiar el mismo papel dos veces. Lo mismo pasaba, desde antes,
+           con dos accesorios en un ticket. -->
       <!-- Cámara Y galería, como arriba con fileCam/fileGal para las series.
            `capture="environment"` no es una preferencia: en el celular ABRE LA
            CÁMARA y deja fuera el carrete, así que el ticket que ya está en el
@@ -3026,10 +3130,40 @@ refreshEolVenta(); // trae los EOL con 50% activo (solo exhibición)
       <div id="accEstado" style="font-size:12.5px;color:var(--azul);font-weight:700;
            margin-top:8px;min-height:18px"></div>
 
-      <!-- Producto, piezas y vendedor son SOLO del accesorio. Una reparación no
-           tiene artículo del catálogo, ni se cobra por piezas, ni le paga
-           comisión a nadie de la tienda: se ocultan en vez de dejarlos vacíos,
-           porque un campo que no se usa se acaba llenando de cualquier cosa. -->
+      <div style="display:flex;gap:10px">
+        <div style="flex:1">
+          <label class="ed-l">N° de ticket</label>
+          <input id="accTicket" class="ed-i" inputmode="numeric" autocomplete="off">
+        </div>
+        <div style="flex:1">
+          <label class="ed-l">Fecha</label>
+          <input id="accFecha" class="ed-i" type="date">
+        </div>
+      </div>
+
+      <!-- «Atendido por» es del ticket, no de cada línea: es UNA persona la que
+           atendió esa compra. Por eso está aquí y no dentro de cada concepto. -->
+      <label class="ed-l">Lo atendió</label>
+      <select id="accVend" class="ed-i"></select>
+
+      <!-- ── 2 · LO QUE LLEVA ────────────────────────────────────────── -->
+      <div class="acc-sep">Qué lleva este ticket</div>
+      <div id="accLineas"></div>
+      <p class="ed-n" id="accVacio">Todavía no has agregado nada. Elige abajo qué
+        lleva y pulsa <b>Agregar</b>. Puedes meter accesorios y reparaciones en el
+        mismo ticket.</p>
+
+      <!-- ── 3 · AGREGAR UN CONCEPTO ─────────────────────────────────── -->
+      <div class="acc-sep">Agregar</div>
+      <!-- El selector ya no decide «qué venta es esta», sino «qué voy a agregar
+           ahora». Cada concepto se guarda en la tabla que le toca, así que un
+           ticket mixto acaba con sus accesorios en `accesorios_ventas` y su
+           reparación en `reparaciones`, con la misma foto y el mismo ticket. -->
+      <div class="tipo-sel">
+        <button type="button" data-t="acc" class="on" onclick="accTipo('acc')">🔌 Accesorio</button>
+        <button type="button" data-t="rep" onclick="accTipo('rep')">🔧 Reparación</button>
+      </div>
+
       <div id="accSoloAcc">
         <label class="ed-l">Producto</label>
         <select id="accProd" class="ed-i" onchange="accProdCambio()"></select>
@@ -3051,20 +3185,12 @@ refreshEolVenta(); // trae los EOL con 50% activo (solo exhibición)
         </div>
       </div>
 
-      <label class="ed-l">N° de ticket</label>
-      <input id="accTicket" class="ed-i" inputmode="numeric" autocomplete="off">
-
-      <div id="accSoloVend">
-        <label class="ed-l">Lo vendió</label>
-        <select id="accVend" class="ed-i"></select>
-      </div>
-
-      <label class="ed-l">Fecha</label>
-      <input id="accFecha" class="ed-i" type="date">
-
       <p class="ed-n" id="accNotaRep" style="display:none">La reparación es del
         técnico: <b>no entra en el Excel de comisiones</b> ni cuenta como venta
         de la tienda.</p>
+
+      <button class="btn" id="accAgregar" onclick="accAgregarLinea()"
+        style="width:100%;margin-top:10px;background:#eee;color:#444">＋ Agregar al ticket</button>
 
       <!-- Lo que el OCR entendió, para poder desmentirlo de un vistazo -->
       <div id="accLeido" style="display:none;margin-top:12px;padding:10px 12px;

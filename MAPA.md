@@ -636,6 +636,57 @@ Un mes sin reparaciones **es un resultado normal** y se dice nombrando el mes, a
 revés que el catálogo, que nunca está vacío de verdad y donde cero siempre es un
 problema.
 
+#### Un ticket, una foto, varios conceptos *(24-ago-2026, v207)*
+
+El selector de tipo decidía **toda la captura**, y eso rompía con el ticket más
+normal del mundo: una mica **y** un cambio de pantalla en el mismo papel. Había
+que capturar dos veces y **fotografiar el mismo ticket dos veces**. Lo señaló
+Ángel al usar la app.
+
+El defecto era más viejo y más ancho de lo que parecía: **dos accesorios en un
+ticket ya tenían ese problema desde el 18-ago**, y nadie lo había dicho.
+
+**La foto, el número y la fecha son del PAPEL. El producto y el importe son de
+cada línea.** El panel ahora sigue ese reparto, en tres partes: el ticket
+arriba, lo que lleva en medio, y abajo el formulario para agregar un concepto
+más. El selector ya no dice «qué venta es esta» sino «qué voy a agregar ahora».
+
+⚠️ **Un solo `captura_id` para todo el ticket, y una sola foto.** Es lo que liga
+la evidencia con lo capturado, y el papel es el mismo para todos los conceptos.
+Con un id por línea, la foto quedaría ligada a uno solo —`venta_fotos` tiene
+`PRIMARY KEY (store_id, captura_id)`, así que la segunda subida ni entraría— y
+el resto del ticket se quedaría sin evidencia sin dar error.
+
+**«Atendido por» es del ticket**, no de cada línea: es una persona la que
+atendió esa compra. Por eso subió arriba y ya no se oculta en reparación.
+
+**Las tablas siguen separadas.** Cada concepto se guarda con su función, así que
+un ticket mixto acaba con sus accesorios en `accesorios_ventas` y su reparación
+en `reparaciones`, con el mismo número y la misma foto. Compartir ticket y foto
+no las junta; lo que las juntaría es compartir la tabla.
+
+**Se guarda en secuencia, no en paralelo.** Si una línea falla hay que saber
+*cuáles* quedaron dentro: con `Promise.all` se pierde ese orden y el asesor no
+sabría qué recapturar sin duplicar lo que ya entró. Cuando falla a media
+escritura se dice **cuántas entraron**, se quitan de la lista las guardadas y
+las que faltan se quedan ahí, para que darle a Guardar otra vez mande solo el
+resto. La foto se sube igual si algo entró: sin ella, lo guardado se queda sin
+evidencia para siempre.
+
+Dos avisos que salen **antes** de llamar al servidor, porque allí ya sería
+tarde y con medio ticket dentro: el mismo producto dos veces en un ticket
+—`UNIQUE (store_id, ticket, producto)`— y más de una reparación —`UNIQUE
+(store_id, ticket)`—.
+
+**Y si hay algo escrito sin agregar, se agrega solo al guardar.** Olvidar pulsar
+«Agregar» es el fallo más probable de este panel, y castigarlo perdiendo la
+línea sería peor que adivinar bien: los datos están delante, y lo agregado se ve
+en la lista antes de guardar.
+
+`pruebas/mrfix_tipo.js` cubre ahora el ticket mixto: que salgan las dos
+llamadas, con **el mismo `captura_id`** y **una sola foto**. Comprobada
+rompiéndola por los dos lados — un id por línea, y el tipo ignorado.
+
 #### Un solo botón: 🔧 Mr Fix *(24-ago-2026, v205)*
 
 Accesorio y reparación empezaron siendo **dos botones** en la barra y dos paneles.
