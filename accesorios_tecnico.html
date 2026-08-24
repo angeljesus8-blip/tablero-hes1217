@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Accesorios · Mr Fix</title>
+<title>Accesorios y reparaciones · Mr Fix</title>
 <link rel="icon" href="icon-192.png">
 <!--
   CONSULTA PARA TECNICOS EXTERNOS — 20-ago-2026.
@@ -48,6 +48,8 @@
   .fila .m{ font-weight:800; color:var(--verde); white-space:nowrap; }
   .tot{ display:flex; justify-content:space-between; font-size:14px; font-weight:800;
         padding-top:10px; margin-top:4px; border-top:2px solid var(--linea); }
+  .seccion{ font-size:12.5px; font-weight:800; color:#444; margin:0 0 8px;
+            padding-bottom:7px; border-bottom:2px solid var(--linea); }
   .nota{ font-size:12px; color:var(--gris); line-height:1.5; }
   .err{ color:var(--rojo); font-weight:700; font-size:13px; }
   .lupa{ background:none; border:1.5px solid #ddd; border-radius:7px; cursor:pointer;
@@ -59,7 +61,7 @@
 <body>
 
 <header>
-  <h1>Accesorios vendidos</h1>
+  <h1>Accesorios y reparaciones</h1>
   <p id="sub">HES Angelópolis 1217</p>
 </header>
 
@@ -78,11 +80,24 @@
     <div class="caja">
       <label for="mes">Mes</label>
       <select id="mes" onchange="cargar()"></select>
+    </div>
+
+    <!-- Dos secciones y DOS TOTALES, nunca uno solo. Los accesorios van al
+         reporte de comisiones de la tienda y las reparaciones no: son dos
+         cobros distintos. Un total que los sumara daría un número que no le
+         sirve a nadie y que se prestaría a cotejarlo contra el que no es. -->
+    <div class="caja">
+      <div class="seccion">🔌 Accesorios vendidos</div>
+      <div id="lista"><p class="nota">Consultando…</p></div>
       <div class="tot" id="total" style="display:none"></div>
     </div>
+
     <div class="caja">
-      <div id="lista"><p class="nota">Consultando…</p></div>
+      <div class="seccion">🔧 Reparaciones</div>
+      <div id="listaRep"><p class="nota">Consultando…</p></div>
+      <div class="tot" id="totalRep" style="display:none"></div>
     </div>
+
     <button class="btn sec" onclick="salir()">Salir</button>
   </div>
 </main>
@@ -98,7 +113,8 @@ const MESES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO',
                'AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
 const $ = id => document.getElementById(id);
 let CLAVE = '';
-let FILAS = [];
+let FILAS = [];   // accesorios del mes que se está viendo
+let REPS  = [];   // reparaciones del mismo mes, en su propia lista
 
 /* POR QUE devolvio null la ultima llamada: 'red' o 'servidor'. Las dos daban
    «No hay conexion», y esa mentira costo una tarde (20-ago-2026): las dos
@@ -163,19 +179,20 @@ async function entrar(){
      dejó de servir. Por eso se prueba contra el mes ANTERIOR también. */
   llenarMeses();
   const hoy = new Date();
-  const a = await rpc('accesorios_tecnico_lista',
-                      { p_anio: hoy.getFullYear(), p_mes: hoy.getMonth() + 1 });
-  const falloA = RPC_FALLO;      // la consulta del mes anterior lo sobreescribe
   const ant = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
-  const b = (Array.isArray(a) && a.length) ? a
-          : await rpc('accesorios_tecnico_lista',
-                      { p_anio: ant.getFullYear(), p_mes: ant.getMonth() + 1 });
 
-  if(!Array.isArray(a) || (!a.length && (!Array.isArray(b) || !b.length))){
+  /* Y contra las DOS listas, no solo la de accesorios. Un técnico cuyo mes
+     llevara únicamente reparaciones —que para él es un mes normal— leería
+     «esa clave no es válida» y dejaría de intentarlo. */
+  const a = await mesDe(hoy);
+  const falloA = a.fallo;
+  const b = a.hay ? a : await mesDe(ant);
+
+  if(a.roto || (!a.hay && !b.hay)){
     CLAVE = '';
-    $('errClave').textContent = (a === null)
+    $('errClave').textContent = a.roto
       ? porQue(falloA)
-      : 'Esa clave no es válida, o no hay ventas registradas todavía.';
+      : 'Esa clave no es válida, o no hay nada registrado todavía.';
     $('errClave').style.display = 'block';
     return;
   }
@@ -188,55 +205,103 @@ async function entrar(){
 
 function salir(){
   try{ localStorage.removeItem(CKEY); }catch(e){}   // igual: peor caso, sigue pidiendo la clave
-  CLAVE = ''; FILAS = [];
+  CLAVE = ''; FILAS = []; REPS = [];   // las dos: si no, el siguiente que entre vería lo del anterior
   $('clave').value = '';
   $('cajaDatos').style.display = 'none';
   $('cajaClave').style.display = 'block';
 }
 
+/* Las dos listas de un mes, de una vez.
+
+   El fallo que se devuelve es SOLO el de accesorios, a propósito. Esa función
+   existe desde antes que las reparaciones: mientras
+   `reparaciones_tecnico_lista` no esté pegada en el servidor devuelve 404, y
+   tratarlo como avería cerraría la pantalla entera —incluidos los accesorios,
+   que sí contestan— por una función que todavía no existe. Sin reparaciones se
+   ve la mitad; con la pantalla cerrada no se ve nada. */
+async function mesDe(d){
+  const p = { p_anio: d.getFullYear(), p_mes: d.getMonth() + 1 };
+  const acc = await rpc('accesorios_tecnico_lista', p);
+  const fallo = RPC_FALLO;                 // la siguiente llamada lo sobreescribe
+  const rep = await rpc('reparaciones_tecnico_lista', p);
+  return {
+    acc: Array.isArray(acc) ? acc : [],
+    rep: Array.isArray(rep) ? rep : [],
+    roto: acc === null,
+    fallo: fallo,
+    hay: (Array.isArray(acc) && acc.length > 0) || (Array.isArray(rep) && rep.length > 0)
+  };
+}
+
 async function cargar(){
   const [anio, mes] = ($('mes').value || '').split('-').map(Number);
   $('lista').innerHTML = '<p class="nota">Consultando…</p>';
+  $('listaRep').innerHTML = '<p class="nota">Consultando…</p>';
   $('total').style.display = 'none';
+  $('totalRep').style.display = 'none';
 
-  const filas = await rpc('accesorios_tecnico_lista', { p_anio: anio, p_mes: mes });
+  const p = { p_anio: anio, p_mes: mes };
+  const acc = await rpc('accesorios_tecnico_lista', p);
+  const falloAcc = RPC_FALLO;
+  const rep = await rpc('reparaciones_tecnico_lista', p);
+  const falloRep = RPC_FALLO;
+
+  FILAS = Array.isArray(acc) ? acc : [];
+  REPS  = Array.isArray(rep) ? rep : [];
+
+  pintar('lista', 'total', acc, falloAcc, mes, 'acc');
+  pintar('listaRep', 'totalRep', rep, falloRep, mes, 'rep');
+}
+
+/* Una sola función para las dos secciones. Con una copia por lista, el día que
+   se toque el formato del importe o el botón del ticket habría que acordarse de
+   la otra — y la que se quedara atrás no daría error, solo se vería distinta. */
+function pintar(idLista, idTotal, filas, fallo, mes, tipo){
+  const rep = (tipo === 'rep');
   if(filas === null){
-    $('lista').innerHTML = '<p class="err">' + esc(porQue(RPC_FALLO)) + '</p>';
+    $(idLista).innerHTML = '<p class="err">' + esc(porQue(fallo)) + '</p>';
     return;
   }
-  FILAS = filas;
   if(!filas.length){
-    $('lista').innerHTML = '<p class="nota">No hay accesorios registrados en ' +
-                           MESES[mes-1] + '.</p>';
+    $(idLista).innerHTML = '<p class="nota">No hay ' +
+      (rep ? 'reparaciones' : 'accesorios') + ' en ' + MESES[mes-1] + '.</p>';
     return;
   }
 
-  $('lista').innerHTML = filas.map((f, i) => `
+  $(idLista).innerHTML = filas.map((f, i) => `
     <div class="fila">
       <span class="d">${String(f.dia).slice(8,10)}</span>
       <span class="t">${esc(f.ticket)}</span>
-      <span class="p">${esc(f.producto)}${Number(f.cantidad) > 1 ? ' ×' + f.cantidad : ''}</span>
+      <span class="p">${rep ? 'Reparación'
+                            : esc(f.producto) + (Number(f.cantidad) > 1 ? ' ×' + f.cantidad : '')}</span>
       <span class="m">$${Number(f.importe).toLocaleString('es-MX')}</span>
       ${f.tiene_foto
-        ? `<button class="lupa" onclick="verTicket(${i})">ticket</button>`
+        ? `<button class="lupa" onclick="verTicket('${tipo}',${i})">ticket</button>`
         : '<span style="width:46px"></span>'}
     </div>`).join('');
 
   const total = filas.reduce((s, f) => s + Number(f.importe || 0), 0);
-  $('total').innerHTML = '<span>' + filas.length + ' venta' + (filas.length===1?'':'s') +
+  const que = rep ? (filas.length === 1 ? 'reparación' : 'reparaciones')
+                  : (filas.length === 1 ? 'venta' : 'ventas');
+  $(idTotal).innerHTML = '<span>' + filas.length + ' ' + que +
     '</span><span>$' + total.toLocaleString('es-MX', {minimumFractionDigits:2}) + '</span>';
-  $('total').style.display = 'flex';
+  $(idTotal).style.display = 'flex';
 }
 
-async function verTicket(i){
-  const f = FILAS[i];
+async function verTicket(tipo, i){
+  const f = (tipo === 'rep' ? REPS : FILAS)[i];
   if(!f) return;
-  const cont = $('lista');
+  const cont = $(tipo === 'rep' ? 'listaRep' : 'lista');
   const antes = cont.innerHTML;
   cont.innerHTML = '<p class="nota">Abriendo el ticket ' + esc(f.ticket) + '…</p>';
   const d = await rpc('accesorios_tecnico_foto', { p_captura_id: f.captura_id }, 20000);
   if(!d || d.ok !== true){
-    cont.innerHTML = '<p class="err">No se pudo abrir ese ticket.</p>' + antes;
+    /* La foto dura 7 días —`venta_foto_guardar` limpia las viejas en cada
+       guardado—, así que al cotejar el mes lo de la primera semana ya no está.
+       Se dice, porque «no se pudo abrir» invita a reintentar toda la tarde algo
+       que no va a volver. */
+    cont.innerHTML = '<p class="err">No se pudo abrir ese ticket. Las fotos se ' +
+      'guardan 7 días; si el ticket es de hace más, ya no está.</p>' + antes;
     return;
   }
   cont.innerHTML = '<button class="btn sec" onclick="cargar()">← Volver</button>' +

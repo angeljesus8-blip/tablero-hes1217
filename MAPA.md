@@ -498,6 +498,68 @@ Al cerrar el panel se vacía `_accCat` para que el catálogo de capturar se vuel
 a pedir: sin eso, quien acaba de dar de alta un producto no lo vería en la lista
 hasta recargar la app, y lo daría de alta otra vez.
 
+### Reparaciones de Mr Fix *(24-ago-2026, v201)*
+
+El asesor captura el ticket de reparación en **Captura → 🔧 Reparación**, y los
+dos técnicos externos lo ven en su pantalla, en una sección aparte de los
+accesorios.
+
+⚠️ **Tabla propia, `reparaciones`, y esa es la pieza que importa.** El Excel
+regional de Mr Fix sale de `accesorios_reporte`, que lee `accesorios_ventas`.
+Una reparación guardada ahí aparecería como venta de accesorio: **movería las
+comisiones de todo el equipo** y el importe de una hoja que comparten diez
+tiendas, sin dar error en ningún sitio.
+
+Se pensó en una columna `tipo` dentro de `accesorios_ventas` y se descartó: eso
+hace que *no* contaminar dependa de que cada consulta futura se acuerde del
+filtro. Basta un `WHERE` que falte —o un `COUNT(*)` en un tablero— para que se
+cuelen. Separadas es imposible por construcción, que es el mismo argumento por
+el que `accesorios_ventas` no vive dentro de `ventas`.
+
+Lo vigila **`r_reparaciones_fuera`**, por los dos caminos que bastan cada uno por
+su cuenta para contaminar el archivo: una función `*reporte*` que lea
+`reparaciones`, y la pantalla que baja el Excel llamando a algo de reparaciones
+que no sea `reparacion_guardar`. Comprobada rompiéndola por los dos lados.
+
+**No llevan vendedor, ni producto, ni piezas.** La reparación es del técnico y la
+tienda no cobra comisión por ella, así que no hay a quién apuntársela. Campos que
+no se usan se acaban llenando de cualquier cosa.
+
+**El mismo lector de tickets que el accesorio** (`accLeerTicket`): es el mismo
+papel de la misma caja. De lo que devuelve se usan solo ticket, importe y fecha —
+en una reparación no hay línea de artículo del catálogo que adivinar, y por eso
+se toma el **importe** y no el precio de una línea.
+
+`UNIQUE (store_id, ticket)` sin producto, al revés que en accesorios: un ticket
+de reparación es uno. El riesgo que frena es el mismo — dos asesores capturando
+lo mismo al cerrar el día.
+
+#### La pantalla del técnico, con dos totales
+
+Dos secciones y **dos totales, nunca uno solo**: los accesorios van al reporte de
+comisiones y las reparaciones no, así que son dos cobros distintos. Un total que
+los sumara daría un número que no le sirve a nadie y que se prestaría a cotejarlo
+contra el que no es.
+
+⚠️ **Que falte `reparaciones_tecnico_lista` en el servidor no cierra la
+pantalla.** Mientras el SQL no esté pegado devuelve 404, y tratarlo como avería
+tumbaría también los accesorios, que sí contestan. Sin reparaciones se ve la
+mitad; con la pantalla cerrada no se ve nada. Por eso `mesDe()` solo mira el
+fallo de accesorios para decidir si la clave sirve — y por eso la sección dice
+«no disponible» en vez de «no hay reparaciones»: **cero y no-se-pudo-preguntar no
+son lo mismo**, y confundirlos es lo que hizo perder una tarde el 24-ago.
+
+La validación de la clave mira **las dos listas**. Con solo los accesorios, un
+técnico cuyo mes llevara únicamente reparaciones —que para él es un mes normal—
+leería «esa clave no es válida» y dejaría de intentarlo.
+
+⚠️ **La foto del ticket dura 7 días.** `venta_foto_guardar` limpia las más viejas
+en cada guardado, y eso vale igual para accesorios y reparaciones. Al cotejar el
+mes, lo de la primera semana **ya no se abre**. La pantalla lo dice al fallar, en
+vez de un «no se pudo abrir» que invita a reintentar toda la tarde algo que no va
+a volver. Queda pendiente decidir si la evidencia de un corte mensual merece más
+retención que la de una serie dudosa, que es para lo que se pensaron los 7 días.
+
 #### El ticket del accesorio, también desde la galería *(24-ago-2026, v200)*
 
 `capture="environment"` no es una preferencia: en el celular **abre la cámara y
