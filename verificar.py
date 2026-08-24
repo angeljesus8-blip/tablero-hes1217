@@ -855,6 +855,10 @@ def r_pruebas():
 
 # ── 16 · Una función que ESCRIBE no puede ir marcada STABLE ──
 def _sql_sin_comentarios(t):
+    # Los de bloque TAMBIEN: un comentario que explica por que un alias no debe
+    # llamarse `r` contiene, por fuerza, el texto del alias malo. Sin quitarlos,
+    # la regla se denuncia a si misma y el aviso real se pierde entre los falsos.
+    t = re.sub(r'/\*.*?\*/', '', t, flags=re.S)
     return re.sub(r'--[^\n]*', '', t)
 
 
@@ -997,12 +1001,75 @@ def r_reparaciones_fuera():
                   'que acaba metiéndolas en el pegado.' % m.group(1))
 
 
+# ── 19 · Un alias de tabla que pisa una variable del DECLARE ─
+def r_alias_variable():
+    """plpgsql resuelve sus variables ANTES que las tablas, y revienta entera.
+
+    24-ago-2026: al ampliar `accesorios_tecnico_foto` para aceptar reparaciones
+    se escribió `FROM public.reparaciones r`, en una función que declara
+    `r record`. El `r.store_id` del WHERE se leyó como un campo de la variable
+    —sin asignar todavía— y la función murió con
+    `55000: record "r" is not assigned yet`.
+
+    Lo que lo hace caro es el alcance: no falla solo lo nuevo. Esa función es la
+    que abre TODAS las fotos, así que un alias de dos letras dejó al técnico sin
+    poder ver tampoco los tickets de accesorios, que llevaban semanas
+    funcionando. Y la variable se declara en un archivo distinto del que se está
+    editando, así que al escribir el alias no hay nada a la vista que chirríe.
+
+    Se vio probando la función contra el servidor después de pegarla, no
+    leyéndola: el SQL es válido y el fallo solo existe en tiempo de ejecución."""
+    CLAVES = set('''where on group order limit having left right inner outer full
+                    join cross union all as into using set returning for loop
+                    and or not exists select from natural lateral'''.split())
+    for ruta in sorted(glob.glob(os.path.join(BASE, 'supabase_*.sql'))):
+        arch = os.path.basename(ruta)
+        s = leer(arch)
+        if s is None: continue
+        for m in re.finditer(r'CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+public\.(\w+)\s*\(',
+                             s, re.I):
+            cab = re.search(r'\bAS\s+(\$\w*\$)', s[m.end():], re.I)
+            if not cab: continue
+            tag = cab.group(1)
+            ini = m.end() + cab.end()
+            fin = s.find(tag, ini)
+            if fin < 0: continue
+            cuerpo = _sql_sin_comentarios(s[ini:fin])
+
+            # Las variables del DECLARE (lo que va entre DECLARE y el BEGIN)
+            dec = re.search(r'\bDECLARE\b(.*?)\bBEGIN\b', cuerpo, re.I | re.S)
+            if not dec: continue
+            # Solo las de tipo RECORD (o %ROWTYPE). Con una variable escalar no
+            # hay choque: un `int` no tiene campos, asi que `a.venta_id` resuelve
+            # a la tabla y funciona. `cargar_cortes` lleva meses cargando el
+            # inventario cada dia con un alias `a` y una variable `a int`.
+            # Marcarlas seria enseñar cinco fallos falsos, y una regla que grita
+            # sin motivo se acaba desactivando entera —con el fallo de verdad
+            # dentro—.
+            variables = set()
+            for linea in dec.group(1).split(';'):
+                v = re.match(r'\s*(\w+)\s+(record\b|\w+%rowtype\b)', linea, re.I)
+                if v: variables.add(v.group(1).lower())
+            if not variables: continue
+
+            # Los alias de tabla del cuerpo
+            for a in re.finditer(r'\b(?:FROM|JOIN)\s+(?:public\.)?\w+\s+(?:AS\s+)?(\w+)',
+                                 cuerpo, re.I):
+                alias = a.group(1).lower()
+                if alias in CLAVES or alias not in variables: continue
+                falla('alias-var',
+                      '%s: `%s` usa `%s` como alias de tabla y `%s` es tambien una '
+                      'variable del DECLARE. plpgsql resuelve la variable primero, asi '
+                      'que la funcion entera falla en ejecucion (55000) aunque el SQL '
+                      'sea valido. Cambiale el alias.' % (arch, m.group(1), alias, alias))
+
+
 def main():
     staged = '--staged' in sys.argv
     r_sintaxis(); r_helpers(); r_version(staged); r_copias(); r_cupo()
     r_preventa_sb(); r_preventa_stock(); r_cargas_sb(); r_lectura_con_escritura()
     r_porteros(); r_contrato_sql(); r_join_sql()
-    r_sql_volatilidad(); r_galeria(); r_reparaciones_fuera()
+    r_sql_volatilidad(); r_galeria(); r_reparaciones_fuera(); r_alias_variable()
     r_personales(); r_secretos(); r_silencios(); r_cadenas(); r_precache(); r_scripts_locales(); r_pruebas()
 
     for regla, msg in avisos:
