@@ -1866,8 +1866,13 @@ function accExtraer(txt){
 /* ¿Qué es cada línea de este ticket? Lo dice EL PAPEL, no el asesor.
 
    Los accesorios se reconocen por su código de artículo —`43739` y los dos de
-   Office— y la reparación por el suyo, que el gerente pone en
+   Office— y las reparaciones por los suyos, que el gerente pone en
    Admin → Configuración. Los dos salen del ticket después de `SERVICIO:`.
+
+   Son VARIOS códigos, no uno: Mr Fix cobra las reparaciones con `100175537` y
+   `100175545`. Por eso la configuración es una lista y no un campo suelto —con
+   uno solo, el otro tipo de reparación se habría guardado como accesorio y
+   habría entrado al Excel de comisiones.
 
    ⚠️ SOLO DECIDE CUANDO NO HAY DUDA. Si el ticket lleva las dos cosas, o si el
    OCR no leyó ningún código reconocible, NO toca el selector y lo dice. El OCR
@@ -1876,33 +1881,38 @@ function accExtraer(txt){
    Un accesorio guardado como reparación no entra en el Excel, y esa comisión no
    se le paga a nadie sin que nada avise.
 
-   Con el código sin configurar (vacío) esto no hace nada y el asesor elige a
-   mano, como antes. Más vale preguntar que adivinar mal. */
-var SKU_REP = String((_cfgCS && _cfgCS.sku_reparacion) || '')
-                .trim().toUpperCase().replace(/\s+/g, '');
+   Con la lista vacía esto no hace nada y el asesor elige a mano, como antes.
+   Más vale preguntar que adivinar mal. */
+var SKUS_REP = String((_cfgCS && _cfgCS.sku_reparacion) || '')
+                 .toUpperCase().split(/[,;\s]+/)
+                 .map(function(x){ return x.trim(); }).filter(Boolean);
 
 function accQueEs(textoTicket){
-  if(!SKU_REP) return { tipo:null, porque:'' };
+  if(!SKUS_REP.length) return { tipo:null, porque:'' };
   var codigos = accCodigos(textoTicket);
   if(!codigos.length) return { tipo:null, porque:'' };
 
-  // Se comparan aplanados por las confusiones del OCR, igual que la adivinanza
-  // del producto: si no, un `SERVIC1O` mal leido no casaria con nada.
-  var claveRep = accClave(SKU_REP);
-  var hayRep = false, hayAcc = false;
+  // Aplanados por las confusiones del OCR, igual que la adivinanza del
+  // producto: sin esto un `TOOT755З7` mal leido no casaria con `100175537` y la
+  // deteccion se apagaria sola, sin avisar.
+  var claves = SKUS_REP.map(accClave).filter(Boolean);
+  var hayRep = false, hayAcc = false, cual = '';
   for(var i = 0; i < codigos.length; i++){
     var c = accClave(codigos[i]);
-    // El codigo de reparacion puede venir solo o con sufijo, como los de
-    // accesorio (`43739-MICAHR`): basta que empiece igual.
-    if(claveRep && c.indexOf(claveRep) === 0) hayRep = true;
-    else hayAcc = true;
+    var esRep = false;
+    for(var j = 0; j < claves.length; j++){
+      // El codigo puede venir solo o con sufijo, como los de accesorio
+      // (`43739-MICAHR`): basta que empiece igual.
+      if(c.indexOf(claves[j]) === 0){ esRep = true; cual = SKUS_REP[j]; break; }
+    }
+    if(esRep) hayRep = true; else hayAcc = true;
   }
 
   if(hayRep && hayAcc){
     return { tipo:null, porque:'Este ticket lleva accesorio Y reparación. ' +
                                 'Agrégalos uno por uno, empezando por el que quieras.' };
   }
-  if(hayRep) return { tipo:'rep', porque:'Es una reparación: el ticket trae el código ' + SKU_REP + '.' };
+  if(hayRep) return { tipo:'rep', porque:'Es una reparación: el ticket trae el código ' + cual + '.' };
   return { tipo:'acc', porque:'' };     // accesorio es lo habitual: no hace falta decirlo
 }
 
