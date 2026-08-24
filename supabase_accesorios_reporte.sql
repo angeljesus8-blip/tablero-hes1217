@@ -94,7 +94,11 @@ CREATE OR REPLACE FUNCTION public.accesorios_reporte(
   p_mes   integer DEFAULT NULL
 ) RETURNS TABLE (
   dia integer, ticket text, sku text, producto text,
-  cantidad integer, precio numeric, empleado text, sin_nombre boolean
+  cantidad integer, precio numeric, empleado text, sin_nombre boolean,
+  -- Para abrir el ticket desde el reporte (24-ago-2026). Van AL FINAL y el
+  -- generador del Excel mapea por nombre de campo, no por posicion, asi que no
+  -- se mueve ninguna columna del pegado.
+  captura_id text, tiene_foto boolean
 )
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
 AS $$
@@ -105,7 +109,10 @@ AS $$
   SELECT extract(day from v.dia)::int,
          v.ticket, v.sku, v.producto, v.cantidad, v.precio,
          coalesce(e.nombre_reporte, v.vendedor),
-         (e.nombre_reporte IS NULL)
+         (e.nombre_reporte IS NULL),
+         v.captura_id,
+         EXISTS (SELECT 1 FROM public.venta_fotos vf
+                  WHERE vf.store_id = v.store_id AND vf.captura_id = v.captura_id)
   /* CROSS JOIN explicito y DESPUES del LEFT JOIN. Con `FROM v, r LEFT JOIN e`
      el join se asocia a `r`, no a `v`, y Postgres responde «invalid reference
      to FROM-clause entry for table v». */

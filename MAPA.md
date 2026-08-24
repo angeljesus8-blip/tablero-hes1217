@@ -498,6 +498,52 @@ Al cerrar el panel se vacía `_accCat` para que el catálogo de capturar se vuel
 a pedir: sin eso, quien acaba de dar de alta un producto no lo vería en la lista
 hasta recargar la app, y lo daría de alta otra vez.
 
+#### La vista del gerente *(24-ago-2026, v204)*
+
+Hasta hoy, sobre la misma venta de accesorio, **el técnico externo de Mr Fix podía
+abrir la foto del ticket y el gerente no**. Y con las reparaciones pasaba entero:
+el asesor las capturaba, el técnico las consultaba, y el único sin pantalla era el
+dueño de la tienda.
+
+**Dos piezas, en dos sitios distintos, y la separación es deliberada:**
+
+| qué | dónde | por qué ahí |
+|---|---|---|
+| Ticket de un accesorio | Captura → 🔌 Accesorio → 📊 Reporte del mes | Es la lista que ya estaba; solo le faltaba el botón |
+| Reparaciones del mes | **Admin → 👥 Equipo** | Captura es la pantalla que baja el Excel |
+
+⚠️ **Las reparaciones NO se ven desde Captura de Series, y no es un descuido.**
+Esa es la pantalla que arma el pegado del Excel regional, y las reparaciones no
+van a ese Excel. Que no pueda *ni leerlas* es lo que lo garantiza —lo vigila
+`r_reparaciones_fuera`—, y ponerlas ahí «para tenerlo todo junto» sería deshacer
+la garantía por comodidad. Revisar el mes es además trabajo de gestión, no de
+piso con un cliente delante.
+
+**El botón del ticket sale solo cuando hay foto.** `accesorios_reporte` devuelve
+ahora `captura_id` y `tiene_foto`, **al final** del `RETURNS TABLE`: el generador
+del Excel mapea por nombre de campo y no por posición, así que no se mueve ni una
+columna del pegado. Un botón que a veces abre y a veces dice «no hay» enseña a no
+fiarse de él, y entonces deja de usarse también cuando sí está.
+
+**`reparaciones_lista` es una función aparte de la del técnico, no la misma con
+dos porteros.** El técnico entra con su clave y el gerente con el token de la
+tienda; meter las dos credenciales en un solo `IF ... OR ...` hace que aflojar el
+portero para uno se lo afloje al otro sin que se vea. Esta **sí puede ser
+`STABLE`** —`escritura_ok_` solo lee—, al revés que la del técnico, donde
+`tecnico_ok_` sella el último acceso.
+
+El gerente ve además **`capturado_por`**, que el técnico no: a él le toca su
+dinero, no quién de la tienda tecleó el ticket.
+
+En Admin, `p_token` va **explícito** en la llamada: `sbLeer` no lo manda solo
+—solo lo hace `sbEscribir`—, que es exactamente el fallo de v199 con el catálogo.
+Y la foto va por `sbEscribir` aunque sea una lectura, porque necesita el token y
+devuelve un objeto en vez de filas.
+
+Un mes sin reparaciones **es un resultado normal** y se dice nombrando el mes, al
+revés que el catálogo, que nunca está vacío de verdad y donde cero siempre es un
+problema.
+
 ### Reparaciones de Mr Fix *(24-ago-2026, v201)*
 
 El asesor captura el ticket de reparación en **Captura → 🔧 Reparación**, y los
