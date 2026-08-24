@@ -1949,7 +1949,11 @@ window.accProdCambio = function(){
    cargar y `null.onclick` tumbaría la captura entera al arrancar — no el panel,
    toda la pantalla. Lo cazó `pruebas/cola_ventas.js`, que respeta el orden del
    documento; es el mismo fallo del 17-ago con `edSku`. */
-window.accTomarFoto = function(){ $('accFile').click(); };
+window.accTomarFoto  = function(){ $('accFile').click(); };
+// Las dos acaban en `accFotoElegida`: comprime, guarda la evidencia y lanza el
+// OCR igual, venga del carrete o de la cámara. Dos caminos y un solo destino,
+// para que no haya una foto de galería que se guarde distinto que una de cámara.
+window.accElegirFoto = function(){ $('accFileGal').click(); };
 window.accFotoElegida = function(e){
   const f = e.target.files[0];
   /* El input se vacía SIEMPRE, incluso si no hay archivo. Sin esto, volver a
@@ -2892,9 +2896,21 @@ refreshEolVenta(); // trae los EOL con 50% activo (solo exhibición)
           📊 Reporte del mes · bajar Excel</button>
       </div>
 
+      <!-- Cámara Y galería, como arriba con fileCam/fileGal para las series.
+           `capture="environment"` no es una preferencia: en el celular ABRE LA
+           CÁMARA y deja fuera el carrete, así que el ticket que ya está en el
+           teléfono —capturado al cerrar el día, o el que un compañero mandó por
+           WhatsApp— no había forma de subirlo. Son dos inputs y no uno sin
+           `capture` porque quitarlo sin más cambia el caso normal: el asesor con
+           el cliente delante pasaría a elegir en un menú en vez de disparar. -->
       <input type="file" accept="image/*" capture="environment" id="accFile" hidden onchange="accFotoElegida(event)">
-      <button class="btn" id="accFoto" onclick="accTomarFoto()" style="background:var(--azul);color:#fff;width:100%">
-        📷 Foto del ticket</button>
+      <input type="file" accept="image/*" id="accFileGal" hidden onchange="accFotoElegida(event)">
+      <div style="display:flex;gap:8px">
+        <button class="btn" id="accFoto" onclick="accTomarFoto()" style="flex:1;background:var(--azul);color:#fff">
+          📷 Foto del ticket</button>
+        <button class="btn" id="accFotoGal" onclick="accElegirFoto()" style="flex:1;background:#555;color:#fff">
+          🖼️ Galería</button>
+      </div>
       <div id="accEstado" style="font-size:12.5px;color:var(--azul);font-weight:700;
            margin-top:8px;min-height:18px"></div>
 
