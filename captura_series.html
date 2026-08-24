@@ -168,12 +168,20 @@
 
   .footbar{ position:fixed; bottom:0; left:0; right:0; background:#fff; border-top:1px solid var(--linea);
     padding:10px 16px calc(10px + env(safe-area-inset-bottom)); display:flex; gap:10px;
+    /* Con el tercer botón (Reparación, 24-ago) tres etiquetas no caben en un
+       teléfono estrecho. Envolver las baja de línea enteras; sin esto se
+       encogen hasta partir el texto en dos renglones dentro del botón. */
+    flex-wrap:wrap;
     max-width:560px; margin:0 auto; box-shadow:0 -4px 18px rgba(0,0,0,.06); }
   .footbar .btn{ font-size:14px; padding:13px; }
+  .footbar .btn, .footbar .lock-msg{ min-width:132px; }
   .btn-csv{ background:var(--azul); color:#fff; flex:1; }
   /* Accesorios (18-ago-2026). Naranja para que no se confunda con capturar una
      venta con serie: es otro flujo y otra tabla. */
   .btn-acc{ background:var(--naranja); color:#fff; flex:1; }
+  /* Reparaciones (24-ago-2026). Tercer color de la marca, y por el mismo motivo
+     que el naranja: es otra tabla y NO va al Excel de comisiones. */
+  .btn-rep{ background:var(--rojo); color:#fff; flex:1; }
   .lock-msg{ flex:1; text-align:center; font-size:12.5px; color:var(--gris); font-weight:600;
     padding:13px; background:#f6f6f7; border-radius:12px; }
   .lock-msg b{ color:var(--rojo); }
@@ -423,6 +431,7 @@
 
 <div class="footbar">
   <button class="btn btn-acc" id="btnAcc" title="Cargadores, micas y demás accesorios">🔌 Accesorio</button>
+  <button class="btn btn-rep" id="btnRepa" title="Tickets de reparación de Mr Fix">🔧 Reparación</button>
   <button class="btn btn-csv" id="btnCsv">📋 Ventas del día</button>
   <div class="lock-msg" id="lockMsg">🔒 Solo <b>Laura</b> abre la hoja de ventas</div>
 </div>
@@ -1523,6 +1532,7 @@ function marcarCopiada(fechaTxt, serie){
 }
 
 $('btnAcc').onclick = () => abrirAcc();
+$('btnRepa').onclick = () => abrirRepa();
 
 $('btnCsv').onclick = async () => {
   if(!puedeVerVentas_()){ toast('No tienes permiso para ver las ventas', 'warn'); return; }
@@ -2096,6 +2106,111 @@ window.guardarAcc = async function(){
 
     cerrarAcc();
     toast('Accesorio registrado ✓ $' + (r.importe != null ? r.importe : precio), 'ok');
+  }catch(e){
+    err('No se pudo guardar · ' + ((e && e.message) || 'sin conexión'));
+  }finally{
+    btn.disabled = false; btn.textContent = 'Guardar';
+  }
+};
+
+/* ---------- Reparaciones de Mr Fix (24-ago-2026) ----------
+
+   Mismo flujo que el accesorio y el MISMO lector de tickets: es el mismo papel
+   de la misma caja, así que `accLeerTicket` sirve igual. Lo que cambia es a
+   dónde va —`reparaciones`, no `accesorios_ventas`— y que no lleva producto,
+   vendedor ni piezas.
+
+   Del OCR se usan solo ticket, importe y fecha. El producto no se pregunta: en
+   una reparación no hay línea de artículo del catálogo que adivinar. */
+let _repaOcr = null;         // promesa del OCR en curso
+let _repaFoto = null;        // la foto del ticket, de evidencia
+
+window.abrirRepa = function(){
+  _repaOcr = null; _repaFoto = null;
+  $('repaEstado').textContent = '';
+  $('repaLeido').style.display = 'none';
+  $('repaError').style.display = 'none';
+  $('repaTicket').value = ''; $('repaImporte').value = '';
+  $('repaFecha').value = accHoyISO();
+  $('repaPanel').classList.add('show');
+};
+window.cerrarRepa = function(){ $('repaPanel').classList.remove('show'); };
+
+// `onclick`/`onchange` van en el HTML del panel y no aquí, por lo mismo que en
+// el accesorio: este <script> termina antes de que exista ese <div>.
+window.repaTomarFoto  = function(){ $('repaFile').click(); };
+window.repaElegirFoto = function(){ $('repaFileGal').click(); };
+
+window.repaFotoElegida = function(e){
+  const f = e.target.files[0];
+  e.target.value = '';               // para poder reelegir la misma foto
+  if(!f) return;
+
+  $('repaLeido').style.display = 'none';
+  $('repaError').style.display = 'none';
+  $('repaEstado').textContent = 'Leyendo el ticket…';
+
+  _repaFoto = null;
+  compressImage(f).then(function(d){ _repaFoto = d; })
+    .catch(function(){});   // sin foto se guarda igual: la reparacion importa mas que la evidencia
+
+  _repaOcr = accLeerTicket(f).then(function(r){
+    $('repaEstado').textContent = '';
+    if(r.ticket && !$('repaTicket').value) $('repaTicket').value = r.ticket;
+    /* El IMPORTE, no el precio de una línea: en una reparación se cobra el
+       trabajo entero, y no hay artículo del catálogo con el que cuadrarlo. */
+    if(r.importe != null && !$('repaImporte').value) $('repaImporte').value = r.importe;
+    if(r.fecha){
+      const m = r.fecha.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/);
+      if(m) $('repaFecha').value = '20' + m[3] + '-' + m[2].padStart(2,'0') + '-' + m[1].padStart(2,'0');
+    }
+    const el = $('repaLeido');
+    el.innerHTML = '<b>Del ticket:</b> ' +
+      (r.ticket ? 'n° ' + esc(r.ticket) : 'no encontré el número') +
+      (r.importe != null ? ' · $' + r.importe : ' · no encontré el importe') +
+      '<br>Compruébalo antes de guardar.';
+    el.style.display = 'block';
+    return r;
+  }).catch(function(){
+    $('repaEstado').textContent = '';
+    const el = $('repaError');
+    el.textContent = 'No se pudo leer el ticket. Escribe los datos a mano — la reparación se guarda igual.';
+    el.style.display = 'block';
+    return null;
+  });
+};
+
+window.guardarRepa = async function(){
+  const err = m => { const e = $('repaError'); e.textContent = m; e.style.display = 'block'; };
+  $('repaError').style.display = 'none';
+
+  const ticket = $('repaTicket').value.trim();
+  const importe = Number(String($('repaImporte').value).replace(/[^0-9.]/g, ''));
+  if(!ticket) return err('Falta el número de ticket.');
+  if(!(importe > 0)) return err('Falta el importe cobrado.');
+
+  const btn = $('repaGuardar');
+  btn.disabled = true; btn.textContent = 'Guardando…';
+  try{
+    // El id, ANTES de guardar: la reparación y su foto tienen que llevar el
+    // mismo, y generarlo dos veces las dejaría sin ligar.
+    const capturaId = 'r' + Date.now() + Math.random().toString(36).slice(2,6);
+
+    const r = await sbCallCS('reparacion_guardar', {
+      p_token: GAS_TOKEN, p_ticket: ticket, p_importe: importe,
+      p_fecha: $('repaFecha').value || null,
+      p_quien: MI_EMPNO,
+      p_captura_id: capturaId,
+      p_ocr: _repaOcr ? ((await _repaOcr) || {}).texto || null : null
+    }, 15000);
+
+    if(!r || r.ok !== true) return err((r && r.error) || 'No se pudo guardar. Revisa la conexión.');
+
+    // La foto DESPUÉS y sin await: si falla, la reparación ya está guardada.
+    if(_repaFoto) subirFoto(capturaId, _repaFoto);
+
+    cerrarRepa();
+    toast('Reparación registrada ✓ $' + importe, 'ok');
   }catch(e){
     err('No se pudo guardar · ' + ((e && e.message) || 'sin conexión'));
   }finally{
@@ -2953,6 +3068,61 @@ refreshEolVenta(); // trae los EOL con 50% activo (solo exhibición)
     <div class="vd-pie" style="display:flex;gap:10px;padding:12px 16px">
       <button class="btn" style="flex:1;background:#eee;color:#444" onclick="cerrarAcc()">Cancelar</button>
       <button class="btn" style="flex:2" id="accGuardar" onclick="guardarAcc()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Reparación de Mr Fix (24-ago-2026).
+
+     Panel aparte del de accesorio, y tabla aparte, porque son cosas distintas:
+     la reparación NO va al Excel regional de comisiones. Si compartieran
+     formulario, no contaminar el reporte dependería de una casilla bien puesta
+     por alguien con un cliente delante.
+
+     No lleva vendedor ni piezas: la reparación es del técnico y la tienda no
+     cobra comisión por ella, así que no hay a quién apuntársela. Campos que no
+     se usan se acaban llenando de cualquier cosa. -->
+<div id="repaPanel" class="vd" style="z-index:75">
+  <div class="vd-box" style="max-height:94vh">
+    <div class="vd-top">
+      <h2>Reparación</h2>
+      <button class="vd-cerrar" onclick="cerrarRepa()" aria-label="Cerrar">×</button>
+    </div>
+    <div class="vd-lista" style="padding:14px 16px">
+
+      <input type="file" accept="image/*" capture="environment" id="repaFile" hidden onchange="repaFotoElegida(event)">
+      <input type="file" accept="image/*" id="repaFileGal" hidden onchange="repaFotoElegida(event)">
+      <div style="display:flex;gap:8px">
+        <button class="btn" id="repaFoto" onclick="repaTomarFoto()" style="flex:1;background:var(--azul);color:#fff">
+          📷 Foto del ticket</button>
+        <button class="btn" id="repaFotoGal" onclick="repaElegirFoto()" style="flex:1;background:#555;color:#fff">
+          🖼️ Galería</button>
+      </div>
+      <div id="repaEstado" style="font-size:12.5px;color:var(--azul);font-weight:700;
+           margin-top:8px;min-height:18px"></div>
+
+      <label class="ed-l">N° de ticket</label>
+      <input id="repaTicket" class="ed-i" inputmode="numeric" autocomplete="off">
+
+      <label class="ed-l">Importe cobrado</label>
+      <input id="repaImporte" class="ed-i" inputmode="decimal" autocomplete="off">
+
+      <label class="ed-l">Fecha</label>
+      <input id="repaFecha" class="ed-i" type="date">
+
+      <p class="ed-n">La reparación es del técnico: <b>no entra en el Excel de
+        comisiones</b> ni cuenta como venta de la tienda.</p>
+
+      <div id="repaLeido" style="display:none;margin-top:12px;padding:10px 12px;
+           border-radius:9px;border-left:4px solid var(--azul);background:#eef4fb;
+           font-size:12.5px;line-height:1.45;color:#24507f"></div>
+      <div id="repaError" style="display:none;margin-top:12px;padding:10px 12px;
+           border-radius:9px;border-left:4px solid var(--rojo);background:#fdeaea;
+           font-size:12.5px;line-height:1.45;color:#8a1f1f"></div>
+    </div>
+    <div class="vd-pie" style="display:flex;gap:10px;padding:12px 16px">
+      <button class="btn" style="flex:1;background:#eee;color:#444" onclick="cerrarRepa()">Cancelar</button>
+      <button class="btn" style="flex:2" id="repaGuardar" onclick="guardarRepa()">Guardar</button>
     </div>
   </div>
 </div>
