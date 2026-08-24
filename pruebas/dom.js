@@ -80,6 +80,14 @@ function crearEntorno(opciones){
       els[id] = {
         id, style:{}, dataset:{}, value:'', textContent:'', innerHTML:'',
         children:[], onclick:null, onchange:null, checked:false, disabled:false,
+        /* Un <select> de verdad tiene `selectedOptions`, y el codigo lo usa para
+           sacar el SKU del producto elegido (`selectedOptions[0].dataset.sku`).
+           Sin esto, cualquier prueba que guarde un accesorio revienta con
+           «Cannot read properties of undefined (reading '0')» y parece un fallo
+           de la pantalla cuando lo es del andamiaje. Se sirve una opcion vacia:
+           la que importa —que el SKU se lea del producto y no se suponga— la
+           comprueba `catalogo_accesorios.js` contra el HTML de la lista. */
+        options:[], selectedOptions:[{ value:'', dataset:{}, textContent:'' }],
         classList:{
           add:    c => clases.add(c),
           remove: c => clases.delete(c),

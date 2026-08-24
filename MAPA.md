@@ -509,7 +509,7 @@ dueño de la tienda.
 
 | qué | dónde | por qué ahí |
 |---|---|---|
-| Ticket de un accesorio | Captura → 🔌 Accesorio → 📊 Reporte del mes | Es la lista que ya estaba; solo le faltaba el botón |
+| Ticket de un accesorio | Captura → 🔧 Mr Fix → 📊 Reporte del mes | Es la lista que ya estaba; solo le faltaba el botón |
 | Reparaciones del mes | **Admin → 👥 Equipo** | Captura es la pantalla que baja el Excel |
 
 ⚠️ **Las reparaciones NO se ven desde Captura de Series, y no es un descuido.**
@@ -544,9 +544,57 @@ Un mes sin reparaciones **es un resultado normal** y se dice nombrando el mes, a
 revés que el catálogo, que nunca está vacío de verdad y donde cero siempre es un
 problema.
 
+#### Un solo botón: 🔧 Mr Fix *(24-ago-2026, v205)*
+
+Accesorio y reparación empezaron siendo **dos botones** en la barra y dos paneles.
+Se juntaron en uno el mismo día, a propuesta de Ángel: *«¿por qué no puede haber
+solo un botón?»*.
+
+**Tenía razón, y el argumento de separarlos era del sitio equivocado.** Lo que
+protege el Excel regional es que sean **dos tablas** y que la pantalla del Excel
+no pueda leer reparaciones. Nada de eso depende de que haya dos pantallas.
+Separar la interfaz no compraba ninguna garantía: solo llenaba la barra —con tres
+botones no cabían las etiquetas en un teléfono— y **duplicaba el flujo de foto y
+OCR**, que era idéntico en los dos paneles.
+
+Al asesor, además, le llega **un ticket** de Mr Fix y decide qué fue; no elige
+antes por qué puerta entrar.
+
+Ahora es un panel con un selector arriba del todo, en color de marca —naranja el
+accesorio, rojo la reparación—. Va **arriba y no entre los campos** porque es el
+único dato que decide a qué tabla va la venta, y el único que no se corrige
+después sin borrar y recapturar. Producto, piezas y vendedor **se ocultan** en
+reparación en vez de quedarse vacíos: un campo que no se usa se acaba llenando de
+cualquier cosa. Y el mismo campo cambia de nombre —«Precio» / «Importe
+cobrado»—, porque del mismo papel se leen dos números distintos: en el accesorio
+manda el precio de **la línea del 43739**, en la reparación el **importe** del
+trabajo entero.
+
+⚠️ **El riesgo que esto sí introduce, y que con dos botones no existía.** Lo
+único que ahora separa una cosa de otra es una rama `if` dentro de `guardarAcc`.
+Si esa rama se rompiera, una reparación saldría por `accesorio_guardar`, caería
+en `accesorios_ventas` y de ahí **al Excel regional**, moviendo comisiones de
+todo el equipo. Sin dar error: se vería, si acaso, al cuadrar la región semanas
+después.
+
+Por eso existe **`pruebas/mrfix_tipo.js`**, que no mira la pantalla sino **la
+llamada que sale a la red** —el único punto donde la decisión ya no se deshace—.
+Comprueba que cada tipo llame a su función *y que no llame a la del otro*.
+
+Comprobada rompiéndola por los dos lados. La primera versión era más débil de lo
+que parecía: con el producto vacío, ignorar el tipo se veía como «falta el
+producto» y no como una reparación mal enrutada. Ahora deja el producto puesto
+—que es el estado real del panel tras capturar un accesorio—, así una reparación
+mal dirigida **llega hasta `accesorio_guardar`** y el fallo se lee con su nombre.
+
+De paso, el DOM de pruebas no tenía `selectedOptions`, que un `<select>` real sí
+tiene y que el código usa para sacar el SKU del producto. Sin eso, cualquier
+prueba que guardara un accesorio reventaba con un error que **parecía de la
+pantalla y era del andamiaje**.
+
 ### Reparaciones de Mr Fix *(24-ago-2026, v201)*
 
-El asesor captura el ticket de reparación en **Captura → 🔧 Reparación**, y los
+El asesor captura el ticket de reparación en **Captura → 🔧 Mr Fix → Reparación**, y los
 dos técnicos externos lo ven en su pantalla, en una sección aparte de los
 accesorios.
 
