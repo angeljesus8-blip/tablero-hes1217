@@ -2553,10 +2553,10 @@ async function verFoto(capturaId, serie){
   const c = document.getElementById('fotoCuerpo');
   if(!c) return;                       // lo cerró antes de que llegara
   if(!d || d.ok !== true){
-    // "sin foto" es un caso normal —captura sin foto, o de hace más de 90 días—
+    // "sin foto" es un caso normal —captura sin foto, o de hace más de 31 días—
     // y se dice con esas palabras, no como un fallo.
     c.textContent = (d && d.error === 'sin foto')
-      ? 'Esta captura no tiene foto, o ya pasaron los 90 días que se guardan.'
+      ? 'Esta captura no tiene foto, o ya pasaron los 31 días que se guardan.'
       : ('No se pudo cargar: ' + ((d && d.error) || 'sin conexión'));
     return;
   }

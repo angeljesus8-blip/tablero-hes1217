@@ -33,15 +33,20 @@
 --  Edge Function, que es justo lo que se dejó para el final.
 --
 --  Aquí la foto entra por una RPC con el MISMO token de tienda que protege todo
---  lo demás. Sobre el tamaño: a ~10 ventas al día y ~150 KB por foto, los 90
---  días de retención salen a unos 135 MB. Con 7 días eran 10 MB.
+--  lo demás. Sobre el tamaño: a ~10 ventas al día y ~150 KB por foto, los 31
+--  días de retención salen a unos 46 MB. Con 7 días eran 10 MB.
 --
---  RETENCIÓN: 90 DÍAS (24-ago-2026). Eran 7, y 7 es lo que dura una serie
+--  RETENCIÓN: 31 DÍAS (24-ago-2026). Eran 7, y 7 es lo que dura una serie
 --  dudosa: se reclama en caliente o no se reclama. Pero la misma tabla guarda
 --  desde el 18-ago los tickets de accesorio y ahora los de reparación, que son
---  la evidencia de un CORTE MENSUAL: el técnico coteja su mes el día 25 y con 7
---  días los tickets de la primera semana ya no existían. Una evidencia que
---  caduca antes de que llegue el momento de usarla no es evidencia.
+--  la evidencia de un CORTE MENSUAL, y con 7 días los de la primera semana ya
+--  no existían al cotejarlo. Una evidencia que caduca antes de que llegue el
+--  momento de usarla no es evidencia.
+--
+--  ⚠️ 31 días cubren el mes EN CURSO, no el anterior. Un ticket del 1 de mes
+--  mirado el 10 del siguiente ya no está. Es una decisión tomada —el cotejo se
+--  hace dentro del mes—, no un descuido: si algún día hay que revisar un mes
+--  cerrado, esto es lo primero que hay que subir.
 --
 --  Se pega completo en el SQL Editor del proyecto "HES" (rjdrljtujbwooejrpyqv).
 --  Es idempotente.
@@ -128,7 +133,7 @@ BEGIN
   -- justo cuando hay algo que limpiar. Si un día dejan de subirse fotos, las
   -- últimas se quedan — 10 MB parados, que no molestan a nadie.
   DELETE FROM public.venta_fotos
-   WHERE store_id = p_store AND creada_en < now() - interval '90 days';
+   WHERE store_id = p_store AND creada_en < now() - interval '31 days';
   GET DIAGNOSTICS viejas = ROW_COUNT;
 
   RETURN jsonb_build_object('ok', true, 'bytes', n, 'borradas', viejas);
