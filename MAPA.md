@@ -553,13 +553,18 @@ La validación de la clave mira **las dos listas**. Con solo los accesorios, un
 técnico cuyo mes llevara únicamente reparaciones —que para él es un mes normal—
 leería «esa clave no es válida» y dejaría de intentarlo.
 
-**La foto del ticket dura 90 días** *(24-ago-2026; eran 7)*. Los 7 se pensaron
+**La foto del ticket dura 31 días** *(24-ago-2026; eran 7)*. Los 7 se pensaron
 para una serie dudosa, que se reclama en caliente o no se reclama. Pero la misma
 tabla guarda los tickets de accesorio y de reparación, que son la evidencia de un
-**corte mensual**: el técnico coteja su mes el día 25 y los de la primera semana
-ya no existían. **Una evidencia que caduca antes del momento de usarla no es
+**corte mensual**, y con 7 días los de la primera semana ya no existían al
+cotejarlo. **Una evidencia que caduca antes del momento de usarla no es
 evidencia.** El coste es de espacio y está medido: a ~10 ventas al día y ~150 KB
-por foto, 90 días son unos **135 MB** contra los 10 MB de antes.
+por foto, 31 días son unos **46 MB** contra los 10 MB de antes.
+
+⚠️ **31 días cubren el mes EN CURSO, no el anterior.** Un ticket del 1 de mes
+mirado el 10 del siguiente ya no está. Es una decisión tomada —el cotejo se hace
+dentro del mes—, no un descuido: si algún día hay que revisar un mes cerrado,
+esto es lo primero que hay que subir.
 
 La pantalla sigue diciendo el plazo al fallar, en vez de un «no se pudo abrir» que
 invita a reintentar toda la tarde algo que no va a volver.

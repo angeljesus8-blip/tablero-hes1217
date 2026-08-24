@@ -179,9 +179,8 @@ END $fn$;
 -- quedara corta seria la nueva, y nadie mira dos veces una funcion que ya
 -- existia.
 --
--- La foto dura 90 dias (24-ago-2026; eran 7). `venta_foto_guardar` limpia las
--- mas viejas en cada guardado, y 90 cubre el mes entero mas el tiempo de
--- cotejarlo, que es para lo que sirve este ticket.
+-- La foto dura 31 dias (24-ago-2026; eran 7). `venta_foto_guardar` limpia las
+-- mas viejas en cada guardado: cubre el mes EN CURSO, no el anterior.
 CREATE OR REPLACE FUNCTION public.accesorios_tecnico_foto(
   p_store text, p_clave text, p_captura_id text
 ) RETURNS jsonb
