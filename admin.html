@@ -1692,10 +1692,11 @@ function isoP(y,m,d){ return y+'-'+String(m).padStart(2,'0')+'-'+String(d).padSt
    del comunicado y del nombre del archivo.
    ================================================================ */
 
-/* Saca de PDF.js las palabras con su posición. El centro horizontal es lo
-   que permite casar una celda con su encabezado aunque venga centrada o
-   alineada a la derecha. */
-async function _ceaPalabrasPDF(file){
+/* Saca de PDF.js los fragmentos de texto tal como vienen, con su posición y
+   su ancho. NO se parten en palabras aquí: PDF.js no garantiza que un
+   fragmento sea una palabra. El CEA 257 llega partido glifo por glifo
+   —"$" "3" "," "4" "9" "8" ".00"— y hasta el SKU viene en dos pedazos. */
+async function _ceaItemsPDF(file){
   if(typeof pdfjsLib==='undefined') throw new Error('PDF.js no disponible — recarga la página');
   const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;
   const out=[];
@@ -1704,21 +1705,51 @@ async function _ceaPalabrasPDF(file){
     const vp=page.getViewport({scale:1});
     const tc=await page.getTextContent();
     tc.items.forEach(it=>{
-      const s=String(it.str==null?'':it.str).replace(/ /g,' ');
+      const s=String(it.str==null?'':it.str).replace(/ /g,' ');
       if(!s.trim()) return;
-      const x0=it.transform[4], y0=vp.height-it.transform[5], an=it.width||0;
-      const re=/\S+/g; let m;
-      while((m=re.exec(s))){
-        const a=m.index/s.length, b=(m.index+m[0].length)/s.length;
-        out.push({t:m[0], x:x0+an*a, c:x0+an*(a+b)/2, y:y0, page:p});
-      }
+      out.push({s:s, x:it.transform[4], y:vp.height-it.transform[5], w:it.width||0, page:p});
     });
   }
   return out;
 }
 
-/* Vuelve a pegar lo que PDF.js parte: el "$" separado de su cifra, la coma
-   de miles, y el SKU cortado a la mitad al inicio del renglón. */
+/* De los fragmentos de un renglón a sus palabras.
+
+   Primero se vuelven a pegar los pedazos que en la hoja están tocándose: si
+   el siguiente empieza a menos de 1 pt de donde acabó el anterior, entre
+   ellos no hubo espacio y son la misma palabra. Un espacio de verdad mide
+   2 pt o más en estos cuerpos de texto, así que no se pegan palabras
+   distintas.
+
+   Es la única forma que no depende de CÓMO parta PDF.js. Antes se buscaban
+   cortes concretos —el "$" suelto, la coma de miles— y este comunicado
+   partía de otra manera: "$3,498.00" se leyó como 3 pesos y así se guardó en
+   la nube. Aquí ya no importa dónde corte, importa dónde está impreso.
+
+   Después sí se separa por los espacios reales, repartiendo la posición
+   proporcionalmente. El centro horizontal es lo que casa cada celda con su
+   encabezado aunque venga centrada o alineada a la derecha. */
+function _ceaPalabras(its){
+  const trozos=[];
+  its.forEach(it=>{
+    const u=trozos[trozos.length-1];
+    if(u && it.x>=u.x && it.x-(u.x+u.w)<1){ u.s+=it.s; u.w=(it.x+it.w)-u.x; }
+    else trozos.push({s:it.s,x:it.x,w:it.w});
+  });
+  const out=[];
+  trozos.forEach(t=>{
+    const re=/\S+/g; let m;
+    while((m=re.exec(t.s))){
+      const a=m.index/t.s.length, b=(m.index+m[0].length)/t.s.length;
+      out.push({t:m[0], x:t.x+t.w*a, c:t.x+t.w*(a+b)/2});
+    }
+  });
+  return _ceaPegar(out);
+}
+
+/* Red por si algún PDF sí deja un espacio de verdad donde no va: el "$"
+   suelto de su cifra, o la coma de miles. Lo que viene pegado en la hoja ya
+   lo resolvió _ceaPalabras; esto sólo cubre el caso contrario. */
 function _ceaPegar(toks){
   const out=[];
   for(let i=0;i<toks.length;i++){
@@ -1726,7 +1757,6 @@ function _ceaPegar(toks){
     if(b){
       if(a.t==='$'&&/^\d/.test(b.t)){ out.push({t:'$'+b.t,x:a.x,c:(a.c+b.c)/2}); i++; continue; }
       if(/^\$?\d[\d,]*,$/.test(a.t)&&/^\d{3}(?:\.\d{1,2})?$/.test(b.t)){ out.push({t:a.t+b.t,x:a.x,c:(a.c+b.c)/2}); i++; continue; }
-      if(!out.length&&/^\d{1,8}$/.test(a.t)&&/^\d{1,8}$/.test(b.t)&&(a.t+b.t).length===9){ out.push({t:a.t+b.t,x:a.x,c:(a.c+b.c)/2}); i++; continue; }
     }
     out.push({t:a.t,x:a.x,c:a.c});
   }
@@ -1735,20 +1765,21 @@ function _ceaPegar(toks){
 
 /* Renglones por cercanía vertical. El agrupado anterior redondeaba y/6, y un
    renglón que caía justo en el borde del bucket se partía en dos: media fila
-   sin precio y fila perdida. Aquí cada renglón se abre con su primera palabra
-   y admite lo que caiga a menos de 4 pt de ella. */
-function _ceaRenglones(pals){
+   sin precio y fila perdida. Aquí cada renglón se abre con su primer
+   fragmento y admite lo que caiga a menos de 4 pt de él. Ya armado el
+   renglón, _ceaPalabras reconstruye sus palabras. */
+function _ceaRenglones(items){
   const porPag={};
-  pals.forEach(p=>(porPag[p.page]||(porPag[p.page]=[])).push(p));
+  items.forEach(i=>(porPag[i.page]||(porPag[i.page]=[])).push(i));
   const filas=[];
   Object.keys(porPag).map(Number).sort((a,b)=>a-b).forEach(pg=>{
     const ps=porPag[pg].sort((a,b)=>a.y-b.y||a.x-b.x);
     let grupo=[],y0=null;
-    const cerrar=()=>{ if(grupo.length) filas.push({page:pg,y:y0,toks:_ceaPegar(grupo.sort((a,b)=>a.x-b.x))}); grupo=[]; };
-    ps.forEach(p=>{
-      if(y0===null){ y0=p.y; grupo=[p]; return; }
-      if(Math.abs(p.y-y0)<=4){ grupo.push(p); return; }
-      cerrar(); y0=p.y; grupo=[p];
+    const cerrar=()=>{ if(grupo.length) filas.push({page:pg,y:y0,toks:_ceaPalabras(grupo.sort((a,b)=>a.x-b.x))}); grupo=[]; };
+    ps.forEach(i=>{
+      if(y0===null){ y0=i.y; grupo=[i]; return; }
+      if(Math.abs(i.y-y0)<=4){ grupo.push(i); return; }
+      cerrar(); y0=i.y; grupo=[i];
     });
     cerrar();
   });
@@ -1890,7 +1921,7 @@ function _ceaVigencia(flat){
 
 /* Núcleo: del PDF a filas {sku,desc,pr,pp,est,msi,d1,d2} */
 async function _ceaTablaPDF(file){
-  const filas=_ceaRenglones(await _ceaPalabrasPDF(file));
+  const filas=_ceaRenglones(await _ceaItemsPDF(file));
   const flat=filas.map(_ceaTexto).join(' ').replace(/\s+/g,' ');
   const cols=_ceaColumnas(filas);
   /* Etiqueta de la columna cuyo centro queda más cerca; si ninguna queda a
