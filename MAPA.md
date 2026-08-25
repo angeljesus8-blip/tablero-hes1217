@@ -636,6 +636,52 @@ Un mes sin reparaciones **es un resultado normal** y se dice nombrando el mes, a
 revés que el catálogo, que nunca está vacío de verdad y donde cero siempre es un
 problema.
 
+#### El mismo número, dicho tres veces *(24-ago-2026, v223)*
+
+Séptima foto. Ahora el mal leído fue **el precio**:
+
+```
+000043739 1 399,000 $999,00 |
+```
+
+`999.000` salió `399,000` —un 9 por un 3—, así que la cuenta no cerraba. Y el
+`Total` de ese papel **quedó ilegible**, con lo que el desempate de v220 no tenía
+con qué trabajar.
+
+Pero el mismo número está una tercera vez, más abajo:
+
+```
+I-IVA 16% 861.21 137.79
+```
+
+**Base más impuesto: exactamente 999.00.** Ahora, si no hay `Total` legible, se
+reconstruye desde ahí.
+
+Se usa **solo** cuando el `Total` falta: cuando está, es más directo, y una suma
+de dos números mal leídos daría un total falso con toda la confianza del mundo.
+
+⚠️ **El ticket dice cada importe hasta cuatro veces** —línea del artículo,
+`Total`, línea del IVA, y en letra al pie— y esa redundancia es lo que permite
+corregir sin inventar. Todo lo que se corrige aquí se corrige **contra otro sitio
+del mismo papel**, nunca por parecido ni por lo que suele valer un producto.
+
+#### Siete fotos, siete fallos
+
+| foto | qué hizo el OCR |
+|---|---|
+| 1 | Ruido del borde y rayas entre columnas |
+| 2 | Dígito del SKU · punto del precio perdido |
+| 3 | Cantidad mudada al renglón de arriba |
+| 4 | Importe mal leído · mes cero en la fecha |
+| 5 | Dígito en la zona de ceros · coma decimal |
+| 6 | Línea partida en dos · SKU irreconocible |
+| 7 | Precio mal leído · sin `Total` con el que comprobar |
+
+Siete fotos de la misma impresora, siete fallos distintos y **ninguno repetido**.
+La lista ya no es una anécdota: es la medida de cuánto ruido mete este OCR, y de
+por qué cada corrección tiene que apoyarse en otro dato del ticket en vez de en
+una corazonada.
+
 #### La línea del artículo, partida en dos *(24-ago-2026, v222)*
 
 Sexta foto, sexto fallo que no se parece a ninguno:
