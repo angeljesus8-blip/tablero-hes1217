@@ -1749,6 +1749,7 @@ let _accOcr = null;          // promesa del OCR en curso
 let _accFoto = null;         // la foto del ticket, para guardarla de evidencia
 let _accCat = [];            // catálogo de accesorios
 let _accCfgPedida = false;   // los codigos de reparacion, una vez por sesion de app
+let _accFechaDudosa = '';    // fecha del ticket que el OCR leyo imposible (mes 0)
 
 const ACC_ANCLAS = [/437\s?39/, /atendido/i, /productos/i, /1217/,
                     /articulo/i, /importe/i, /reimprimir/i];
@@ -1829,11 +1830,26 @@ async function accLeerTicket(file){
    subtotales del reporte mensual nunca pudo decir. */
 function accExtraer(txt){
   const idl = txt.match(/1217\s+\d\s+(\d{1,2}\/\d{1,2}\/\d{2})\s+[\d:]+\s*[APap][MmHh]?\s+(\d{4,6})/);
-  // La cantidad acepta ] I l | : el OCR los confunde con 1 en matriz de puntos.
-  const lin = txt.match(/0{0,6}43\s?739\D{0,6}([\dIl\]|]{1,3})\s+([\d.,]+)\s+\$?\s?([\d.,]+)/);
-  const cant = lin ? accNum(String(lin[1]).replace(/[Il\]|]/g, '1')) : null;
-  const pUni = lin ? accNum3(lin[2]) : null;
-  const imp  = lin ? accNum(lin[3])  : null;
+
+  /* LA LÍNEA DEL ARTÍCULO, sea cual sea su SKU.
+
+     Antes esto buscaba literalmente el `43739`, así que en una reparación
+     —cobrada con 100175537 / 100175545— no encontraba nada y devolvía cantidad,
+     precio e importe VACÍOS. El asesor tenía que teclear el importe a mano sin
+     que nada dijera por qué. Pasó el 24-ago, en cuanto se capturó la primera.
+
+     Se coge la línea de la REPARACIÓN si la hay, y si no la del accesorio: son
+     las dos cosas que esta pantalla sabe capturar, y un ticket no lleva las dos
+     en la misma línea. */
+  const lineas = accLineasArticulo(txt);
+  const clavesRep = SKUS_REP.map(accSkuNorm).filter(Boolean);
+  const esRep = (l) => clavesRep.indexOf(accSkuNorm(l.sku)) >= 0;
+  const esAcc = (l) => /^(43739|63602|57518)/.test(accSkuNorm(l.sku));
+  const lin = lineas.filter(esRep)[0] || lineas.filter(esAcc)[0] || null;
+
+  const cant = lin ? lin.cant : null;
+  const pUni = lin ? lin.precio : null;
+  const imp  = lin ? lin.importe : null;
   return {
     ticket: idl ? idl[2] : (txt.match(/\b(3\d{4})\b/) || [])[1] || '',
     fecha:  idl ? idl[1] : '',
@@ -1845,6 +1861,40 @@ function accExtraer(txt){
             && Math.abs(pUni * cant - imp) < 0.02,
     texto: txt
   };
+}
+
+/* Las líneas de artículo con sus números: sku, cantidad, precio unitario e
+   importe. La cantidad acepta ] I l | porque el OCR los confunde con 1.
+
+   El precio unitario lleva TRES decimales (`1124.390` son 1124.39 pesos) y el
+   importe dos con coma de miles (`$1,124.39`). Formatos distintos, funciones
+   distintas: leer el precio como si tuviera separador de miles daba $1,124,390
+   y la comprobación no cerraba nunca. */
+/* El aviso de la fecha que no se pudo usar. Se enseña en los dos avisos —el de
+   accesorio y el de reparacion— porque el fallo es del OCR, no del tipo de
+   venta: sin decirlo, el asesor ve la fecha de hoy en el campo y la da por
+   buena, y la venta se guarda en el dia equivocado. En un corte MENSUAL eso
+   mueve la venta de mes cuando el ticket es de fin de mes. */
+function accAvisoFecha(){
+  return _accFechaDudosa
+    ? '<br><b>Ojo:</b> la fecha del ticket se leyó «' + esc(_accFechaDudosa) +
+      '», que no es una fecha. Comprueba el día antes de guardar.'
+    : '';
+}
+
+function accLineasArticulo(txt){
+  const re = /(?:^|\n)\s*(\d{4,12})\s+([\dIl\]|]{1,3})\s+([\d.,]+)\s+\$?\s?([\d.,]+)/g;
+  const fuera = [];
+  let m;
+  while((m = re.exec(String(txt || ''))) !== null){
+    fuera.push({
+      sku: m[1],
+      cant: accNum(String(m[2]).replace(/[Il\]|]/g, '1')),
+      precio: accNum3(m[3]),
+      importe: accNum(m[4])
+    });
+  }
+  return fuera;
 }
 
 /* ── Adivinar QUÉ producto fue, desde el código del ticket ───────────────
@@ -1929,10 +1979,11 @@ function accSkuNorm(s){
    importe. La cantidad acepta ] I l | porque el OCR los confunde con 1, igual
    que en `accExtraer`. */
 function accSkusDeLineas(textoTicket){
-  var re = /(?:^|\n)\s*(\d{4,12})\s+([\dIl\]|]{1,3})\s+([\d.,]+)\s+\$?\s?[\d.,]+/g;
-  var fuera = [], m;
-  while((m = re.exec(String(textoTicket || ''))) !== null) fuera.push(m[1]);
-  return fuera;
+  // Se apoya en `accLineasArticulo`: una sola forma de leer esa linea. Con dos
+  // copias del mismo patron, un dia dirian cosas distintas del mismo ticket —y
+  // aqui eso seria decidir que es una venta con unos numeros y cobrarla con
+  // otros.
+  return accLineasArticulo(textoTicket).map(function(l){ return l.sku; });
 }
 
 function accQueEs(textoTicket){
@@ -2179,6 +2230,7 @@ function accPintarLineas(){
 window.abrirAcc = async function(){
   accTipo('acc');            // cada ticket empieza en accesorio, que es lo habitual
   accTipoManual();           // hasta que se lea la foto no hay nada detectado
+  _accFechaDudosa = '';
   _accLineas = []; accPintarLineas();
   _accOcr = null;
   $('accEstado').textContent = '';
@@ -2292,15 +2344,42 @@ window.accFotoElegida = function(e){
       $('accPrecio').value = (_accTipo === 'rep') ? r.importe
                            : (r.precio != null ? r.precio : r.importe);
     if(r.cant && Number(r.cant) > 0) $('accCant').value = r.cant;
+    /* La fecha, SOLO si el día y el mes existen.
+
+       El OCR leyó `23/8/26` como `23/0/26` —el 8 por un 0— y eso armaba
+       `2026-00-23`. Un `<input type="date">` rechaza esa fecha en silencio: el
+       campo se quedaba EN BLANCO, sin decir nada, y la venta se guardaba con la
+       fecha de hoy en vez de la del ticket. Un mes 0 no es una fecha rara: es
+       una fecha imposible, y llenar el campo con ella no es mejor que dejar la
+       que ya estaba puesta. */
     if(r.fecha){
       const m = r.fecha.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/);
-      if(m) $('accFecha').value = '20' + m[3] + '-' + m[2].padStart(2,'0') + '-' + m[1].padStart(2,'0');
+      const dd = m ? Number(m[1]) : 0, mm = m ? Number(m[2]) : 0;
+      if(m && mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31){
+        $('accFecha').value = '20' + m[3] + '-' + String(mm).padStart(2,'0') +
+                              '-' + String(dd).padStart(2,'0');
+      }else if(m){
+        // Se dice, porque si no el asesor ve la fecha de hoy y la da por buena.
+        _accFechaDudosa = r.fecha;
+      }
     }
     /* De aquí abajo, todo es del accesorio: proponer el producto y adivinar el
        vendedor. En una reparación no hay artículo del catálogo que casar ni
        comisión que asignar, y dejarlo correr enseñaría un aviso de «no pude
        proponer el producto» sobre un panel donde el producto ni se pregunta. */
-    if(_accTipo === 'rep') return r;
+    if(_accTipo === 'rep'){
+      /* Pero SÍ se enseña lo que se leyó. Sin esto, en una reparación el asesor
+         no veía nada de lo que el OCR había entendido —ni ticket, ni fecha, ni
+         importe— y tenía que fiarse de unos campos que se rellenaron solos. */
+      const el = $('accLeido');
+      el.innerHTML = 'Del ticket: <b>' + esc(r.ticket || '—') + '</b>'
+        + (r.fecha ? ' · ' + esc(r.fecha) : '')
+        + (r.importe != null ? '<br>Importe leído: <b>$' + r.importe + '</b>' : '')
+        + (r.importe == null ? '<br><b>Ojo:</b> no pude leer el importe. Escríbelo a mano.' : '')
+        + accAvisoFecha();
+      el.style.display = 'block';
+      return r;
+    }
     if(r.vend){
       const flojo = VENDEDORES.filter(v => _sinAcentos(v).indexOf(_sinAcentos(r.vend.split(',')[0])) >= 0);
       if(flojo.length === 1) $('accVend').value = flojo[0];
@@ -2347,6 +2426,7 @@ window.accFotoElegida = function(e){
       + (r.fecha ? ' · ' + esc(r.fecha) : '')
       + (r.vend ? ' · ' + esc(r.vend) : '')
       + (r.importe != null ? '<br>Importe leído: <b>$' + r.importe + '</b>' : '')
+      + accAvisoFecha()
       + (r.cuadra
           ? ' — la cuenta del ticket cuadra ✓'
           : '<br><b>Ojo:</b> no pude comprobar el importe contra la línea del ticket. '

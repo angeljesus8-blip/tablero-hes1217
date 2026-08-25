@@ -636,6 +636,40 @@ Un mes sin reparaciones **es un resultado normal** y se dice nombrando el mes, a
 revés que el catálogo, que nunca está vacío de verdad y donde cero siempre es un
 problema.
 
+#### Ni fecha ni importe en una reparación *(24-ago-2026, v213)*
+
+Detectado el tipo, la captura seguía coja: el asesor tenía que teclear el
+importe y la fecha a mano. Dos fallos distintos, los dos en el mismo ticket.
+
+**1 · `accExtraer` buscaba literalmente la línea del `43739`.** Una reparación se
+cobra con `100175537` / `100175545`, así que no encontraba nada y devolvía
+cantidad, precio e importe **vacíos** — sin decir por qué. Ahora lee **la línea
+del artículo sea cual sea su SKU**: coge la de la reparación si la hay y si no la
+del accesorio.
+
+`accSkusDeLineas` pasa a apoyarse en esa misma función. Con dos copias del mismo
+patrón, un día dirían cosas distintas del mismo ticket — y aquí eso sería
+**decidir qué es una venta con unos números y cobrarla con otros**.
+
+**2 · La fecha del ticket se leyó `23/0/26`** — el OCR confundió el 8 con un 0.
+Eso arma `2026-00-23`, y un `<input type="date">` **rechaza esa fecha en
+silencio**: el campo se quedaba en blanco y la venta se guardaba con la fecha de
+hoy en vez de la del ticket.
+
+⚠️ En un corte **mensual** eso mueve la venta de mes cuando el ticket es de fin
+de mes. Ahora se comprueba que el día y el mes existan; si no, **se dice** —«la
+fecha del ticket se leyó "23/0/26", que no es una fecha»— en vez de dejar la de
+hoy puesta y que el asesor la dé por buena.
+
+**Y en una reparación ahora se enseña lo que se leyó.** Antes el aviso azul solo
+se armaba para accesorios: en una reparación los campos se rellenaban solos y no
+había nada contra lo que comprobarlos.
+
+La prueba corre `accExtraer` contra el ticket transcrito y comprueba **el importe
+(1124.39), el ticket, la fecha y que `precio × cantidad = importe` cuadre**.
+Verificada devolviendo la búsqueda del 43739: falla diciendo que no leyó el
+importe.
+
 #### El código estaba en otra columna del ticket *(24-ago-2026, v212)*
 
 Con todo lo demás ya en su sitio, la detección seguía sin reconocer una
