@@ -1750,6 +1750,13 @@ let _accFoto = null;         // la foto del ticket, para guardarla de evidencia
 let _accCat = [];            // catálogo de accesorios
 let _accCfgPedida = false;   // los codigos de reparacion, una vez por sesion de app
 let _accFechaDudosa = '';    // fecha del ticket que el OCR leyo imposible (mes 0)
+/* Lo ULTIMO que leyo el OCR, tal cual. Se guarda para poder ENSEÑARLO.
+   24-ago-2026: el sku y el precio no se leian y no habia forma de saber por
+   que, porque nadie veia el texto que sale del OCR — solo el resultado de
+   intentar interpretarlo. Se arreglo dos veces a ciegas, adivinando el
+   formato del ticket, y las dos veces mal. Poder mirar el texto convierte
+   «no lee el precio» en un dato. */
+let _accCrudo = '';
 
 const ACC_ANCLAS = [/437\s?39/, /atendido/i, /productos/i, /1217/,
                     /articulo/i, /importe/i, /reimprimir/i];
@@ -1875,6 +1882,30 @@ function accExtraer(txt){
    venta: sin decirlo, el asesor ve la fecha de hoy en el campo y la da por
    buena, y la venta se guarda en el dia equivocado. En un corte MENSUAL eso
    mueve la venta de mes cuando el ticket es de fin de mes. */
+/* El enlace para ver el texto que salio del OCR. Va en los dos avisos.
+
+   No es un modo depuracion escondido: cuando el OCR falla, lo unico que ve el
+   asesor —y quien tenga que arreglarlo— es que un campo salio vacio. Con el
+   texto delante se ve si el fallo fue de la foto, de la impresora o del codigo
+   que lo interpreta, que son tres arreglos distintos. */
+window.accVerCrudo = function(){
+  const c = $('accCrudo');
+  if(!c) return;
+  const abierto = c.style.display !== 'none';
+  c.style.display = abierto ? 'none' : 'block';
+  if(!abierto) c.textContent = _accCrudo || '(el OCR no devolvio texto)';
+};
+
+function accBotonCrudo(){
+  return _accCrudo
+    ? '<br><button type="button" class="lupa" style="margin-top:8px" ' +
+      'onclick="accVerCrudo()">ver lo que leí en el ticket</button>' +
+      '<pre id="accCrudo" style="display:none;white-space:pre-wrap;word-break:break-word;' +
+      'font-size:10.5px;line-height:1.35;background:#fff;border:1px solid #cddcec;' +
+      'border-radius:8px;padding:8px;margin:8px 0 0;max-height:220px;overflow:auto"></pre>'
+    : '';
+}
+
 function accAvisoFecha(){
   return _accFechaDudosa
     ? '<br><b>Ojo:</b> la fecha del ticket se leyó «' + esc(_accFechaDudosa) +
@@ -2230,7 +2261,7 @@ function accPintarLineas(){
 window.abrirAcc = async function(){
   accTipo('acc');            // cada ticket empieza en accesorio, que es lo habitual
   accTipoManual();           // hasta que se lea la foto no hay nada detectado
-  _accFechaDudosa = '';
+  _accFechaDudosa = ''; _accCrudo = '';
   _accLineas = []; accPintarLineas();
   _accOcr = null;
   $('accEstado').textContent = '';
@@ -2318,6 +2349,7 @@ window.accFotoElegida = function(e){
   // Corre EN PARALELO. Nadie espera mirando una barra.
   _accOcr = accLeerTicket(f).then(function(r){
     $('accEstado').textContent = '';
+    _accCrudo = r.texto || '';
     if(r.ticket && !$('accTicket').value) $('accTicket').value = r.ticket;
 
     /* EL TICKET DECIDE QUÉ ES, no el asesor. Va antes de rellenar el importe,
@@ -2376,7 +2408,7 @@ window.accFotoElegida = function(e){
         + (r.fecha ? ' · ' + esc(r.fecha) : '')
         + (r.importe != null ? '<br>Importe leído: <b>$' + r.importe + '</b>' : '')
         + (r.importe == null ? '<br><b>Ojo:</b> no pude leer el importe. Escríbelo a mano.' : '')
-        + accAvisoFecha();
+        + accAvisoFecha() + accBotonCrudo();
       el.style.display = 'block';
       return r;
     }
@@ -2430,7 +2462,8 @@ window.accFotoElegida = function(e){
       + (r.cuadra
           ? ' — la cuenta del ticket cuadra ✓'
           : '<br><b>Ojo:</b> no pude comprobar el importe contra la línea del ticket. '
-            + 'Míralo antes de guardar.');
+            + 'Míralo antes de guardar.')
+      + accBotonCrudo();
     el.style.display = 'block';
     return r;
   }).catch(function(){
