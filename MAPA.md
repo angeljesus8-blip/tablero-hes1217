@@ -636,6 +636,49 @@ Un mes sin reparaciones **es un resultado normal** y se dice nombrando el mes, a
 revés que el catálogo, que nunca está vacío de verdad y donde cero siempre es un
 problema.
 
+#### El importe, ilegible entero *(24-ago-2026, v224)*
+
+Octava foto. Donde el papel dice `$1,013.20`, el OCR leyó **`SOI`**:
+
+```
+100175537 1 1013,200 SOI |
+```
+
+Exigiendo el importe se perdía **la línea completa** — y con ella el SKU y el
+precio, que estaban **bien leídos**. Ahora el importe es opcional y lo rellena el
+`Total`, que en este ticket sí se leyó.
+
+⚠️ **El guardarraíl es lo que sostiene el cambio: sin importe, el precio tiene
+que llevar decimales.** Sin esa condición, la línea del pie del ticket
+—`1217 2 23/0/26 4:59 PM 33685`, que está en **todos**— pasaría por artículo:
+SKU 1217, cantidad 2, precio 23.
+
+Comprobado quitándola: **nueve fallos**, porque esa línea se cuela en casi todos
+los tickets y los convierte en «mixtos», que son de los que no se deciden solos.
+`1013,200` lleva decimales; `23` no.
+
+#### Ocho fotos, ocho fallos
+
+| foto | qué hizo el OCR |
+|---|---|
+| 1 | Ruido del borde y rayas entre columnas |
+| 2 | Dígito del SKU · punto del precio perdido |
+| 3 | Cantidad mudada al renglón de arriba |
+| 4 | Importe mal leído · mes cero en la fecha |
+| 5 | Dígito en la zona de ceros · coma decimal |
+| 6 | Línea partida en dos · SKU irreconocible |
+| 7 | Precio mal leído · sin `Total` con el que comprobar |
+| 8 | **Importe ilegible entero** (`$1,013.20` → `SOI`) |
+
+Ocho fotos del mismo modelo de impresora y **ninguno de los ocho fallos se
+repite**. Cada campo de la línea ha fallado ya al menos una vez —SKU, cantidad,
+precio, importe— y en dos ocasiones se fue de línea.
+
+Lo que hace que esto siga siendo capturable es que **el ticket dice cada número
+varias veces**: la línea, el `Total`, la línea del IVA, y en letra al pie. Nada
+se corrige por parecido — todo se corrige contra otro sitio del mismo papel, y
+lo que no se puede comprobar se deja como está y se avisa.
+
 #### El mismo número, dicho tres veces *(24-ago-2026, v223)*
 
 Séptima foto. Ahora el mal leído fue **el precio**:
