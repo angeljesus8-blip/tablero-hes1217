@@ -636,6 +636,45 @@ Un mes sin reparaciones **es un resultado normal** y se dice nombrando el mes, a
 revés que el catálogo, que nunca está vacío de verdad y donde cero siempre es un
 problema.
 
+#### Borré tres funciones y nada lo dijo *(24-ago-2026, v217)*
+
+`accVerCrudo`, `accBotonCrudo` y `accAvisoFecha` **se borraron sin querer en
+v215**, al reemplazar un bloque de código, y siguieron llamándose. Al leer un
+ticket la excepción caía en el `catch` del OCR, así que se veía como **«no se
+pudo leer el ticket»** y no como lo que era. Pasó el verificador y se publicó
+**dos veces**.
+
+⚠️ **`r_helpers` existía justo para esto y no lo vio.** Vigila una lista fija de
+**trece nombres**, escrita hace meses: ninguna función creada después estaba
+cubierta. Ampliarla a mano deja el mismo agujero para la siguiente.
+
+Ahora, además, **compara con el commit anterior**: lo que ayer existía, hoy no, y
+se sigue llamando, está roto seguro. Eso no necesita lista ni mantenimiento. No
+caza una función que nunca existió —para eso sigue estando `propios`— pero sí el
+caso de hoy, que es borrar algo que estaba.
+
+#### Quién atendió, y por qué no se rellenaba
+
+El nombre se buscaba **entero** dentro de la lista del equipo. El ticket lo
+escribe al revés —apellidos primero— y el OCR le pega ruido al final, así que
+bastaba una letra de más para no casar con nadie.
+
+Ahora se compara **por palabras**: gana quien comparta más, con **dos como
+mínimo y sin empate**. Dos y no una porque un solo apellido puede ser de dos
+personas del equipo; y con empate no se elige, porque poner el nombre equivocado
+en un accesorio **le da la comisión a otro** sin dar error en ningún sitio.
+
+Y se dice cuál de los **tres casos** ocurrió, porque cada uno se arregla distinto:
+no se leyó (repetir la foto), se leyó y no coincide con nadie (falta esa persona
+en Admin → Equipo), o casó (solo comprobarlo). Un campo vacío los confunde los
+tres.
+
+⚠️ **Datos personales fuera del repo.** El ticket guardado traía el nombre
+completo de un empleado, el número de cuenta y el de autorización. `r_personales`
+lo cazó al aparecer en un comentario del código. El texto se conserva entero
+—que es lo que lo hace útil— pero con nombre ficticio y esos números tapados:
+este repo es público.
+
 #### Ni fecha ni quién atendió, en una reparación *(24-ago-2026, v216)*
 
 Con el SKU y el importe ya leídos, faltaban dos campos. Dos causas distintas, y

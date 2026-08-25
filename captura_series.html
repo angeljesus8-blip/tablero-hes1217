@@ -1757,6 +1757,8 @@ let _accFechaDudosa = '';    // fecha del ticket que el OCR leyo imposible (mes 
    formato del ticket, y las dos veces mal. Poder mirar el texto convierte
    «no lee el precio» en un dato. */
 let _accCrudo = '';
+let _accVendLeido = '';    // lo que el ticket dice en «Atendido por»
+let _accVendCasado = null; // con quien de la lista se pudo casar, o null
 
 const ACC_ANCLAS = [/437\s?39/, /atendido/i, /productos/i, /1217/,
                     /articulo/i, /importe/i, /reimprimir/i];
@@ -1911,6 +1913,75 @@ function accExtraer(txt){
    y la comprobación no cerraba nunca.
 
    La cantidad acepta ] I l | porque el OCR los confunde con 1. */
+window.accVerCrudo = function(){
+  const c = $('accCrudo');
+  if(!c) return;
+  const abierto = c.style.display !== 'none';
+  c.style.display = abierto ? 'none' : 'block';
+  if(!abierto) c.textContent = _accCrudo || '(el OCR no devolvio texto)';
+};
+
+function accBotonCrudo(){
+  return _accCrudo
+    ? '<br><button type="button" class="lupa" style="margin-top:8px" ' +
+      'onclick="accVerCrudo()">ver lo que leí en el ticket</button>' +
+      '<pre id="accCrudo" style="display:none;white-space:pre-wrap;word-break:break-word;' +
+      'font-size:10.5px;line-height:1.35;background:#fff;border:1px solid #cddcec;' +
+      'border-radius:8px;padding:8px;margin:8px 0 0;max-height:220px;overflow:auto"></pre>'
+    : '';
+}
+
+/* Casar el nombre del ticket con alguien de la lista del equipo.
+
+   Antes se buscaba el nombre leído ENTERO dentro del de la lista. Eso pide que
+   las dos cadenas se parezcan mucho, y no se parecen: el ticket escribe
+   «APELLIDO1 APELLIDO2, NOMBRE» —apellidos primero— y la lista tiene
+   «Nombre Segundo Apellido1 Apellido2». Encima el OCR pega ruido al final
+   («NOMBRE NN», «NOMBRE XX»), así que bastaba una letra de más para no casar
+   con nadie y dejar el campo sin poner.
+
+   Ahora se compara POR PALABRAS, que sobrevive al orden y al ruido: gana quien
+   comparta más, con dos como mínimo y sin empate. Las de menos de tres letras
+   se tiran — son las iniciales que inventa el OCR y las partículas («de»,
+   «la»), que casan con cualquiera.
+
+   Dos como mínimo, y no una, porque un solo apellido puede ser de dos personas
+   del equipo. Y con empate NO se elige: poner el nombre equivocado en una venta
+   de accesorio le da la comisión a otro, y eso no da error en ningún sitio — se
+   vería, si acaso, al cuadrar el mes. */
+function accCasarVendedor(leido){
+  const palabras = _sinAcentos(leido).split(/[^a-z0-9]+/).filter(p => p.length >= 3);
+  if(!palabras.length) return null;
+  let mejor = null, cuantas = 0, empate = false;
+  for(const v of VENDEDORES){
+    const n = palabras.filter(p => _sinAcentos(v).indexOf(p) >= 0).length;
+    if(n > cuantas){ mejor = v; cuantas = n; empate = false; }
+    else if(n === cuantas && n > 0){ empate = true; }
+  }
+  return (cuantas >= 2 && !empate) ? mejor : null;
+}
+
+/* Lo que se le dice al asesor sobre quién atendió. Son TRES casos y cada uno se
+   arregla de otra forma: si no se leyó, hay que repetir la foto; si se leyó y no
+   casa, falta esa persona en la lista del equipo; y si casó, solo hay que
+   comprobarlo de un vistazo. Un campo vacío sin más los confunde los tres, y el
+   asesor acaba eligiendo a mano sin saber si hacía falta. */
+function accAvisoVend(){
+  if(!_accVendLeido) return '<br><b>Ojo:</b> no pude leer quién atendió. Elígelo tú.';
+  if(_accVendCasado) return '<br>Atendió: <b>' + esc(_accVendCasado) + '</b>';
+  return '<br><b>Ojo:</b> el ticket dice «' + esc(_accVendLeido) + '», que no coincide ' +
+         'con nadie de la lista del equipo. Elígelo tú, y si falta esa persona se ' +
+         'agrega en <b>Admin → Equipo</b>.';
+}
+
+function accAvisoFecha(){
+  return _accFechaDudosa
+    ? '<br><b>Ojo:</b> la fecha del ticket se leyó «' + esc(_accFechaDudosa) +
+      '», que no es una fecha. Comprueba el día antes de guardar.'
+    : '';
+}
+
+
 function accLineasArticulo(txt){
   const re = /(?:^|\n)[^\d\n]{0,12}?(\d{4,12})[\s\u2014\u2013|]+([\dIl\]|]{1,3})[\s\u2014\u2013|]+([\d.,]+)[\s\u2014\u2013|]+\$?\s?([\d.,]+)/g;
   const fuera = [];
@@ -2259,7 +2330,7 @@ function accPintarLineas(){
 window.abrirAcc = async function(){
   accTipo('acc');            // cada ticket empieza en accesorio, que es lo habitual
   accTipoManual();           // hasta que se lea la foto no hay nada detectado
-  _accFechaDudosa = ''; _accCrudo = '';
+  _accFechaDudosa = ''; _accCrudo = ''; _accVendLeido = ''; _accVendCasado = null;
   _accLineas = []; accPintarLineas();
   _accOcr = null;
   $('accEstado').textContent = '';
@@ -2406,10 +2477,9 @@ window.accFotoElegida = function(e){
 
        No se guarda en la reparación, que no comisiona a nadie, pero sí se
        enseña: si el ticket dice otro nombre del que está puesto, eso se ve. */
-    if(r.vend){
-      const flojo = VENDEDORES.filter(v => _sinAcentos(v).indexOf(_sinAcentos(r.vend.split(',')[0])) >= 0);
-      if(flojo.length === 1) $('accVend').value = flojo[0];
-    }
+    _accVendLeido = r.vend || '';
+    _accVendCasado = r.vend ? accCasarVendedor(r.vend) : null;
+    if(_accVendCasado) $('accVend').value = _accVendCasado;
 
     if(_accTipo === 'rep'){
       /* Pero SÍ se enseña lo que se leyó. Sin esto, en una reparación el asesor
@@ -2420,7 +2490,7 @@ window.accFotoElegida = function(e){
         + (r.fecha ? ' · ' + esc(r.fecha) : '')
         + (r.importe != null ? '<br>Importe leído: <b>$' + r.importe + '</b>' : '')
         + (r.importe == null ? '<br><b>Ojo:</b> no pude leer el importe. Escríbelo a mano.' : '')
-        + accAvisoFecha() + accBotonCrudo();
+        + accAvisoVend() + accAvisoFecha() + accBotonCrudo();
       el.style.display = 'block';
       return r;
     }
