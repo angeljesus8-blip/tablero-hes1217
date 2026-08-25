@@ -1873,17 +1873,28 @@ function accExtraer(txt){
    que hay que saber es si el OCR leyo algo y qué. */
 /* ¿Qué es cada línea de este ticket? Lo dice EL PAPEL, no el asesor.
 
-   Los accesorios se reconocen por su código de artículo —`43739` y los dos de
-   Office— y las reparaciones por los suyos, que el gerente pone en
-   Admin → Configuración. Los dos salen del ticket después de `SERVICIO:`.
+   ⚠️ EL CÓDIGO SE LEE DE LA COLUMNA «Artículo», NO del campo `SERVICIO:`.
+   Esto costó una tarde el 24-ago. En el ticket de una reparación:
 
-   Son VARIOS códigos, no uno: Mr Fix cobra las reparaciones con `100175537` y
-   `100175545`. Por eso la configuración es una lista y no un campo suelto —con
-   uno solo, el otro tipo de reparación se habría guardado como accesorio y
-   habría entrado al Excel de comisiones.
+       Artículo   Cantidad   Precio      Importe
+       REP FUERA DE GARANTÍA HW 2
+       100175545      1      1124.390   $1,124.39  I
+       IMEI / SERIE / SERVICIO: 3RYUN24919G00047
+
+   El SKU va en su propia línea, delante de cantidad-precio-importe. Lo que hay
+   detrás de `SERVICIO:` es el IMEI DEL EQUIPO REPARADO —la etiqueta entera es
+   «IMEI / SERIE / SERVICIO:»—, y leyendo ahí la detección se traía el IMEI y no
+   reconocía ninguna reparación jamás. En los accesorios ese mismo campo sí trae
+   el código abreviado del artículo (`CARGA100WTS`), porque no tienen IMEI; por
+   eso `accCodigos` sigue sirviendo para ADIVINAR EL PRODUCTO y no para esto.
+
+   Es la misma línea de la que `accExtraer` saca el precio del 43739.
+
+   Los accesorios se reconocen por su SKU —`43739` y los dos de Office— y las
+   reparaciones por los suyos, que el gerente pone en Admin → Configuración.
 
    ⚠️ SOLO DECIDE CUANDO NO HAY DUDA. Si el ticket lleva las dos cosas, o si el
-   OCR no leyó ningún código reconocible, NO toca el selector y lo dice. El OCR
+   OCR no leyó ninguna línea de artículo, NO toca el selector y lo dice. El OCR
    de esta impresora falla de verdad —`CARGA100WTS` se leyó `CARGATOONTS 2 77`—
    y aquí equivocarse no es un campo mal puesto: manda la venta a la otra tabla.
    Un accesorio guardado como reparación no entra en el Excel, y esa comisión no
@@ -1903,23 +1914,39 @@ function accPartirSkus(txt){
    los telefonos el 24-ago. */
 var SKUS_REP = accPartirSkus(_cfgCS && _cfgCS.sku_reparacion);
 
+/* Normaliza un SKU para compararlo. Aplana las confusiones del OCR igual que
+   `accClave`, pero SIN quitarle el prefijo 43739 —eso alli sirve para acortar
+   el codigo de articulo, y aqui dejaria el SKU del accesorio en nada— y sin los
+   ceros de la izquierda, porque el catalogo guarda `000043739` y el ticket
+   imprime `43739`. */
+function accSkuNorm(s){
+  return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+           .replace(/[ODQILT|\]ZSBGNM]/g, function(c){ return ACC_OCR[c] || c; })
+           .replace(/^0+/, '');
+}
+
+/* Los SKU de las lineas de articulo: un numero, y detras cantidad, precio e
+   importe. La cantidad acepta ] I l | porque el OCR los confunde con 1, igual
+   que en `accExtraer`. */
+function accSkusDeLineas(textoTicket){
+  var re = /(?:^|\n)\s*(\d{4,12})\s+([\dIl\]|]{1,3})\s+([\d.,]+)\s+\$?\s?[\d.,]+/g;
+  var fuera = [], m;
+  while((m = re.exec(String(textoTicket || ''))) !== null) fuera.push(m[1]);
+  return fuera;
+}
+
 function accQueEs(textoTicket){
   if(!SKUS_REP.length) return { tipo:null, porque:'' };
-  var codigos = accCodigos(textoTicket);
-  if(!codigos.length) return { tipo:null, porque:'' };
+  var skus = accSkusDeLineas(textoTicket);
+  if(!skus.length) return { tipo:null, porque:'' };
 
-  // Aplanados por las confusiones del OCR, igual que la adivinanza del
-  // producto: sin esto un `TOOT755З7` mal leido no casaria con `100175537` y la
-  // deteccion se apagaria sola, sin avisar.
-  var claves = SKUS_REP.map(accClave).filter(Boolean);
+  var claves = SKUS_REP.map(accSkuNorm).filter(Boolean);
   var hayRep = false, hayAcc = false, cual = '';
-  for(var i = 0; i < codigos.length; i++){
-    var c = accClave(codigos[i]);
+  for(var i = 0; i < skus.length; i++){
+    var s = accSkuNorm(skus[i]);
     var esRep = false;
     for(var j = 0; j < claves.length; j++){
-      // El codigo puede venir solo o con sufijo, como los de accesorio
-      // (`43739-MICAHR`): basta que empiece igual.
-      if(c.indexOf(claves[j]) === 0){ esRep = true; cual = SKUS_REP[j]; break; }
+      if(s === claves[j]){ esRep = true; cual = SKUS_REP[j]; break; }
     }
     if(esRep) hayRep = true; else hayAcc = true;
   }
@@ -1928,7 +1955,7 @@ function accQueEs(textoTicket){
     return { tipo:null, porque:'Este ticket lleva accesorio Y reparación. ' +
                                 'Agrégalos uno por uno, empezando por el que quieras.' };
   }
-  if(hayRep) return { tipo:'rep', porque:'Es una reparación: el ticket trae el código ' + cual + '.' };
+  if(hayRep) return { tipo:'rep', porque:'Es una reparación: el ticket la cobra con el código ' + cual + '.' };
   return { tipo:'acc', porque:'' };     // accesorio es lo habitual: no hace falta decirlo
 }
 
