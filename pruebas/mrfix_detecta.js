@@ -44,6 +44,13 @@ function motor(skusRep){
   if(decl < 0) throw new Error('no encuentro `var SKUS_REP =` en captura_series.html');
   const finDecl = html.indexOf(';', decl);
 
+  /* `ACC_SKUS` tambien sale del HTML. Copiar aqui los tres codigos de
+     accesorio seria tener la lista en dos sitios: el dia que se añada uno, la
+     prueba seguiria comprobando los de antes y diria que todo va bien. */
+  const dAcc = html.indexOf('var ACC_SKUS =');
+  if(dAcc < 0) throw new Error('no encuentro `var ACC_SKUS =` en captura_series.html');
+  const finAcc = html.indexOf(';', dAcc);
+
   const caja = { _cfgCS: { sku_reparacion: skusRep } };
   vm.createContext(caja);
   /* `accPartirSkus` va aparte desde el 24-ago: SKUS_REP dejo de ser constante
@@ -51,7 +58,7 @@ function motor(skusRep){
      propia funcion. Se traen las dos del HTML, sin copiar ninguna. */
   vm.runInContext(codigos + '\n' +
     trozo('accPartirSkus') + '\n' +
-    html.slice(decl, finDecl + 1) + '\n' +
+    html.slice(dAcc, finAcc + 1) + '\n' + html.slice(decl, finDecl + 1) + '\n' +
     /* `accCodigos` se carga aunque `accQueEs` ya no lo use: si alguien vuelve
        a leerlo de ahi —el fallo del 24-ago— la prueba tiene que fallar diciendo
        QUE decidio mal, no «accCodigos is not defined», que suena a prueba rota
@@ -126,6 +133,20 @@ const T_REAL_REP3 = fs.readFileSync(
 const T_REAL_ACC4 = fs.readFileSync(
   path.join(__dirname, 'ocr_ticket_real4.txt'), 'utf8');
 
+/* QUINTO ticket: otra foto del MISMO accesorio que el cuarto, con dos fallos
+   que ningun otro tenia.
+
+       000943739 1 999,000 $999,00 1 =
+
+     · el sku `000043739` salio `000943739` — un 4 leido como 9. Los accesorios
+       se comparaban por prefijo exacto, asi que la linea no se encontraba: ni
+       sku ni precio. Y quitar los ceros de delante lo empeoraba, porque el
+       fallo cae JUSTO en esa zona y los dos codigos acababan midiendo distinto.
+     · el importe `$999,00` viene con COMA decimal, no con punto. Borrando las
+       comas sin mirar salia 99900: cien veces mas. */
+const T_REAL_ACC5 = fs.readFileSync(
+  path.join(__dirname, 'ocr_ticket_real5.txt'), 'utf8');
+
 /* El guardarrail del total: MISMO ticket pero con dos articulos. Aqui el total
    no dice nada del accesorio —un ticket de ocho articulos por $16,962.50
    llevaba un kit de $169— y corregir con el guardaria el total como precio del
@@ -164,6 +185,7 @@ const CASOS = [
   ['tercer ticket, sin cantidad en la linea', queEs, T_REAL_REP3, 'rep', true ],
   ['ticket REAL de accesorio',      queEs,         T_REAL_ACC,  'acc', false],
   ['cuarto ticket, accesorio real', queEs,         T_REAL_ACC4, 'acc', false],
+  ['quinto: sku de accesorio con un digito mal', queEs, T_REAL_ACC5, 'acc', false],
   ['ticket con las DOS cosas',      queEs,         T_MIX,      null,  true ],
   ['sin lineas de articulo',        queEs,         T_NADA,     null,  false],
   ['codigos sin configurar',        sinConfigurar, T_REAL_REP, null,  false],
@@ -212,6 +234,8 @@ const numeros = [
   /* El importe venia mal leido ($993.00) y lo desempata el Total del ticket,
      que solo se usa porque hay UN articulo. */
   ['cuarto ticket', queEs.extraer(T_REAL_ACC4), 999, '33675', ''],
+  /* Importe con coma decimal (`$999,00`) y sku con un digito mal leido. */
+  ['quinto ticket', queEs.extraer(T_REAL_ACC5), 999, '33675', '23/8/26'],
   ['accesorio',  queEs.extraer(T_REAL_ACC),  149,    '',      ''],
 ];
 for(const [que, r, importe, ticket, fecha] of numeros){
@@ -267,6 +291,28 @@ const dos = queEs.extraer(T_DOS_ARTICULOS);
 if(dos.cuadra || dos.importe === 999){
   fallos.push('con DOS articulos uso el Total del ticket para corregir (importe ' +
               dos.importe + '). El total no dice nada de una linea cuando hay varias');
+}
+
+/* ── La coma: unas veces es de miles y otras decimal ────────────────────
+   El importe se imprime `$1,124.39` pero el OCR lo devuelve a veces `$999,00`.
+   Borrar las comas sin mirar convertia eso en 99900. */
+{
+  const caja = { accNum: null };
+  const i = html.indexOf('function accNum(x){');
+  let j = html.indexOf('{', i), hondo = 0, k = j;
+  for(; k < html.length; k++){
+    if(html[k] === '{') hondo++;
+    else if(html[k] === '}'){ hondo--; if(!hondo) break; }
+  }
+  const accNum = vm.runInNewContext(html.slice(i, k + 1) + '; accNum', {});
+  for(const [txt, vale] of [['1,124.39', 1124.39], ['999,00', 999],
+                            ['961,71', 961.71], ['16,962.50', 16962.50],
+                            ['877.27', 877.27]]){
+    const leido = accNum(txt);
+    if(Math.abs(leido - vale) > 0.001){
+      fallos.push('accNum("' + txt + '") = ' + leido + ' y vale ' + vale);
+    }
+  }
 }
 
 if(fallos.length){
