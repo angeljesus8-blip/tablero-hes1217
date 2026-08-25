@@ -168,6 +168,36 @@ for(const [que, r, importe, ticket, fecha] of numeros){
   if(fecha && r.fecha !== fecha)   fallos.push(que + ': leyo la fecha "' + r.fecha + '" y es ' + fecha);
 }
 
+/* ── La fecha aguanta que el OCR estropee el ancla ──────────────────────
+   `accExtraer` saca ticket y fecha de la linea del pie —`1217 2 23/8/26 11:44
+   AM 33671`—, y basta que lea mal un digito del 1217 para perder la fecha
+   entera. El ticket ya tenia respaldo; la fecha no, y se quedaba vacia: la
+   venta se guardaba con la de HOY, que en un corte mensual mueve de mes un
+   ticket de fin de mes. */
+const T_ANCLA_ROTA = T_REAL_REP.replace('1217 2 23/8/26', 'T2I7 2 23/8/26');
+const rota = queEs.extraer(T_ANCLA_ROTA);
+if(rota.fecha !== '23/8/26'){
+  fallos.push('ancla rota: perdio la fecha ("' + rota.fecha + '") porque el OCR ' +
+              'estropeo el 1217 del pie. La venta se guardaria con la fecha de hoy');
+}
+
+/* ── Y QUIEN ATENDIO se lee tambien en una reparacion ───────────────────
+   «Lo atendio» es del TICKET desde v207, pero el codigo que lo rellena se
+   quedo en la parte del accesorio: en una reparacion se salia antes de llegar
+   y el campo no se rellenaba nunca, con el nombre impreso en el papel. */
+const vend = queEs.extraer(T_REAL_REP).vend;
+if(!vend || vend.toUpperCase().indexOf('GARCIA') < 0){
+  fallos.push('no leyo quien atendio del ticket de reparacion (leyo "' + vend + '")');
+}
+{
+  const orden = html.indexOf("if(_accTipo === 'rep'){");
+  const dondeVend = html.indexOf('const flojo = VENDEDORES.filter');
+  if(dondeVend < 0 || dondeVend > orden){
+    fallos.push('el vendedor se rellena DESPUES del corte de reparacion: en una ' +
+                'reparacion no llega a ejecutarse y el campo se queda vacio');
+  }
+}
+
 if(fallos.length){
   console.log('mrfix-detecta: ' + fallos.length + ' fallo(s)');
   fallos.forEach(f => console.log('   · ' + f));

@@ -636,6 +636,33 @@ Un mes sin reparaciones **es un resultado normal** y se dice nombrando el mes, a
 revés que el catálogo, que nunca está vacío de verdad y donde cero siempre es un
 problema.
 
+#### Ni fecha ni quién atendió, en una reparación *(24-ago-2026, v216)*
+
+Con el SKU y el importe ya leídos, faltaban dos campos. Dos causas distintas, y
+ninguna estaba en la lectura: `accExtraer` sacaba los dos bien del texto crudo.
+
+**1 · «Lo atendió» se rellenaba después del corte de reparación.** Ese campo
+pasó a ser **del ticket** en v207 —una persona atiende la compra entera— pero el
+código que lo rellena se quedó donde estaba, en la parte del accesorio. En una
+reparación se salía antes de llegar, y el campo quedaba vacío **con el nombre
+impreso en el papel**. Ahora va antes del corte.
+
+No se guarda en la reparación, que no comisiona a nadie, pero **sí se enseña**:
+si el ticket dice otro nombre del que está puesto, eso se ve.
+
+**2 · La fecha colgaba del literal `1217`.** `accExtraer` la saca de la línea del
+pie —`1217 2 23/8/26 11:44 AM 33671`— y basta que el OCR lea mal **un dígito de
+ese 1217** para perder la fecha entera. El número de ticket ya tenía respaldo
+desde el 18-ago; la fecha no.
+
+⚠️ Y perderla no deja el campo en blanco: deja **la fecha de hoy**. En un corte
+**mensual**, un ticket de fin de mes se va al mes siguiente sin que nada avise.
+Ahora hay respaldo que busca la fecha por su cuenta. Los centavos en letra
+—`39/100 MXN`— no se cuelan: hacen falta los tres grupos separados por barra.
+
+Las dos comprobadas rompiéndolas, y la de la fecha con el ancla estropeada a
+propósito (`T2I7`), que es como falla de verdad.
+
 #### El texto del OCR no se parece al ticket *(24-ago-2026, v215)*
 
 Tres intentos de arreglar esto fallaron, y los tres por lo mismo: **el patrón se
