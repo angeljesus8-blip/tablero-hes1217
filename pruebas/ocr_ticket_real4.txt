@@ -20,7 +20,7 @@ Cambio us TUN TA NIE IET DITA EN ZAR: — o.
 
 x NOVECIENTOS NOVENTA Y NUEVE PESOS 00/100 MXN *
 
-1217 2 23/0/26 3:12 PM 33675 <empno>
+1217 2 23/0/26 3:12 PM 33675 999999
 
 Atendido por : LOPEZ, CARLOS
 Recuento de artículos vendidos = 1

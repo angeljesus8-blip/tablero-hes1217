@@ -21,7 +21,7 @@ Ne de autorización: 000000 NON
 Nu Venta Normal “ N
 N Cambio 0.00 N
 N x MIL CIENTO VEINTICUATRO PESOS 39/100 MXN -—* NN
-1217 2 23/8/26 11:44 AM 33671 <empno> NN
+1217 2 23/8/26 11:44 AM 33671 888888 NN
 Atendido por :PEREZ RAMIREZ, JUAN NN
 Recuento de artículos vendidos = 1
 os NN

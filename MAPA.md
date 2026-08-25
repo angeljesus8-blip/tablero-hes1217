@@ -636,6 +636,48 @@ Un mes sin reparaciones **es un resultado normal** y se dice nombrando el mes, a
 revés que el catálogo, que nunca está vacío de verdad y donde cero siempre es un
 problema.
 
+#### La coma no siempre es de miles *(24-ago-2026, v221)*
+
+Quinta foto, del mismo accesorio que la cuarta, y **dos fallos que ninguna otra
+tenía**:
+
+```
+000943739 1 999,000 $999,00 1 =
+```
+
+**1 · El importe `$999,00` viene con coma DECIMAL.** El ticket lo imprime
+`$1,124.39` —coma de miles, punto decimal—, así que el conversor borraba las
+comas sin mirar: `999,00` se convertía en **99900**, cien veces más, y la cuenta
+no cerraba nunca.
+
+La regla nueva sale del propio número, no de suponer un formato: si trae **punto
+y coma**, la coma es de miles; si solo trae coma y detrás quedan **1 o 2**
+dígitos, es decimal; si quedan **3**, es de miles.
+
+**2 · El SKU `000043739` salió `000943739`** — un 4 leído como 9. Los accesorios
+se comparaban **por prefijo exacto** mientras las reparaciones ya toleraban un
+dígito. Ahora los dos usan la misma tolerancia.
+
+⚠️ **Y quitar los ceros de delante lo empeoraba.** El fallo cayó justo en esa
+zona: al recortar ceros quedaban `43739` y `943739`, de distinto largo, así que
+ni siquiera se comparaban. Ahora los códigos se alinean **por la derecha
+rellenando ceros**, que es lo que de verdad los hace comparables — `000043739`
+contra `000943739` es un dígito de diferencia, ni más ni menos.
+
+#### Cinco fotos, cinco fallos que no se repiten
+
+| foto | qué hizo el OCR |
+|---|---|
+| 1 | Ruido del borde (`N`, `NN`) y rayas entre columnas |
+| 2 | Un dígito del SKU mal leído · el punto del precio perdido |
+| 3 | La cantidad mudada al renglón de arriba |
+| 4 | El importe mal leído (`$993.00` por `$999.00`) · mes cero en la fecha |
+| 5 | Un dígito del SKU mal leído en la zona de los ceros · coma decimal |
+
+**Ninguno se parece al anterior**, y ninguno se deduce mirando el papel. Los
+cinco textos crudos están en `pruebas/`, y son lo que convierte «a veces no lee
+el precio» en cinco fallos concretos, cada uno con su arreglo y su comprobación.
+
 #### El ticket se desmiente a sí mismo *(24-ago-2026, v220)*
 
 Cuarto ticket, el primero de **accesorio**, y dos fallos más del OCR:
