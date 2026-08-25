@@ -76,28 +76,20 @@ const soloUno = motor(REP_A);            // como si se hubiera configurado a med
 const sinConfigurar = motor('');
 const conCeros = motor('000' + REP_B);   // mismo sku, escrito con ceros delante
 
-/* EL TICKET DE VERDAD, transcrito del papel (24-ago-2026). Es el que destapo el
-   fallo: la deteccion leia el campo `SERVICIO:` y se traia el IMEI del equipo
-   —3RYUN24919G00047— en vez del SKU 100175545 de la columna Articulo.
+/* EL TEXTO QUE DE VERDAD SALE DEL OCR, guardado tal cual en
+   `pruebas/ocr_ticket_real.txt` (24-ago-2026).
 
-   Se deja entero, con su cabecera y su pie, para que la prueba corra contra lo
-   que sale de la impresora y no contra un resumen comodo escrito por mi. */
-const T_REAL_REP = [
-  '1217-HUAWEI HES ANGELOPOLIS PUEBLA',
-  'Venta Normal',
-  'Reimprimir - Reimprimir - Reimprimir - Reimprimi',
-  'Articulo    Cantidad    Precio     Importe',
-  'REP FUERA DE GARANTIA HW 2',
-  '100175545        1      1124.390   $1,124.39  I',
-  'IMEI / SERIE / SERVICIO: 3RYUN24919G00047',
-  'Codigo Cambio de Precio: ITM017',
-  '                 Total        1,124.39',
-  '1217 2 23/8/26 11:44 AM 33671 <empno>',
-  'Atendido por:Ortega Vidal Luis'
-].join('\n');
+   No es el ticket transcrito a mano: es lo que Tesseract devuelve al leer la
+   foto, con el borde del papel convertido en `N`, `NN`, `ON`, con rayas donde
+   el papel solo tiene separacion, y con el IMEI leido `SRYUNZ4919600047`.
 
-// Un accesorio del mismo formato: el SKU generico en la columna Articulo, y en
-// SERVICIO el codigo abreviado (ahi si, porque una mica no tiene IMEI).
+   Esta es la diferencia entre las tres versiones que fallaron y esta. Las tres
+   se escribieron contra el ticket COMO SE VE, y las tres pasaban sus pruebas.
+   Un ticket transcrito por quien escribe el codigo confirma lo que ese codigo
+   ya supone; el crudo es el unico que puede desmentirlo. */
+const T_REAL_REP = fs.readFileSync(
+  path.join(__dirname, 'ocr_ticket_real.txt'), 'utf8');
+
 const T_REAL_ACC = [
   'Articulo    Cantidad    Precio     Importe',
   'MICA HR',
