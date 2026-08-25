@@ -636,6 +636,56 @@ Un mes sin reparaciones **es un resultado normal** y se dice nombrando el mes, a
 revés que el catálogo, que nunca está vacío de verdad y donde cero siempre es un
 problema.
 
+#### La detección estaba apagada en los teléfonos *(24-ago-2026, v210)*
+
+Ángel abrió la app y seguía viendo los dos botones. El código estaba puesto en
+Admin y en la base, y aun así **la detección no se encendía en ningún teléfono**.
+
+`sku_reparacion` viaja a la app dentro de `hes_store`, que se arma **campo por
+campo** en el login. No lo añadí a esa lista, así que llegaba vacío, `SKUS_REP`
+quedaba vacío y la detección se apagaba sola. **Sin dar error**: el panel
+funciona igual, solo pregunta lo que debería saber.
+
+⚠️ **El propio archivo lo advierte desde el 2-ago**: *«se arma el objeto campo
+por campo, así que hay que nombrarlo o se pierde en silencio»*. Es exactamente
+el fallo que costó el botón de «Ventas del día» oculto para todos. Había que
+tocar **cuatro sitios**: el `select` de cada login en `index.html`, los dos
+objetos `cfg`, y el `RETURNS TABLE` de `login_asesor` y `login_empleado`.
+
+**Lo cazó `r_cadenas`**, que existe desde aquel fallo. Funcionó.
+
+#### Dos cosas que aprendí de la regla al probarla
+
+⚠️ **Un comentario en medio la ciega.** Al documentar el campo nuevo lo escribí
+**entre** la firma de `login_asesor` y su `RETURNS TABLE`. La regla empareja los
+dos y solo admite un salto de línea, así que dejó de encontrar los campos y
+avisó de que faltaban **todos** — un falso positivo causado por un comentario, y
+de los que hacen desconfiar de una regla buena. Los comentarios de esas
+funciones van **arriba del `CREATE`**.
+
+⚠️ **Un `.sql` suelto en la carpeta la dejaba ciega, y lo descubrió la propia
+prueba.** `r_cadenas` leía *todos* los `.sql` del directorio para saber qué
+devuelve `login_asesor`. Al verificarla quitándole el campo, seguía diciendo que
+todo estaba bien: el respaldo `_b.sql` que la prueba dejaba al lado **aportaba
+el campo como si fuera el archivo bueno**. Un archivo que nadie va a pegar en el
+servidor no puede contar como si lo fuera, así que ahora solo mira **lo que git
+conoce**.
+
+Las otras reglas SQL no tenían este agujero: recorren `supabase_*.sql`, y un
+respaldo `_b.sql` no entra en ese patrón.
+
+#### Y el selector se esconde cuando el ticket decide
+
+Preguntar lo que ya está impreso es trabajo de más. Ahora, cuando la detección
+es concluyente, los dos botones desaparecen y queda un cartel con **lo elegido y
+por qué** —«Es una reparación: el ticket trae el código 100175537»— y un
+**cambiar** al lado. Esconderlo sin decir nada sería peor: el asesor tiene que
+poder ver qué se decidió y desdecirlo si el OCR falló.
+
+Los botones vuelven **al agregar cada línea**: la detección ya se gastó en lo
+que se acaba de agregar, y lo siguiente que meta en ese mismo ticket puede ser
+de otro tipo — que es justo el caso del ticket mixto.
+
 #### El ticket decide qué es, no el asesor *(24-ago-2026, v208)*
 
 Preguntarle el tipo al asesor era pedirle que repitiera algo que **ya está
