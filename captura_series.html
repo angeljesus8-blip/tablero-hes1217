@@ -1852,7 +1852,12 @@ function accExtraer(txt){
      en la misma línea. */
   const lineas = accLineasArticulo(txt);
   const clavesRep = SKUS_REP.map(accSkuNorm).filter(Boolean);
-  const esRep = (l) => clavesRep.indexOf(accSkuNorm(l.sku)) >= 0;
+  /* Con la MISMA tolerancia de un dígito que usa `accQueEs`. Si aquí se
+     comparara exacto, un código mal leído decidiría «reparación» por un lado y
+     no encontraría su línea por el otro: se detectaría el tipo bien y el
+     importe saldría vacío, que es como se vio el 24-ago. Los dos sitios miran
+     lo mismo o se contradicen sobre el mismo ticket. */
+  const esRep = (l) => clavesRep.some(c => accDistancia(accSkuNorm(l.sku), c) <= 1);
   const esAcc = (l) => /^(43739|63602|57518)/.test(accSkuNorm(l.sku));
   const lin = lineas.filter(esRep)[0] || lineas.filter(esAcc)[0] || null;
 
@@ -1987,12 +1992,26 @@ function accLineasArticulo(txt){
   const fuera = [];
   let m;
   while((m = re.exec(String(txt || ''))) !== null){
-    fuera.push({
-      sku: m[1],
-      cant: accNum(String(m[2]).replace(/[Il\]|]/g, '1')),
-      precio: accNum3(m[3]),
-      importe: accNum(m[4])
-    });
+    const cant = accNum(String(m[2]).replace(/[Il\]|]/g, '1'));
+    const importe = accNum(m[4]);
+    let precio = accNum3(m[3]);
+
+    /* EL PUNTO DEL PRECIO SE PIERDE A VECES. `1124.390` se leyó `1124390`, y
+       así el precio salía mil veces más grande y la comprobación
+       `precio × cantidad = importe` no cerraba nunca.
+
+       Se corrige SOLO si al dividir por mil cuadra con el importe, que se lee
+       aparte y con otro formato (`$1,124.39`, dos decimales y coma de miles).
+       Es una comprobación, no una suposición: si no cuadra, se deja lo leído y
+       el aviso dice que no pudo comprobarse — dividir «por si acaso» sería
+       inventarse un precio que nadie escribió. */
+    if(precio != null && importe != null && cant){
+      const cuadraYa  = Math.abs(precio * cant - importe) < 0.02;
+      const cuadraMil = Math.abs(precio / 1000 * cant - importe) < 0.02;
+      if(!cuadraYa && cuadraMil) precio = precio / 1000;
+    }
+
+    fuera.push({ sku: m[1], cant: cant, precio: precio, importe: importe });
   }
   return fuera;
 }
@@ -2086,20 +2105,58 @@ function accSkusDeLineas(textoTicket){
   return accLineasArticulo(textoTicket).map(function(l){ return l.sku; });
 }
 
+/* Cuantos digitos se diferencian dos codigos DE LA MISMA LONGITUD. Si la
+   longitud no coincide devuelve algo grande: al OCR se le tolera confundir un
+   digito, no comerse uno — eso ya es otro codigo. */
+function accDistancia(a, b){
+  if(!a || !b || a.length !== b.length) return 99;
+  var n = 0;
+  for(var i = 0; i < a.length; i++) if(a[i] !== b[i]) n++;
+  return n;
+}
+
 function accQueEs(textoTicket){
   if(!SKUS_REP.length) return { tipo:null, porque:'' };
   var skus = accSkusDeLineas(textoTicket);
   if(!skus.length) return { tipo:null, porque:'' };
 
   var claves = SKUS_REP.map(accSkuNorm).filter(Boolean);
-  var hayRep = false, hayAcc = false, cual = '';
+  var hayRep = false, hayAcc = false, cual = '', dudoso = false;
   for(var i = 0; i < skus.length; i++){
     var s = accSkuNorm(skus[i]);
-    var esRep = false;
+    var casan = [];
     for(var j = 0; j < claves.length; j++){
-      if(s === claves[j]){ esRep = true; cual = SKUS_REP[j]; break; }
+      var d = accDistancia(s, claves[j]);
+      if(d === 0) casan = [{ j:j, d:0 }];
+      else if(d === 1 && !casan.length) casan.push({ j:j, d:1 });
+      else if(d === 1) casan.push({ j:j, d:1 });
+      if(d === 0) break;
     }
-    if(esRep) hayRep = true; else hayAcc = true;
+    /* UN DÍGITO DE TOLERANCIA, y solo con la misma longitud. El OCR leyó
+       `100175545` como `100175540` —el último 5 por un 0— y con comparación
+       exacta eso no reconocía la reparación. Pedir el código entero perfecto es
+       pedirle al OCR que no falle nunca, y falla.
+
+       Es seguro porque los códigos en juego no se parecen tanto: los dos de
+       reparación tienen NUEVE dígitos y difieren en DOS, y los de accesorio
+       tienen cinco. Un dígito mal leído no puede convertir uno en otro.
+
+       Si un código queda a un dígito de DOS de la lista, no se elige ninguno:
+       ahí ya no se sabe cuál era, y con esa duda decidir es peor que preguntar. */
+    if(casan.length === 1){
+      hayRep = true;
+      cual = SKUS_REP[casan[0].j];
+      if(casan[0].d === 1) dudoso = true;
+    }else if(casan.length > 1){
+      dudoso = true; hayAcc = true;      // ambiguo: que lo diga el asesor
+    }else{
+      hayAcc = true;
+    }
+  }
+  if(dudoso && hayRep && !hayAcc){
+    // Se decide igual, pero se dice que el código no se leyó limpio.
+    return { tipo:'rep', porque:'Es una reparación: el ticket la cobra con el código ' +
+             cual + ' (el OCR lo leyó con un dígito distinto — compruébalo).' };
   }
 
   if(hayRep && hayAcc){
