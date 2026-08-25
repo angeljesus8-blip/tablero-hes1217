@@ -1748,6 +1748,7 @@ function pintarVentasDia(){
 let _accOcr = null;          // promesa del OCR en curso
 let _accFoto = null;         // la foto del ticket, para guardarla de evidencia
 let _accCat = [];            // catálogo de accesorios
+let _accCfgPedida = false;   // los codigos de reparacion, una vez por sesion de app
 
 const ACC_ANCLAS = [/437\s?39/, /atendido/i, /productos/i, /1217/,
                     /articulo/i, /importe/i, /reimprimir/i];
@@ -1890,9 +1891,17 @@ function accExtraer(txt){
 
    Con la lista vacía esto no hace nada y el asesor elige a mano, como antes.
    Más vale preguntar que adivinar mal. */
-var SKUS_REP = String((_cfgCS && _cfgCS.sku_reparacion) || '')
-                 .toUpperCase().split(/[,;\s]+/)
-                 .map(function(x){ return x.trim(); }).filter(Boolean);
+function accPartirSkus(txt){
+  return String(txt || '').toUpperCase().split(/[,;\s]+/)
+           .map(function(x){ return x.trim(); }).filter(Boolean);
+}
+
+/* Arranca con lo que traiga la sesion, pero NO se queda ahi: `abrirAcc` se lo
+   pregunta al servidor. `hes_store` se escribe una vez, al entrar, y nunca se
+   refresca —una sesion guardada antes de que el campo existiera se queda sin el
+   para siempre—, que es justo por lo que la deteccion nacio apagada en todos
+   los telefonos el 24-ago. */
+var SKUS_REP = accPartirSkus(_cfgCS && _cfgCS.sku_reparacion);
 
 function accQueEs(textoTicket){
   if(!SKUS_REP.length) return { tipo:null, porque:'' };
@@ -2158,6 +2167,20 @@ window.abrirAcc = async function(){
   if(!_accCat.length){
     const filas = await sbCallCS('accesorios_catalogo_lista', {}, 10000);
     _accCat = Array.isArray(filas) ? filas : [];
+  }
+
+  /* Los códigos de reparación, del SERVIDOR y no de la sesión. Una vez por
+     apertura de la app: cambia lo que el gerente ponga en Admin sin que nadie
+     tenga que volver a entrar.
+
+     Si la llamada falla se queda lo que hubiera —de la sesión, o de la vez
+     anterior— y como mucho la detección no se enciende: el asesor elige a mano,
+     que es el comportamiento de siempre. Nunca se borra lo que ya se sabía. */
+  if(!_accCfgPedida){
+    _accCfgPedida = true;
+    const cfg = await sbCallCS('captura_config', {}, 8000);
+    const fila = Array.isArray(cfg) ? cfg[0] : null;
+    if(fila && fila.sku_reparacion) SKUS_REP = accPartirSkus(fila.sku_reparacion);
   }
   accPintarLista(0, null);
 
