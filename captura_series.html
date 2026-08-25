@@ -1775,9 +1775,29 @@ function accNum3(x){
   const v = m ? Number(m[1]) + Number(m[2]) / 1000 : Number(s.replace(/[^\d.]/g, ''));
   return isFinite(v) ? v : null;
 }
+/* LA COMA NO SIEMPRE ES SEPARADOR DE MILES.
+
+   El importe se imprime `$1,124.39` —coma de miles, punto decimal— pero el OCR
+   lo devuelve a veces con coma decimal: `$999,00`. Borrando las comas sin mirar,
+   eso salía **99900**: cien veces más, y la comprobación
+   `precio × cantidad = importe` no cerraba nunca.
+
+   La regla sale del propio número, no de suponer un formato:
+
+     · si trae punto Y coma, la coma es de miles  (`1,124.39` → 1124.39);
+     · si solo trae coma y detrás quedan 1 o 2 dígitos, es decimal
+       (`999,00` → 999.00);
+     · si detrás quedan 3, es de miles (`16,962` → 16962). */
 function accNum(x){
   if(x == null) return null;
-  const v = Number(String(x).replace(/,/g, '').replace(/[^\d.]/g, ''));
+  let s = String(x).replace(/[^\d.,]/g, '');
+  if(s.indexOf('.') >= 0 && s.indexOf(',') >= 0){
+    s = s.replace(/,/g, '');                       // coma de miles, punto decimal
+  }else if(s.indexOf(',') >= 0){
+    const cola = s.length - s.lastIndexOf(',') - 1;
+    s = (cola === 1 || cola === 2) ? s.replace(/,/g, '.') : s.replace(/,/g, '');
+  }
+  const v = Number(s);
   return isFinite(v) ? v : null;
 }
 
@@ -1858,7 +1878,11 @@ function accExtraer(txt){
      importe saldría vacío, que es como se vio el 24-ago. Los dos sitios miran
      lo mismo o se contradicen sobre el mismo ticket. */
   const esRep = (l) => clavesRep.some(c => accDistancia(accSkuNorm(l.sku), c) <= 1);
-  const esAcc = (l) => /^(43739|63602|57518)/.test(accSkuNorm(l.sku));
+  /* Los de accesorio, con la MISMA tolerancia de un dígito que los de
+     reparación. Antes se exigía el prefijo exacto, y un 4 leído
+     como 9 dejaba la línea sin encontrar: ni SKU ni
+     precio. Al OCR se le pide que acierte casi todo, no todo. */
+  const esAcc = (l) => ACC_SKUS.some(c => accDistancia(accSkuNorm(l.sku), c) <= 1);
   const lin = lineas.filter(esRep)[0] || lineas.filter(esAcc)[0] || null;
 
   const cant = lin ? lin.cant : null;
@@ -2135,6 +2159,11 @@ var SKUS_REP = accPartirSkus(_cfgCS && _cfgCS.sku_reparacion);
    el codigo de articulo, y aqui dejaria el SKU del accesorio en nada— y sin los
    ceros de la izquierda, porque el catalogo guarda `000043739` y el ticket
    imprime `43739`. */
+/* Los SKU con los que la caja cobra un ACCESORIO. El generico y los dos de
+   Office, que van al reporte con el suyo. Estan aqui y no dentro de la funcion
+   para que se vea que son tres y cuales, al lado de los de reparacion. */
+var ACC_SKUS = ['43739', '63602', '57518'];
+
 function accSkuNorm(s){
   return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
            .replace(/[ODQILT|\]ZSBGNM]/g, function(c){ return ACC_OCR[c] || c; })
@@ -2155,10 +2184,26 @@ function accSkusDeLineas(textoTicket){
 /* Cuantos digitos se diferencian dos codigos DE LA MISMA LONGITUD. Si la
    longitud no coincide devuelve algo grande: al OCR se le tolera confundir un
    digito, no comerse uno — eso ya es otro codigo. */
+/* Cuantos digitos se diferencian dos codigos, alineados por la DERECHA y
+   rellenando con ceros por la izquierda.
+
+   El relleno importa: el catalogo guarda `000043739` y el ticket imprime
+   `43739`, asi que quitar los ceros era la unica forma de compararlos. Pero eso
+   se rompe cuando el OCR falla JUSTO en esa zona: el SKU del accesorio se leyo con
+   un 4 convertido en 9, y al quitar los ceros de delante los dos codigos
+   quedaban de distinto largo, asi que ni siquiera se comparaban. Alineados a la derecha y con relleno
+   vuelven a medir lo mismo: un digito de diferencia, que es lo que de verdad
+   paso.
+
+   Si aun rellenados siguen midiendo distinto, es otro codigo: al OCR se le
+   tolera confundir un digito, no comerse uno. */
 function accDistancia(a, b){
-  if(!a || !b || a.length !== b.length) return 99;
+  if(!a || !b) return 99;
+  var largo = Math.max(a.length, b.length);
+  while(a.length < largo) a = '0' + a;
+  while(b.length < largo) b = '0' + b;
   var n = 0;
-  for(var i = 0; i < a.length; i++) if(a[i] !== b[i]) n++;
+  for(var i = 0; i < largo; i++) if(a[i] !== b[i]) n++;
   return n;
 }
 
