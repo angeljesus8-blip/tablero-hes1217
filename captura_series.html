@@ -1883,6 +1883,21 @@ function accExtraer(txt){
      como 9 dejaba la línea sin encontrar: ni SKU ni
      precio. Al OCR se le pide que acierte casi todo, no todo. */
   const esAcc = (l) => ACC_SKUS.some(c => accDistancia(accSkuNorm(l.sku), c) <= 1);
+  /* LA LÍNEA QUE SE COGE DEPENDE DE LO QUE SE ESTÉ CAPTURANDO.
+
+     Antes se buscaba siempre primero la de reparación. En un ticket MIXTO
+     —una mica de $149 y una reparación de $1,145.47— eso proponía el producto
+     del accesorio con el importe de la reparación, y encima con un «la cuenta
+     del ticket cuadra ✓»: cuadraba, pero de la línea que no era. Guardado así,
+     quedaba una mica a mil ciento cuarenta y cinco pesos en el reporte de
+     comisiones.
+
+     Se mira el tipo activo. `accTipo` vuelve a llamar aquí al cambiarlo, así
+     que elegir «Reparación» trae los números de la reparación y elegir
+     «Accesorio» los del accesorio, del mismo ticket y sin volver a fotografiar. */
+  const primero = (_accTipo === 'rep') ? esRep : esAcc;
+  const segundo = (_accTipo === 'rep') ? esAcc : esRep;
+
   /* Y si el SKU no se reconoce pero hay UNA SOLA línea de artículo, es esa.
 
      El OCR llegó a leer `000043739` como `10004373`: perdió el 9 del final y se
@@ -1892,7 +1907,7 @@ function accExtraer(txt){
 
      Solo con UNA. Con varias habría que acertar cuál, y ahí equivocarse es
      capturar el precio de otro artículo: mejor que el asesor lo escriba. */
-  const lin = lineas.filter(esRep)[0] || lineas.filter(esAcc)[0] ||
+  const lin = lineas.filter(primero)[0] || lineas.filter(segundo)[0] ||
               (lineas.length === 1 ? lineas[0] : null);
 
   const cant = lin ? lin.cant : null;
@@ -2455,6 +2470,19 @@ window.accTipo = function(t){
   // En una reparación se cobra el trabajo entero: no hay precio unitario que
   // multiplicar por piezas, así que el mismo campo cambia de nombre.
   $('accPrecioLabel').textContent  = rep ? 'Importe cobrado' : 'Precio';
+
+  /* Y los números se rehacen con la línea del tipo elegido. En un ticket con
+     accesorio Y reparación hay dos líneas con dos importes: sin esto, cambiar
+     de tipo dejaba el número de la otra puesto, y el asesor lo daba por bueno
+     porque lo había rellenado la app. */
+  if(_accCrudo){
+    const r = accExtraer(_accCrudo);
+    if(r.importe != null || r.precio != null){
+      $('accPrecio').value = rep ? (r.importe != null ? r.importe : r.precio)
+                                 : (r.precio  != null ? r.precio  : r.importe);
+    }
+    if(!rep && r.cant && Number(r.cant) > 0) $('accCant').value = r.cant;
+  }
   $('accError').style.display = 'none';
 };
 

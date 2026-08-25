@@ -51,7 +51,7 @@ function motor(skusRep){
   if(dAcc < 0) throw new Error('no encuentro `var ACC_SKUS =` en captura_series.html');
   const finAcc = html.indexOf(';', dAcc);
 
-  const caja = { _cfgCS: { sku_reparacion: skusRep } };
+  const caja = { _cfgCS: { sku_reparacion: skusRep }, _accTipo: 'acc' };
   vm.createContext(caja);
   /* `accPartirSkus` va aparte desde el 24-ago: SKUS_REP dejo de ser constante
      porque `abrirAcc` lo refresca del servidor, y partir la lista se saco a su
@@ -69,7 +69,10 @@ function motor(skusRep){
     trozo('accSkuNorm') + '\n' + trozo('accDistancia') + '\n' + trozo('accSkusDeLineas') + '\n' +
     trozo('accExtraer') + '\n' + trozo('accQueEs'), caja);
   const fn = (texto) => vm.runInContext('accQueEs(' + JSON.stringify(texto) + ')', caja);
-  fn.extraer = (texto) => vm.runInContext('accExtraer(' + JSON.stringify(texto) + ')', caja);
+  fn.extraer = (texto, tipo) => {
+    caja._accTipo = tipo || 'acc';
+    return vm.runInContext('accExtraer(' + JSON.stringify(texto) + ')', caja);
+  };
   return fn;
 }
 
@@ -190,6 +193,21 @@ const T_REAL_REP8 = fs.readFileSync(
    articulo: sku 1217, cantidad 2, precio 23. */
 const T_SIN_IMPORTE_NI_DECIMAL = T_REAL_REP8
   .replace('100175537 1 1013,200 SOI |', '100175537 1 1013 SOI |');
+
+/* NOVENO ticket: MIXTO de verdad. Una mica de $149 y una reparacion de
+   $1,145.47 en el mismo papel:
+
+       000043739 | 149,000 $149.00 |
+       100175545 1 1145,470 $1,145.47 |
+
+   La deteccion hacia lo correcto —decir que lleva las dos cosas y no decidir—
+   pero `accExtraer` cogia SIEMPRE la linea de reparacion primero. Con el panel
+   en Accesorio, eso proponia el producto del accesorio con el importe de la
+   reparacion, y encima con un "la cuenta del ticket cuadra": cuadraba, pero de
+   la linea que no era. Guardado asi quedaba una mica a mil ciento cuarenta y
+   cinco pesos en el reporte de comisiones. */
+const T_REAL_MIXTO = fs.readFileSync(
+  path.join(__dirname, 'ocr_ticket_real9.txt'), 'utf8');
 
 /* Y el guardarrail de eso: el MISMO ticket con una segunda linea de articulo.
    Con dos, un sku irreconocible ya no se puede resolver —habria que acertar
@@ -392,6 +410,26 @@ const flojo = queEs.extraer(T_SIN_IMPORTE_NI_DECIMAL);
 if(flojo.precio === 1013 || (flojo.precio != null && flojo.precio < 100)){
   fallos.push('sin importe acepto un precio sin decimales (' + flojo.precio +
               '): asi la linea del pie del ticket pasa por articulo');
+}
+
+/* ── Ticket MIXTO: cada tipo trae los numeros de SU linea ───────────────
+   Es el fallo mas caro de todos los vistos, porque no da error ni aviso: los
+   dos numeros existen, cuadran, y estan en el campo equivocado. */
+{
+  const lineas = queEs(T_REAL_MIXTO);
+  if(lineas.tipo !== null){
+    fallos.push('mixto: decidio "' + lineas.tipo + '" en un ticket que lleva ' +
+                'accesorio Y reparacion. Ahi hay que preguntar');
+  }
+  const acc = queEs.extraer(T_REAL_MIXTO, 'acc');
+  const rep = queEs.extraer(T_REAL_MIXTO, 'rep');
+  if(Math.abs((acc.importe || 0) - 149) > 0.01){
+    fallos.push('mixto/accesorio: importe ' + acc.importe + ' y la mica vale 149. ' +
+                'Se esta cogiendo la linea de la reparacion');
+  }
+  if(Math.abs((rep.importe || 0) - 1145.47) > 0.01){
+    fallos.push('mixto/reparacion: importe ' + rep.importe + ' y la reparacion vale 1145.47');
+  }
 }
 
 if(fallos.length){

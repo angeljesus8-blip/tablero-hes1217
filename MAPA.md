@@ -636,6 +636,37 @@ Un mes sin reparaciones **es un resultado normal** y se dice nombrando el mes, a
 revés que el catálogo, que nunca está vacío de verdad y donde cero siempre es un
 problema.
 
+#### El producto de una línea con el importe de otra *(24-ago-2026, v225)*
+
+Noveno ticket, y el fallo **más caro de todos** — y este no era del OCR. El papel
+llevaba las dos cosas:
+
+```
+000043739 | 149,000 $149.00 |      ← mica, $149
+100175545 1 1145,470 $1,145.47 |   ← reparación, $1,145.47
+```
+
+Las dos líneas se leyeron bien. La detección hizo lo correcto: dijo que el ticket
+lleva accesorio **y** reparación, y no decidió. Pero `accExtraer` cogía **siempre
+la línea de reparación primero**, sin mirar qué se estaba capturando.
+
+⚠️ **Resultado: el producto del accesorio con el importe de la reparación.** Y
+encima con un «la cuenta del ticket cuadra ✓» — cuadraba, pero de la línea que no
+era. Guardado así, quedaba **una mica a $1,145.47** en el reporte de comisiones.
+
+Es peor que cualquier fallo del OCR: **no da error, no da aviso, y los números
+son reales**. Sólo están en el campo equivocado. Nadie lo ataría a nada al
+cuadrar el mes.
+
+**Ahora la línea se elige según lo que se está capturando**, y `accTipo` rehace
+los números al cambiar: pulsar «Reparación» trae los de la reparación y
+«Accesorio» los del accesorio, del mismo ticket y sin volver a fotografiar. Que
+es justo lo que hacía falta para el ticket mixto que motivó el panel de v207.
+
+La prueba comprueba los **dos** tipos sobre el mismo texto: 149 con Accesorio,
+1145.47 con Reparación. Verificada devolviendo la prioridad fija: falla diciendo
+que está cogiendo la línea de la reparación.
+
 #### El importe, ilegible entero *(24-ago-2026, v224)*
 
 Octava foto. Donde el papel dice `$1,013.20`, el OCR leyó **`SOI`**:
