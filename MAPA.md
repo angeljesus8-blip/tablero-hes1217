@@ -636,6 +636,22 @@ Un mes sin reparaciones **es un resultado normal** y se dice nombrando el mes, a
 revés que el catálogo, que nunca está vacío de verdad y donde cero siempre es un
 problema.
 
+#### Poder ver lo que leyó el OCR *(24-ago-2026, v214)*
+
+El SKU y el precio no se leían y **no había forma de saber por qué**: lo único
+visible era el resultado de intentar interpretar el texto, nunca el texto. Se
+arregló dos veces a ciegas —adivinando el formato del ticket— y las dos veces
+mal: primero leyendo el campo `SERVICIO:`, luego suponiendo cómo separa las
+columnas el OCR.
+
+Ahora los dos avisos traen **«ver lo que leí en el ticket»**, que despliega el
+texto tal cual sale del OCR.
+
+No es un modo de depuración escondido. Cuando esto falla, lo que ve el asesor es
+un campo vacío, y con el texto delante se distingue entre **tres arreglos
+distintos**: foto mal tomada, impresora que imprime otra cosa, o código que
+interpreta mal. Sin él, «no lee el precio» no es un dato: es una queja.
+
 #### Ni fecha ni importe en una reparación *(24-ago-2026, v213)*
 
 Detectado el tipo, la captura seguía coja: el asesor tenía que teclear el
