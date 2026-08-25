@@ -114,6 +114,27 @@ const T_REAL_REP2 = fs.readFileSync(
 const T_REAL_REP3 = fs.readFileSync(
   path.join(__dirname, 'ocr_ticket_real3.txt'), 'utf8');
 
+/* CUARTO ticket, y el primero de ACCESORIO (24-ago-2026). Dos fallos mas:
+
+     · el importe `$999.00` se leyo `$993.00`, asi que precio x cantidad no
+       cerraba y el aviso mandaba a revisar una venta que estaba bien;
+     · la fecha `23/8/26` se leyo `23/0/26` — mes cero, que no existe.
+
+   El propio papel desmiente el importe dos veces: `Total 999.00` y
+   `Recuento de articulos vendidos = 1`. Ese total solo vale con UN articulo, y
+   por eso la correccion lo comprueba antes. */
+const T_REAL_ACC4 = fs.readFileSync(
+  path.join(__dirname, 'ocr_ticket_real4.txt'), 'utf8');
+
+/* El guardarrail del total: MISMO ticket pero con dos articulos. Aqui el total
+   no dice nada del accesorio —un ticket de ocho articulos por $16,962.50
+   llevaba un kit de $169— y corregir con el guardaria el total como precio del
+   kit. En el reporte de comisiones eso no es un aviso, es dinero. */
+const T_DOS_ARTICULOS = T_REAL_ACC4
+  .replace('Recuento de artículos vendidos = 1', 'Recuento de artículos vendidos = 2')
+  .replace('IMEI / SERIE / SERVICIO: CARGA TOONTS',
+           'IMEI / SERIE / SERVICIO: CARGA TOONTS\n000043739 1 149.000 $149.00 1');
+
 const T_REAL_ACC = [
   'Articulo    Cantidad    Precio     Importe',
   'MICA HR',
@@ -141,7 +162,8 @@ const CASOS = [
   /* Tercer ticket: la cantidad se fue a la linea de arriba. Sin cantidad en la
      linea, el patron no encontraba el articulo y no habia ni sku ni precio. */
   ['tercer ticket, sin cantidad en la linea', queEs, T_REAL_REP3, 'rep', true ],
-  ['ticket REAL de accesorio',      queEs,         T_REAL_ACC, 'acc', false],
+  ['ticket REAL de accesorio',      queEs,         T_REAL_ACC,  'acc', false],
+  ['cuarto ticket, accesorio real', queEs,         T_REAL_ACC4, 'acc', false],
   ['ticket con las DOS cosas',      queEs,         T_MIX,      null,  true ],
   ['sin lineas de articulo',        queEs,         T_NADA,     null,  false],
   ['codigos sin configurar',        sinConfigurar, T_REAL_REP, null,  false],
@@ -187,6 +209,9 @@ const numeros = [
      veces mas grande y la cuenta del ticket no cerraba nunca. */
   ['segunda foto', queEs.extraer(T_REAL_REP2), 1124.39, '33671', ''],
   ['tercer ticket', queEs.extraer(T_REAL_REP3), 877.27, '33673', '23/8/26'],
+  /* El importe venia mal leido ($993.00) y lo desempata el Total del ticket,
+     que solo se usa porque hay UN articulo. */
+  ['cuarto ticket', queEs.extraer(T_REAL_ACC4), 999, '33675', ''],
   ['accesorio',  queEs.extraer(T_REAL_ACC),  149,    '',      ''],
 ];
 for(const [que, r, importe, ticket, fecha] of numeros){
@@ -232,6 +257,16 @@ if(!vend || vend.toUpperCase().indexOf('PEREZ') < 0){
     fallos.push('el vendedor se rellena DESPUES del corte de reparacion: en una ' +
                 'reparacion no llega a ejecutarse y el campo se queda vacio');
   }
+}
+
+/* ── El total NO se usa cuando hay varios articulos ─────────────────────
+   Es el guardarrail que evita guardar el total del ticket como precio de una
+   linea. Con dos articulos, el importe mal leido tiene que quedarse mal leido y
+   el aviso decir que no cuadra: mejor mandar a revisar que inventar un precio. */
+const dos = queEs.extraer(T_DOS_ARTICULOS);
+if(dos.cuadra || dos.importe === 999){
+  fallos.push('con DOS articulos uso el Total del ticket para corregir (importe ' +
+              dos.importe + '). El total no dice nada de una linea cuando hay varias');
 }
 
 if(fallos.length){
