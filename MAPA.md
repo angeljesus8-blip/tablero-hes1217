@@ -636,6 +636,42 @@ Un mes sin reparaciones **es un resultado normal** y se dice nombrando el mes, a
 revés que el catálogo, que nunca está vacío de verdad y donde cero siempre es un
 problema.
 
+#### El ticket se desmiente a sí mismo *(24-ago-2026, v220)*
+
+Cuarto ticket, el primero de **accesorio**, y dos fallos más del OCR:
+
+```
+000043739 1 999.000 $993.00 1
+...
+MM — Total 999.00
+Recuento de artículos vendidos = 1
+```
+
+El importe `$999.00` se leyó **`$993.00`**, así que `precio × cantidad = importe`
+no cerraba y el aviso mandaba a revisar **una venta que estaba bien**. La app
+hacía lo correcto —desconfiar— pero se dejaba en la mesa lo que el propio papel
+dice **dos veces**: el total y el recuento.
+
+Ahora, cuando la cuenta no cierra, el **`Total`** desempata. Se corrige solo el
+que no cuadra con él: si `precio × cantidad` da el total, el mal leído era el
+importe; si el importe da el total, era el precio. Si ninguno cuadra, **no se
+toca nada** y el aviso sigue mandando a mirarlo.
+
+⚠️ **SOLO CON UN ARTÍCULO**, y esa cautela vale más que la corrección. El total
+del ticket **no dice nada de una línea** cuando hay varias: un ticket de ocho
+artículos por $16,962.50 llevaba un kit de limpieza de $169. Corregir ahí
+guardaría dieciséis mil pesos como precio del kit, y en el reporte de comisiones
+eso no es un aviso — **es dinero**. Se comprueba con el `Recuento` del propio
+ticket, y si no está, contando las líneas encontradas.
+
+La prueba lleva el mismo ticket con **dos artículos** y verifica que entonces
+**no** se corrige. Comprobado quitando el guardarraíl: pasa a corregir, que es
+exactamente lo que no debe hacer.
+
+**La fecha de este ticket salió `23/0/26`** — mes cero. Se rechaza y se avisa,
+como desde v213: es una fecha imposible, y ponerla sería peor que dejar la que
+había.
+
 #### La cantidad se muda de línea *(24-ago-2026, v219)*
 
 Tercer ticket, tercer fallo distinto del OCR. La cantidad **no estaba en la
