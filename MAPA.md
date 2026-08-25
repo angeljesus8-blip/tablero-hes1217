@@ -636,6 +636,50 @@ Un mes sin reparaciones **es un resultado normal** y se dice nombrando el mes, a
 revés que el catálogo, que nunca está vacío de verdad y donde cero siempre es un
 problema.
 
+#### La cantidad se muda de línea *(24-ago-2026, v219)*
+
+Tercer ticket, tercer fallo distinto del OCR. La cantidad **no estaba en la
+línea del artículo**:
+
+```
+REP FUERA DE GARANTÍA HW 1 1
+100175537 877.270 $877.27 | y
+```
+
+El `1` se fue al renglón del nombre. El patrón exigía cuatro columnas en el
+mismo renglón, así que no encontraba la línea: **ni SKU ni precio**.
+
+Ahora la cantidad va en un grupo opcional y, si falta, **es 1** — lo que vale
+cuando el ticket no dice otra cosa. Se sigue comprobando con
+`precio × cantidad = importe`, así que una cantidad supuesta que no cuadre
+aparece en el aviso en vez de colarse.
+
+El motor de expresiones resuelve bien la ambigüedad por sí solo: en
+`877.270` no puede tomar `877` como cantidad, porque detrás viene un punto y no
+un separador.
+
+⚠️ **Y por eso el `$` del importe pasa a ser OBLIGATORIO.** Con la cantidad
+opcional el patrón se afloja lo bastante como para que la línea del pie —
+`1217 2 23/8/26 1:54 PM 33673`, que está en **todos** los tickets — case como si
+fuera un artículo: SKU 1217, precio 2, importe 23. Eso convertiría cualquier
+reparación en un ticket «mixto», que es de los que no se deciden solos.
+
+Comprobado quitando el `$`: **los tres tickets dejan de detectarse**. Es de los
+cambios que parecen inofensivos y rompen todo lo demás.
+
+#### Tres fotos, tres fallos que nadie habría adivinado
+
+| ticket | qué hizo el OCR |
+|---|---|
+| 1 | Ruido del borde (`N`, `NN`) al principio de línea, y rayas entre columnas |
+| 2 | Un dígito del SKU mal leído, y el punto del precio perdido |
+| 3 | La cantidad mudada al renglón de arriba |
+
+Los tres textos crudos están guardados en `pruebas/`. **Ninguno de los tres
+fallos se parece a los otros**, y ninguno se deduce mirando el papel — que es
+exactamente por lo que los primeros intentos, escritos contra el ticket «como se
+ve», pasaban sus pruebas mientras la app fallaba en la tienda.
+
 #### El OCR no falla igual dos veces *(24-ago-2026, v218)*
 
 Segunda foto **del mismo ticket**, y dos fallos que la primera no tenía. La

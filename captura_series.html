@@ -1988,11 +1988,31 @@ function accAvisoFecha(){
 
 
 function accLineasArticulo(txt){
-  const re = /(?:^|\n)[^\d\n]{0,12}?(\d{4,12})[\s\u2014\u2013|]+([\dIl\]|]{1,3})[\s\u2014\u2013|]+([\d.,]+)[\s\u2014\u2013|]+\$?\s?([\d.,]+)/g;
+  /* LA CANTIDAD PUEDE NO ESTAR EN ESTA L\u00cdNEA. En un ticket se ley\u00f3 as\u00ed:
+
+         REP FUERA DE GARANT\u00cdA HW 1 1
+         100175537 877.270 $877.27 | y
+
+     el `1` se fue al rengl\u00f3n del nombre del art\u00edculo. Por eso va en un grupo
+     opcional, y si falta se toma 1 \u2014 que es lo que vale cuando el ticket no
+     dice otra cosa. El backtracking del propio motor decide bien: con
+     `877.270` no puede tomar `877` como cantidad, porque detr\u00e1s viene un punto
+     y no un separador.
+
+     Y por eso mismo el `$` del importe pasa a ser OBLIGATORIO. Con la cantidad
+     opcional, el patr\u00f3n se afloja lo bastante como para que
+     `1217 2 23/8/26 1:54 PM 33673` case \u2014sku 1217, precio 2, importe 23\u2014 y esa
+     l\u00ednea del pie aparece en TODOS los tickets: se colar\u00eda como un art\u00edculo m\u00e1s
+     y convertir\u00eda cualquier reparaci\u00f3n en un ticket \u00abmixto\u00bb, que es de los que
+     no se deciden solos. El importe siempre lleva `$` en este ticket. */
+  const re = /(?:^|\n)[^\d\n]{0,12}?(\d{4,12})[\s\u2014\u2013|]+(?:([\dIl\]|]{1,3})[\s\u2014\u2013|]+)?([\d.,]+)[\s\u2014\u2013|]+\$\s?([\d.,]+)/g;
   const fuera = [];
   let m;
   while((m = re.exec(String(txt || ''))) !== null){
-    const cant = accNum(String(m[2]).replace(/[Il\]|]/g, '1'));
+    // Sin cantidad en la línea, es 1: lo que vale cuando el ticket no dice otra
+    // cosa. Se comprueba igual con `precio × cantidad = importe`, así que una
+    // cantidad supuesta que no cuadre se ve en el aviso en vez de colarse.
+    const cant = m[2] ? accNum(String(m[2]).replace(/[Il\]|]/g, '1')) : 1;
     const importe = accNum(m[4]);
     let precio = accNum3(m[3]);
 
