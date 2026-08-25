@@ -9,12 +9,13 @@ Acceso por **link + QR** (sin instalar nada). Buscador y filtros por categoría.
 - `index.html` — la app (diseño + lógica). **No se toca normalmente.**
 - `datos.js` — **aquí vive toda la información.** Esto es lo que se actualiza.
 - `logo_odemas.png` — branding Odemás.
-- `deploy.ps1` — sube los cambios a Netlify.
+- `sw.js` — service worker. Su `VERSION` es lo que hace que los celulares
+  reciban un cambio; ver **Deploy**.
 
 ## Cómo se actualiza (flujo con Claude)
 1. Ángel comparte el comunicado (PDF/imagen) o el export de inventario del día.
 2. Claude lo digiere y actualiza `datos.js` (y la fecha de "Actualizado").
-3. Se ejecuta `deploy.ps1` → la página queda al día. **El link y el QR NO cambian.**
+3. Se hace push a `main` → la página queda al día. **El link y el QR NO cambian.**
 
 ## Actualizar a mano (opcional)
 Editar `datos.js`. Cada bloque (`promos`, `eol`, `novedades`, `inventario`, `avisos`)
@@ -24,7 +25,20 @@ es una lista de tarjetas. Copiar una entrada existente y cambiar los textos.
 - Inventario: `stock` 0 = rojo, 1-3 = naranja, 4+ = verde (semáforo automático).
 
 ## Deploy
+Se publica solo: **GitHub Pages sirve lo que esté en `main`**. No hay script ni
+panel que apretar — el deploy es el push.
+
 ```powershell
-./deploy.ps1
+python verificar.py     # tiene que decir "Todo en orden"
+git add -A; git commit -m "v___ — qué cambió"; git push origin main
 ```
-Después del primer deploy, generar el QR del link que devuelva Netlify y pegarlo en cajas/trastienda.
+
+Queda en https://angeljesus8-blip.github.io/tablero-hes1217/ un minuto después.
+
+**Si tocaste un `.html`, sube `VERSION` en `sw.js`.** El service worker sirve la
+copia que tiene en caché, así que sin ese cambio los celulares del equipo se
+quedan con la versión vieja — sin error y sin aviso, solo el comportamiento de
+antes. `verificar.py` detiene el commit si se te olvida; hazle caso.
+
+> Hubo un `deploy.ps1` que publicaba en Netlify. Ya no: el tablero vive en
+> GitHub Pages y aquel camino no subía `VERSION` ni corría `verificar.py`.
