@@ -1871,50 +1871,39 @@ function accExtraer(txt){
 }
 
 /* Las líneas de artículo con sus números: sku, cantidad, precio unitario e
-   importe. La cantidad acepta ] I l | porque el OCR los confunde con 1.
+   importe.
+
+   ⚠️ EL PATRÓN ESTÁ HECHO CONTRA EL TEXTO QUE DE VERDAD SALE DEL OCR, no
+   contra el ticket como se ve en el papel. Se guardó uno entero en
+   `pruebas/ocr_ticket_real.txt`. Esa línea, impresa así:
+
+       100175545      1      1124.390   $1,124.39  I
+
+   sale del OCR así:
+
+       N 100175545 1 — 1124.390 $1,124.39 1 RU
+
+   Dos cosas que ninguna versión anterior admitía, y que costaron tres intentos
+   a ciegas:
+
+     · LA LÍNEA NO EMPIEZA POR EL NÚMERO. El borde del papel se lee como `N`,
+       `NN`, `ON`… en casi todas las líneas. Se toleran hasta 12 caracteres que
+       no sean dígitos por delante.
+     · ENTRE COLUMNA Y COLUMNA NO SIEMPRE HAY UN ESPACIO. El OCR mete rayas
+       (`—`, `–`) y barras donde el papel tiene solo separación.
+
+   Se admite raya larga y barra, pero NO el guion normal `-`: aparece en
+   teléfonos y fechas del propio ticket, y lo convertiría en un separador de
+   columnas cualquiera.
 
    El precio unitario lleva TRES decimales (`1124.390` son 1124.39 pesos) y el
    importe dos con coma de miles (`$1,124.39`). Formatos distintos, funciones
    distintas: leer el precio como si tuviera separador de miles daba $1,124,390
-   y la comprobación no cerraba nunca. */
-/* El aviso de la fecha que no se pudo usar. Se enseña en los dos avisos —el de
-   accesorio y el de reparacion— porque el fallo es del OCR, no del tipo de
-   venta: sin decirlo, el asesor ve la fecha de hoy en el campo y la da por
-   buena, y la venta se guarda en el dia equivocado. En un corte MENSUAL eso
-   mueve la venta de mes cuando el ticket es de fin de mes. */
-/* El enlace para ver el texto que salio del OCR. Va en los dos avisos.
+   y la comprobación no cerraba nunca.
 
-   No es un modo depuracion escondido: cuando el OCR falla, lo unico que ve el
-   asesor —y quien tenga que arreglarlo— es que un campo salio vacio. Con el
-   texto delante se ve si el fallo fue de la foto, de la impresora o del codigo
-   que lo interpreta, que son tres arreglos distintos. */
-window.accVerCrudo = function(){
-  const c = $('accCrudo');
-  if(!c) return;
-  const abierto = c.style.display !== 'none';
-  c.style.display = abierto ? 'none' : 'block';
-  if(!abierto) c.textContent = _accCrudo || '(el OCR no devolvio texto)';
-};
-
-function accBotonCrudo(){
-  return _accCrudo
-    ? '<br><button type="button" class="lupa" style="margin-top:8px" ' +
-      'onclick="accVerCrudo()">ver lo que leí en el ticket</button>' +
-      '<pre id="accCrudo" style="display:none;white-space:pre-wrap;word-break:break-word;' +
-      'font-size:10.5px;line-height:1.35;background:#fff;border:1px solid #cddcec;' +
-      'border-radius:8px;padding:8px;margin:8px 0 0;max-height:220px;overflow:auto"></pre>'
-    : '';
-}
-
-function accAvisoFecha(){
-  return _accFechaDudosa
-    ? '<br><b>Ojo:</b> la fecha del ticket se leyó «' + esc(_accFechaDudosa) +
-      '», que no es una fecha. Comprueba el día antes de guardar.'
-    : '';
-}
-
+   La cantidad acepta ] I l | porque el OCR los confunde con 1. */
 function accLineasArticulo(txt){
-  const re = /(?:^|\n)\s*(\d{4,12})\s+([\dIl\]|]{1,3})\s+([\d.,]+)\s+\$?\s?([\d.,]+)/g;
+  const re = /(?:^|\n)[^\d\n]{0,12}?(\d{4,12})[\s\u2014\u2013|]+([\dIl\]|]{1,3})[\s\u2014\u2013|]+([\d.,]+)[\s\u2014\u2013|]+\$?\s?([\d.,]+)/g;
   const fuera = [];
   let m;
   while((m = re.exec(String(txt || ''))) !== null){

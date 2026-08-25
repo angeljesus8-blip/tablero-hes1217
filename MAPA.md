@@ -636,6 +636,48 @@ Un mes sin reparaciones **es un resultado normal** y se dice nombrando el mes, a
 revés que el catálogo, que nunca está vacío de verdad y donde cero siempre es un
 problema.
 
+#### El texto del OCR no se parece al ticket *(24-ago-2026, v215)*
+
+Tres intentos de arreglar esto fallaron, y los tres por lo mismo: **el patrón se
+escribió mirando el ticket de papel, no lo que el OCR devuelve**. Esta es la
+línea, impresa:
+
+```
+100175545      1      1124.390   $1,124.39  I
+```
+
+y esto es lo que sale del OCR:
+
+```
+N 100175545 1 — 1124.390 $1,124.39 1 RU
+```
+
+| lo que se suponía | lo que pasa de verdad |
+|---|---|
+| La línea empieza por el número | Empieza por `N` — el **borde del papel** se lee como `N`, `NN`, `ON`… en casi todas las líneas |
+| Las columnas van separadas por espacios | El OCR mete **rayas** (`—`, `–`) donde el papel solo tiene separación |
+
+Se toleran hasta 12 caracteres no numéricos por delante, y raya larga o barra
+como separador. **El guion normal `-` NO**: aparece en los teléfonos y las
+fechas del propio ticket, y admitirlo lo convertiría en separador de columnas
+en todas partes.
+
+⚠️ **El texto crudo está guardado en `pruebas/ocr_ticket_real.txt`** y es el caso
+principal de `mrfix_detecta.js`. No es el ticket transcrito a mano: es la salida
+literal de Tesseract, con su ruido.
+
+**Esa es la diferencia entre las tres versiones que fallaron y esta.** Las tres
+pasaban sus pruebas — porque las pruebas también estaban escritas contra el
+ticket *como se ve*. Un ticket transcrito por quien escribe el código confirma
+lo que ese código ya supone; **el crudo es el único que puede desmentirlo**.
+
+Comprobado devolviendo el patrón anterior: la prueba falla diciendo que no
+reconoce la reparación.
+
+De ahí también el botón **«ver lo que leí en el ticket»** de v214: sin poder
+mirar ese texto, «no lee el precio» no es un dato, es una queja — y se arregla a
+ciegas, tres veces.
+
 #### Poder ver lo que leyó el OCR *(24-ago-2026, v214)*
 
 El SKU y el precio no se leían y **no había forma de saber por qué**: lo único
