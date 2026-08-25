@@ -160,6 +160,20 @@ const T_REAL_ACC5 = fs.readFileSync(
 const T_REAL_ACC6 = fs.readFileSync(
   path.join(__dirname, 'ocr_ticket_real6.txt'), 'utf8');
 
+/* SEPTIMO ticket: el PRECIO mal leido y sin `Total` con el que desempatar.
+
+       000043739 1 399,000 $999,00 |
+
+   El precio `999.000` salio `399,000` —un 9 por un 3— y el `Total` de ese papel
+   quedo ilegible, asi que no habia con que comprobarlo. Pero el mismo numero
+   esta dicho una tercera vez mas abajo:
+
+       I-IVA 16% 861.21 137.79
+
+   base mas impuesto, que suman exactamente 999.00. */
+const T_REAL_ACC7 = fs.readFileSync(
+  path.join(__dirname, 'ocr_ticket_real7.txt'), 'utf8');
+
 /* Y el guardarrail de eso: el MISMO ticket con una segunda linea de articulo.
    Con dos, un sku irreconocible ya no se puede resolver —habria que acertar
    cual es— y capturar el precio del otro articulo es peor que dejarlo vacio. */
@@ -207,6 +221,7 @@ const CASOS = [
   ['cuarto ticket, accesorio real', queEs,         T_REAL_ACC4, 'acc', false],
   ['quinto: sku de accesorio con un digito mal', queEs, T_REAL_ACC5, 'acc', false],
   ['sexto: la linea partida en dos',  queEs,         T_REAL_ACC6, 'acc', false],
+  ['septimo: precio mal leido, sin Total', queEs,   T_REAL_ACC7, 'acc', false],
   ['ticket con las DOS cosas',      queEs,         T_MIX,      null,  true ],
   ['sin lineas de articulo',        queEs,         T_NADA,     null,  false],
   ['codigos sin configurar',        sinConfigurar, T_REAL_REP, null,  false],
@@ -259,6 +274,8 @@ const numeros = [
   ['quinto ticket', queEs.extraer(T_REAL_ACC5), 999, '33675', '23/8/26'],
   /* Linea partida y sku irreconocible: se usa porque es la unica del ticket. */
   ['sexto ticket', queEs.extraer(T_REAL_ACC6), 149, '33677', '23/8/26'],
+  /* Sin `Total` legible: lo reconstruye la linea del IVA (base + impuesto). */
+  ['septimo ticket', queEs.extraer(T_REAL_ACC7), 999, '33679', '23/8/26'],
   ['accesorio',  queEs.extraer(T_REAL_ACC),  149,    '',      ''],
 ];
 for(const [que, r, importe, ticket, fecha] of numeros){

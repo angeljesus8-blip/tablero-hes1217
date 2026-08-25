@@ -1918,7 +1918,28 @@ function accExtraer(txt){
      diciendo que hay que mirarlo. */
   const mTot = txt.match(/Total\s+\$?\s?([\d.,]+)/i);
   const mRec = txt.match(/Recuento\s+de\s+art[ií]culos\s+vendidos\s*=\s*(\d+)/i);
-  const total = mTot ? accNum(mTot[1]) : null;
+  let total = mTot ? accNum(mTot[1]) : null;
+
+  /* Y SI NO HAY «Total» LEGIBLE, la línea del IVA lo reconstruye.
+
+     En un ticket el precio `999.000` se leyó `399,000` —un 9 por un 3— y el
+     `Total` de ese papel salió ilegible del OCR, así que no había con qué
+     desempatar. Pero abajo estaba:
+
+         I-IVA 16% 861.21 137.79
+
+     base más impuesto, que suman exactamente 999.00. Es el mismo número dicho
+     por tercera vez en el mismo papel.
+
+     Se usa solo si el `Total` no se pudo leer: cuando está, es más directo y una
+     suma de dos números mal leídos daría un total falso. */
+  if(total == null){
+    const mIva = txt.match(/IVA\s*\d{0,2}\s*%\s*([\d.,]+)[\s—–|]+([\d.,]+)/i);
+    if(mIva){
+      const base = accNum(mIva[1]), impuesto = accNum(mIva[2]);
+      if(base != null && impuesto != null) total = Math.round((base + impuesto) * 100) / 100;
+    }
+  }
   const unico = mRec ? Number(mRec[1]) === 1 : (lineas.length === 1);
   if(total != null && unico && cant && pUni != null && imp != null &&
      Math.abs(pUni * cant - imp) >= 0.02){
