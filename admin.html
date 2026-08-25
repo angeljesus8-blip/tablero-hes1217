@@ -328,6 +328,10 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
       <div class="filebox" id="fboxPromos" onclick="document.getElementById('filePromos').click()">
         <div class="ph" id="fphPromos">📄 Toca para elegir el PDF o Excel del CEA</div>
       </div>
+      <details id="detPromos" style="display:none;margin-top:12px">
+        <summary style="font-size:11px;color:#888;cursor:pointer;font-weight:700">🔍 Ver lo que leyó del archivo (antes de subir)</summary>
+        <div id="prevListPromos"></div>
+      </details>
       <button class="btn-pri" id="btnPromos" onclick="subirPromos()" disabled style="margin-top:14px">Subir promociones</button>
       <div class="result" id="resPromos"></div>
     </div>
@@ -383,7 +387,7 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
     <div class="divider">o desde CEA de Promos (PDF)</div>
     <div class="card">
       <h2>📎 Desde CEA de Promos (PDF)</h2>
-      <p class="note">Sube el PDF del CEA normal. La app extrae automáticamente los productos con estatus EOL.</p>
+      <p class="note">Sube el PDF del CEA o del ADENDUM. La app saca los productos EOL: los que traen ESTATUS EOL en su renglón, y también los de un comunicado que ya es de EOL completo (como «PROMOCIONES EOL»), aunque su tabla no traiga esa columna.</p>
       <input type="file" id="filePdfEol" accept="application/pdf,.pdf" hidden>
       <div class="filebox" id="fboxEol" onclick="document.getElementById('filePdfEol').click()">
         <div class="ph" id="fphEol">📄 Toca para elegir el PDF del CEA</div>
@@ -1670,79 +1674,274 @@ let parsedPromos=null;
 const MESES_P={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12};
 function isoP(y,m,d){ return y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0'); }
 
-async function parsePromosPDF(file){
+/* ================================================================
+   LECTOR DE TABLAS DE CEA EN PDF — compartido por Promos y EOL
+   ================================================================
+   Antes cada pestaña traía su propio regex y las dos exigían que el renglón
+   terminara con la palabra ACTIVO/EOL de la columna ESTATUS. El CEA 257
+   (PROMOCIONES EOL) no trae esa columna —sus encabezados son SKU ·
+   DESCRIPCIÓN · PRECIO REGULAR · PROMO ACTUAL · NUEVA PROMO— así que
+   ninguna de las dos leyó una sola fila del comunicado.
+
+   Ahora el PDF se lee como tabla de verdad: las palabras se agrupan en
+   renglones por su coordenada Y, se leen los encabezados y cada precio se
+   casa con SU columna por la posición horizontal. Eso es lo que distingue
+   "NUEVA PROMO" (lo que se cobra) de "DESCUENTO" (lo que se rebaja) en los
+   CEA de PRICE MATCH, donde quedarse con el último precio del renglón
+   cobraría de menos. Cuando la tabla no trae estatus, se deduce del título
+   del comunicado y del nombre del archivo.
+   ================================================================ */
+
+/* Saca de PDF.js las palabras con su posición. El centro horizontal es lo
+   que permite casar una celda con su encabezado aunque venga centrada o
+   alineada a la derecha. */
+async function _ceaPalabrasPDF(file){
   if(typeof pdfjsLib==='undefined') throw new Error('PDF.js no disponible — recarga la página');
-  const buf=await file.arrayBuffer();
-  const pdf=await pdfjsLib.getDocument({data:buf}).promise;
-  const allItems=[]; let flatText='';
+  const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;
+  const out=[];
   for(let p=1;p<=pdf.numPages;p++){
     const page=await pdf.getPage(p);
     const vp=page.getViewport({scale:1});
     const tc=await page.getTextContent();
-    tc.items.forEach(i=>{
-      allItems.push({str:i.str,x:i.transform[4],y:vp.height-i.transform[5],page:p});
+    tc.items.forEach(it=>{
+      const s=String(it.str==null?'':it.str).replace(/ /g,' ');
+      if(!s.trim()) return;
+      const x0=it.transform[4], y0=vp.height-it.transform[5], an=it.width||0;
+      const re=/\S+/g; let m;
+      while((m=re.exec(s))){
+        const a=m.index/s.length, b=(m.index+m[0].length)/s.length;
+        out.push({t:m[0], x:x0+an*a, c:x0+an*(a+b)/2, y:y0, page:p});
+      }
     });
-    flatText+=tc.items.map(i=>i.str).join(' ')+'\n';
   }
-  const fixSkus=t=>t.replace(/(\d{1,8}) (\d{1,8})/g,(m,a,b)=>(a+b).length===9?a+b:m);
-  flatText=fixSkus(flatText);
+  return out;
+}
 
+/* Vuelve a pegar lo que PDF.js parte: el "$" separado de su cifra, la coma
+   de miles, y el SKU cortado a la mitad al inicio del renglón. */
+function _ceaPegar(toks){
+  const out=[];
+  for(let i=0;i<toks.length;i++){
+    const a=toks[i],b=toks[i+1];
+    if(b){
+      if(a.t==='$'&&/^\d/.test(b.t)){ out.push({t:'$'+b.t,x:a.x,c:(a.c+b.c)/2}); i++; continue; }
+      if(/^\$?\d[\d,]*,$/.test(a.t)&&/^\d{3}(?:\.\d{1,2})?$/.test(b.t)){ out.push({t:a.t+b.t,x:a.x,c:(a.c+b.c)/2}); i++; continue; }
+      if(!out.length&&/^\d{1,8}$/.test(a.t)&&/^\d{1,8}$/.test(b.t)&&(a.t+b.t).length===9){ out.push({t:a.t+b.t,x:a.x,c:(a.c+b.c)/2}); i++; continue; }
+    }
+    out.push({t:a.t,x:a.x,c:a.c});
+  }
+  return out;
+}
+
+/* Renglones por cercanía vertical. El agrupado anterior redondeaba y/6, y un
+   renglón que caía justo en el borde del bucket se partía en dos: media fila
+   sin precio y fila perdida. Aquí cada renglón se abre con su primera palabra
+   y admite lo que caiga a menos de 4 pt de ella. */
+function _ceaRenglones(pals){
+  const porPag={};
+  pals.forEach(p=>(porPag[p.page]||(porPag[p.page]=[])).push(p));
+  const filas=[];
+  Object.keys(porPag).map(Number).sort((a,b)=>a-b).forEach(pg=>{
+    const ps=porPag[pg].sort((a,b)=>a.y-b.y||a.x-b.x);
+    let grupo=[],y0=null;
+    const cerrar=()=>{ if(grupo.length) filas.push({page:pg,y:y0,toks:_ceaPegar(grupo.sort((a,b)=>a.x-b.x))}); grupo=[]; };
+    ps.forEach(p=>{
+      if(y0===null){ y0=p.y; grupo=[p]; return; }
+      if(Math.abs(p.y-y0)<=4){ grupo.push(p); return; }
+      cerrar(); y0=p.y; grupo=[p];
+    });
+    cerrar();
+  });
+  return filas;
+}
+
+const _ceaTexto=f=>f.toks.map(t=>t.t).join(' ');
+/* Un renglón de encabezado no trae minúsculas; así se distingue de la prosa
+   que rodea a la tabla. */
+const _ceaEsCab=f=>f.toks.length>0 && f.toks.every(t=>!/[a-záéíóúñü]/.test(t.t));
+const _ceaEsDato=f=>f.toks.length>0 && /^\d{9}$/.test(f.toks[0].t);
+
+/* Columnas de la tabla leídas del encabezado: agrupa sus palabras por centro
+   horizontal y arma la etiqueta de cada columna ("PRECIO REGULAR",
+   "NUEVA PROMO", "DESCUENTO"…). */
+function _ceaColumnas(filas){
+  /* El renglón del encabezado, no el párrafo: "SKU" también aparece en la
+     prosa ("los siguientes SKU que se incorporan al listado"), y tomar esa
+     línea como encabezado inventaba columnas con media oración de etiqueta. */
+  let iSku=-1;
+  for(let i=0;i<filas.length;i++)
+    if(_ceaEsCab(filas[i])&&filas[i].toks.length>=2&&filas[i].toks.some(t=>/^SKU$/i.test(t.t))){ iSku=i; break; }
+  if(iSku<0) return [];
+  let ini=iSku,fin=iSku;
+  while(ini>0&&iSku-ini<3&&filas[ini-1].page===filas[iSku].page&&_ceaEsCab(filas[ini-1])&&!_ceaEsDato(filas[ini-1])) ini--;
+  while(fin+1<filas.length&&fin-iSku<3&&filas[fin+1].page===filas[iSku].page&&_ceaEsCab(filas[fin+1])&&!_ceaEsDato(filas[fin+1])) fin++;
+
+  const pals=[];
+  for(let i=ini;i<=fin;i++) filas[i].toks.forEach(t=>pals.push({t:t.t,c:t.c,x:t.x,fila:i}));
+  if(!pals.length) return [];
+
+  const cols=[];
+  pals.sort((a,b)=>a.c-b.c).forEach(p=>{
+    const ult=cols[cols.length-1];
+    if(ult&&Math.abs(p.c-ult.c)<=18){ ult.pals.push(p); ult.c=ult.pals.reduce((s,q)=>s+q.c,0)/ult.pals.length; }
+    else cols.push({c:p.c,pals:[p]});
+  });
+  return cols.map(c=>({c:c.c, et:c.pals.sort((a,b)=>a.fila-b.fila||a.x-b.x).map(p=>p.t).join(' ')}));
+}
+
+const _CEA_EST=/^(ACTIVO|ACTIVA|EOL|LANZAMIENTO|NUEVO|DESCONTINUADO)$/i;
+const _CEA_MARCA=/^[Xx✓✔\-–—]$/;
+const _CEA_TACHE=/^[Xx✓✔]$/;
+/* Columnas que NO son un precio a cobrar: el descuento es cuánto se rebaja,
+   no cuánto se cobra. */
+const _CEA_NO_PRECIO=/DESCUENTO|AHORRO|DIFERENCIA|MSI|MESES|COSTO|INVENTARIO|EXIST/i;
+function _ceaNum(t){ const n=parseFloat(String(t).replace(/[^0-9.]/g,'')); return isNaN(n)?null:n; }
+
+/* Un token es precio si trae "$". Cuando la tabla no usa "$" tiene que venir
+   escrito como dinero —coma de miles o centavos—: un entero pelón no cuenta,
+   porque "HUAWEI PURA 80 PRO" traía el 80 como precio y dejaba la
+   descripción cortada en "HUAWEI PURA". */
+function _ceaEsPrecio(t,hayDolar){
+  if(/^\$\d[\d,]*(?:\.\d{1,2})?$/.test(t)) return true;
+  if(hayDolar) return false;
+  if(!/^\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?$|^\d{2,}\.\d{2}$/.test(t)) return false;
+  const n=_ceaNum(t); return n!==null&&n>=50;
+}
+
+/* Elige precio regular y precio a cobrar por la etiqueta de la columna; si el
+   encabezado no se pudo leer, cae al primero y al último del renglón. */
+function _ceaPrecios(px,etiqueta){
+  const como=(p,re)=>re.test(etiqueta(p.c)||'');
+  const base=px.filter(p=>!como(p,_CEA_NO_PRECIO));
+  const lista=base.length?base:px;
+  let pp = lista.find(p=>como(p,/NUEVA\s*PROMO/i))
+        || lista.find(p=>como(p,/PRICE\s*MATCH/i))
+        || lista.find(p=>como(p,/PROMO|OFERTA|ESPECIAL|PREVENTA/i));
+  let pr = lista.find(p=>como(p,/REGULAR|LISTA|P[UÚ]BLICO/i))
+        || lista.find(p=>como(p,/VENTA/i))
+        || lista.find(p=>como(p,/^PRECIO$/i));
+  if(pr&&pp&&pr===pp) pp=null;
+  if(!pr) pr=lista.find(p=>p!==pp)||null;
+  if(!pp&&lista.length>1) pp=lista.slice().reverse().find(p=>p!==pr)||null;
+  if(pr&&pp&&_ceaNum(pp.v)>=_ceaNum(pr.v)){
+    /* Si el precio a cobrar salió mayor o igual al regular, la lectura de
+       columnas falló: se toman el más caro y el más barato del renglón, que
+       es lo menos malo que puede pasar sin cobrarle de más al cliente. */
+    const ord=lista.slice().sort((a,b)=>_ceaNum(b.v)-_ceaNum(a.v));
+    pr=ord[0]; pp=ord[ord.length-1];
+    if(pr===pp) pp=null;
+  }
+  return {pr:pr?pr.v:'', pp:pp?pp.v:''};
+}
+
+/* Descompone un renglón de tabla. Devuelve el estatus tal como venía escrito
+   (o '' si la tabla no trae esa columna): quién decide el estatus final es
+   quien llama, que ya sabe si el documento completo es de EOL. */
+function _ceaFila(fila,etiqueta){
+  const toks=fila.toks;
+  if(!toks.length||!/^\d{9}$/.test(toks[0].t)) return null;
+  const resto=toks.slice(1);
+  if(!resto.length) return null;
+  const hayDolar=resto.some(t=>t.t.indexOf('$')>=0);
+
+  let fin=resto.length,marcas=[];
+  while(fin>0&&_CEA_MARCA.test(resto[fin-1].t)){ marcas.unshift(resto[fin-1].t); fin--; }
+  const cuerpo=resto.slice(0,fin);
+
+  const px=[],iPx=[];
+  cuerpo.forEach((t,i)=>{ if(_ceaEsPrecio(t.t,hayDolar)){ px.push({v:t.t.replace(/\$/g,''),c:t.c}); iPx.push(i); } });
+  let iEst=-1;
+  for(let i=0;i<cuerpo.length;i++) if(_CEA_EST.test(cuerpo[i].t)){ iEst=i; break; }
+
+  let corte=cuerpo.length;
+  if(iPx.length) corte=Math.min(corte,iPx[0]);
+  if(iEst>=0)    corte=Math.min(corte,iEst);
+  const desc=cuerpo.slice(0,corte).map(t=>t.t).join(' ').replace(/[\s|·,;]+$/,'').trim();
+  if(!desc) return null;
+
+  const p=_ceaPrecios(px,etiqueta);
+  return {sku:toks[0].t,desc:desc,pr:p.pr,pp:p.pp,estTok:iEst>=0?cuerpo[iEst].t:'',marcas:marcas};
+}
+
+function _ceaVigencia(flat){
   const ds=s=>s.replace(/\s/g,'');
   let d1='',d2='',vig='';
-  const vm=flatText.match(/Vigencia\D{0,8}(\d\s*\d?)\s*al\s*(\d\s*\d?)\s*de\s+([A-Za-záéíóúÁÉÍÓÚ]+)\s+de\s+(\d{4})/i);
+  /* Una sola pasada tolerante: "Vigencia: 24 al 31 de agosto de 2026",
+     "vigentes del 15 al 19 de septiembre de 2025" y "vigentes del 13 AL 15
+     JUNIO 2025" —este último sin la palabra "de" antes del mes— son el mismo
+     dato escrito de tres maneras. Se exige que el mes exista de verdad para
+     no fabricar un enero con cualquier palabra que caiga en ese lugar. */
+  let vm=null,mv;
+  const reVig=/vigen\w*\D{0,40}?(\d\s*\d?)\s*(?:de\s+[A-Za-záéíóúÁÉÍÓÚ]+\s+)?al\s+(\d\s*\d?)\s*(?:de\s+)?([A-Za-záéíóúÁÉÍÓÚ]{4,})\s+(?:de[l]?\s+)?(\d{4})/gi;
+  while((mv=reVig.exec(flat))){ if(MESES_P[mv[3].toLowerCase()]){ vm=mv; break; } }
   if(vm){
-    const mes=MESES_P[vm[3].toLowerCase()]||1,y=+vm[4];
+    const mes=MESES_P[vm[3].toLowerCase()],y=+vm[4];
     d1=isoP(y,mes,+ds(vm[1])); d2=isoP(y,mes,+ds(vm[2]));
-    vig=ds(vm[1])+' al '+ds(vm[2])+' de '+vm[3]+' '+vm[4];
+    vig=ds(vm[1])+' al '+ds(vm[2])+' de '+vm[3].toLowerCase()+' '+vm[4];
   }
   let eolD1=d1;
-  const em=flatText.match(/EOL[^.]{0,60}?a partir del\s+(\d\s*\d?)\s+de\s+([A-Za-záéíóúÁÉÍÓÚ]+)/i);
+  const em=flat.match(/EOL[^.]{0,60}?a partir del\s+(\d\s*\d?)\s+de\s+([A-Za-záéíóúÁÉÍÓÚ]+)/i);
   if(em&&vm){
     const mes2=MESES_P[em[2].toLowerCase()]||MESES_P[vm[3].toLowerCase()]||1;
     eolD1=isoP(+vm[4],mes2,+ds(em[1]));
   }
-
-  const byRow={};
-  allItems.forEach(it=>{
-    if(!it.str.trim()) return;
-    const k=it.page+'_'+Math.round(it.y/6);
-    (byRow[k]||(byRow[k]=[])).push(it);
-  });
-  const lines=Object.values(byRow)
-    .map(r=>fixSkus(r.sort((a,b)=>a.x-b.x).map(i=>i.str).join(' ').trim()))
-    .filter(l=>l.length>0);
-
-  const seen={},rows=[];
-  const PRECIO='\\$?([\\d,]+(?:\\.\\d{1,3})?)';
-  const EXTRA='(?:\\S+\\s+)?';
-
-  function parseLine(line){
-    const sku9=line.match(/^(\d{9})\b/); if(!sku9) return;
-    const sku=sku9[1]; if(seen[sku]) return;
-    const re=new RegExp('(\\d{9})\\s+(.+?)\\s+'+PRECIO+'\\s+'+PRECIO+'\\s+'+EXTRA+'(Activo|EOL|Lanzamiento)','i');
-    const m=line.match(re); if(!m) return;
-    const pr=parseFloat(m[3].replace(/,/g,'')),pp=parseFloat(m[4].replace(/,/g,''));
-    if(isNaN(pr)||isNaN(pp)) return;
-    seen[sku]=1;
-    const est=m[5].toUpperCase()==='EOL'?'EOL':'Activo';
-    rows.push({sku,desc:m[2].trim().replace(/\s+/g,' '),pr:m[3],pp:m[4],est,msi:'',
-      d1:est==='EOL'?eolD1:d1,d2});
-  }
-  lines.forEach(parseLine);
-
-  const rePlano=new RegExp('(\\d{9})\\s+(.+?)\\s+'+PRECIO+'\\s+'+PRECIO+'\\s+'+EXTRA+'(Activo|EOL|Lanzamiento)','gi');
-  let m2;
-  while((m2=rePlano.exec(flatText))){
-    const sku=m2[1]; if(seen[sku]) continue;
-    const pr=parseFloat(m2[3].replace(/,/g,'')),pp=parseFloat(m2[4].replace(/,/g,''));
-    if(isNaN(pr)||isNaN(pp)) continue;
-    seen[sku]=1;
-    const est=m2[5].toUpperCase()==='EOL'?'EOL':'Activo';
-    rows.push({sku,desc:m2[2].trim().replace(/\s+/g,' '),pr:m2[3],pp:m2[4],est,msi:'',
-      d1:est==='EOL'?eolD1:d1,d2});
-  }
-  return {rows,vig};
+  return {d1:d1,d2:d2,vig:vig,eolD1:eolD1};
 }
+
+/* Núcleo: del PDF a filas {sku,desc,pr,pp,est,msi,d1,d2} */
+async function _ceaTablaPDF(file){
+  const filas=_ceaRenglones(await _ceaPalabrasPDF(file));
+  const flat=filas.map(_ceaTexto).join(' ').replace(/\s+/g,' ');
+  const cols=_ceaColumnas(filas);
+  /* Etiqueta de la columna cuyo centro queda más cerca; si ninguna queda a
+     tiro se devuelve '' y la elección de precios cae al primero/último. */
+  const etiqueta=c=>{
+    let mej=null,d=45;
+    cols.forEach(col=>{ const dd=Math.abs(col.c-c); if(dd<d){ d=dd; mej=col; } });
+    return mej?mej.et:'';
+  };
+  const nom=String(file.name||'').replace(/[_\-]+/g,' ');
+  const docEsEol=/PROMOCIONES?\s+EOL|ART[IÍ]CULOS?\s+EOL|PRODUCTOS?\s+EOL|EQUIPOS?\s+EOL|LISTADO\s+(?:DE\s+)?(?:ART[IÍ]CULOS\s+)?EOL/i.test(nom+' '+flat.slice(0,1200));
+  let msiCols=[];
+  filas.forEach(f=>{
+    const ms=_ceaTexto(f).match(/\d{1,2}\s*MSI/gi);
+    if(ms&&ms.length>msiCols.length) msiCols=ms.map(s=>s.replace(/\D/g,''));
+  });
+  const v=_ceaVigencia(flat);
+
+  const seen={},crudas=[];
+  filas.forEach(f=>{ const r=_ceaFila(f,etiqueta); if(r&&!seen[r.sku]){ seen[r.sku]=1; crudas.push(r); } });
+
+  /* Red por si el agrupado por coordenada falla en algún PDF: cada tramo de
+     texto plano que va de un SKU al siguiente se intenta leer igual, pero sin
+     columnas (centro -9999) para que caiga al primero/último precio. */
+  const pos=[],reSku=/\b\d{9}\b/g; let ms;
+  while((ms=reSku.exec(flat))) pos.push(ms.index);
+  pos.forEach((p,i)=>{
+    if(seen[flat.substr(p,9)]) return;
+    const tramo=flat.slice(p, i+1<pos.length?pos[i+1]:Math.min(flat.length,p+160)).trim();
+    const r=_ceaFila({toks:tramo.split(' ').filter(Boolean).map(t=>({t:t,x:0,c:-9999}))},function(){return '';});
+    /* Sólo si trae precio o estatus: sin ese filtro, un SKU citado de pasada
+       en un párrafo entraba como promoción con la oración de descripción. */
+    if(r&&!seen[r.sku]&&(r.pr||r.estTok)){ seen[r.sku]=1; crudas.push(r); }
+  });
+
+  /* Si ningún renglón trajo estatus manda el documento: un CEA titulado
+     "PROMOCIONES EOL" es una tabla de EOL aunque no tenga esa columna. */
+  const hayEstatus=crudas.some(r=>r.estTok);
+  const rows=crudas.map(r=>{
+    const est=r.estTok ? (/EOL/i.test(r.estTok)?'EOL':'Activo')
+                       : ((!hayEstatus&&docEsEol)?'EOL':'Activo');
+    let msi='';
+    if(msiCols.length&&r.marcas.length===msiCols.length)
+      msi=msiCols.filter(function(_,i){ return _CEA_TACHE.test(r.marcas[i]); }).join(',');
+    return {sku:r.sku,desc:r.desc,pr:r.pr,pp:r.pp,est:est,msi:msi,
+            d1:est==='EOL'?v.eolD1:v.d1, d2:v.d2};
+  });
+  return {rows:rows,vig:v.vig};
+}
+
+async function parsePromosPDF(file){ return await _ceaTablaPDF(file); }
 
 /* ── Excel parser para promos ── */
 function _fmtDateXlsx(val){
@@ -1835,6 +2034,7 @@ document.getElementById('filePromos').onchange=async function(e){
   document.getElementById('resPromos').className='result';
   document.getElementById('fphPromos').textContent='Leyendo archivo…';
   document.getElementById('fboxPromos').classList.remove('ok');
+  document.getElementById('detPromos').style.display='none';
   try{
     const isXlsx=/\.(xlsx|xls)$/i.test(f.name);
     parsedPromos=isXlsx ? await parsePromosXLSX(f) : await parsePromosPDF(f);
@@ -1843,6 +2043,17 @@ document.getElementById('filePromos').onchange=async function(e){
     document.getElementById('fboxPromos').classList.add('ok');
     document.getElementById('fphPromos').innerHTML=
       `✓ ${f.name}<br>${parsedPromos.rows.length} promos · ${eolCount} EOL · vigencia ${parsedPromos.vig||'no detectada'}`;
+    /* La lista de lo leído va antes del botón a propósito: un renglón mal
+       leído se ve aquí en tres segundos, y ya subido hay que perseguirlo en
+       la nube. */
+    document.getElementById('prevListPromos').innerHTML=parsedPromos.rows.map(r=>`
+      <div class="prev-item">
+        <strong>SKU ${r.sku}${r.est==='EOL'?' · EOL':''}</strong>
+        <span>${r.desc||'(sin descripción)'}</span>
+        <span>${r.pr?'regular $'+r.pr:'sin precio regular'}${r.pp?' → promo $'+r.pp:''}${r.msi?' · '+r.msi.split(',').join(' y ')+' MSI':''}</span>
+        <span>📅 ${r.d1||'sin inicio'} al ${r.d2||'SIN VIGENCIA — no se va a guardar'}</span>
+      </div>`).join('');
+    document.getElementById('detPromos').style.display='block';
     document.getElementById('btnPromos').disabled=false;
   }catch(err){
     parsedPromos=null; document.getElementById('btnPromos').disabled=true;
@@ -2192,90 +2403,15 @@ async function clearBundles(){
    TAB EOL — PDF parser (solo filas EOL del CEA)
    ================================================================ */
 async function parseEolPDF(file){
-  if(typeof pdfjsLib==='undefined') throw new Error('PDF.js no disponible');
-  const buf=await file.arrayBuffer();
-  const pdf=await pdfjsLib.getDocument({data:buf}).promise;
-  const allItems=[]; let flatText='';
-  for(let p=1;p<=pdf.numPages;p++){
-    const page=await pdf.getPage(p);
-    const vp=page.getViewport({scale:1});
-    const tc=await page.getTextContent();
-    tc.items.forEach(i=>{
-      allItems.push({str:i.str,x:i.transform[4],y:vp.height-i.transform[5],page:p});
-    });
-    flatText+=tc.items.map(i=>i.str).join(' ')+'\n';
-  }
-  const fixSkus=t=>t.replace(/(\d{1,8}) (\d{1,8})/g,(m,a,b)=>(a+b).length===9?a+b:m);
-  flatText=fixSkus(flatText);
-
-  const MESES={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12};
-  const ds=s=>s.replace(/\s/g,'');
-  let d1='',d2='',vig='';
-  const vm=flatText.match(/Vigencia\D{0,8}(\d\s*\d?)\s*al\s*(\d\s*\d?)\s*de\s+([A-Za-záéíóúÁÉÍÓÚ]+)\s+de\s+(\d{4})/i);
-  if(vm){
-    const mes=MESES[vm[3].toLowerCase()]||1,y=+vm[4];
-    d1=isoP(y,mes,+ds(vm[1])); d2=isoP(y,mes,+ds(vm[2]));
-    vig=ds(vm[1])+' al '+ds(vm[2])+' de '+vm[3]+' '+vm[4];
-  }
-  let eolD1=d1;
-  const em=flatText.match(/EOL[^.]{0,60}?a partir del\s+(\d\s*\d?)\s+de\s+([A-Za-záéíóúÁÉÍÓÚ]+)/i);
-  if(em&&vm){
-    const mes2=MESES[em[2].toLowerCase()]||MESES[vm[3].toLowerCase()]||1;
-    eolD1=isoP(+vm[4],mes2,+ds(em[1]));
-  }
-
-  const byRow={};
-  allItems.forEach(it=>{
-    if(!it.str.trim()) return;
-    const k=it.page+'_'+Math.round(it.y/6);
-    (byRow[k]||(byRow[k]=[])).push(it);
-  });
-  const lines=Object.values(byRow)
-    .map(r=>fixSkus(r.sort((a,b)=>a.x-b.x).map(i=>i.str).join(' ').trim()))
-    .filter(l=>l.length>0);
-
-  const seen={},rows=[];
-  const PRECIO='\\$?([\\d,]+(?:\\.\\d{1,3})?)';
-  const EXTRA='(?:\\S+\\s+)?';
-
-  // Formato 1: CEA promos con precios (SKU desc precioReg precioPromo EOL)
-  lines.forEach(line=>{
-    const m=line.match(new RegExp('(\\d{9})\\s+(.+?)\\s+'+PRECIO+'\\s+'+PRECIO+'\\s+'+EXTRA+'(EOL)','i'));
-    if(!m) return;
-    const sku=m[1]; if(seen[sku]) return;
-    const pr=parseFloat(m[3].replace(/,/g,'')),pp=parseFloat(m[4].replace(/,/g,''));
-    if(isNaN(pr)||isNaN(pp)) return;
-    seen[sku]=1;
-    rows.push({sku,desc:m[2].trim().replace(/\s+/g,' '),pr:m[3],pp:m[4],d1:eolD1,d2});
-  });
-  const rePlano=new RegExp('(\\d{9})\\s+(.+?)\\s+'+PRECIO+'\\s+'+PRECIO+'\\s+'+EXTRA+'(EOL)','gi');
-  let m2;
-  while((m2=rePlano.exec(flatText))){
-    const sku=m2[1]; if(seen[sku]) continue;
-    const pr=parseFloat(m2[3].replace(/,/g,'')),pp=parseFloat(m2[4].replace(/,/g,''));
-    if(isNaN(pr)||isNaN(pp)) continue;
-    seen[sku]=1;
-    rows.push({sku,desc:m2[2].trim().replace(/\s+/g,' '),pr:m2[3],pp:m2[4],d1:eolD1,d2});
-  }
-
-  // Formato 2: ADENDUM EOL sin precios (SKU desc EOL)
-  lines.forEach(line=>{
-    const m=line.match(/^(\d{9})\s+(.*?)\s*EOL\s*$/i);
-    if(!m) return;
-    const sku=m[1]; if(seen[sku]) return;
-    seen[sku]=1;
-    rows.push({sku,desc:m[2].trim().replace(/\s+/g,' '),pr:'',pp:'',d1:eolD1,d2});
-  });
-  // también buscar en texto plano (por si las palabras quedaron en distintas líneas de PDF)
-  const reSinPx=/(\d{9})\s+((?:(?!\d{9}).){3,80}?)\s+EOL\b/gi;
-  let m3;
-  while((m3=reSinPx.exec(flatText))){
-    const sku=m3[1]; if(seen[sku]) continue;
-    seen[sku]=1;
-    rows.push({sku,desc:m3[2].trim().replace(/\s+/g,' '),pr:'',pp:'',d1:eolD1,d2});
-  }
-
-  return {rows,vig};
+  /* Mismo lector que las promos: aquí sólo se quedan las filas EOL. Antes
+     este parser pedía la palabra EOL dentro del propio renglón y además la
+     buscaba suelta en el texto plano, lo que marcaba como EOL productos que
+     el CEA daba por ACTIVO —el EOL del renglón vecino caía dentro de la
+     ventana de búsqueda—. Ahora el estatus sale de la columna que le toca. */
+  const t=await _ceaTablaPDF(file);
+  const rows=t.rows.filter(r=>r.est==='EOL')
+                   .map(r=>({sku:r.sku,desc:r.desc,pr:r.pr,pp:r.pp,d1:r.d1,d2:r.d2}));
+  return {rows,vig:t.vig};
 }
 
 document.getElementById('filePdfEol').onchange=async function(e){
@@ -2293,7 +2429,8 @@ document.getElementById('filePdfEol').onchange=async function(e){
     document.getElementById('prevListEol').innerHTML=result.rows.map(r=>`
       <div class="prev-item">
         <strong>SKU ${r.sku}</strong>
-        <span>${r.desc} · precio regular $${r.pr}</span>
+        <span>${r.desc}</span>
+        <span>${r.pr?'precio regular $'+r.pr:'sin precio en el comunicado'}${r.pp?' → promo $'+r.pp:''}</span>
         ${r.d1?`<span>📅 EOL desde ${r.d1}</span>`:''}
       </div>`).join('');
     document.getElementById('btnSaveEol')._rows=result.rows;
