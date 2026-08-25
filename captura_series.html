@@ -1941,6 +1941,12 @@ function accExtraer(txt){
     }
   }
   const unico = mRec ? Number(mRec[1]) === 1 : (lineas.length === 1);
+  /* Si el importe salió ilegible del todo, lo pone el `Total` — y solo con UN
+     artículo, por lo mismo de siempre: con varios, el total no es el de esta
+     línea. Sin esto la venta se guardaba sin importe y la cuenta no se podía
+     comprobar, teniendo el número impreso dos veces más abajo. */
+  if(imp == null && total != null && unico) imp = total;
+
   if(total != null && unico && cant && pUni != null && imp != null &&
      Math.abs(pUni * cant - imp) >= 0.02){
     if(Math.abs(pUni * cant - total) < 0.02)      imp  = total;
@@ -2097,15 +2103,30 @@ function accLineasArticulo(txt){
      l\u00ednea del pie aparece en TODOS los tickets: se colar\u00eda como un art\u00edculo m\u00e1s
      y convertir\u00eda cualquier reparaci\u00f3n en un ticket \u00abmixto\u00bb, que es de los que
      no se deciden solos. El importe siempre lleva `$` en este ticket. */
-  const re = /(?:^|\n)[^\d\n]{0,12}?(\d{4,12})[^\d$]{1,15}?(?:([\dIl\]|]{1,3})[\s—–|]+)?([\d.,]+)[\s—–|]+\$\s?([\d.,]+)/g;
+  const re = /(?:^|\n)[^\d\n]{0,12}?(\d{4,12})[^\d$]{1,15}?(?:([\dIl\]|]{1,3})[\s—–|]+)?([\d.,]+)(?:[\s—–|]+\$\s?([\d.,]+))?/g;
   const fuera = [];
   let m;
   while((m = re.exec(String(txt || ''))) !== null){
     // Sin cantidad en la línea, es 1: lo que vale cuando el ticket no dice otra
     // cosa. Se comprueba igual con `precio × cantidad = importe`, así que una
     // cantidad supuesta que no cuadre se ve en el aviso en vez de colarse.
+    /* EL IMPORTE PUEDE SALIR ILEGIBLE ENTERO. En un ticket, donde el papel
+       decía `$1,013.20`, el OCR leyó `SOI`:
+
+           100175537 1 1013,200 SOI |
+
+       Exigiendo el importe se perdía la línea completa, y con ella el SKU y el
+       precio, que estaban BIEN leídos. Ahora es opcional.
+
+       ⚠️ Pero sin importe hay que sostener el patrón por otro lado, o la línea
+       del pie —`1217 2 23/0/26 4:59 PM 33685`— pasaría por artículo: sería
+       SKU 1217, cantidad 2, precio 23. Por eso, cuando el importe falta, el
+       precio tiene que PARECER un precio: llevar decimales. `1013,200` los
+       lleva; `23` no. */
+    if(m[4] == null && !/[.,]\d/.test(m[3])) continue;
+
     const cant = m[2] ? accNum(String(m[2]).replace(/[Il\]|]/g, '1')) : 1;
-    const importe = accNum(m[4]);
+    const importe = m[4] != null ? accNum(m[4]) : null;
     let precio = accNum3(m[3]);
 
     /* EL PUNTO DEL PRECIO SE PIERDE A VECES. `1124.390` se leyó `1124390`, y
