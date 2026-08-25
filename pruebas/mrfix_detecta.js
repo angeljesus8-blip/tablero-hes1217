@@ -57,8 +57,13 @@ function motor(skusRep){
        QUE decidio mal, no «accCodigos is not defined», que suena a prueba rota
        y no a deteccion rota. */
     trozo('accCodigos') + '\n' +
-    trozo('accSkuNorm') + '\n' + trozo('accSkusDeLineas') + '\n' + trozo('accQueEs'), caja);
-  return (texto) => vm.runInContext('accQueEs(' + JSON.stringify(texto) + ')', caja);
+    trozo('accNum') + '\n' + trozo('accNum3') + '\n' +
+    trozo('accLineasArticulo') + '\n' +
+    trozo('accSkuNorm') + '\n' + trozo('accSkusDeLineas') + '\n' +
+    trozo('accExtraer') + '\n' + trozo('accQueEs'), caja);
+  const fn = (texto) => vm.runInContext('accQueEs(' + JSON.stringify(texto) + ')', caja);
+  fn.extraer = (texto) => vm.runInContext('accExtraer(' + JSON.stringify(texto) + ')', caja);
+  return fn;
 }
 
 /* Los DOS de la 1217, dichos por Angel el 24-ago-2026. Son dos y no uno, y esa
@@ -145,6 +150,30 @@ for(const [titulo, fn, texto, espera, debeDecir] of CASOS){
     fallos.push(titulo + ': no explica por que. Sin motivo, el asesor no sabe si ' +
                 'mirarlo o fiarse');
   }
+}
+
+/* ── Y los NUMEROS de la reparacion ──────────────────────────────────────
+   `accExtraer` buscaba literalmente la linea del 43739, asi que en una
+   reparacion no encontraba nada y devolvia cantidad, precio e importe VACIOS:
+   el asesor tenia que teclear el importe a mano sin que nada dijera por que.
+   Se vio capturando la primera reparacion de verdad, el 24-ago. */
+const numeros = [
+  ['reparacion', queEs.extraer(T_REAL_REP), 1124.39, '33671', '23/8/26'],
+  ['accesorio',  queEs.extraer(T_REAL_ACC),  149,    '',      ''],
+];
+for(const [que, r, importe, ticket, fecha] of numeros){
+  if(r.importe == null){
+    fallos.push(que + ': no leyo el importe de la linea del articulo — el asesor ' +
+                'tendria que teclearlo a mano sin saber por que');
+  }else if(Math.abs(r.importe - importe) > 0.01){
+    fallos.push(que + ': leyo un importe de ' + r.importe + ' y el ticket dice ' + importe);
+  }
+  if(!r.cuadra){
+    fallos.push(que + ': precio x cantidad no cuadra con el importe (' +
+                r.precio + ' x ' + r.cant + ' vs ' + r.importe + ')');
+  }
+  if(ticket && r.ticket !== ticket) fallos.push(que + ': leyo el ticket "' + r.ticket + '" y es ' + ticket);
+  if(fecha && r.fecha !== fecha)   fallos.push(que + ': leyo la fecha "' + r.fecha + '" y es ' + fecha);
 }
 
 if(fallos.length){
