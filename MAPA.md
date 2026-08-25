@@ -636,6 +636,50 @@ Un mes sin reparaciones **es un resultado normal** y se dice nombrando el mes, a
 revés que el catálogo, que nunca está vacío de verdad y donde cero siempre es un
 problema.
 
+#### El código estaba en otra columna del ticket *(24-ago-2026, v212)*
+
+Con todo lo demás ya en su sitio, la detección seguía sin reconocer una
+reparación. El ticket de verdad lo explicó:
+
+```
+Artículo   Cantidad   Precio      Importe
+REP FUERA DE GARANTÍA HW 2
+100175545      1      1124.390   $1,124.39  I
+IMEI / SERIE / SERVICIO: 3RYUN24919G00047
+```
+
+⚠️ **El SKU está en la columna «Artículo», no detrás de `SERVICIO:`.** Lo que
+hay tras esa etiqueta es el **IMEI del equipo reparado** — el rótulo entero es
+«IMEI / SERIE / SERVICIO:». La detección leía ahí, se traía el IMEI
+`3RYUN24919G00047` y **no reconocía una reparación jamás**.
+
+**En los accesorios ese mismo campo sí trae el código del artículo**
+(`43739-MICAHR`, abreviado a mano), porque una mica no tiene IMEI. De ahí venía
+el error: `accCodigos` funciona para **adivinar el producto** de un accesorio, y
+lo reutilicé para algo que no es lo mismo.
+
+Ahora el SKU sale de la **línea del artículo** —número, cantidad, precio,
+importe—, que es exactamente la línea de la que `accExtraer` saca el precio del
+43739 desde el 18-ago. Estaba delante todo el tiempo.
+
+Y se comparan **sin los ceros de la izquierda**: el catálogo guarda `000043739`
+y el ticket imprime `43739`.
+
+**La prueba corre contra el ticket transcrito del papel**, entero, con su
+cabecera y su pie — no contra un resumen cómodo escrito por mí. Es la diferencia
+entre probar lo que sale de la impresora y probar lo que yo suponía que salía.
+
+⚠️ **Dos debilidades de la propia prueba, encontradas al romperla:**
+
+1. Al volver a leer el campo `SERVICIO:`, fallaba con *«accCodigos is not
+   defined»* — que suena a **prueba rota**, no a detección rota, y se habría
+   arreglado borrando el caso. Ahora el motor carga esa función aunque no se
+   use, para que el fallo diga *qué decidió mal*.
+2. Quitar el recorte de ceros **no rompía nada**: ese trozo no estaba cubierto
+   por ningún caso. Un código sin prueba que lo respalde es código que nadie
+   sabe si hace falta. Ahora hay un caso con el SKU configurado con ceros
+   delante.
+
 #### La sesión guardada nunca se refresca *(24-ago-2026, v211)*
 
 El código estaba en la base, `login_asesor` y `login_empleado` lo devolvían, y

@@ -52,7 +52,12 @@ function motor(skusRep){
   vm.runInContext(codigos + '\n' +
     trozo('accPartirSkus') + '\n' +
     html.slice(decl, finDecl + 1) + '\n' +
-    trozo('accCodigos') + '\n' + trozo('accQueEs'), caja);
+    /* `accCodigos` se carga aunque `accQueEs` ya no lo use: si alguien vuelve
+       a leerlo de ahi —el fallo del 24-ago— la prueba tiene que fallar diciendo
+       QUE decidio mal, no «accCodigos is not defined», que suena a prueba rota
+       y no a deteccion rota. */
+    trozo('accCodigos') + '\n' +
+    trozo('accSkuNorm') + '\n' + trozo('accSkusDeLineas') + '\n' + trozo('accQueEs'), caja);
   return (texto) => vm.runInContext('accQueEs(' + JSON.stringify(texto) + ')', caja);
 }
 
@@ -64,29 +69,65 @@ const REP_A = '100175537', REP_B = '100175545';
 const queEs = motor(REP_A + ',' + REP_B);
 const soloUno = motor(REP_A);            // como si se hubiera configurado a medias
 const sinConfigurar = motor('');
+const conCeros = motor('000' + REP_B);   // mismo sku, escrito con ceros delante
 
-const T_ACC  = 'ATENDIDO POR ARTURO\nSERVICIO: 43739-MICAHR\nIMPORTE 149.00';
-const T_REPA = 'ATENDIDO POR ARTURO\nSERVICIO: 100175537\nIMPORTE 850.00';
-const T_REPB = 'ATENDIDO POR ARTURO\nSERVICIO: 100175545\nIMPORTE 1200.00';
-const T_MIX  = 'SERVICIO: 43739-MICAHR\nSERVICIO: 100175545\nIMPORTE 999.00';
+/* EL TICKET DE VERDAD, transcrito del papel (24-ago-2026). Es el que destapo el
+   fallo: la deteccion leia el campo `SERVICIO:` y se traia el IMEI del equipo
+   —3RYUN24919G00047— en vez del SKU 100175545 de la columna Articulo.
+
+   Se deja entero, con su cabecera y su pie, para que la prueba corra contra lo
+   que sale de la impresora y no contra un resumen comodo escrito por mi. */
+const T_REAL_REP = [
+  '1217-HUAWEI HES ANGELOPOLIS PUEBLA',
+  'Venta Normal',
+  'Reimprimir - Reimprimir - Reimprimir - Reimprimi',
+  'Articulo    Cantidad    Precio     Importe',
+  'REP FUERA DE GARANTIA HW 2',
+  '100175545        1      1124.390   $1,124.39  I',
+  'IMEI / SERIE / SERVICIO: 3RYUN24919G00047',
+  'Codigo Cambio de Precio: ITM017',
+  '                 Total        1,124.39',
+  '1217 2 23/8/26 11:44 AM 33671 <empno>',
+  'Atendido por:Ortega Vidal Luis'
+].join('\n');
+
+// Un accesorio del mismo formato: el SKU generico en la columna Articulo, y en
+// SERVICIO el codigo abreviado (ahi si, porque una mica no tiene IMEI).
+const T_REAL_ACC = [
+  'Articulo    Cantidad    Precio     Importe',
+  'MICA HR',
+  '000043739        1      149.000    $149.00  I',
+  'IMEI / SERIE / SERVICIO: 43739-MICAHR',
+  'Atendido por:Ortega Vidal Luis'
+].join('\n');
+
+const T_MIX = [
+  'Articulo    Cantidad    Precio     Importe',
+  'MICA HR',
+  '000043739        1      149.000    $149.00  I',
+  'REP FUERA DE GARANTIA HW 2',
+  '100175545        1      1124.390   $1,124.39  I'
+].join('\n');
+
 const T_NADA = 'ATENDIDO POR ARTURO\nTOTAL 149.00';
-// El OCR de esta impresora confunde 1->T y 0->O: el codigo llega deformado.
-const T_OCR  = 'SERVICIO: TOOT75537\nIMPORTE 850.00';
 
 const CASOS = [
-  ['accesorio solo',                queEs,         T_ACC,  'acc', false],
-  ['reparacion con el primer sku',  queEs,         T_REPA, 'rep', true ],
-  ['reparacion con el SEGUNDO sku', queEs,         T_REPB, 'rep', true ],
-  ['reparacion con el OCR sucio',   queEs,         T_OCR,  'rep', true ],
-  ['ticket con las DOS cosas',      queEs,         T_MIX,  null,  true ],
-  ['sin codigos legibles',          queEs,         T_NADA, null,  false],
-  ['codigos sin configurar',        sinConfigurar, T_REPA, null,  false],
-  /* Configurado a medias: el segundo sku se lee como ACCESORIO y esa reparacion
-     acabaria en el Excel de comisiones. No es un fallo del codigo —hace lo que
-     le dijeron— pero deja escrito, y comprobado, por que la lista lleva los dos
-     y por que quitar uno no es inofensivo. */
-  ['solo un sku configurado',       soloUno,       T_REPB, 'acc', false],
+  ['ticket REAL de reparacion',     queEs,         T_REAL_REP, 'rep', true ],
+  ['ticket REAL de accesorio',      queEs,         T_REAL_ACC, 'acc', false],
+  ['ticket con las DOS cosas',      queEs,         T_MIX,      null,  true ],
+  ['sin lineas de articulo',        queEs,         T_NADA,     null,  false],
+  ['codigos sin configurar',        sinConfigurar, T_REAL_REP, null,  false],
+  /* Configurado a medias: el sku que falta se lee como ACCESORIO y esa
+     reparacion acabaria en el Excel de comisiones. No es un fallo del codigo
+     —hace lo que le dijeron— pero deja escrito, y comprobado, por que la lista
+     lleva los dos y por que quitar uno no es inofensivo. */
+  /* El catalogo guarda `000043739` y el ticket imprime `43739`; si alguien
+     configura el sku de reparacion con ceros delante tiene que dar igual. Sin
+     el recorte de ceros esto se leeria como accesorio y acabaria en el Excel. */
+  ['sku configurado con ceros',     conCeros,      T_REAL_REP, 'rep', true ],
+  ['solo un sku configurado',       soloUno,       T_REAL_REP, 'acc', false],
 ];
+
 
 const fallos = [];
 for(const [titulo, fn, texto, espera, debeDecir] of CASOS){
