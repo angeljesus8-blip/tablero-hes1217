@@ -147,6 +147,26 @@ const T_REAL_ACC4 = fs.readFileSync(
 const T_REAL_ACC5 = fs.readFileSync(
   path.join(__dirname, 'ocr_ticket_real5.txt'), 'utf8');
 
+/* SEXTO ticket: la linea del articulo PARTIDA EN DOS.
+
+       10004373
+       mer 149,000 $149.00 1
+
+   El sku solo en un renglon y los numeros en el siguiente. Y encima el sku
+   quedo irreconocible —`000043739` leido `10004373`: perdio el 9 del final y
+   gano un 1 delante, seis digitos de diferencia—, asi que ni la tolerancia lo
+   salva. Se usa igual porque en todo el ticket hay UNA sola linea de articulo:
+   no hay nada que elegir. */
+const T_REAL_ACC6 = fs.readFileSync(
+  path.join(__dirname, 'ocr_ticket_real6.txt'), 'utf8');
+
+/* Y el guardarrail de eso: el MISMO ticket con una segunda linea de articulo.
+   Con dos, un sku irreconocible ya no se puede resolver —habria que acertar
+   cual es— y capturar el precio del otro articulo es peor que dejarlo vacio. */
+const T_SKU_ROTO_Y_DOS = T_REAL_ACC6
+  .replace('naci! SERIE / SERVICIO: MICATRANSPARENTE',
+           '000043739 1 299.000 $299.00 1\nnaci! SERIE / SERVICIO: MICATRANSPARENTE');
+
 /* El guardarrail del total: MISMO ticket pero con dos articulos. Aqui el total
    no dice nada del accesorio —un ticket de ocho articulos por $16,962.50
    llevaba un kit de $169— y corregir con el guardaria el total como precio del
@@ -186,6 +206,7 @@ const CASOS = [
   ['ticket REAL de accesorio',      queEs,         T_REAL_ACC,  'acc', false],
   ['cuarto ticket, accesorio real', queEs,         T_REAL_ACC4, 'acc', false],
   ['quinto: sku de accesorio con un digito mal', queEs, T_REAL_ACC5, 'acc', false],
+  ['sexto: la linea partida en dos',  queEs,         T_REAL_ACC6, 'acc', false],
   ['ticket con las DOS cosas',      queEs,         T_MIX,      null,  true ],
   ['sin lineas de articulo',        queEs,         T_NADA,     null,  false],
   ['codigos sin configurar',        sinConfigurar, T_REAL_REP, null,  false],
@@ -236,6 +257,8 @@ const numeros = [
   ['cuarto ticket', queEs.extraer(T_REAL_ACC4), 999, '33675', ''],
   /* Importe con coma decimal (`$999,00`) y sku con un digito mal leido. */
   ['quinto ticket', queEs.extraer(T_REAL_ACC5), 999, '33675', '23/8/26'],
+  /* Linea partida y sku irreconocible: se usa porque es la unica del ticket. */
+  ['sexto ticket', queEs.extraer(T_REAL_ACC6), 149, '33677', '23/8/26'],
   ['accesorio',  queEs.extraer(T_REAL_ACC),  149,    '',      ''],
 ];
 for(const [que, r, importe, ticket, fecha] of numeros){
@@ -313,6 +336,16 @@ if(dos.cuadra || dos.importe === 999){
       fallos.push('accNum("' + txt + '") = ' + leido + ' y vale ' + vale);
     }
   }
+}
+
+/* ── Un sku irreconocible NO se resuelve si hay varias lineas ───────────
+   Con una sola linea de articulo no hay nada que elegir; con dos, acertar cual
+   es seria adivinar, y capturar el precio del articulo equivocado es peor que
+   dejar el campo vacio y que lo escriba el asesor. */
+const roto2 = queEs.extraer(T_SKU_ROTO_Y_DOS);
+if(roto2.importe === 149){
+  fallos.push('con el sku irreconocible Y dos lineas, eligio una igual (importe ' +
+              roto2.importe + '). Con varias no se puede saber cual era');
 }
 
 if(fallos.length){

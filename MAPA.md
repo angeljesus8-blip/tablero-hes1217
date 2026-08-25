@@ -636,6 +636,52 @@ Un mes sin reparaciones **es un resultado normal** y se dice nombrando el mes, a
 revés que el catálogo, que nunca está vacío de verdad y donde cero siempre es un
 problema.
 
+#### La línea del artículo, partida en dos *(24-ago-2026, v222)*
+
+Sexta foto, sexto fallo que no se parece a ninguno:
+
+```
+10004373
+mer 149,000 $149.00 1
+```
+
+El SKU quedó **solo en un renglón** y los números en el siguiente. El patrón
+pedía todo en la misma línea, así que no encontraba nada: ni SKU ni precio.
+
+Ahora, entre el SKU y el resto se admite ruido que puede incluir **un salto de
+línea**: hasta 15 caracteres, y ninguno un dígito ni un `$`. Lo justo para
+cruzar el corte sin saltar a una línea lejana y emparejar números que no van
+juntos.
+
+⚠️ **Y el SKU quedó irreconocible.** `000043739` se leyó `10004373`: perdió el 9
+del final y ganó un 1 delante — **seis dígitos de diferencia**, muy lejos de la
+tolerancia de uno. Cuando eso pasa pero en todo el ticket hay **una sola** línea
+de artículo, se usa esa: no hay nada que elegir.
+
+**Solo con una.** Con varias habría que acertar cuál, y equivocarse es capturar
+el precio de otro artículo. La prueba lleva el mismo ticket con una segunda
+línea y verifica que entonces **no** elige — mejor un campo vacío que el número
+de otra cosa.
+
+#### Seis fotos, seis fallos, ninguno repetido
+
+| foto | qué hizo el OCR |
+|---|---|
+| 1 | Ruido del borde (`N`, `NN`) y rayas entre columnas |
+| 2 | Dígito del SKU mal leído · punto del precio perdido |
+| 3 | La cantidad mudada al renglón de arriba |
+| 4 | Importe mal leído · mes cero en la fecha |
+| 5 | Dígito en la zona de los ceros · coma decimal |
+| 6 | La línea partida en dos · SKU irreconocible |
+
+Seis fotos de la misma impresora, y **cada una rompió algo distinto**. Ninguno de
+los seis se deduce mirando el papel: los seis salieron de leer el texto crudo.
+
+Eso es lo que hay detrás de «a veces no lee el precio» — no un fallo, sino seis,
+cada uno con su arreglo y su comprobación. Y por eso los seis textos se guardan
+en `pruebas/`: es la única forma de que el arreglo del séptimo no rompa los
+anteriores.
+
 #### La coma no siempre es de miles *(24-ago-2026, v221)*
 
 Quinta foto, del mismo accesorio que la cuarta, y **dos fallos que ninguna otra

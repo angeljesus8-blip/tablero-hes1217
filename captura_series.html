@@ -1883,7 +1883,17 @@ function accExtraer(txt){
      como 9 dejaba la línea sin encontrar: ni SKU ni
      precio. Al OCR se le pide que acierte casi todo, no todo. */
   const esAcc = (l) => ACC_SKUS.some(c => accDistancia(accSkuNorm(l.sku), c) <= 1);
-  const lin = lineas.filter(esRep)[0] || lineas.filter(esAcc)[0] || null;
+  /* Y si el SKU no se reconoce pero hay UNA SOLA línea de artículo, es esa.
+
+     El OCR llegó a leer `000043739` como `10004373`: perdió el 9 del final y se
+     inventó un 1 delante. Eso ya no se parece a ningún código —seis dígitos de
+     diferencia— y con la tolerancia no basta; pero si en todo el ticket hay una
+     única línea con su precio y su importe, no hay nada que elegir.
+
+     Solo con UNA. Con varias habría que acertar cuál, y ahí equivocarse es
+     capturar el precio de otro artículo: mejor que el asesor lo escriba. */
+  const lin = lineas.filter(esRep)[0] || lineas.filter(esAcc)[0] ||
+              (lineas.length === 1 ? lineas[0] : null);
 
   const cant = lin ? lin.cant : null;
   let pUni = lin ? lin.precio : null;
@@ -2050,13 +2060,23 @@ function accLineasArticulo(txt){
      `877.270` no puede tomar `877` como cantidad, porque detr\u00e1s viene un punto
      y no un separador.
 
+     ⚠️ Y LA LÍNEA SE PARTE EN DOS. En otro ticket salió así:
+
+         10004373
+         mer 149,000 $149.00 1
+
+     el SKU solo en un renglón y los números en el siguiente. Por eso entre el
+     SKU y el resto se admite ruido que puede incluir UN salto de línea, hasta
+     15 caracteres y ninguno un dígito ni un `$`: lo justo para cruzar el corte
+     sin saltar a una línea lejana y emparejar números que no van juntos.
+
      Y por eso mismo el `$` del importe pasa a ser OBLIGATORIO. Con la cantidad
      opcional, el patr\u00f3n se afloja lo bastante como para que
      `1217 2 23/8/26 1:54 PM 33673` case \u2014sku 1217, precio 2, importe 23\u2014 y esa
      l\u00ednea del pie aparece en TODOS los tickets: se colar\u00eda como un art\u00edculo m\u00e1s
      y convertir\u00eda cualquier reparaci\u00f3n en un ticket \u00abmixto\u00bb, que es de los que
      no se deciden solos. El importe siempre lleva `$` en este ticket. */
-  const re = /(?:^|\n)[^\d\n]{0,12}?(\d{4,12})[\s\u2014\u2013|]+(?:([\dIl\]|]{1,3})[\s\u2014\u2013|]+)?([\d.,]+)[\s\u2014\u2013|]+\$\s?([\d.,]+)/g;
+  const re = /(?:^|\n)[^\d\n]{0,12}?(\d{4,12})[^\d$]{1,15}?(?:([\dIl\]|]{1,3})[\s—–|]+)?([\d.,]+)[\s—–|]+\$\s?([\d.,]+)/g;
   const fuera = [];
   let m;
   while((m = re.exec(String(txt || ''))) !== null){
