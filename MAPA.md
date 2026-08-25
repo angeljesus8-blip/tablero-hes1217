@@ -636,6 +636,48 @@ Un mes sin reparaciones **es un resultado normal** y se dice nombrando el mes, a
 revés que el catálogo, que nunca está vacío de verdad y donde cero siempre es un
 problema.
 
+#### El OCR no falla igual dos veces *(24-ago-2026, v218)*
+
+Segunda foto **del mismo ticket**, y dos fallos que la primera no tenía. La
+línea salió así:
+
+```
+(Ei 100175540 1 1124390 $1,124.39 1 0)
+```
+
+| lo que pasó | consecuencia |
+|---|---|
+| El SKU `100175545` se leyó `100175540` — el último 5 por un 0 | No reconocía la reparación: se habría capturado como **accesorio**, o sea al Excel de comisiones |
+| El precio `1124.390` perdió el punto → `1124390` | El precio salía mil veces mayor y la cuenta del ticket no cerraba nunca |
+
+**El punto del precio se corrige contra el IMPORTE**, que se lee aparte y con
+otro formato (`$1,124.39`, dos decimales y coma de miles). Solo se divide entre
+mil **si así cuadra**: es una comprobación, no una suposición. Dividir «por si
+acaso» sería inventarse un precio que nadie escribió.
+
+**El SKU admite un dígito de diferencia**, y solo con la misma longitud. Pedir el
+código entero perfecto es pedirle al OCR que no falle nunca, y falla. Es seguro
+porque los códigos en juego no se parecen: los dos de reparación tienen **nueve
+dígitos y difieren en dos**, y los de accesorio tienen cinco — un dígito mal
+leído no puede convertir uno en otro.
+
+⚠️ **Si un código queda a un dígito de DOS de la lista, no se elige ninguno.**
+Ahí ya no se sabe cuál era, y decidir con esa duda es peor que preguntar.
+Comprobado subiendo la tolerancia a tres: los dos códigos se vuelven
+indistinguibles y la detección deja de decidir, que es lo que debe hacer.
+
+Cuando el código no se leyó limpio **se dice**: «lo cobra con el código
+100175545 (el OCR lo leyó con un dígito distinto — compruébalo)».
+
+Y la misma tolerancia se usa en los **dos** sitios que miran el SKU. Si uno
+comparara exacto y el otro no, se detectaría el tipo bien y el importe saldría
+vacío — dos piezas contradiciéndose sobre el mismo ticket.
+
+⚠️ **Se guardan las DOS lecturas del mismo papel** (`ocr_ticket_real.txt` y
+`ocr_ticket_real2.txt`). Es lo que obliga al código a aguantar un OCR que falla
+**distinto cada vez**, en vez de a acertar con una foto concreta. Una sola
+lectura habría dejado pasar los dos fallos de hoy.
+
 #### Borré tres funciones y nada lo dijo *(24-ago-2026, v217)*
 
 `accVerCrudo`, `accBotonCrudo` y `accAvisoFecha` **se borraron sin querer en

@@ -59,7 +59,7 @@ function motor(skusRep){
     trozo('accCodigos') + '\n' +
     trozo('accNum') + '\n' + trozo('accNum3') + '\n' +
     trozo('accLineasArticulo') + '\n' +
-    trozo('accSkuNorm') + '\n' + trozo('accSkusDeLineas') + '\n' +
+    trozo('accSkuNorm') + '\n' + trozo('accDistancia') + '\n' + trozo('accSkusDeLineas') + '\n' +
     trozo('accExtraer') + '\n' + trozo('accQueEs'), caja);
   const fn = (texto) => vm.runInContext('accQueEs(' + JSON.stringify(texto) + ')', caja);
   fn.extraer = (texto) => vm.runInContext('accExtraer(' + JSON.stringify(texto) + ')', caja);
@@ -90,6 +90,18 @@ const conCeros = motor('000' + REP_B);   // mismo sku, escrito con ceros delante
 const T_REAL_REP = fs.readFileSync(
   path.join(__dirname, 'ocr_ticket_real.txt'), 'utf8');
 
+/* SEGUNDA lectura del MISMO ticket, otra foto (24-ago-2026). El OCR no da dos
+   veces lo mismo, y aqui salieron dos fallos que la primera no tenia:
+
+     · el sku `100175545` se leyo `100175540` — el ultimo 5 por un 0;
+     · el precio `1124.390` se leyo `1124390`, sin el punto.
+
+   Los dos se ven en la misma linea: `(Ei 100175540 1 1124390 $1,124.39 1 0)`.
+   Guardar las DOS lecturas del mismo papel es lo que obliga al codigo a
+   aguantar un OCR que falla distinto cada vez, en vez de a acertar una. */
+const T_REAL_REP2 = fs.readFileSync(
+  path.join(__dirname, 'ocr_ticket_real2.txt'), 'utf8');
+
 const T_REAL_ACC = [
   'Articulo    Cantidad    Precio     Importe',
   'MICA HR',
@@ -109,7 +121,11 @@ const T_MIX = [
 const T_NADA = 'ATENDIDO POR ARTURO\nTOTAL 149.00';
 
 const CASOS = [
-  ['ticket REAL de reparacion',     queEs,         T_REAL_REP, 'rep', true ],
+  ['ticket REAL de reparacion',     queEs,         T_REAL_REP,  'rep', true ],
+  /* Segunda foto: el sku con un digito mal leido. Con comparacion exacta esto
+     no reconocia la reparacion, y la venta se habria capturado como accesorio
+     — o sea, al Excel de comisiones. */
+  ['segunda foto, sku con un digito mal', queEs,   T_REAL_REP2, 'rep', true ],
   ['ticket REAL de accesorio',      queEs,         T_REAL_ACC, 'acc', false],
   ['ticket con las DOS cosas',      queEs,         T_MIX,      null,  true ],
   ['sin lineas de articulo',        queEs,         T_NADA,     null,  false],
@@ -151,6 +167,10 @@ for(const [titulo, fn, texto, espera, debeDecir] of CASOS){
    Se vio capturando la primera reparacion de verdad, el 24-ago. */
 const numeros = [
   ['reparacion', queEs.extraer(T_REAL_REP), 1124.39, '33671', '23/8/26'],
+  /* Segunda foto: el precio venia sin el punto (`1124390`). Se corrige contra el
+     importe, que se lee aparte y con otro formato. Sin eso, el precio salia mil
+     veces mas grande y la cuenta del ticket no cerraba nunca. */
+  ['segunda foto', queEs.extraer(T_REAL_REP2), 1124.39, '33671', ''],
   ['accesorio',  queEs.extraer(T_REAL_ACC),  149,    '',      ''],
 ];
 for(const [que, r, importe, ticket, fecha] of numeros){
