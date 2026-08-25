@@ -102,6 +102,18 @@ const T_REAL_REP = fs.readFileSync(
 const T_REAL_REP2 = fs.readFileSync(
   path.join(__dirname, 'ocr_ticket_real2.txt'), 'utf8');
 
+/* TERCER ticket (24-ago-2026), con el fallo mas raro de los tres: la CANTIDAD
+   no esta en la linea del articulo.
+
+       REP FUERA DE GARANTIA HW 1 1
+       100175537 877.270 $877.27 | y
+
+   El `1` se fue al renglon del nombre. Tres fotos, tres fallos distintos: el
+   ruido del borde, un digito mal leido con el punto perdido, y ahora una
+   columna que se muda de linea. Ninguno se habria adivinado leyendo el papel. */
+const T_REAL_REP3 = fs.readFileSync(
+  path.join(__dirname, 'ocr_ticket_real3.txt'), 'utf8');
+
 const T_REAL_ACC = [
   'Articulo    Cantidad    Precio     Importe',
   'MICA HR',
@@ -126,6 +138,9 @@ const CASOS = [
      no reconocia la reparacion, y la venta se habria capturado como accesorio
      — o sea, al Excel de comisiones. */
   ['segunda foto, sku con un digito mal', queEs,   T_REAL_REP2, 'rep', true ],
+  /* Tercer ticket: la cantidad se fue a la linea de arriba. Sin cantidad en la
+     linea, el patron no encontraba el articulo y no habia ni sku ni precio. */
+  ['tercer ticket, sin cantidad en la linea', queEs, T_REAL_REP3, 'rep', true ],
   ['ticket REAL de accesorio',      queEs,         T_REAL_ACC, 'acc', false],
   ['ticket con las DOS cosas',      queEs,         T_MIX,      null,  true ],
   ['sin lineas de articulo',        queEs,         T_NADA,     null,  false],
@@ -171,6 +186,7 @@ const numeros = [
      importe, que se lee aparte y con otro formato. Sin eso, el precio salia mil
      veces mas grande y la cuenta del ticket no cerraba nunca. */
   ['segunda foto', queEs.extraer(T_REAL_REP2), 1124.39, '33671', ''],
+  ['tercer ticket', queEs.extraer(T_REAL_REP3), 877.27, '33673', '23/8/26'],
   ['accesorio',  queEs.extraer(T_REAL_ACC),  149,    '',      ''],
 ];
 for(const [que, r, importe, ticket, fecha] of numeros){
