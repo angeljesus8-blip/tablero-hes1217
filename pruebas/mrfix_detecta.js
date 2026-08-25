@@ -174,6 +174,23 @@ const T_REAL_ACC6 = fs.readFileSync(
 const T_REAL_ACC7 = fs.readFileSync(
   path.join(__dirname, 'ocr_ticket_real7.txt'), 'utf8');
 
+/* OCTAVO ticket: el IMPORTE ilegible del todo.
+
+       100175537 1 1013,200 SOI |
+
+   Donde el papel dice `$1,013.20`, el OCR leyo `SOI`. Exigiendo el importe se
+   perdia la linea entera, y con ella el sku y el precio, que estaban BIEN
+   leidos. Ahora es opcional y lo rellena el `Total`, que en este ticket si se
+   leyo. */
+const T_REAL_REP8 = fs.readFileSync(
+  path.join(__dirname, 'ocr_ticket_real8.txt'), 'utf8');
+
+/* El guardarrail del importe opcional: sin importe, el precio tiene que llevar
+   decimales. Si no, la linea del PIE del ticket —presente en todos— pasaria por
+   articulo: sku 1217, cantidad 2, precio 23. */
+const T_SIN_IMPORTE_NI_DECIMAL = T_REAL_REP8
+  .replace('100175537 1 1013,200 SOI |', '100175537 1 1013 SOI |');
+
 /* Y el guardarrail de eso: el MISMO ticket con una segunda linea de articulo.
    Con dos, un sku irreconocible ya no se puede resolver —habria que acertar
    cual es— y capturar el precio del otro articulo es peor que dejarlo vacio. */
@@ -222,6 +239,7 @@ const CASOS = [
   ['quinto: sku de accesorio con un digito mal', queEs, T_REAL_ACC5, 'acc', false],
   ['sexto: la linea partida en dos',  queEs,         T_REAL_ACC6, 'acc', false],
   ['septimo: precio mal leido, sin Total', queEs,   T_REAL_ACC7, 'acc', false],
+  ['octavo: importe ilegible',       queEs,         T_REAL_REP8, 'rep', true ],
   ['ticket con las DOS cosas',      queEs,         T_MIX,      null,  true ],
   ['sin lineas de articulo',        queEs,         T_NADA,     null,  false],
   ['codigos sin configurar',        sinConfigurar, T_REAL_REP, null,  false],
@@ -276,6 +294,8 @@ const numeros = [
   ['sexto ticket', queEs.extraer(T_REAL_ACC6), 149, '33677', '23/8/26'],
   /* Sin `Total` legible: lo reconstruye la linea del IVA (base + impuesto). */
   ['septimo ticket', queEs.extraer(T_REAL_ACC7), 999, '33679', '23/8/26'],
+  /* Importe ilegible: lo pone el `Total`, que aqui si se leyo. */
+  ['octavo ticket', queEs.extraer(T_REAL_REP8), 1013.20, '33685', ''],
   ['accesorio',  queEs.extraer(T_REAL_ACC),  149,    '',      ''],
 ];
 for(const [que, r, importe, ticket, fecha] of numeros){
@@ -363,6 +383,15 @@ const roto2 = queEs.extraer(T_SKU_ROTO_Y_DOS);
 if(roto2.importe === 149){
   fallos.push('con el sku irreconocible Y dos lineas, eligio una igual (importe ' +
               roto2.importe + '). Con varias no se puede saber cual era');
+}
+
+/* ── Sin importe, un precio SIN decimales no vale ───────────────────────
+   Es lo que impide que la linea del pie del ticket pase por articulo ahora que
+   el importe es opcional. */
+const flojo = queEs.extraer(T_SIN_IMPORTE_NI_DECIMAL);
+if(flojo.precio === 1013 || (flojo.precio != null && flojo.precio < 100)){
+  fallos.push('sin importe acepto un precio sin decimales (' + flojo.precio +
+              '): asi la linea del pie del ticket pasa por articulo');
 }
 
 if(fallos.length){
