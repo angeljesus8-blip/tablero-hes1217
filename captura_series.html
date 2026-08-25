@@ -1859,7 +1859,16 @@ function accExtraer(txt){
   const imp  = lin ? lin.importe : null;
   return {
     ticket: idl ? idl[2] : (txt.match(/\b(3\d{4})\b/) || [])[1] || '',
-    fecha:  idl ? idl[1] : '',
+    /* La fecha, con respaldo. `idl` cuelga del literal `1217` del pie del
+       ticket, y basta que el OCR lea un dígito de esos mal —le pasa a cada
+       rato— para perder la fecha entera. El ticket ya tenía respaldo desde el
+       18-ago; la fecha no, así que se quedaba vacía y la venta se guardaba con
+       la de hoy: en un corte MENSUAL, un ticket de fin de mes se va al mes
+       siguiente.
+
+       `39/100 MXN` —los centavos escritos en letra— no se cuela: hacen falta
+       los tres grupos separados por barra. */
+    fecha:  idl ? idl[1] : (txt.match(/\b(\d{1,2}\/\d{1,2}\/\d{2})\b/) || [])[1] || '',
     // «Atendido por» es quien VENDIÓ. El número del final del ticket es quien
     // cobró en caja, y no son la misma persona. La comisión es del que vendió.
     vend:   ((txt.match(/Atendido\s*por\s*:?\s*([^\r\n]{3,40})/i) || [])[1] || '').trim(),
@@ -2388,6 +2397,20 @@ window.accFotoElegida = function(e){
        vendedor. En una reparación no hay artículo del catálogo que casar ni
        comisión que asignar, y dejarlo correr enseñaría un aviso de «no pude
        proponer el producto» sobre un panel donde el producto ni se pregunta. */
+    /* QUIÉN ATENDIÓ, antes del corte de reparación y no después.
+
+       «Lo atendió» es del TICKET desde v207 —una persona atiende la compra
+       entera—, pero esto se quedó donde estaba, en la parte del accesorio. En
+       una reparación se salía antes de llegar aquí y el campo no se rellenaba
+       nunca: el asesor lo elegía a mano teniendo el nombre impreso en el papel.
+
+       No se guarda en la reparación, que no comisiona a nadie, pero sí se
+       enseña: si el ticket dice otro nombre del que está puesto, eso se ve. */
+    if(r.vend){
+      const flojo = VENDEDORES.filter(v => _sinAcentos(v).indexOf(_sinAcentos(r.vend.split(',')[0])) >= 0);
+      if(flojo.length === 1) $('accVend').value = flojo[0];
+    }
+
     if(_accTipo === 'rep'){
       /* Pero SÍ se enseña lo que se leyó. Sin esto, en una reparación el asesor
          no veía nada de lo que el OCR había entendido —ni ticket, ni fecha, ni
@@ -2400,10 +2423,6 @@ window.accFotoElegida = function(e){
         + accAvisoFecha() + accBotonCrudo();
       el.style.display = 'block';
       return r;
-    }
-    if(r.vend){
-      const flojo = VENDEDORES.filter(v => _sinAcentos(v).indexOf(_sinAcentos(r.vend.split(',')[0])) >= 0);
-      if(flojo.length === 1) $('accVend').value = flojo[0];
     }
     /* El producto, propuesto desde el código del artículo. Se marca en la
        lista pero el asesor lo ve y lo puede cambiar.
