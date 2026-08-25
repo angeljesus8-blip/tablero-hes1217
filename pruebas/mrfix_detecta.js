@@ -42,11 +42,15 @@ function motor(skusRep){
   };
   const decl = html.indexOf('var SKUS_REP =');
   if(decl < 0) throw new Error('no encuentro `var SKUS_REP =` en captura_series.html');
-  const finDecl = html.indexOf(';', html.indexOf('.filter(Boolean)', decl));
+  const finDecl = html.indexOf(';', decl);
 
   const caja = { _cfgCS: { sku_reparacion: skusRep } };
   vm.createContext(caja);
+  /* `accPartirSkus` va aparte desde el 24-ago: SKUS_REP dejo de ser constante
+     porque `abrirAcc` lo refresca del servidor, y partir la lista se saco a su
+     propia funcion. Se traen las dos del HTML, sin copiar ninguna. */
   vm.runInContext(codigos + '\n' +
+    trozo('accPartirSkus') + '\n' +
     html.slice(decl, finDecl + 1) + '\n' +
     trozo('accCodigos') + '\n' + trozo('accQueEs'), caja);
   return (texto) => vm.runInContext('accQueEs(' + JSON.stringify(texto) + ')', caja);

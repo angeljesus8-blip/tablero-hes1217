@@ -3381,6 +3381,17 @@ document.getElementById('fboxGar').addEventListener('paste', function(e){ alPega
 /* ================================================================
    TAB CONFIG — Configuración de tienda
    ================================================================ */
+/* Pinta la config y DESPUES la refresca desde el servidor.
+
+   24-ago-2026: `_cfg` sale de `hes_store`, la sesion guardada en ESTE
+   dispositivo, que se escribe una vez al entrar y nunca se refresca. El gerente
+   veia el campo de los codigos de reparacion VACIO teniendolos puestos en la
+   base — y si guardaba desde ahi, los borraba de verdad.
+
+   Primero se pinta lo que haya, para que la pestaña no salga en blanco si no
+   hay red; luego se pide lo bueno y se corrige lo que difiera. Si la lectura
+   falla no se toca nada: mas vale un dato viejo a la vista que un formulario
+   vacio que, al guardarse, borra lo que habia. */
 function loadConfig(){
   const cfg = _cfg || {};
   document.getElementById('cfgGas').value   = cfg.gas_url   || '';
@@ -3388,6 +3399,34 @@ function loadConfig(){
   document.getElementById('cfgHoja').value  = cfg.hoja_auth || '';
   document.getElementById('cfgVend').value  = (cfg.vendedores||[]).join('\n');
   document.getElementById('cfgSkuRep').value = cfg.sku_reparacion || '';
+  refrescarConfig();
+}
+
+async function refrescarConfig(){
+  try{
+    if(!sb && !initSB()) return;
+    const storeId = (_cfg && _cfg.store_id) || '';
+    if(!storeId) return;
+    const { data, error } = await sb.from('tiendas')
+      .select('gas_url,sheet_url,hoja_auth,vendedores,sku_reparacion')
+      .eq('store_id', storeId).maybeSingle();
+    if(error || !data) return;      // sin red o sin permiso: se queda lo pintado
+
+    document.getElementById('cfgGas').value   = data.gas_url   || '';
+    document.getElementById('cfgSheet').value = data.sheet_url || '';
+    document.getElementById('cfgHoja').value  = data.hoja_auth || '';
+    document.getElementById('cfgVend').value  = (data.vendedores||[]).join('\n');
+    document.getElementById('cfgSkuRep').value = data.sku_reparacion || '';
+
+    /* Y se pone al dia la sesion de este dispositivo, que es de donde leen las
+       demas pantallas. Sin esto, el gerente ve el dato bueno en el formulario y
+       la app sigue usando el viejo. */
+    try{
+      const stored = JSON.parse(localStorage.getItem('hes_store')||'{}');
+      localStorage.setItem('hes_store', JSON.stringify(Object.assign({}, stored, data)));
+      Object.assign(_cfg, data);
+    }catch(e){}   // cuota llena: el formulario ya enseña lo bueno, que es lo que se venia a ver
+  }catch(e){}     // nunca debe impedir abrir la pestaña
 }
 
 async function guardarConfig(){

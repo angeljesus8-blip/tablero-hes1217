@@ -109,6 +109,39 @@ UPDATE public.tiendas
    AND coalesce(trim(sku_reparacion), '') = '';
 
 
+-- ── 1-ter · Captura pregunta el codigo al SERVIDOR ──────────
+--
+-- Y NO a la sesion guardada en el telefono, que es de donde salio el fallo del
+-- 24-ago: el codigo estaba puesto en Admin y en la base, y la deteccion seguia
+-- apagada en todos los telefonos. `hes_store` se escribe UNA vez, al entrar, y
+-- nunca se refresca; una sesion guardada antes de que el campo existiera se
+-- queda sin el PARA SIEMPRE, porque la app recuerda al usuario y ya no vuelve a
+-- pasar por el login. Es el mismo fallo del 9-ago con la lista del equipo.
+--
+-- Añadir el campo a `queFaltaEnLaSesion` lo habria tapado hasta el proximo
+-- campo nuevo. Preguntarlo aqui lo arregla de raiz: cambia el gerente el codigo
+-- en Admin y la captura del asesor lo usa en cuanto abre el panel, sin volver a
+-- entrar y sin que nadie tenga que acordarse de nada.
+--
+-- SIN TOKEN a proposito: devuelve un codigo de articulo del catalogo de Mr Fix,
+-- que va impreso en cada ticket que se entrega al cliente. No es un secreto, y
+-- exigir credencial aqui solo daria una forma mas de que la deteccion se apague
+-- sin que se vea.
+CREATE OR REPLACE FUNCTION public.captura_config(p_store text)
+RETURNS TABLE (sku_reparacion text)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
+AS $$
+  SELECT t.sku_reparacion
+    FROM public.tiendas t
+   WHERE t.store_id = p_store
+     AND coalesce(t.activo, true) = true
+   LIMIT 1;
+$$;
+
+REVOKE ALL ON FUNCTION public.captura_config(text) FROM public;
+GRANT EXECUTE ON FUNCTION public.captura_config(text) TO anon, authenticated;
+
+
 -- ── 2 · Guardar una, desde Captura ──────────────────────────
 CREATE OR REPLACE FUNCTION public.reparacion_guardar(
   p_store      text,
