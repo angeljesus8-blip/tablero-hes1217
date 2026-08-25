@@ -208,6 +208,13 @@
     color:#fff; white-space:nowrap; }
   .acc-li .et.acc{ background:var(--naranja); }
   .acc-li .et.rep{ background:var(--rojo); }
+  .tipo-auto{ display:flex; gap:10px; align-items:center; margin-bottom:14px;
+    padding:10px 12px; border-radius:11px; background:#eef4fb;
+    border-left:4px solid var(--azul); font-size:12.5px; color:#24507f; }
+  .tipo-auto b{ flex:1; }
+  .tipo-auto button{ background:none; border:1.5px solid #c3d5ea; border-radius:7px;
+    color:#24507f; font-size:11px; font-weight:700; padding:4px 9px; cursor:pointer;
+    font-family:inherit; white-space:nowrap; }
   .tipo-sel{ display:flex; gap:8px; margin-bottom:14px; }
   .tipo-sel button{ flex:1; padding:11px 8px; border:2px solid var(--linea);
     background:#fff; color:#777; border-radius:11px; font-size:13px; font-weight:800;
@@ -2021,6 +2028,23 @@ let _accTipo = 'acc';
 // anterior y nadie lo notaria hasta cuadrar el mes.
 let _accLineas = [];
 
+/* El ticket lo dijo: se aplica y el selector se esconde. Se guarda tambien el
+   motivo, para que el asesor vea QUE se decidio y pueda desdecirlo. */
+window.accTipoAuto = function(t, porque){
+  accTipo(t);
+  $('accTipoAutoTxt').textContent = porque ||
+    (t === 'rep' ? 'Reparación, según el ticket' : 'Accesorio, según el ticket');
+  $('accTipoAuto').style.display = 'flex';
+  $('accTipoSel').style.display = 'none';
+};
+
+// Vuelve a enseñar los dos botones: el OCR se equivoco, o el ticket lleva otra
+// cosa mas. Es la salida de emergencia de la deteccion automatica.
+window.accTipoManual = function(){
+  $('accTipoAuto').style.display = 'none';
+  $('accTipoSel').style.display = 'flex';
+};
+
 window.accTipo = function(t){
   _accTipo = t;
   const rep = (t === 'rep');
@@ -2083,6 +2107,10 @@ window.accAgregarLinea = function(){
   // Se limpia lo de la línea, NO lo del ticket: el número, la fecha, la foto y
   // quién atendió siguen siendo los mismos para lo siguiente que se agregue.
   $('accPrecio').value = ''; $('accCant').value = '1';
+  /* Los dos botones vuelven: la deteccion ya se gasto en la linea que se acaba
+     de agregar, y lo siguiente que meta el asesor en este mismo ticket puede
+     ser de otro tipo — que es justo el caso del ticket mixto. */
+  accTipoManual();
   accPintarLineas();
   return true;      // guardarAcc lo mira para no seguir si la linea no valia
 };
@@ -2114,6 +2142,7 @@ function accPintarLineas(){
 
 window.abrirAcc = async function(){
   accTipo('acc');            // cada ticket empieza en accesorio, que es lo habitual
+  accTipoManual();           // hasta que se lea la foto no hay nada detectado
   _accLineas = []; accPintarLineas();
   _accOcr = null;
   $('accEstado').textContent = '';
@@ -2194,8 +2223,12 @@ window.accFotoElegida = function(e){
        cuando el ticket no deja lugar a dudas; si lleva las dos cosas, o si no
        se reconoció ningún código, lo deja como está y lo dice. */
     var que = accQueEs(r.texto);
-    if(que.tipo && que.tipo !== _accTipo) accTipo(que.tipo);
-    if(que.porque){
+    if(que.tipo){
+      accTipoAuto(que.tipo, que.porque);
+    }else if(que.porque){
+      // No se pudo decidir y hay algo que explicar: el selector se queda a la
+      // vista y el motivo se dice arriba, donde se va a elegir.
+      accTipoManual();
       var av = $('accLeido');
       av.innerHTML = '<b>' + esc(que.porque) + '</b>';
       av.style.display = 'block';
@@ -3225,9 +3258,17 @@ refreshEolVenta(); // trae los EOL con 50% activo (solo exhibición)
            ahora». Cada concepto se guarda en la tabla que le toca, así que un
            ticket mixto acaba con sus accesorios en `accesorios_ventas` y su
            reparación en `reparaciones`, con la misma foto y el mismo ticket. -->
-      <div class="tipo-sel">
+      <div class="tipo-sel" id="accTipoSel">
         <button type="button" data-t="acc" class="on" onclick="accTipo('acc')">🔌 Accesorio</button>
         <button type="button" data-t="rep" onclick="accTipo('rep')">🔧 Reparación</button>
+      </div>
+      <!-- Cuando el ticket lo dice sin lugar a dudas, el selector se esconde y
+           queda esto: lo elegido y POR QUE. Preguntar lo que ya esta impreso es
+           trabajo de mas, pero esconderlo sin decir nada seria peor — el asesor
+           tiene que poder ver que se decidio, y desdecirlo si el OCR fallo. -->
+      <div class="tipo-auto" id="accTipoAuto" style="display:none">
+        <b id="accTipoAutoTxt"></b>
+        <button type="button" onclick="accTipoManual()">cambiar</button>
       </div>
 
       <div id="accSoloAcc">

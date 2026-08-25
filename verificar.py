@@ -541,6 +541,26 @@ def r_preventa_stock():
                   'tablero enseña stock que no existe.' % (nombre, n, esperados))
 
 
+def versionados():
+    """Los archivos que git conoce en esta carpeta.
+
+    24-ago-2026: `r_cadenas` mira TODOS los .sql del directorio para saber que
+    devuelve `login_asesor`. Un respaldo suelto —`_b.sql`, «copia de
+    supabase_hoja_auth.sql»— aporta sus campos como si fuera el bueno, y la
+    regla da por entregado algo que el archivo de verdad ya no devuelve.
+
+    Se descubrio porque el respaldo lo dejaba la propia prueba de la regla: al
+    quitarle un campo al login, seguia diciendo que todo estaba bien. Un archivo
+    que nadie va a pegar en el servidor no puede contar como si lo fuera."""
+    try:
+        r = subprocess.run(['git', 'ls-files'], cwd=BASE, capture_output=True,
+                           timeout=20, encoding='utf-8', errors='replace')
+        if r.returncode != 0: return None      # sin git: no se filtra nada
+        return set(x.strip() for x in (r.stdout or '').split('\n') if x.strip())
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
 def git_cambiados(staged):
     cmd = ['git', 'diff', '--name-only'] + (['--cached'] if staged else ['HEAD'])
     try:
@@ -678,9 +698,15 @@ def r_cadenas():
         m = re.search(r'const cfg\s*=\s*\{([^}]*)\}', idx)
         pedidos = set(re.findall(r'data\.(\w+)', m.group(1))) if m else set()
         entregados, hay_sql = set(), False
+        vers = versionados()
         for d in (BASE, os.path.dirname(BASE)):
             try: archivos = [x for x in os.listdir(d) if x.endswith('.sql')]
             except OSError: continue
+            # En la carpeta del repo, solo los que git conoce: un respaldo suelto
+            # aportaria campos que el archivo de verdad ya no devuelve, y la
+            # regla daria por bueno lo que viene a vigilar.
+            if d == BASE and vers is not None:
+                archivos = [x for x in archivos if x in vers]
             for f in archivos:
                 try: s = io.open(os.path.join(d, f), encoding='utf-8').read()
                 except OSError: continue
