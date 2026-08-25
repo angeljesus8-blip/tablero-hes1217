@@ -234,6 +234,41 @@ def r_helpers():
         if faltan:
             falla('helpers', '%s usa sin definir: %s' % (p, ', '.join(sorted(faltan))))
 
+        """Y las que ESTABAN y ya no estan, si se siguen usando.
+
+        24-ago-2026: `accVerCrudo`, `accBotonCrudo` y `accAvisoFecha` se borraron
+        sin querer al reemplazar un bloque de codigo, y siguieron llamandose. La
+        pantalla dejo de leer tickets —la excepcion caia en el catch del OCR y
+        salia «no se pudo leer»— y esto paso el verificador y se publico dos
+        veces.
+
+        La lista `propios` de arriba es fija y de trece nombres, escrita hace
+        meses: ninguna funcion creada despues estaba vigilada. Ampliarla a mano
+        deja el mismo agujero para la siguiente.
+
+        Comparar con el commit anterior no necesita lista: lo que ayer existia y
+        hoy no, y se sigue llamando, esta roto seguro. No caza una funcion que
+        nunca existio —para eso esta `propios`— pero si el caso de hoy, que es
+        borrar algo que estaba."""
+        try:
+            r = subprocess.run(['git', 'show', 'HEAD:./' + p], cwd=BASE,
+                               capture_output=True, timeout=20,
+                               encoding='utf-8', errors='replace')
+            antes_js = scripts_de(r.stdout or '') if r.returncode == 0 else ''
+        except (OSError, subprocess.SubprocessError):
+            antes_js = ''
+        if antes_js:
+            antes_def = set(re.findall(r'function\s+([a-zA-Z_][\w]*)', antes_js))
+            antes_def |= set(re.findall(r'(?:const|let|var|window\.)\s*([a-zA-Z_][\w]*)\s*=\s*(?:async\s+)?function', antes_js))
+            ahora_def = set(definidos)
+            ahora_def |= set(re.findall(r'window\.([a-zA-Z_][\w]*)\s*=\s*(?:async\s+)?function', js))
+            borradas = (antes_def - ahora_def) & usados
+            if borradas:
+                falla('helpers', '%s BORRA funciones que sigue usando: %s. La pantalla '
+                                 'revienta en cuanto se llame a una — y si es dentro de un '
+                                 'catch, se ve como «no se pudo leer» y no como un fallo.'
+                      % (p, ', '.join(sorted(borradas))))
+
 
 # ── 3 · Versión del service worker ──────────────────────────
 # 1-ago-2026: se cambiaron seis .html y no se subió VERSION. Los celulares

@@ -95,7 +95,7 @@ const T_REAL_ACC = [
   'MICA HR',
   '000043739        1      149.000    $149.00  I',
   'IMEI / SERIE / SERVICIO: 43739-MICAHR',
-  'Atendido por:Ortega Vidal Luis'
+  'Atendido por:PEREZ RAMIREZ,JUAN'
 ].join('\n');
 
 const T_MIX = [
@@ -186,12 +186,12 @@ if(rota.fecha !== '23/8/26'){
    quedo en la parte del accesorio: en una reparacion se salia antes de llegar
    y el campo no se rellenaba nunca, con el nombre impreso en el papel. */
 const vend = queEs.extraer(T_REAL_REP).vend;
-if(!vend || vend.toUpperCase().indexOf('GARCIA') < 0){
+if(!vend || vend.toUpperCase().indexOf('PEREZ') < 0){
   fallos.push('no leyo quien atendio del ticket de reparacion (leyo "' + vend + '")');
 }
 {
   const orden = html.indexOf("if(_accTipo === 'rep'){");
-  const dondeVend = html.indexOf('const flojo = VENDEDORES.filter');
+  const dondeVend = html.indexOf('_accVendCasado = r.vend ?');
   if(dondeVend < 0 || dondeVend > orden){
     fallos.push('el vendedor se rellena DESPUES del corte de reparacion: en una ' +
                 'reparacion no llega a ejecutarse y el campo se queda vacio');
