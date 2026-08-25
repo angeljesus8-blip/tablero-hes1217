@@ -636,6 +636,46 @@ Un mes sin reparaciones **es un resultado normal** y se dice nombrando el mes, a
 revés que el catálogo, que nunca está vacío de verdad y donde cero siempre es un
 problema.
 
+#### La sesión guardada nunca se refresca *(24-ago-2026, v211)*
+
+El código estaba en la base, `login_asesor` y `login_empleado` lo devolvían, y
+aun así **el campo salía vacío en Admin y la detección seguía apagada**. Ángel
+volvió a entrar y todo siguió igual.
+
+⚠️ **«Volver a entrar» no vuelve a pasar por el login.** `hes_store` se escribe
+UNA vez, al identificarse, y nunca se refresca; si la sesión de Supabase sigue
+viva, la app arranca directa con lo guardado. Una sesión creada antes de que un
+campo existiera **se queda sin él para siempre**.
+
+Es el fallo del 9-ago con la lista del equipo, y el archivo lo tiene escrito:
+*«la app recuerda al usuario y ya no vuelve a pasar por aquí»*. Existe
+`queFaltaEnLaSesion` para esto, pero mira solo dos cosas y **para gerente no
+mira nada**.
+
+**Añadir el campo ahí lo habría tapado hasta el próximo campo nuevo.** El
+arreglo va a la raíz: **quien necesita el dato lo pide**.
+
+| pantalla | antes | ahora |
+|---|---|---|
+| Captura de Series | `hes_store` | `captura_config` al abrir el panel |
+| Admin → Configuración | `hes_store` | lee `tiendas` al abrir la pestaña |
+
+Así, el gerente cambia el código en Admin y la captura del asesor lo usa **sin
+que nadie vuelva a entrar**.
+
+**Admin además pinta primero y refresca después**: la pestaña no sale en blanco
+sin red, y si la lectura falla no se toca nada. Un formulario vaciado por falta
+de red **borra los datos de verdad al guardarlo** — que es lo que estuvo a punto
+de pasar aquí, con el campo en blanco delante del gerente.
+
+Y al refrescar se pone al día `hes_store`, que es de donde leen las demás
+pantallas: sin eso, el gerente vería el dato bueno en el formulario mientras la
+app sigue usando el viejo.
+
+`captura_config` va **sin token** a propósito: devuelve un código de artículo
+que va impreso en cada ticket que se entrega al cliente. No es un secreto, y
+exigir credencial solo daría otra forma de que la detección se apague sin verse.
+
 #### La detección estaba apagada en los teléfonos *(24-ago-2026, v210)*
 
 Ángel abrió la app y seguía viendo los dos botones. El código estaba puesto en
