@@ -42,3 +42,26 @@ antes. `verificar.py` detiene el commit si se te olvida; hazle caso.
 
 > Hubo un `deploy.ps1` que publicaba en Netlify. Ya no: el tablero vive en
 > GitHub Pages y aquel camino no subía `VERSION` ni corría `verificar.py`.
+
+## Lo que GitHub NO guarda
+
+Dos carpetas quedan fuera del repo a propósito, y de ellas no hay copia en
+ningún otro sitio:
+
+- `_privado\` — los nombres del equipo y el mapeo al Excel regional. Sin
+  `datos_equipo.txt` el verificador falla; sin `mapeo_nombres.sql` no se puede
+  repegar el mapeo y las comisiones dejan de sumarse. **Irrecuperable.**
+- `eol\` — los PDF del CEA. Se pueden volver a pedir, pero cuesta.
+
+```powershell
+.\respaldar_privado.ps1              # copia a OneDrive y comprueba
+.\respaldar_privado.ps1 -Revisar     # solo dice cómo está, no copia
+```
+
+Compara por **hash y no por fecha**: copiar un archivo le pone fecha nueva, así
+que la fecha dice cuándo se copió, no si el contenido es el mismo. Y comprueba
+después de copiar — un disco lleno o OneDrive a medio sincronizar dejan el
+archivo a medias sin dar error.
+
+Córrelo cada vez que toques `_privado\`, que es cuando entra o sale alguien del
+equipo.
