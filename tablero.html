@@ -573,8 +573,8 @@ const TIENDA_NOMBRE = (_cfg && _cfg.nombre)   || 'Angelópolis';
 const ROLE          = localStorage.getItem('hes_role') || 'asesor';
 /* Quién entró. Desde que se retiró el PIN de tienda, cada quien accede con su
    número de empleado, así que esto SIEMPRE existe y el tablero no tiene que
-   preguntar quién es. Antes el vendedor de un apartado se tecleaba a mano y
-   salían "Maria" y "María Fuentes Bravo" como si fueran dos personas. */
+   preguntar quién es. Antes el vendedor de un apartado se tecleaba a mano y el
+   mismo asesor salía como dos personas: el nombre suelto y el completo. */
 const YO = (function(){ try{ return JSON.parse(localStorage.getItem('hes_empleado')||'null'); }
                         catch(e){ return null; } })();
 

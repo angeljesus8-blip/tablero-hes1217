@@ -26,10 +26,10 @@ const html = fs.readFileSync(path.join(__dirname, '..', 'captura_series.html'), 
 
 const { crearEntorno } = require('./dom.js');
 
-const EQUIPO = ['Jorge Medina Rejón', 'Luis de Jesús Ortega Vidal'];
+const EQUIPO = ['Jorge Medina Rejon', 'Luis de Jesus Ortega Vidal'];
 const STORE  = { store_id:'1217', nombre:'Angelopolis', gas_url:'https://gas.example/exec',
                  gas_token:'t', vendedores:EQUIPO };
-const EMP    = { empno:'2', nombre:'Luis de Jesús Ortega Vidal', puesto:'asesor' };
+const EMP    = { empno:'2', nombre:'Luis de Jesus Ortega Vidal', puesto:'asesor' };
 
 /* El entorno vive en `dom.js` desde el 17-ago-2026: respeta el orden del
    documento y trae un classList de verdad. Aquí solo se dice con qué sesión
@@ -219,7 +219,7 @@ const ok = (t, c, extra) => { if(!c) fallos.push(t + (extra ? ' -> ' + extra : '
    Se prueban las dos direcciones: sin ellas, "arreglarlo" abriendo el panel a
    todos pasaría igual de desapercibido. */
 {
-  const sub = { empno:'<empno>', nombre:EQUIPO[1], puesto:'Subgerente de Tienda' };
+  const sub = { empno:'1000002', nombre:EQUIPO[1], puesto:'Subgerente de Tienda' };
   const s = arrancar({ hes_empleado: JSON.stringify(sub) });
   if(!s.err){
     ok('el subgerente sí puede abrir Ventas del día',
@@ -240,7 +240,7 @@ const ok = (t, c, extra) => { if(!c) fallos.push(t + (extra ? ' -> ' + extra : '
 }
 {
   // Asesor que NO es el de `hoja_auth`: sigue sin ver la lista, como siempre.
-  const ases = { empno:'<empno>', nombre:EQUIPO[0], puesto:'Asesor de Tienda' };
+  const ases = { empno:'1000003', nombre:EQUIPO[0], puesto:'Asesor de Tienda' };
   const s = arrancar({ hes_empleado: JSON.stringify(ases) });
   if(!s.err){
     ok('y un asesor cualquiera sigue sin verla',
@@ -261,7 +261,7 @@ const ok = (t, c, extra) => { if(!c) fallos.push(t + (extra ? ' -> ' + extra : '
    lo tuvieran, el servidor las rechaza igual, pero el asesor se llevaría el
    viaje en balde. */
 {
-  const sub = { empno:'<empno>', nombre:EQUIPO[1], puesto:'Subgerente de Tienda' };
+  const sub = { empno:'1000002', nombre:EQUIPO[1], puesto:'Subgerente de Tienda' };
   const s = arrancar({ hes_empleado: JSON.stringify(sub) });
   if(!s.err){
     s.correr(`

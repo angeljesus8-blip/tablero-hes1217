@@ -57,10 +57,10 @@ function escenario(store, empleado) {
            tieneSalida: gateHTML.indexOf('index.html') >= 0 };
 }
 
-const EQUIPO = ['Jorge Medina Rejón', 'Luis de Jesús Ortega Vidal', 'Ana Ramírez Solís'];
+const EQUIPO = ['Jorge Medina Rejon', 'Luis de Jesus Ortega Vidal', 'Ana Ramirez solis'];
 const conLista = { store_id:'1217', nombre:'Angelopolis', gas_url:'', gas_token:'t', vendedores:EQUIPO };
 const sinLista = { store_id:'1217', nombre:'Angelopolis', gas_url:'', gas_token:'t', vendedores:[] };
-const EMP      = { empno:'2', nombre:'Luis de Jesús Ortega Vidal', puesto:'asesor' };
+const EMP      = { empno:'2', nombre:'Luis de Jesus Ortega Vidal', puesto:'asesor' };
 const EMP_FUERA= { empno:'9', nombre:'Alguien Que No Vende', puesto:'gerente' };
 
 /* `captura` = entra directo a capturar.  `elegir` = pregunta con la lista.

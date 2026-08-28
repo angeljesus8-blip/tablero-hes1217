@@ -221,19 +221,20 @@ GRANT EXECUTE ON FUNCTION public.accesorio_catalogo_baja(text,text,bigint,boolea
 --
 --  1) Los 23 de siempre siguen ahi, y ahora se ven con sus usos:
 --       select count(*) from public.accesorios_catalogo_admin(
---         '1217', (select gas_token from public.tiendas where store_id='1217'), '<empno>');
+--         '1217', (select gas_token from public.tiendas where store_id='1217'), '<empno-gerente>');
 --     Tiene que dar 23 o mas (las de la lista vieja estan de baja y tambien salen).
 --
---  2) Que el asesor NO puede. Con el numero de Maria (<empno>) tiene que dar
---     cero filas, no la lista:
+--  2) Que el asesor NO puede. Con el numero de un asesor tiene que dar cero
+--     filas, no la lista:
 --       select count(*) from public.accesorios_catalogo_admin(
---         '1217', (select gas_token from public.tiendas where store_id='1217'), '<empno>');
+--         '1217', (select gas_token from public.tiendas where store_id='1217'), '<empno-asesor>');
 --
 --  3) LO QUE DE VERDAD HAY QUE COMPROBAR — que el alta sale COMPLETA.
 --     Este es el fallo que traia la version anterior, y no daba error:
 --       select public.accesorio_catalogo_guardar(
 --         '1217', (select gas_token from public.tiendas where store_id='1217'),
---         'PRUEBA BORRAR', 111, 999, NULL, '43739-PRUEBA', '43739', '<empno>');
+--         'PRUEBA BORRAR', 111, 999, NULL, '43739-PRUEBA', '43739', '<empno-gerente>');
+--     (los numeros de empleado de verdad estan en `_privado/datos_equipo.txt`)
 --       select articulo, sku from public.accesorios_catalogo
 --        where store_id='1217' and nombre='PRUEBA BORRAR';
 --     `articulo` tiene que decir 43739-PRUEBA y `sku` 43739. Si `articulo`
