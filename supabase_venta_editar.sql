@@ -264,7 +264,7 @@ GRANT EXECUTE ON FUNCTION public.venta_editar(text,text,text,text,text,text,nume
 --       select count(*) from public.ventas_ediciones;
 --
 --  2) Que el puesto se lee bien (tiene que dar true para el subgerente):
---       select public.puede_gestionar_('1217','<empno>');
+--       select public.puede_gestionar_('1217','<empno-subgerente>');
 --
 --  3) El caso que importa, con una venta de prueba: capturar una en la app con
 --     un SKU equivocado, anotar el stock de los DOS productos en el tablero,

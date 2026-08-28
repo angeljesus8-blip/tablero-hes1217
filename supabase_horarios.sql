@@ -98,14 +98,14 @@ GRANT EXECUTE ON FUNCTION public.horario_equipo(text, text) TO anon, authenticat
 --        SELECT clave, jsonb_typeof(contenido), updated_at
 --        FROM horarios_config WHERE store_id = '1217' ORDER BY clave;
 --
---   b) Un número activo SÍ recibe horario (<empno> = Ángel):
---        SELECT horario_equipo('1217','<empno>') IS NOT NULL;   -- espera true
+--   b) Un número activo SÍ recibe horario (los reales, en `_privado/datos_equipo.txt`):
+--        SELECT horario_equipo('1217','<empno-activo>') IS NOT NULL;   -- espera true
 --
 --   c) Un número que no existe NO recibe nada:
 --        SELECT horario_equipo('1217','000000');               -- espera NULL
 --
 --   d) El PIN viejo no viaja en la respuesta:
---        SELECT horario_equipo('1217','<empno>')->'equipo'->'pin';  -- espera NULL
+--        SELECT horario_equipo('1217','<empno-activo>')->'equipo'->'pin';  -- espera NULL
 --
 --   e) La tabla NO se puede leer sin cuenta. Desde fuera, con la clave
 --      publicable que está en el HTML:

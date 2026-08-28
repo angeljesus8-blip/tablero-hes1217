@@ -605,25 +605,144 @@ def git_cambiados(staged):
         return []
 
 
+def r_git():
+    """Cinco reglas le preguntan a git. Sin git, las cinco callan y esto dice
+    «Todo en orden» sin haber corrido ninguna.
+
+    28-ago-2026: pasó de verdad. Se tocó `admin.html` en una máquina sin git en
+    el PATH; `git_cambiados` devolvió [] por su `except OSError`, `r_version` se
+    salió por el `if not cambiados: return` y el verificador dio el visto bueno
+    sin comprobar VERSION — que era exactamente lo que faltaba subir. Con ella
+    callaron `r_contrato_sql`, `r_returns_table_drop` y `r_funcion_repetida`, y
+    `git_publicados` dejó de filtrar los .sql que no están en el repo.
+
+    Es el mismo fallo que este archivo ya describe dos veces con otra causa:
+    «una regla que calla por no saber leer el archivo es peor que no tenerla,
+    porque además da permiso». Aquí no sabe leer el repo.
+
+    FALLA y no avisa. Un aviso al final de una lista de «ok» verdes no para a
+    nadie, y lo que está en juego es subir sin VERSION: la página queda al día y
+    los celulares del equipo se quedan con la copia vieja, sin error y sin
+    aviso. Eso ya costó horas el 1-ago-2026."""
+    try:
+        r = subprocess.run(['git', 'rev-parse', '--git-dir'], cwd=BASE,
+                           capture_output=True, timeout=20,
+                           encoding='utf-8', errors='replace')
+    except (OSError, subprocess.SubprocessError) as e:
+        falla('git', 'no se pudo ejecutar git (%s). Lo consultan la VERSION del '
+                     'service worker, el contrato SQL, el DROP del RETURNS TABLE '
+                     'y las funciones repetidas: sin él se saltan todas en '
+                     'silencio.' % (str(e)[:70] or 'no está en el PATH'))
+        return
+    if r.returncode != 0:
+        falla('git', 'git no reconoce esto como repositorio (%s). Las reglas que '
+                     'comparan contra el último commit no pueden correr, y sin '
+                     'este aviso se saltarían sin decir nada.'
+              % ((r.stderr or '').strip().replace('\n', ' ')[:70] or 'sin detalle'))
+
+
 # ── 4 · Datos personales ────────────────────────────────────
 # 1-ago-2026: el repo es público y traía nombres completos, números de empleado
 # y —en comisiones_datos.js— venta individual y monto de comisión de cada quien.
+PRIVADO = os.path.join('_privado', 'datos_equipo.txt')
+TEXTO = ('.html', '.js', '.py', '.md', '.sql', '.gs', '.json', '.txt', '.yml',
+         '.yaml', '.css')
+
+
+def _sin_acentos(s):
+    import unicodedata
+    return ''.join(c for c in unicodedata.normalize('NFD', s)
+                   if unicodedata.category(c) != 'Mn').lower()
+
+
+def _datos_equipo():
+    """Los apellidos y números reales, de un archivo que NO se versiona.
+
+    28-ago-2026: antes estaban escritos DENTRO de esta función, o sea que el
+    archivo encargado de vigilar la fuga era parte de la fuga.
+
+    Devuelve None si no se puede leer, y entonces `r_personales` falla: no saber
+    qué buscar no es lo mismo que no encontrar nada."""
+    s = leer(PRIVADO)
+    if s is None: return None
+    apellidos, numeros = [], []
+    for linea in s.split('\n'):
+        linea = linea.split('#')[0].strip()
+        if not linea: continue
+        partes = [x.strip() for x in linea.split('|')]
+        if partes[0]: apellidos.append(_sin_acentos(partes[0]))
+        if len(partes) > 1 and partes[1]: numeros.append(partes[1])
+    return (apellidos, numeros) if (apellidos or numeros) else None
+
+
 def r_personales():
-    patrones = [
-        # El (?<![#\w]) es por los colores hex: horarios.html trae #777777 y
-        # #827717, que sin eso se reportaban como números de empleado.
-        (r'(?<![#\w])\d{6}\b(?!\s*(?:pieza|pzas|MSI))', 'número de empleado'),
-        (r'(?i)\b(Ramirez Solis|Ortega Vidal|ortega vidal|Fuentes Bravo|'
-         r'Medina Rejon|medina rejon|navarro gal)', 'apellidos del equipo'),
-    ]
+    """Que no salgan del repo los nombres ni los números del equipo.
+
+    1-ago-2026: el repo es público y traía nombres completos, números de empleado
+    y —en comisiones_datos.js— venta individual y monto de comisión de cada quien.
+
+    28-ago-2026: se descubrió que seguían ahí, en 14 archivos, porque la regla
+    solo miraba `HTML + SUELTOS + datos.js`. No revisaba los `.sql` —donde estaba
+    el mapeo entero con los cinco nombres y sus números—, ni `MAPA.md`, ni
+    `pruebas/`. Ahora mira TODO lo que devuelve `versionados()`, que es la lista
+    de lo que git publica de verdad y no una escrita a mano que se queda corta.
+
+    ⚠️ Y el único nombre que sí estaba en un archivo vigilado —`tablero.html`— se
+    le escapó igual: el patrón traía la grafía buena del apellido y el archivo
+    llevaba la mala, con una letra de más. La misma letra que descuadró las
+    comisiones de agosto. Por eso `_privado/datos_equipo.txt` pide escribir
+    también las grafías malas que circulan.
+
+    (Y esta explicación no puede nombrarlas: este archivo se audita a sí mismo,
+    que es precisamente lo que hizo falta para llegar hasta aquí.)"""
+    datos = _datos_equipo()
+    if datos is None:
+        falla('datos', 'no se pudo leer %s, así que no hay contra qué comparar. '
+                       'Créalo (ver MAPA.md) o esta regla no comprueba nada — y '
+                       'callar aquí es dar permiso para publicar los nombres.'
+              % PRIVADO)
+        return
+    apellidos, numeros = datos
+
+    publicados = versionados()
+    if publicados is None:
+        # Sin git ya falla `r_git()`. Aquí se cae a lo que se pueda enumerar,
+        # para no dejar de mirar del todo.
+        publicados = [os.path.relpath(r, BASE).replace('\\', '/')
+                      for r in glob.glob(os.path.join(BASE, '**', '*'), recursive=True)
+                      if os.path.isfile(r)]
+
+    for p in sorted(publicados):
+        if p.endswith('/') or not p.lower().endswith(TEXTO): continue
+        if p.replace('\\', '/').startswith('_privado/'): continue
+        # verificar.py NO se excluye: ya no lleva los apellidos dentro, así que
+        # se audita como cualquier otro. Excluirlo dejaría abierta justo la
+        # puerta por la que entraron la primera vez.
+        s = leer(p)
+        if s is None: continue
+        plano = _sin_acentos(s)
+        for a in apellidos:
+            if a in plano:
+                falla('datos', '%s trae un apellido del equipo ("%s"). Los datos '
+                               'reales van en _privado/, no en el repo.' % (p, a[:24]))
+                break
+        for n in numeros:
+            if re.search(r'(?<![#\w])%s\b' % re.escape(n), s):
+                falla('datos', '%s trae un número de empleado real. Usa un '
+                               '<placeholder> o un número de ejemplo.' % p)
+                break
+
+    # La red de siempre, sobre las páginas de la app: pilla un número que todavía
+    # no esté en la lista privada —alguien que acaba de entrar al equipo—.
+    # El (?<![#\w]) es por los colores hex: horarios.html trae #777777 y #827717,
+    # que sin eso se reportaban como números de empleado.
     for p in HTML + SUELTOS + ['datos.js']:
         s = leer(p)
         if s is None: continue
-        for rx, que in patrones:
-            hits = re.findall(rx, s)
-            if hits:
-                muestra = hits[0] if isinstance(hits[0], str) else hits[0][0]
-                falla('datos', '%s parece traer %s (ej. "%s")' % (p, que, str(muestra)[:24]))
+        hits = re.findall(r'(?<![#\w])\d{6}\b(?!\s*(?:pieza|pzas|MSI))', s)
+        if hits:
+            falla('datos', '%s parece traer un número de empleado (ej. "%s")'
+                  % (p, str(hits[0])[:24]))
 
 
 # ── 5 · Secretos ────────────────────────────────────────────
@@ -1262,6 +1381,9 @@ def r_funcion_repetida():
 
 def main():
     staged = '--staged' in sys.argv
+    # Va PRIMERA: si git no contesta, las reglas que lo consultan no corren, y
+    # conviene saberlo antes de leer 24 «ok» que no cubren lo que parecen.
+    r_git()
     r_sintaxis(); r_helpers(); r_version(staged); r_copias(); r_cupo()
     r_preventa_sb(); r_preventa_stock(); r_cargas_sb(); r_lectura_con_escritura()
     r_porteros(); r_contrato_sql(); r_join_sql()

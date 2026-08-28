@@ -18,15 +18,21 @@ const fs = require('fs'), path = require('path'), vm = require('vm');
 const raiz = path.join(__dirname, '..');
 
 /* Respuesta real de login_empleado (9-ago-2026), sin el gas_token ni las URLs:
-   este repo es público. Lo que importa es la FORMA. */
+   este repo es público. Lo que importa es la FORMA.
+
+   Los nombres son INVENTADOS desde el 28-ago-2026 — antes eran los del equipo,
+   que es justo lo que este comentario decía estar evitando. Lo que se conserva
+   es la forma que importa: la lista trae grafías flojas —minúsculas y sin
+   acentos— y una que difiere del nombre oficial en UNA letra («bravvo» contra
+   «Bravo»), que es el caso que descuadró las comisiones de agosto. */
 const RESPUESTA_ASESOR = [{
   store_id: '1217', nombre: 'Angelópolis', ciudad: 'Puebla',
   gas_url: 'https://script.google.com/macros/s/XXXX/exec',
-  vendedores: ['Jorge Medina Rejón', 'Luis de Jesús Ortega Vidal',
-               'Elena Navarro Gálvez', 'María Fuentes Bravo', 'Ana Ramírez Solís'],
-  emp_no: '<empno>', emp_nombre: 'Jorge Medina Rejón',
+  vendedores: ['Jorge Medina Rejon', 'Luis de Jesus Ortega Vidal',
+               'Elena Navarro Galvez', 'Maria Fuentes bravvo', 'Ana Ramirez solis'],
+  emp_no: '1000004', emp_nombre: 'Jorge Medina Rejón',
   emp_puesto: 'Asesor de Tienda', emp_admin: false,
-  gas_token: 'xxxx', hoja_auth: 'Elena Navarro Gálvez', sheet_url: 'https://docs.google.com/x',
+  gas_token: 'xxxx', hoja_auth: 'Elena Navarro Galvez', sheet_url: 'https://docs.google.com/x',
 }];
 
 const fallos = [];
@@ -116,7 +122,9 @@ ok('Captura de Series no se cae con esa sesión', !err, err);
 if(!err){
   ok('entra directo a capturar, sin preguntar quién es', gateOculto === true,
      'se quedó en el gate con ' + (gateHTML.match(/gate-name/g) || []).length + ' nombre(s)');
-  ok('y con el nombre del asesor puesto', el('vendLabel').textContent === 'Jorge Medina Rejón',
+  // Sin acentos: gana la grafía de la LISTA, no la de la sesión. Eso es lo que
+  // se está probando, y por eso los dos nombres no se escriben igual arriba.
+  ok('y con el nombre del asesor puesto', el('vendLabel').textContent === 'Jorge Medina Rejon',
      '"' + el('vendLabel').textContent + '"');
 }
 
