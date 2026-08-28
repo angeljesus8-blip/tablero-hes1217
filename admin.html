@@ -518,6 +518,7 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
       <p class="note">Cada persona entra con <b>su número de empleado</b>. Aquí das de alta a los nuevos, das de baja a quien se va y decides quién puede abrir esta pantalla de Admin.</p>
       <div id="equipoAviso" class="note" style="display:none;background:#fff6e5;border-color:#ffd28a;color:#8a6100"></div>
       <div id="equipoLista"></div>
+      <div id="divergEquipo" class="note" style="display:none;margin-top:12px;background:#fff1f1;border-color:#ffc9c9;color:#8a1f1f"></div>
     </div>
 
     <div class="card" id="equipoAltaCard">
@@ -622,6 +623,8 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
       <div class="field">
         <label>Vendedores del equipo (uno por línea)</label>
         <textarea id="cfgVend" rows="6" placeholder="Ana García&#10;Luis Pérez&#10;María López"></textarea>
+        <p style="font-size:11px;color:#aaa;margin-top:4px">Escritos <b>igual</b> que en 👥 Equipo. Con una letra de diferencia la comisión de ese asesor no se suma a nadie en el Excel regional.</p>
+        <div id="divergCfg" class="note" style="display:none;margin-top:8px;background:#fff1f1;border-color:#ffc9c9;color:#8a1f1f"></div>
       </div>
       <button class="btn-pri" id="btnConfig" onclick="guardarConfig()">💾 Guardar configuración</button>
       <div class="result" id="resConfig"></div>
@@ -826,6 +829,59 @@ function equipoAviso(msg){
   el.innerHTML = msg || '';
 }
 
+/* ── Los nombres que no cuadran entre las dos listas (28-ago-2026) ──────
+   La lista de vendedores (Configuración) y la tabla `empleados` (Equipo) son
+   DOS listas escritas a mano, y `accesorios_reporte` las casa POR NOMBRE. Una
+   letra de diferencia y la comisión de ese asesor no se suma a nadie en el
+   Excel regional — sin que el Excel avise.
+
+   Pasó de verdad con un apellido escrito con una letra de más en una de las
+   dos listas: 19 ventas de accesorio y 32 en `ventas` contadas como si fueran
+   de otra persona. El aviso del reporte lo enseñó, pero a fin de mes y con el
+   daño hecho. Esto lo dice donde se causa: al editar el equipo o la lista.
+
+   UN SOLO PORTERO para las dos pestañas, igual que `seccionVisible_` en el
+   tablero y por la misma razón: dos consultas separadas se responden distinto
+   el día que alguien toque una, y entonces una pantalla avisa y la otra no.
+
+   No bloquea nada. La lista puede tener un nombre viejo sin limpiar y eso no
+   impide trabajar; solo hay que verlo. */
+async function pintarDivergencias(){
+  const dest = ['divergEquipo','divergCfg']
+    .map(function(id){ return document.getElementById(id); })
+    .filter(Boolean);
+  if(!dest.length) return;
+  function ocultar(){ dest.forEach(function(el){ el.style.display = 'none'; }); }
+
+  let filas;
+  try{
+    if(!sb) initSB();
+    if(!sb) return ocultar();
+    const { data, error } = await sb.rpc('equipo_divergencias',
+                                         { p_store: (_cfg && _cfg.store_id) || '' });
+    if(error) throw error;
+    filas = data || [];
+  }catch(e){
+    /* Sin red o sin permiso NO se dice nada. Un «no se pudo comprobar» en rojo
+       cada vez que falla la señal del centro comercial enseña a ignorar el
+       recuadro, y entonces deja de leerse el día que sí trae algo. */
+    return ocultar();
+  }
+  if(!filas.length) return ocultar();
+
+  const html = '<b>⚠️ ' + filas.length + ' nombre(s) sin cuadrar</b>' +
+    '<ul style="margin:6px 0 0;padding-left:18px">' +
+    filas.map(function(f){
+      return '<li style="margin-bottom:4px"><b>' + escHtml(f.nombre) + '</b> ' +
+             '<span style="opacity:.65">(' + escHtml(f.origen) + ')</span><br>' +
+             escHtml(f.problema) + '</li>';
+    }).join('') +
+    '</ul><p style="margin:8px 0 0;font-size:11.5px">Se arregla escribiendo el ' +
+    'nombre <b>igual</b> en las dos listas: 👥 Equipo y ⚙️ Configuración.</p>';
+
+  dest.forEach(function(el){ el.innerHTML = html; el.style.display = 'block'; });
+}
+
 async function cargarEquipo(){
   const cont = document.getElementById('equipoLista');
   const alta = document.getElementById('equipoAltaCard');
@@ -871,6 +927,10 @@ async function cargarEquipo(){
 
 function pintarEquipo(){
   const cont = document.getElementById('equipoLista');
+  /* Va ANTES del return de la lista vacía y sin `await`: la comprobación de los
+     nombres no depende de que haya alguien pintado, y esperarla dejaría la
+     lista en blanco mientras contesta el servidor. */
+  pintarDivergencias();
   if(!_equipo.length){
     cont.innerHTML = '<p class="note" style="text-align:center;color:#bbb">Todavía no hay nadie dado de alta.</p>';
     return;
@@ -3568,6 +3628,7 @@ function loadConfig(){
   document.getElementById('cfgVend').value  = (cfg.vendedores||[]).join('\n');
   document.getElementById('cfgSkuRep').value = cfg.sku_reparacion || '';
   refrescarConfig();
+  pintarDivergencias();
 }
 
 async function refrescarConfig(){
@@ -3650,6 +3711,10 @@ async function guardarConfig(){
   }
   showResult('resConfig', true,
     '✅ Guardado. El equipo verá estos datos la próxima vez que abran Captura de Series o recarguen el tablero.');
+  /* Después de guardar, no antes: el aviso tiene que hablar de la lista que
+     acaba de quedar en Supabase. Si corrigió el nombre, desaparece solo; si lo
+     escribió mal de nuevo, lo dice en el momento y no a fin de mes. */
+  pintarDivergencias();
 }
 if('serviceWorker' in navigator){
   navigator.serviceWorker.register('./sw.js', {updateViaCache:'none'}).catch(()=>{});

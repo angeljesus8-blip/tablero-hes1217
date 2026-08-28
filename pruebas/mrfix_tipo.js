@@ -30,10 +30,10 @@ const html = fs.readFileSync(RUTA, 'utf8');
 
 const { crearEntorno } = require('./dom.js');
 
-const EQUIPO = ['Jorge Medina Rejón', 'Luis de Jesús Ortega Vidal'];
+const EQUIPO = ['Jorge Medina Rejon', 'Luis de Jesus Ortega Vidal'];
 const STORE  = { store_id:'1217', nombre:'Angelopolis', gas_url:'', gas_token:'tok12345',
                  vendedores:EQUIPO };
-const EMP    = { empno:'2', nombre:'Luis de Jesús Ortega Vidal', puesto:'gerente' };
+const EMP    = { empno:'2', nombre:'Luis de Jesus Ortega Vidal', puesto:'gerente' };
 
 const esperar = () => new Promise(r => setTimeout(r, 30));
 

@@ -35,8 +35,8 @@
 --                                 MatePad en vez del accesorio.
 --
 --  Y el vendedor es «Atendido por», NO el numero del final del ticket: ese es
---  quien cobro en caja. En el ticket 33480 el numero decia <empno> (Angel) y
---  atendio Fuentes, Maria. La comision es de quien vendio.
+--  quien cobro en caja. En el ticket 33480 el numero del final era el del
+--  gerente y quien atendio fue un asesor. La comision es de quien vendio.
 --
 --  Se pega completo en el SQL Editor. Es idempotente.
 -- ============================================================

@@ -36,11 +36,11 @@
 --  vacio y la comision no se suma a nadie — sin dar ningun error.
 --
 --  Y no coincide sola. En el Excel los nombres van APELLIDOS primero, en
---  mayusculas y sin acentos, y encima uno esta escrito distinto:
+--  mayusculas y sin acentos, y encima alguno esta escrito distinto:
 --
---    en la app                        en el Excel
---    María Fuentes Bravo      ->   Fuentes Bravo Maria      (bravvo/BRAVO)
---    Ana Ramírez Solís  ->   Ramirez Solis Ana
+--    en la app                     en el Excel
+--    Ana Ramirez solis        ->   RAMIREZ SOLIS ANA        (solis/SOLIS)
+--    Luis de Jesus Ortega V.  ->   ORTEGA VIDAL LUIS DE JESUS
 --
 --  Por eso el mapeo es EXPLICITO por numero de empleado. Convertirlo con una
 --  regla («voltea apellidos y quita acentos») acertaria hoy y fallaria el dia
@@ -48,6 +48,10 @@
 --  ve un mes despues, cuando la region revisa.
 --
 --  Se pega completo en el SQL Editor. Es idempotente.
+--
+--  ⚠️ Y DESPUES se pega `_privado/mapeo_nombres.sql`, que trae los nombres de
+--  verdad. Sin el, la columna queda NULL y el reporte marca TODAS las ventas
+--  con `sin_nombre` — que es correcto: sin mapeo, ninguna comision se sumaria.
 -- ============================================================
 
 
@@ -59,13 +63,20 @@ COMMENT ON COLUMN public.empleados.nombre_reporte IS
   'NOMBRE, mayusculas, sin acentos). Si no coincide letra por letra, la '
   'formula del PUESTO no lo encuentra y la comision no se suma a nadie.';
 
-UPDATE public.empleados SET nombre_reporte = v.n
-  FROM (VALUES ('<empno>','Ramirez Solis Ana'),
-               ('<empno>','Ortega Vidal Luis'),
-               ('<empno>','Fuentes Bravo Maria'),
-               ('<empno>','Medina Rejon Jorge'),
-               ('<empno>', 'Navarro Galvez Elena')) AS v(e, n)
- WHERE empleados.store_id = '1217' AND empleados.empno = v.e;
+/* Los cinco nombres NO estan aqui: este repo es publico y los llevo escritos
+   desde el 18-ago hasta el 28-ago-2026. Viven en `_privado/mapeo_nombres.sql`,
+   que el .gitignore deja fuera, y se pega justo despues de este archivo.
+
+   La forma es esta, con los datos de verdad en lugar de los de ejemplo:
+
+     UPDATE public.empleados SET nombre_reporte = v.n
+       FROM (VALUES ('<empno>','APELLIDOS NOMBRE'),
+                    ('<empno>','APELLIDOS NOMBRE')) AS v(e, n)
+      WHERE empleados.store_id = '1217' AND empleados.empno = v.e;
+
+   Se dejo fuera el mapeo y no la columna a proposito: la estructura no
+   identifica a nadie, y quien lea este archivo tiene que poder entender como
+   funciona el reporte sin abrir nada privado. */
 
 
 /* Sin la extension `unaccent` instalada: quita los acentos a mano. Hace falta

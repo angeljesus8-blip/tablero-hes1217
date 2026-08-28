@@ -42,10 +42,10 @@ vm.runInContext(trozo[0] + '\n;globalThis.__f = queFaltaEnLaSesion;', caja, { fi
 const queFalta = caja.__f;
 
 const EQUIPO = ['Jorge Medina Rejón', 'Luis de Jesús Ortega Vidal',
-                'Elena Navarro Gálvez', 'María Fuentes Bravo', 'Ángel de Jesús Ramirez Solis'];
+                'Elena Navarro Gálvez', 'María Fuentes Bravo', 'Ana Ramírez Solís'];
 const conLista = { store_id:'1217', vendedores:EQUIPO };
 const sinLista = { store_id:'1217', vendedores:[] };
-const EMP = JSON.stringify({ empno:'<empno>', nombre:'Jorge Medina Rejón' });
+const EMP = JSON.stringify({ empno:'1000004', nombre:'Jorge Medina Rejón' });
 
 /* Se comprueba QUÉ dice que falta, no solo si falta algo: ese texto es lo que
    se le enseña al equipo y lo que llega en la foto cuando algo se tuerce. Una

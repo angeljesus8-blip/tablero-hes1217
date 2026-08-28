@@ -368,7 +368,7 @@ ventas, así que cada cargador hundiría el KPI que se reporta con meta del 25 %
 | **producto** | **lista que toca el asesor** | el OCR devolvió `CARGATOOWTS`, y en un ticket de 8 artículos agarró el IMEI del MatePad |
 
 **El vendedor es «Atendido por», NO el número del final del ticket** — ese es
-quien cobró en caja. En el 33480 el número decía <empno> (Ángel) y había
+quien cobró en caja. En el 33480 el número era el del gerente y había
 atendido Maria. La comisión es de quien vendió, y el campo fácil de leer es el
 equivocado.
 
@@ -409,8 +409,8 @@ contiguo B:N chocaría con la protección. Los datos empiezan en la **fila 6**.
 escribe: la deduce un `INDEX/MATCH` que busca el nombre en la lista del equipo.
 Si no coincide, **el puesto sale vacío y esa comisión no se suma a nadie**, sin
 dar error. Y no coincide sola: en el Excel van apellidos primero, en mayúsculas
-y sin acentos, y uno está escrito distinto —`Fuentes Bravo` en la app,
-`Fuentes Bravo` en el Excel—. De ahí `empleados.nombre_reporte`, mapeado
+y sin acentos, y uno está escrito distinto —una letra de más en la app que en
+el Excel—. De ahí `empleados.nombre_reporte`, mapeado
 **explícito por número de empleado**: una regla automática acertaría hoy y
 fallaría con el primer apellido compuesto, un mes después.
 
@@ -421,6 +421,66 @@ ese mapeo, y la pantalla las enseña en rojo en vez de esconderlas.
 sobreescribe: ese archivo lo comparten diez tiendas y reemplazarlo pisaría el
 trabajo de las demás. El .xlsx que genera la app trae las columnas **en la
 misma posición** que el regional, para que el pegado caiga donde debe.
+
+#### Un asesor escrito de dos formas *(28-ago-2026)*
+
+El reporte de AGOS 26 avisó de **19 ventas de un asesor sin nombre para el
+Excel**. El mapeo del 18-ago estaba bien puesto —su número → sus apellidos en
+mayúsculas—: nunca se llegaba a él.
+
+**Hay dos listas del equipo, y difieren en una letra.** Con nombres de ejemplo,
+que es como está escrito en las pruebas desde que se limpió el repo:
+
+| | |
+|---|---|
+| `public.empleados.nombre` | `María Fuentes Bravo` *(una V)* |
+| `tiendas.vendedores` (jsonb, Admin → Equipo) | `Maria Fuentes bravvo` *(dos V)* |
+
+`accesorios_reporte` las casa con `upper(unaccent_(…))`. Eso salva a los otros
+cuatro, cuya única diferencia son los acentos —`Galán`/`Galan`,
+`Jesús`/`Jesus`—, pero **una letra de más no la arregla ningún `unaccent_`**:
+el `LEFT JOIN` se queda sin empleado, `nombre_reporte` sale `NULL` y la fila se
+marca `sin_nombre`.
+
+⚠️ **Y el nombre se guarda desde dos sitios distintos.** Quien entra con su
+número captura con el de `empleados` —el bueno—; quien lo elige en «¿Quién
+eres?» captura con el de la config —el malo—. Maria llevaba meses **partido en
+dos personas**: 19 ventas de accesorio y 32 en `ventas` con la grafía mala,
+contadas aparte en leaderboard y attach. Es el mismo fallo que ya se cerró para
+los apartados (`tablero.html:577`), reaparecido por la otra puerta.
+
+`supabase_unificar_vendedor.sql` unifica los datos ya guardados **recorriendo
+todas las columnas de texto del esquema**, y no con dos `UPDATE` a mano: el
+nombre del vendedor vive suelto en 24 archivos SQL y un barrido a ojo deja fuera
+justo la tabla que nadie recordaba. Las de auditoría quedan fuera a propósito
+—guardan lo que se escribió entonces—.
+
+**`hoja_auth` no se tocó, y por poco.** Se compara letra por letra contra la
+lista de vendedores; hoy es otra persona del equipo. Si hubiera sido él,
+corregir la grafía le habría quitado «Ventas del día» sin dar ningún error.
+Se comprueba antes de tocar la lista, siempre.
+
+Queda `equipo_divergencias('1217')`: dice quién no casa **el día que se edita el
+equipo**, no a fin de mes con las ventas ya mal guardadas. Detecta tres casos
+—nombre de la config sin empleado, empleado sin `nombre_reporte`, empleado que
+falta en la config— y `pintarDivergencias()` en `admin.html` lo enseña en rojo
+en **las dos pestañas donde se causa**: 👥 Equipo y ⚙️ Configuración.
+
+**Un solo portero para las dos**, igual que `seccionVisible_`: dos consultas
+separadas se responden distinto el día que alguien toque una, y entonces una
+pantalla avisa y la otra no. Y **si la consulta falla, no dice nada**: un «no se
+pudo comprobar» en rojo cada vez que se cae la señal del centro comercial enseña
+a ignorar el recuadro, y entonces deja de leerse el día que sí trae algo.
+
+No impide que las dos listas vuelvan a separarse —mientras `tiendas.vendedores`
+se escriba a mano, pueden—; hace que se note.
+
+⚠️ **El comentario de `admin.html` no lleva los nombres.** Se escribieron ahí al
+documentar el caso y `verificar.py` lo paró: ese archivo es público.
+
+**Y este archivo también lo es** —`MAPA.md` está rastreado en el repo—, cosa que
+se dio por supuesta al revés el mismo día. Ver «Los datos del equipo llevan
+meses publicados».
 
 #### Mantener el catálogo sin escribir SQL *(20-ago-2026, v198)*
 
@@ -2354,11 +2414,87 @@ arrancar()
 
 ---
 
+## Los datos del equipo llevan meses publicados *(28-ago-2026)*
+
+Buscando dónde poner un `.sql` nuevo se vio que **este repo es público y traía
+los nombres completos y los números de empleado en 14 archivos**. El peor,
+`supabase_accesorios_reporte.sql`: el mapeo entero, los cinco con su número,
+desde el 18-ago.
+
+**`r_personales()` nunca los vio porque solo miraba `HTML + SUELTOS + datos.js`.**
+No revisaba los `.sql`, ni este archivo, ni `pruebas/`. La regla contra la fuga
+de datos cubría siete archivos de noventa y ocho.
+
+⚠️ **Y el único que sí estaba en un archivo vigilado se le escapó igual.** El
+patrón conocía un apellido y `tablero.html` traía la otra grafía, con una letra
+de más — la misma que descuadró las comisiones de agosto, dos secciones más
+arriba. El mismo error, en la regla que debía protegerlo.
+
+Nota amarga: `pruebas/login_a_captura.js` empezaba con *«sin el gas_token ni las
+URLs: este repo es público»*. Se sabía. Se quitó la llave y se dejaron los
+nombres.
+
+### Cómo quedó
+
+**Los datos reales salieron del repo, a `_privado/`** (en el `.gitignore`):
+
+| Archivo | Qué guarda |
+|---|---|
+| `_privado/datos_equipo.txt` | apellidos y números, para que `r_personales()` sepa qué buscar |
+| `_privado/mapeo_nombres.sql` | el `UPDATE` de `nombre_reporte`, que se pega tras `supabase_accesorios_reporte.sql` |
+| `_privado/unificar_vendedor.sql` | el arreglo de la grafía, ya aplicado |
+
+Lo versionado lleva ejemplos: `<empno-gerente>` en los comentarios y nombres
+inventados en las pruebas. **Las pruebas conservan lo que probaban** — la lista
+sigue trayendo grafías flojas y una que difiere del nombre oficial en una letra,
+porque ése es justo el caso que hay que seguir cubriendo.
+
+`r_personales()` ahora **mira todo lo que `git ls-files` publica**, no una lista
+escrita a mano, y compara contra `_privado/datos_equipo.txt`. Si ese archivo no
+está, **falla**: no saber qué buscar no es lo mismo que no encontrar nada. Y
+`verificar.py` ya no se excluye a sí mismo — antes llevaba los apellidos dentro,
+o sea que el archivo que vigilaba la fuga era parte de la fuga.
+
+⚠️ **Limpiar el HEAD no bastaba: los datos seguían en el historial.** Se
+reescribió con `git filter-repo` y se forzó el push. Cualquier clon anterior a
+esa fecha queda inservible y hay que volver a clonarlo.
+
+---
+
 ## El verificador y las pruebas *(17-ago-2026)*
 
 Las 15 reglas de `verificar.py` nacieron cada una de un fallo que ya había
 llegado a producción, así que por diseño miran hacia atrás. En un día con tres
 fallos nuevos eso se notó, y el diagnóstico no fue "faltan reglas":
+
+#### Decía «Todo en orden» sin haber comprobado *(28-ago-2026)*
+
+Se tocó `admin.html` en una máquina **sin git en el PATH** y el verificador dio
+el visto bueno. No comprobó nada de lo que importaba:
+
+```
+git_cambiados()  →  except OSError  →  return []
+r_version()      →  if not cambiados: return
+```
+
+`admin.html` está en el precache de `sw.js`, así que **había que subir
+`VERSION`** — y esa es justo la regla que se saltó. Con ella callaron
+`r_contrato_sql`, `r_returns_table_drop` y `r_funcion_repetida`, y
+`git_publicados` dejó de filtrar los `.sql` que no están en el repo. Cuatro
+reglas y un filtro, en silencio, detrás de 24 «ok» verdes.
+
+El archivo ya condenaba esto dos veces, con otras causas: *«una regla que calla
+por no saber leer el archivo es peor que no tenerla, porque además da permiso»*.
+Aquí no sabía leer el repo.
+
+Lo vigila `r_git()`, y va **la primera**: conviene saber que las reglas de git
+no corren antes de leer la lista de oks, no después. **Falla, no avisa** — un
+aviso al final de una lista verde no para a nadie, y lo que está en juego es
+subir sin `VERSION`: Pages queda al día y los celulares del equipo se quedan con
+la copia vieja, sin error y sin aviso. Eso ya costó horas el 1-ago-2026.
+
+⚠️ **Efecto secundario buscado:** en una máquina sin git, `verificar.py` ahora
+falla siempre. Es correcto — ahí tampoco se puede hacer el push.
 
 **El DOM de las pruebas mentía.** Devolvía un elemento para CUALQUIER id y
 traía `classList.add(){}` vacío. Con eso es imposible detectar dos cosas: tocar

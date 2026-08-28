@@ -82,7 +82,7 @@ function arrancar(empno, filas){
 
 /* ── 1 · El alta guarda el código de artículo y el SKU ──────────────────── */
 async function bloque1(){
-  const s = arrancar('<empno>');
+  const s = arrancar('1000001');
   ok('Admin arranca', !s.err, s.err);
   if(s.err) return;
 
@@ -100,7 +100,7 @@ async function bloque1(){
   const l = s.llamadas().filter(x => x.fn === 'accesorios_catalogo_admin')[0];
   ok('la lectura del catálogo manda el token', !!l && !!l.body.p_token,
      'llegó: ' + JSON.stringify(l && l.body));
-  ok('y dice quién pregunta', !!l && l.body.p_quien === '<empno>',
+  ok('y dice quién pregunta', !!l && l.body.p_quien === '1000001',
      'llegó: ' + JSON.stringify(l && l.body.p_quien));
 
   // ── Alta ──
@@ -128,7 +128,7 @@ async function bloque1(){
     /* El servidor decide con esto si quien lo hace es gerente o subgerente.
        Vacío pasaría como «la sesión del dueño» y saltaría la comprobación. */
     ok('y diciendo quién lo hace, que es lo que el servidor comprueba',
-       g.body.p_quien === '<empno>', JSON.stringify(g.body.p_quien));
+       g.body.p_quien === '1000001', JSON.stringify(g.body.p_quien));
   }
 
   // ── Editar: manda el id, no crea un duplicado ──
@@ -194,7 +194,7 @@ function bloque2(){
     html: captura,
     ruta: '/t/captura_series.html',
     ls: { hes_store: JSON.stringify(STORE),
-          hes_empleado: JSON.stringify({ empno:'<empno>', nombre:'Quien sea',
+          hes_empleado: JSON.stringify({ empno:'1000001', nombre:'Quien sea',
                                          puesto:'Gerente de Tienda' }) }
   });
   if(ent.err){ fallos.push('Captura no arranca (bloque 2): ' + ent.err); return; }
@@ -217,7 +217,7 @@ function bloque2(){
 
 /* ── 3 · Los avisos de la ficha, sobre datos reales ─────────────────────── */
 async function bloque3(){
-  const s = arrancar('<empno>');
+  const s = arrancar('1000001');
   if(s.err){ fallos.push('Admin no arranca (bloque 3): ' + s.err); return; }
   await s.caja.cargarCatAcc();
   s.caja.catAccNuevo();
@@ -253,7 +253,7 @@ async function bloque4(){
   /* El servidor devuelve cero filas tanto si no hay permiso como si no hay red,
      a propósito. Pero el catálogo NUNCA está vacío de verdad —los 23 están
      sembrados—, así que dejar la lista en blanco haría creer que se borró. */
-  const s = arrancar('<empno>', []);            // Maria, asesor: sin permiso
+  const s = arrancar('1000003', []);           // un asesor: sin permiso
   if(s.err){ fallos.push('Admin no arranca (bloque 4): ' + s.err); return; }
   await s.caja.cargarCatAcc();
   const html = s.el('catAccLista').innerHTML;
