@@ -796,6 +796,10 @@ function doGet(e) {
   else if (modo === 'eol_venta')     { payload = leerEolVenta_(); }
   else if (modo === 'avisos_cloud')  { payload = leerAvisos_(); }
   else if (modo === 'apartados')     { payload = leerApartados_(); }
+  /* ⚠️ Este modo lee la hoja «Comisiones», que dejó de recibir el 7-ago-2026:
+     devuelve el reporte de JULIO con aspecto del mes en curso. Se apaga SIN
+     tocar este archivo —renombrando la pestaña en el Sheet—, porque el Apps
+     Script ya no se toca (6-sep-2026). Ver la cadena 2-quater del MAPA. */
   else if (modo === 'comisiones')    { payload = leerComisiones_(); }
   else if (modo === 'ventas_hoy')    { payload = leerVentasHoy_(); }
   else if (modo === 'todo') {

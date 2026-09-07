@@ -327,6 +327,18 @@
   .vd-det .sku{ font-family:ui-monospace,monospace; font-weight:700; color:#555;
     background:#f1f1f1; border-radius:5px; padding:1px 5px; letter-spacing:.2px; }
   .vd-fila.hecha .vd-det .sku{ background:#f7f7f7; color:#cfcfcf; }
+  /* Si el artículo se fue con Assurant (6-sep-2026). Va en `.vd-det`, junto al
+     precio, y no arriba con la serie: ahí ya vive la pastilla de entrega/cobro
+     y en un celular las dos juntas empujan la serie a dos renglones. Mismos
+     colores que la insignia de la lista de capturas, que es la que el equipo ya
+     conoce — dos verdes distintos para lo mismo se leen como dos cosas. */
+  .vd-det .vd-seg{ font-family:Montserrat,sans-serif; font-size:10px; font-weight:800;
+    background:#eafaf1; color:var(--verde); border-radius:5px; padding:1px 6px;
+    white-space:nowrap; }
+  /* «Sin seguro» se dice, no se calla: un hueco no distingue el que no llevó
+     seguro del que se capturó antes de que existiera el dato. */
+  .vd-det .vd-seg.no{ background:#f5f5f5; color:#aaa; }
+  .vd-fila.hecha .vd-det .vd-seg{ background:#f7f7f7; color:#cfcfcf; }
   /* Entregas de preventa y traspaso (17-ago-2026). Se cobraron semanas antes,
      así que al cuadrar contra el POS no aparecen en el ticket de hoy. Azul y no
      rojo: no es un problema, es un renglón que se explica solo. */
@@ -1609,6 +1621,13 @@ async function cargarVentasDia(dia){
                precio: v.precio==null ? '' : String(v.precio),
                vend:v.vendedor||'', hora: v.vendida_en ? String(v.vendida_en).slice(11,16) : '',
                captura_id: v.captura_id||'', foto: !!v.tiene_foto,
+               /* El seguro del artículo (6-sep-2026). `ventas_detalle` lo daba
+                  desde el principio —en las tres clases de fila— y este mapeo
+                  lo tiraba, así que la pantalla no podía enseñar lo que ya
+                  tenía. Mismo criterio que al guardar: `null` NO es «sin
+                  seguro», es una captura vieja sin el dato, y confundirlos
+                  pinta de rojo un attach que nadie midió. */
+               seguro: (v.con_seguro === true || v.con_seguro === false) ? v.con_seguro : null,
                // 'preventa' | 'traspaso' | '' — ver la etiqueta en pintarVentasDia
                entrega: v.entrega || '',
                // Cuándo se cobró el apartado: dice en qué corte está su ticket
@@ -1668,6 +1687,24 @@ function etiquetaVenta_(v){
   return '';
 }
 
+/* Si este artículo se fue con Assurant. Tres estados, no dos:
+
+     true   – 🛡️ Assurant
+     false  – sin seguro, en gris
+     null   – no se dice NADA. Son las capturas anteriores a que el dato
+              existiera; poner «sin seguro» ahí sería inventar una venta sin
+              proteger que nadie registró así.
+
+   Se pinta igual en las tres clases —venta, entrega y cobro—, porque la
+   pregunta que contesta es «qué se llevó el cliente», y un apartado cobrado hoy
+   lleva su seguro desde el día que se apartó. Lo que NO cuenta igual para el
+   KPI son las entregas, y de eso avisa la pastilla de al lado. */
+function insigniaSeguro_(v){
+  if(v.seguro === true)  return '<span class="vd-seg">🛡️ Assurant</span>';
+  if(v.seguro === false) return '<span class="vd-seg no">sin seguro</span>';
+  return '';
+}
+
 function pintarVentasDia(){
   const dia = _vdFecha || new Date();
   const ya  = copiadasDe(fechaGas(dia));
@@ -1712,6 +1749,7 @@ function pintarVentasDia(){
                 <span class="sku">${v.sku || '—'}</span>
                 <span>${v.desc || 'sin descripción'}</span>
                 <span class="precio">$${Number(String(v.precio).replace(/[^0-9.]/g,'')||0).toLocaleString('es-MX')}</span>
+                ${insigniaSeguro_(v)}
                 ${v.vend ? '<span>· ' + v.vend + '</span>' : ''}
               </div>
             </div>
@@ -2360,11 +2398,15 @@ function accAdivinar(textoTicket){
        verdad— los dos cargadores empatan en `CARGA`, y ahí lo correcto es
        callarse: proponer al azar es peor que no proponer, porque el asesor
        tiende a aceptar lo que ya viene puesto. */
+    /* Se compara PRODUCTO a producto, con el mejor de SUS códigos (6-sep-2026).
+       Un producto con dos alias no puede competir consigo mismo: si cada código
+       entrara por separado, sus dos alias empatarían y `largo > segundo` haría
+       que un producto bien dado de alta —con las dos formas en que el POS lo
+       imprime— fuera justo el que nunca se propone. */
     let mejor = null, largo = 0, segundo = 0;
     for(const c of _accCat){
-      const cod = accClave(c.articulo);
-      if(!cod || cod.length < 4) continue;
-      const i = accPrefijo(cod, leido);
+      const i = accPrefijoMax(c.articulo, leido);
+      if(i < 4) continue;
       if(i > largo){ segundo = largo; largo = i; mejor = c.nombre; }
       else if(i > segundo){ segundo = i; }
     }
@@ -2925,6 +2967,210 @@ window.abrirAccReporte = function(){
 window.cerrarAccReporte = function(){ $('repPanel').classList.remove('show'); };
 
 
+/* ---------- Corregir o borrar un ticket de Mr Fix (6-sep-2026) ----------
+
+   Visto en piso: «cuando suben un ticket mal del de Mr Fix no se puede borrar,
+   no se puede modificar». El motivo de fondo no era que faltara la función
+   —`accesorio_eliminar` estaba en la base desde el 18-ago— sino que después de
+   guardar NO HABÍA DÓNDE VOLVER A VER el ticket. Una función que ninguna
+   pantalla llama es una función que no existe.
+
+   Las dos cosas, a elección, porque las dos pasan: unas veces sobra el ticket
+   entero y otras solo está mal un campo.
+
+   ⚠️ El TIPO no se corrige editando. Accesorio y reparación son dos tablas, y
+   esa separación es lo único que impide que una reparación acabe en el Excel de
+   la región moviendo comisiones de diez tiendas. Cambiar de tipo es borrar y
+   recapturar, y la pantalla lo dice en vez de dejar que se intente. */
+let _mfFilas = [];
+let _mfEditando = null;
+
+window.abrirMrFixDia = function(){
+  if(!PUEDE_EDITAR){ toast('Solo el gerente o el subgerente pueden corregir', 'warn'); return; }
+  $('mfPanel').classList.add('show');
+  cargarMrFixDia();
+};
+window.cerrarMrFixDia = function(){ $('mfPanel').classList.remove('show'); };
+
+async function cargarMrFixDia(){
+  $('mfLista').innerHTML = '<div class="vd-vacio">Cargando…</div>';
+  const filas = await sbCallCS('mrfix_dia', { p_token: GAS_TOKEN, p_fecha: null }, 10000);
+  /* ⚠️ `mrfix_dia` devuelve LISTA VACÍA cuando el token no sirve, no un error:
+     así lo hace todo Mr Fix. Sin distinguirlo, «tu sesión es vieja» se leería
+     como «hoy no se capturó nada» — y quien lo vea cerrará la pantalla tan
+     tranquilo. Por eso null (no contestó) y [] (contestó vacío) se dicen
+     distinto, y el aviso del token menciona volver a entrar. */
+  if(!Array.isArray(filas)){
+    $('mfLista').innerHTML = '<div class="vd-vacio">No se pudo consultar la nube. '
+      + 'Si acabas de volver, comprueba tu conexión.</div>';
+    return;
+  }
+  _mfFilas = filas;
+  pintarMrFixDia();
+}
+
+function pintarMrFixDia(){
+  if(!_mfFilas.length){
+    $('mfLista').innerHTML = '<div class="vd-vacio">Hoy no se ha capturado ningún '
+      + 'ticket de Mr Fix.<br><span style="font-size:11.5px">Si esperabas ver alguno, '
+      + 'sal y vuelve a entrar: puede ser que tu sesión sea de antes.</span></div>';
+    return;
+  }
+  $('mfLista').innerHTML = _mfFilas.map(function(f, i){
+    const esRep = f.tipo === 'reparacion';
+    const pastilla = esRep
+      ? '<span class="vd-ent" style="color:var(--rojo);background:#fdeaea">🔧 reparación</span>'
+      : '<span class="vd-ent" style="color:#8a4b1f;background:#fff6ee">🛒 accesorio</span>';
+    const imp = Number(f.importe || 0).toLocaleString('es-MX', { minimumFractionDigits:2 });
+    return `<div class="vd-fila" style="cursor:default">
+      <div class="txt">
+        <div class="vd-serie">#${esc(String(f.ticket || ''))}${pastilla}</div>
+        <div class="vd-det">
+          <span>${esRep ? 'trabajo del técnico' : esc(String(f.producto || 'sin producto'))}</span>
+          ${!esRep && f.cantidad > 1 ? '<span>· ' + f.cantidad + ' pzas</span>' : ''}
+          <span class="precio">$${imp}</span>
+          ${!esRep && f.vendedor ? '<span>· ' + esc(String(f.vendedor)) + '</span>' : ''}
+        </div>
+      </div>
+      ${f.tiene_foto ? `<button class="vd-lupa" title="Ver la foto del ticket"
+           onclick="verFoto('${esc(String(f.captura_id||''))}','ticket ${esc(String(f.ticket||''))}')">🔍</button>` : ''}
+      <button class="vd-lupa" title="Corregir este ticket" onclick="abrirMfEditar(${i})">✏️</button>
+      <button class="vd-lupa" title="Borrar este ticket" onclick="borrarMfTicket(${i})">🗑️</button>
+    </div>`;
+  }).join('');
+}
+
+window.abrirMfEditar = function(i){
+  const f = _mfFilas[i];
+  if(!f) return;
+  _mfEditando = f;
+  const esRep = f.tipo === 'reparacion';
+
+  $('mfEdTitulo').textContent = esRep ? 'Corregir reparación' : 'Corregir accesorio';
+  $('mfSoloAcc').style.display = esRep ? 'none' : '';
+  /* El mismo campo cambia de nombre según el tipo, igual que en la captura: del
+     mismo papel se leen dos números distintos. En el accesorio manda el precio
+     de la línea del 43739; en la reparación, el importe del trabajo entero. */
+  $('mfLblImporte').textContent = esRep ? 'Importe cobrado' : 'Importe de la línea';
+  $('mfTicket').value  = f.ticket || '';
+  $('mfFecha').value   = f.dia || '';
+  $('mfImporte').value = f.importe == null ? '' : String(f.importe);
+
+  if(!esRep){
+    // El producto se ELIGE de la lista, nunca se teclea: es lo que mató la
+    // ambigüedad de las dos micas de $149 y lo que llena la columna del Excel.
+    $('mfProd').innerHTML = _accCat.map(function(c){
+      return '<option value="' + esc(c.nombre) + '"' +
+             (c.nombre === f.producto ? ' selected' : '') + '>' + esc(c.nombre) + '</option>';
+    }).join('');
+    $('mfCant').value   = f.cantidad == null ? '1' : String(f.cantidad);
+    $('mfPrecio').value = f.precio == null ? '' : String(f.precio);
+    $('mfVend').innerHTML = (VENDEDORES || []).map(function(v){
+      return '<option' + (v === f.vendedor ? ' selected' : '') + '>' + esc(v) + '</option>';
+    }).join('');
+    // El vendedor guardado puede no estar ya en la lista (alguien que se fue):
+    // se añade para no cambiárselo sin querer al corregir cualquier otra cosa.
+    if(f.vendedor && (VENDEDORES || []).indexOf(f.vendedor) < 0)
+      $('mfVend').innerHTML += '<option selected>' + esc(f.vendedor) + '</option>';
+  }
+  $('mfError').style.display = 'none';
+  mfCuadrar();
+  $('mfEdit').classList.add('show');
+};
+window.cerrarMfEditar = function(){ $('mfEdit').classList.remove('show'); _mfEditando = null; };
+
+/* precio × piezas = importe, dicho mientras se teclea. No bloquea: avisa. El
+   servidor lo vuelve a comprobar y ahí sí rechaza — esto es para no llegar al
+   rechazo con el cliente delante. */
+function mfCuadrar(){
+  const caja = $('mfCuadre');
+  if(!_mfEditando || _mfEditando.tipo === 'reparacion'){ caja.style.display = 'none'; return; }
+  const p = Number(String($('mfPrecio').value).replace(/[^0-9.]/g,'')) || 0;
+  const c = Number(String($('mfCant').value).replace(/[^0-9]/g,'')) || 0;
+  const i = Number(String($('mfImporte').value).replace(/[^0-9.]/g,'')) || 0;
+  if(!p || !c || !i){ caja.style.display = 'none'; return; }
+  const esperado = Math.round(p * c * 100) / 100;
+  const cuadra = Math.abs(esperado - Math.round(i * 100) / 100) <= 0.01;
+  caja.style.display = '';
+  caja.style.cssText += cuadra
+    ? 'border-left:4px solid var(--verde);background:#eafaf1;color:#1a6b3e'
+    : 'border-left:4px solid var(--naranja);background:#fff6ee;color:#8a4b1f';
+  caja.innerHTML = cuadra
+    ? '✓ Cuadra: ' + c + ' × $' + p.toLocaleString('es-MX') + ' = $' + esperado.toLocaleString('es-MX')
+    : '⚠ ' + c + ' × $' + p.toLocaleString('es-MX') + ' da <b>$' + esperado.toLocaleString('es-MX')
+      + '</b>, no $' + i.toLocaleString('es-MX');
+}
+
+window.guardarMfEdicion = async function(){
+  const f = _mfEditando;
+  if(!f) return;
+  const err = function(m){ $('mfError').textContent = m; $('mfError').style.display = ''; };
+  $('mfError').style.display = 'none';
+
+  const ticket = String($('mfTicket').value || '').trim();
+  const fecha  = String($('mfFecha').value || '').trim();
+  if(!ticket) return err('Falta el número de ticket.');
+  if(!fecha)  return err('Falta la fecha del ticket.');
+
+  const btn = $('mfGuardar');
+  btn.disabled = true; btn.textContent = 'Guardando…';
+  let r;
+  try{
+    if(f.tipo === 'reparacion'){
+      r = await sbCallCS('reparacion_editar', {
+        p_token: GAS_TOKEN, p_id: f.id, p_ticket: ticket,
+        p_importe: Number(String($('mfImporte').value).replace(/[^0-9.]/g,'')) || 0,
+        p_fecha: fecha, p_quien: MI_EMPNO }, 12000);
+    }else{
+      const sel = $('mfProd').selectedOptions && $('mfProd').selectedOptions[0];
+      const prod = sel ? sel.value : $('mfProd').value;
+      const cat = _accCat.filter(function(c){ return c.nombre === prod; })[0];
+      r = await sbCallCS('accesorio_editar', {
+        p_token: GAS_TOKEN, p_id: f.id, p_ticket: ticket, p_producto: prod,
+        // El SKU sale del catálogo, no se teclea: no todo va con el 43739.
+        p_sku: (cat && cat.sku) || '43739',
+        p_cantidad: Number(String($('mfCant').value).replace(/[^0-9]/g,'')) || 0,
+        p_precio:   Number(String($('mfPrecio').value).replace(/[^0-9.]/g,'')) || 0,
+        p_importe:  Number(String($('mfImporte').value).replace(/[^0-9.]/g,'')) || 0,
+        p_vendedor: $('mfVend').value, p_fecha: fecha, p_quien: MI_EMPNO }, 12000);
+    }
+  }finally{
+    btn.disabled = false; btn.textContent = 'Guardar cambios';
+  }
+
+  // `null` es que no contestó; `ok:false` es que contestó que no. No son lo
+  // mismo y se dicen distinto: uno se reintenta, el otro se corrige.
+  if(!r)      return err('No se pudo guardar: sin respuesta de la nube. Vuelve a intentarlo.');
+  if(!r.ok)   return err(r.error || 'La nube rechazó el cambio.');
+  toast('Corregido ✓', 'ok');
+  cerrarMfEditar();
+  cargarMrFixDia();
+};
+
+window.borrarMfTicket = async function(i){
+  const f = _mfFilas[i];
+  if(!f) return;
+  const esRep = f.tipo === 'reparacion';
+  /* Se dice QUÉ se borra, no «¿seguro?». Un ticket de accesorio ya capturado
+     puede estar pegado en el Excel de la región, y la línea que se va es la de
+     alguien que cobra por ella. */
+  const que = esRep
+    ? 'la reparación del ticket #' + f.ticket + ' por $' + Number(f.importe||0).toLocaleString('es-MX')
+    : f.producto + ' del ticket #' + f.ticket + ' ($' + Number(f.importe||0).toLocaleString('es-MX')
+      + ', ' + (f.vendedor || 'sin vendedor') + ')';
+  if(!confirm('¿Borrar ' + que + '?\n\nSi ya lo pasaste al reporte del mes, revísalo después.')) return;
+
+  const r = await sbCallCS(esRep ? 'reparacion_eliminar' : 'accesorio_eliminar',
+                           { p_token: GAS_TOKEN, p_id: f.id, p_quien: MI_EMPNO }, 12000);
+  if(!r){ toast('No se pudo borrar: sin respuesta de la nube', 'warn'); return; }
+  if(!r.ok){ toast(r.error || 'La nube rechazó el borrado', 'warn'); return; }
+  /* `borradas: 0` no es un fallo: pudo borrarlo otro, o ser un reintento. Se
+     dice tal cual en vez de cantar un éxito que no hubo. */
+  toast(r.borradas ? 'Borrado ✓' : 'Ese ticket ya no estaba', 'ok');
+  cargarMrFixDia();
+};
+
+
 /* El editor del catálogo se movió a Admin -> Catálogo el 20-ago-2026 (v198).
    Estuvo aquí unas horas, junto al Excel del mes, porque el momento en que se
    descubre que falta un producto es capturando un ticket. Pesó más el
@@ -3272,7 +3518,32 @@ function vdContar(){
        explica — que es el descuadre que esto viene a cerrar. */
     + (cobros ? nota(`${cobros} apartado${cobros===1?'':'s'} cobrado${cobros===1?'':'s'} hoy · `
                    + `sí cuenta${cobros===1?'':'n'} para el Assurant, el equipo se entrega después`,
-                   'var(--verde)') : '');
+                   'var(--verde)') : '')
+    + notaAttach_();
+}
+
+/* El attach del día, contado como lo cuenta el KPI y no de cualquier forma
+   (6-sep-2026).
+
+   ⚠️ EXCLUYE LAS ENTREGAS E INCLUYE LOS COBROS — el mismo criterio de
+   `ventas_hoy`, que es de donde sale el porcentaje que se reporta. Contar las
+   filas de la pantalla a ojo daría OTRO número, y entonces habría dos attach
+   distintos del mismo día sin que ninguno esté mal: el descuadre que la lista
+   agrupada vino a cerrar, reabierto por abajo.
+
+   Las de `seguro === null` no se cuentan ni arriba ni abajo: son capturas viejas
+   sin el dato, y meterlas en el denominador hunde un porcentaje que nadie midió
+   así. Si no queda ninguna fila con dato, no se dice nada. */
+function notaAttach_(){
+  const cuentan = _vdVentas.filter(v => v.clase !== 'entrega' && typeof v.seguro === 'boolean');
+  if(!cuentan.length) return '';
+  const con = cuentan.filter(v => v.seguro).length;
+  const pct = Math.round(con * 100 / cuentan.length);
+  // El semáforo de la tienda: meta 25%, ámbar entre 15 y 25.
+  const color = pct >= 25 ? 'var(--verde)' : pct >= 15 ? 'var(--naranja)' : 'var(--rojo)';
+  return `<div style="margin-top:6px;font-size:11.5px;color:${color};line-height:1.4">`
+       + `🛡️ Assurant del día · <b>${con} de ${cuentan.length}</b> con seguro (${pct}%)`
+       + `</div>`;
 }
 
 function vdMover(dias){
@@ -3682,7 +3953,13 @@ refreshEolVenta(); // trae los EOL con 50% activo (solo exhibición)
       <div id="accGestion" style="display:none;gap:8px;margin-bottom:12px">
         <button class="btn" onclick="abrirAccReporte()"
           style="flex:1;background:#eee;color:#444;font-size:12.5px;padding:11px">
-          📊 Reporte del mes · bajar Excel</button>
+          📊 Reporte del mes</button>
+        <!-- 6-sep-2026: hasta hoy, un ticket mal capturado no se podía tocar —no
+             había ni dónde volver a verlo—. Va junto al reporte porque es lo que
+             se hace justo antes de bajarlo: revisar lo del día. -->
+        <button class="btn" onclick="abrirMrFixDia()"
+          style="flex:1;background:#eee;color:#444;font-size:12.5px;padding:11px">
+          🧾 Lo capturado hoy</button>
       </div>
 
       <!-- ── 1 · EL TICKET. Uno solo, y una sola foto ──────────────────
@@ -3814,6 +4091,78 @@ refreshEolVenta(); // trae los EOL con 50% activo (solo exhibición)
     <div class="vd-pie" style="display:flex;gap:10px;padding:12px 16px">
       <button class="btn" style="flex:1;background:#eee;color:#444" onclick="cerrarAccReporte()">Cerrar</button>
       <button class="btn" style="flex:2" id="repBajar" onclick="bajarRepExcel()">⬇️ Bajar Excel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Lo capturado hoy en Mr Fix (6-sep-2026) ─────────────────────────────
+     Un ticket mal capturado no se podía ni corregir ni borrar, y el motivo de
+     fondo era éste: después de guardar no había NINGUNA pantalla donde volver a
+     verlo. `accesorio_eliminar` existía desde agosto y no la llamaba nadie.
+     z-index 79: encima del panel de Mr Fix (75) y del reporte (78). -->
+<div id="mfPanel" class="vd" style="z-index:79">
+  <div class="vd-box" style="max-height:94vh">
+    <div class="vd-top">
+      <h2>Lo capturado hoy</h2>
+      <button class="vd-cerrar" onclick="cerrarMrFixDia()" aria-label="Cerrar">×</button>
+    </div>
+    <div class="vd-lista" id="mfLista" style="padding:0"></div>
+    <div class="vd-pie" style="padding:12px 16px">
+      <button class="btn" style="width:100%;background:#eee;color:#444" onclick="cerrarMrFixDia()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Corregir un ticket de Mr Fix. Los campos que se enseñan dependen del tipo:
+     una reparación no lleva producto, ni piezas, ni vendedor — es del técnico y
+     la tienda no cobra comisión por ella. -->
+<div id="mfEdit" class="vd" style="z-index:81">
+  <div class="vd-box" style="max-height:92vh">
+    <div class="vd-top">
+      <h2 id="mfEdTitulo">Corregir ticket</h2>
+      <button class="vd-cerrar" onclick="cerrarMfEditar()" aria-label="Cerrar">×</button>
+    </div>
+    <div class="vd-lista" style="padding:14px 16px">
+      <label class="ed-l">Número de ticket</label>
+      <input id="mfTicket" class="ed-i" inputmode="numeric" autocomplete="off">
+      <label class="ed-l">Fecha del ticket</label>
+      <input id="mfFecha" class="ed-i" type="date">
+
+      <div id="mfSoloAcc">
+        <label class="ed-l">Producto</label>
+        <select id="mfProd" class="ed-i"></select>
+        <label class="ed-l">Piezas</label>
+        <input id="mfCant" class="ed-i" inputmode="numeric" autocomplete="off" oninput="mfCuadrar()">
+        <label class="ed-l">Precio por pieza</label>
+        <input id="mfPrecio" class="ed-i" inputmode="decimal" autocomplete="off" oninput="mfCuadrar()">
+        <label class="ed-l">Vendedor</label>
+        <select id="mfVend" class="ed-i"></select>
+      </div>
+
+      <label class="ed-l" id="mfLblImporte">Importe del ticket</label>
+      <input id="mfImporte" class="ed-i" inputmode="decimal" autocomplete="off" oninput="mfCuadrar()">
+
+      <!-- La misma red que en la captura: precio × piezas = importe. Aquí hace
+           más falta todavía, porque al corregir se teclea a mano y ya nadie
+           vuelve a mirar el papel. -->
+      <div id="mfCuadre" style="display:none;margin-top:10px;padding:9px 12px;
+           border-radius:9px;font-size:12.5px;line-height:1.45"></div>
+
+      <div style="margin-top:14px;padding:10px 12px;border-radius:9px;
+           border-left:4px solid var(--azul);background:#eef4fb;
+           font-size:12.5px;line-height:1.45;color:#24507f">
+        Si lo que está mal es <b>el tipo</b> —se capturó como accesorio y era una
+        reparación, o al revés— hay que <b>borrarlo y capturarlo otra vez</b>: son
+        dos registros distintos y solo el de accesorio va al reporte de la región.
+      </div>
+
+      <div id="mfError" style="display:none;margin-top:12px;padding:10px 12px;
+           border-radius:9px;border-left:4px solid var(--rojo);background:#fdeaea;
+           font-size:12.5px;line-height:1.45;color:#8a1f1f"></div>
+    </div>
+    <div class="vd-pie" style="display:flex;gap:10px;padding:12px 16px">
+      <button class="btn" style="flex:1;background:#eee;color:#444" onclick="cerrarMfEditar()">Cancelar</button>
+      <button class="btn" style="flex:2" id="mfGuardar" onclick="guardarMfEdicion()">Guardar cambios</button>
     </div>
   </div>
 </div>

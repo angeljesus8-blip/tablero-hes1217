@@ -291,7 +291,11 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
                  placeholder="43739-MICAHR" oninput="catAccMirarArt()">
           <p class="note" style="margin:5px 0 0">El que teclea el cajero en «N. de
             serie». De aquí sale la propuesta automática al leer el ticket: sin él,
-            este producto <b>nunca se propondrá solo</b>.</p>
+            este producto <b>nunca se propondrá solo</b>.<br>
+            Si el POS lo imprime de varias formas, ponlas <b>todas separadas por
+            coma</b> — el cargador de 100W sale unas veces como
+            <code>CARGA100WTS</code> y otras como <code>CARGADOR100</code>, y con
+            un solo código la mitad de sus tickets no lo encuentra.</p>
           <div id="catAccAvisoArt" class="cat-av" style="display:none"></div>
         </div>
         <div class="field">
@@ -3547,7 +3551,15 @@ async function cargarComisionesCloud(){
   try{
     // comisiones_lista devuelve FILAS; aqui se espera {actualizado, periodo…,
     // empleados:[…]}, que es la forma que armaba el Apps Script.
-    const _f = await sbLeer('comisiones_lista');
+    /* Token y número desde el 6-sep-2026: las comisiones se filtran por quien
+       mira, y la firma de un solo argumento quedó revocada —era la que dejaba
+       leerlas a cualquiera con la clave publicable—.
+
+       ⚠️ Si esto se llamara sin ellos, `sbLeer` devuelve `[]` en su catch y la
+       pantalla diría «no hay comisiones cargadas» sin un solo error: el gerente
+       daría por perdido un reporte que está subido. Lo cazó `r_contrato` al
+       revisar el pegado, no se vio leyendo el código. */
+    const _f = await sbLeer('comisiones_lista', { p_token: GAS_TOKEN, p_empno: _miEmpno() });
     const data = _f.length ? {
       actualizado: _f[0].actualizado ? String(_f[0].actualizado).slice(0,10) : '',
       periodoComisiones: _f[0].periodo || '',

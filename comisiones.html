@@ -137,10 +137,54 @@ const CLOUD_URL = _storeConfig.gas_url || '';
 // rechaza y la pagina se queda con el cache viejo SIN avisar.
 const GAS_TOKEN = _storeConfig.gas_token || '';
 const COMISKEY = 'hes' + _storeId + '_comisiones';
+
+/* ── Quién está mirando (6-sep-2026) ──────────────────────────────────────
+   Hasta hoy esta pantalla no se lo preguntaba: pintaba el equipo entero a
+   quien la abriera. Ahora cada quien ve lo suyo y gerente y subgerente ven a
+   todos, y quien decide es el SERVIDOR — aquí solo se dice quién eres.
+
+   ⚠️ MISMA REGLA DE PUESTOS QUE `tablero.html` y `horarios.html`, y por tercera
+   vez escrita aparte: estas cuatro pantallas no comparten ningún archivo de JS.
+   Que las tres listas no se separen lo vigila `r_puestos_gestion`. */
+const PUESTOS_GESTION_C = ['gerente', 'subgerente'];
+function esPuestoDeGestion_(puesto){
+  const p = String(puesto || '').toLowerCase()
+              .normalize('NFD').replace(new RegExp('[\\u0300-\\u036f]','g'), '').trim();
+  return PUESTOS_GESTION_C.some(function(x){ return p.indexOf(x) === 0; });
+}
+
+let _yo = null;
+// Ficha ilegible: se sigue sin identidad, y sin identidad esta pantalla NO
+// enseña comisiones — se pide entrar con el número. Fallar hacia «no sé quién
+// eres» es lo correcto aquí; lo peligroso sería caer hacia «enséñalo todo».
+try{ _yo = JSON.parse(localStorage.getItem('hes_empleado')||'null'); }catch(e){}
+const MI_EMPNO = (_yo && _yo.empno) ? String(_yo.empno) : '';
+const VEO_TODAS = esPuestoDeGestion_(_yo && _yo.puesto);
+
 let D = { empleados: [] };
 // Cache ilegible: se arranca vacio y la nube lo llena; si tampoco responde,
 // avisoNube() lo dice en pantalla.
 try{ const c = JSON.parse(localStorage.getItem(COMISKEY)||'null'); if(c && Array.isArray(c.empleados)) D = c; }catch(e){}
+
+/* La caché del teléfono trae el equipo entero, guardado antes de que esto
+   filtrara. Sin esta línea, el asesor seguiría abriendo la app y viendo el
+   sueldo de sus compañeros —el dato ya está en SU teléfono— hasta que la nube
+   contestara, y para siempre si no hay red. Se filtra al arrancar y se vuelve
+   a guardar ya filtrada, así el dato viejo deja de existir ahí. */
+D.empleados = soloLoMio_(D.empleados);
+// Sin espacio para guardar: se pierde la limpieza de la caché, no el filtro —
+// lo que se pinta ya salió de `soloLoMio_`. Se reintenta en la próxima apertura.
+if(!VEO_TODAS){ try{ localStorage.setItem(COMISKEY, JSON.stringify(D)); }catch(e){} }
+
+/* La red de seguridad del cliente, para el rato en que el SQL nuevo todavía no
+   está pegado y el servidor sigue devolviendo a todos. No sustituye al filtro
+   del servidor —el dato ya habría viajado— pero evita que la pantalla lo
+   enseñe mientras tanto. */
+function soloLoMio_(lista){
+  if(VEO_TODAS) return Array.isArray(lista) ? lista : [];
+  if(!Array.isArray(lista)) return [];
+  return lista.filter(function(e){ return String(e.empNo || '') === MI_EMPNO; });
+}
 
 function pintarPeriodos(){
   document.getElementById('updated').textContent = D.actualizado || '—';
@@ -188,13 +232,34 @@ function cardEmpleado(e){
 
 function render(){
   const list = (D.empleados||[]).slice().sort((a,b)=> (b.venta||0)-(a.venta||0));
-  if(!list.length){
+
+  /* Sin número no se sabe de quién enseñar la comisión, y «no sé quién eres» no
+     puede acabar en «toma las de todos». Pasa cuando se entró con el PIN de la
+     tienda en vez de con el número propio. Se dice qué falta y cómo se arregla:
+     un «no hay comisiones» aquí sería mentira y mandaría a pedirle al gerente
+     que suba algo que ya está subido. */
+  if(!VEO_TODAS && !MI_EMPNO){
     document.getElementById('app').innerHTML =
-      '<div class="nota">Aún no hay comisiones cargadas para esta tienda. Pide al gerente que las suba.</div>';
+      '<div class="nota">Para ver tu comisión, entra con <b>tu número de empleado</b>. '
+      + 'Esta pantalla es personal: cada quien ve la suya.<br><br>'
+      + '<a href="index.html" style="color:var(--rojo);font-weight:700">Volver a entrar</a></div>';
+    return;
+  }
+  if(!list.length){
+    document.getElementById('app').innerHTML = VEO_TODAS
+      ? '<div class="nota">Aún no hay comisiones cargadas para esta tienda. Pide al gerente que las suba.</div>'
+      /* Para el asesor, «no hay para esta tienda» sería falso el mes en que las
+         hay para los demás y no para él: lo que pasa es que su número no está en
+         el reporte, y eso lo arregla el gerente, no esperar. */
+      : '<div class="nota">Todavía no aparece tu comisión de este periodo. '
+        + 'Si tus compañeros ya ven la suya, pídele al gerente que revise tu número '
+        + 'en el reporte.</div>';
     return;
   }
   document.getElementById('app').innerHTML =
-    `<div class="grupo-titulo">👥 Equipo — ${list.length} integrante${list.length!==1?'s':''}</div>` +
+    (VEO_TODAS
+      ? `<div class="grupo-titulo">👥 Equipo — ${list.length} integrante${list.length!==1?'s':''}</div>`
+      : `<div class="grupo-titulo">💰 Tu comisión</div>`) +
     list.map(cardEmpleado).join('');
 }
 render();
@@ -226,25 +291,48 @@ function avisoNube(msg){
 const SB_URL_CO = 'https://rjdrljtujbwooejrpyqv.supabase.co';
 const SB_KEY_CO = 'sb_publishable_mELjDmCaFpNOxcwPi5MB2A_qSZ5ZA2z';
 
-async function comisionesDeSupabase(){
-  if(!_storeId) return null;
+/* Una llamada a la RPC, con el cuerpo que se le pase. Separada para poder
+   intentar la firma nueva y caer a la vieja sin repetir la fontanería. */
+async function _rpcComisiones(cuerpo){
   const ctl = new AbortController();
   const t = setTimeout(function(){ ctl.abort(); }, 8000);
   try{
     const r = await fetch(SB_URL_CO + '/rest/v1/rpc/comisiones_lista', {
       method:'POST', signal: ctl.signal,
       headers:{ apikey:SB_KEY_CO, Authorization:'Bearer '+SB_KEY_CO, 'Content-Type':'application/json' },
-      body: JSON.stringify({ p_store: String(_storeId) })
+      body: JSON.stringify(cuerpo)
     });
     if(!r.ok) return null;
     const filas = await r.json();
-    if(!Array.isArray(filas) || !filas.length) return null;
+    return Array.isArray(filas) ? filas : null;
+  }catch(e){ return null; }
+  finally{ clearTimeout(t); }
+}
+
+async function comisionesDeSupabase(){
+  if(!_storeId) return null;
+  try{
+    /* Primero la versión que filtra en el servidor. Mientras el SQL no esté
+       pegado, esa firma NO EXISTE y PostgREST responde 404: entonces se llama a
+       la vieja, que devuelve el equipo entero, y el filtro lo hace `soloLoMio_`
+       aquí abajo. La pantalla funciona en los dos mundos, así que da igual si se
+       publica la app antes o después de pegar el SQL — pero hasta pegarlo, el
+       dato sigue viajando al teléfono. */
+    let filas = await _rpcComisiones({ p_store: String(_storeId),
+                                       p_token: GAS_TOKEN,
+                                       p_empno: MI_EMPNO });
+    if(filas === null) filas = await _rpcComisiones({ p_store: String(_storeId) });
+    if(!filas || !filas.length) return null;
     // Supabase devuelve filas; esta pantalla espera el objeto del Apps Script.
     return {
       actualizado: filas[0].actualizado ? String(filas[0].actualizado).slice(0,10) : '',
       periodoComisiones: filas[0].periodo || '',
       periodoGarantias:  filas[0].periodo_gar || '',
-      empleados: filas.map(function(k){
+      /* `soloLoMio_` va DESPUÉS del mapeo, no antes: compara contra `empNo`, que
+         es la clave que usa el resto de la pantalla. Con la función nueva del
+         servidor esto ya no quita nada —llega filtrado—; con la vieja es lo
+         único que separa a un asesor del sueldo de sus compañeros. */
+      empleados: soloLoMio_(filas.map(function(k){
         return { empNo:k.empno||'', nombre:k.nombre||'', puesto:k.puesto||'',
                  venta:Number(k.venta)||0, pptoPct:Number(k.ppto_pct)||0,
                  alcance:Number(k.alcance)||0,
@@ -254,10 +342,9 @@ async function comisionesDeSupabase(){
                  garantiaPzas: k.gar_pzas==null ? null : Number(k.gar_pzas),
                  garantiaElegible: k.gar_elegible==null ? null : Number(k.gar_elegible),
                  garantiaMonto: k.gar_monto==null ? null : Number(k.gar_monto) };
-      })
+      }))
     };
   }catch(e){ return null; }
-  finally{ clearTimeout(t); }
 }
 
 // Trae la versión más reciente desde la nube de esta tienda (si Admin ya la configuró)
@@ -277,7 +364,19 @@ async function refreshComisionesCloud(){
     const sc = document.getElementById('_comis_sc'); if(sc) sc.remove();
     if(data && data.error){ avisoNube('La nube rechazó la consulta (' + data.error + '). Vuelve a entrar desde el menú.'); return; }
     if(data && Array.isArray(data.empleados) && data.empleados.length){
-      D = data;
+      /* El respaldo por Apps Script devolvía el equipo entero y no sabe filtrar:
+         lee una hoja. Desde el 6-sep-2026 ese modo está apagado en el GAS —la
+         hoja llevaba desde el 7-ago sin recibir y servía JULIO con cara de hoy—,
+         así que esta rama ya casi no se alcanza. El filtro se queda igual: es la
+         segunda puerta a lo mismo, y el día que alguien reactive ese modo no va
+         a acordarse de esto.
+
+         ⚠️ Y aquí filtra de más, a propósito: la hoja NO trae número de empleado,
+         así que a un asesor no le casa ninguna fila y se queda sin ver la suya.
+         Es lo correcto de los dos errores posibles — casar por nombre es lo que
+         descuadró las comisiones de agosto, por un apellido con una letra de
+         más. Antes de enseñar la de otro, mejor no enseñar ninguna. */
+      D = Object.assign({}, data, { empleados: soloLoMio_(data.empleados) });
       localStorage.setItem(COMISKEY, JSON.stringify(D));
       pintarPeriodos();
       render();

@@ -321,6 +321,44 @@ def r_copias():
                            'del tablero se queda atrás.' % (copia, origen))
 
 
+# ── 3b-bis · Quién lleva la tienda, dicho en dos archivos ───
+# 6-sep-2026: `tablero.html` decide con `PUESTOS_GESTION` quién ve Resurtir, y
+# `horarios.html` con `PUESTOS_GESTION_H` quién ve el horario del equipo. Son la
+# MISMA pregunta escrita dos veces, y no se puede compartir: horarios.html se
+# publica también en `planeador-odemas`, donde no existe nada del 1217.
+#
+# Si las dos listas se separan, ascender a alguien le abre una cosa y no la otra
+# —o peor, se le quita el horario del equipo y sigue viendo los pedidos—, sin
+# ningún error y sin nadie que ate el síntoma a dos listas distintas.
+def r_puestos_gestion():
+    def lista(archivo, nombre):
+        txt = leer(archivo)
+        if txt is None: return None
+        m = re.search(r'(?:const|let|var)\s+' + nombre + r'\s*=\s*\[(.*?)\]', txt, re.S)
+        if not m: return None
+        return sorted(re.findall(r"'([^']+)'", m.group(1)))
+
+    # (6-sep-2026) Son ya CUATRO. La de captura_series.html llevaba ahí desde el
+    # 17-ago decidiendo quién ve el ✏️ de corregir una venta, y esta regla nació
+    # sin mirarla: una lista de «quién manda» que nadie compara con las otras es
+    # justo el problema que la regla viene a evitar.
+    esperadas = [('horarios.html',       'PUESTOS_GESTION_H'),
+                 ('comisiones.html',     'PUESTOS_GESTION_C'),
+                 ('captura_series.html', '_PUESTOS_GESTION_CS')]
+
+    a = lista('tablero.html', 'PUESTOS_GESTION')
+    if a is None:
+        falla('puestos', 'no encuentro PUESTOS_GESTION en tablero.html'); return
+    for archivo, nombre in esperadas:
+        b = lista(archivo, nombre)
+        if b is None:
+            falla('puestos', 'no encuentro %s en %s: sin ella, esa pantalla '
+                             'decide quién ve qué por otra regla' % (nombre, archivo))
+        elif a != b:
+            falla('puestos', 'los puestos que llevan la tienda no coinciden: '
+                             'tablero.html %s vs %s %s' % (a, archivo, b))
+
+
 # ── 3c · El cupo de preventa, en sus dos sitios ─────────────
 # 5-ago-2026: el cupo vive en la const PREVENTA (lo que ve el asesor) y en la
 # tabla preventa_cupo de Supabase (el tope que frena dos apartados a la vez).
@@ -1000,7 +1038,9 @@ def r_pruebas():
     GUIONES = ('humo_tablero.js', 'humo_captura.js', 'humo_menu.js',
                'login_a_captura.js', 'navegacion.js', 'actualizacion.js',
                'cola_ventas.js', 'catalogo_accesorios.js', 'mrfix_tipo.js',
-               'mrfix_detecta.js')
+               'mrfix_detecta.js', 'ventas_dia_seguro.js', 'acc_alias_codigos.js',
+               'horario_solo_mio.js', 'comisiones_solo_mia.js',
+               'mrfix_corregir.js')
 
     # La lista de arriba es explícita a propósito —así falta un archivo y se
     # nota—, pero eso deja el hueco contrario: una prueba escrita y no añadida
@@ -1172,15 +1212,62 @@ def r_reparaciones_fuera():
                       'y comisiones para quien no vendió nada, sin dar error.'
                       % (arch, m.group(1)))
 
-    # B · la pantalla que baja el Excel solo puede GUARDAR reparaciones, no leerlas
+    # B · en la app, el Excel solo puede armarse con lo que dio `accesorios_reporte`
+    #
+    # (6-sep-2026) Antes esto era una lista blanca de UN nombre: la pantalla solo
+    # podía llamar a `reparacion_guardar`. Se quedó corta el día que hubo que
+    # corregir y borrar tickets desde aquí —y era corta ya, porque una lectura
+    # llamada `mrfix_dia` trae reparaciones y no lleva «reparacion» en el nombre:
+    # la regla la habría dejado pasar sin decir nada.
+    #
+    # Ahora se ata AL DATO y no al nombre. `_repFilas` es lo único de lo que se
+    # construye el XLSX (`for(const f of _repFilas)`), así que basta exigir que
+    # solo se llene desde `accesorios_reporte`. Con eso da igual cuántas
+    # lecturas de reparaciones haya en la pantalla: ninguna puede llegar al
+    # pegado sin pasar por aquí.
     s = leer('captura_series.html')
     if s is None: return
+
+    ESCRITURAS_DE_UNA_FILA = ('reparacion_guardar', 'reparacion_editar', 'reparacion_eliminar')
     for m in re.finditer(r"sbCallCS\(\s*'(reparacion\w*|reparaciones\w*)'", s):
-        if m.group(1) != 'reparacion_guardar':
+        if m.group(1) not in ESCRITURAS_DE_UNA_FILA:
             falla('excel-mrfix',
                   'captura_series.html llama a `%s`, y esta es la pantalla que baja el '
-                  'Excel regional. Capturar una reparación aquí está bien; LEERLAS es lo '
-                  'que acaba metiéndolas en el pegado.' % m.group(1))
+                  'Excel regional. Guardar, corregir o borrar UNA reparación está bien; '
+                  'traerse listas de ellas es lo que acaba metiéndolas en el pegado.'
+                  % m.group(1))
+
+    if '_repFilas' not in s:
+        falla('excel-mrfix',
+              'captura_series.html ya no tiene `_repFilas`: si el Excel se arma ahora '
+              'con otra variable, esta regla dejó de vigilar nada. Actualízala.')
+        return
+    for m in re.finditer(r'_repFilas\s*=\s*([^;\n]+)', s):
+        origen = m.group(1).strip()
+        # `[]` es vaciarla antes de pedir; lo demás tiene que venir del reporte.
+        if origen.startswith('[]'):
+            continue
+        # Se exige que la variable asignada sea LA MISMA que recibió la llamada a
+        # `accesorios_reporte`. Buscar solo si ese nombre aparece «cerca» no vale:
+        # la llamada está siete líneas más arriba, así que cambiar el origen por
+        # otra lista pasaba la comprobación sin despeinarse. (Comprobado: la
+        # primera versión de esta regla no cazó justo eso.)
+        var = re.match(r'^([A-Za-z_$][\w$]*)\s*$', origen)
+        if not var:
+            falla('excel-mrfix',
+                  '`_repFilas` se llena con «%s», que no es una variable suelta. De ahí '
+                  'sale el Excel de la región: déjalo en una asignación simple que se '
+                  'pueda seguir hasta `accesorios_reporte`.' % origen[:60])
+            continue
+        antes = s[max(0, m.start() - 900):m.start()]
+        if not re.search(r'\b' + re.escape(var.group(1)) +
+                         r'\s*=\s*await\s+sbCallCS\(\s*[\'"]accesorios_reporte[\'"]', antes):
+            falla('excel-mrfix',
+                  '`_repFilas` se llena con `%s`, que no viene de `accesorios_reporte`. '
+                  'De esa variable sale el Excel de la región: si le entra cualquier otra '
+                  'lista —la de corregir tickets, por ejemplo— el pegado se lleva '
+                  'reparaciones y mueve comisiones de diez tiendas, sin dar error.'
+                  % var.group(1))
 
 
 # ── 19 · Un alias de tabla que pisa una variable del DECLARE ─
@@ -1384,7 +1471,7 @@ def main():
     # Va PRIMERA: si git no contesta, las reglas que lo consultan no corren, y
     # conviene saberlo antes de leer 24 «ok» que no cubren lo que parecen.
     r_git()
-    r_sintaxis(); r_helpers(); r_version(staged); r_copias(); r_cupo()
+    r_sintaxis(); r_helpers(); r_version(staged); r_copias(); r_puestos_gestion(); r_cupo()
     r_preventa_sb(); r_preventa_stock(); r_cargas_sb(); r_lectura_con_escritura()
     r_porteros(); r_contrato_sql(); r_join_sql()
     r_sql_volatilidad(); r_galeria(); r_reparaciones_fuera(); r_alias_variable(); r_returns_table_drop(); r_funcion_repetida()

@@ -346,6 +346,38 @@ lo correcto: un apartado se corrige desde Preventa.
 Para comprobar que la lista y el KPI siguen cuadrando está el punto 1-bis de
 `supabase_ventas_detalle_entrega.sql`.
 
+#### El seguro se veía en el servidor y no en la pantalla *(6-sep-2026, v230)*
+
+Visto en piso: «cuando vemos ventas del día no veo qué artículos se fueron con
+seguro». Y el dato estaba ahí desde el principio — `ventas_detalle` devuelve
+`con_seguro` en **las tres clases** de fila. Lo tiraba el traductor del cliente
+(`cargarVentasDia`, l. 1607), que arma las claves cortas del panel campo por
+campo: **lo que no se nombra ahí se pierde en silencio**, exactamente como en la
+Cadena 1 con `gas_token` y `hoja_auth`. Tercera vez que el mismo mapeo campo por
+campo se come un campo, y las tres veces la pantalla se veía normal.
+
+Ahora cada renglón lleva su insignia, y debajo va el **attach del día**
+(`notaAttach_`).
+
+⚠️ **Tres cosas que, si se deshacen, no dan error:**
+
+1. **`null` no es «sin seguro».** Son las capturas anteriores al dato. Pintarlas
+   en gris inventa ventas sin proteger que nadie registró así, y de paso mete un
+   denominador falso en el porcentaje.
+2. **El attach de aquí EXCLUYE las entregas e INCLUYE los cobros** — el criterio
+   de `ventas_hoy`, que es el número que se reporta a Demetrio. Contar todas las
+   filas daría **otro** attach del mismo día sin que ninguno esté mal: es el
+   descuadre que cerró v182, reabierto por abajo. Al romperlo a propósito, la
+   pantalla decía 75 % donde el KPI dice 67 %.
+3. **La insignia sí se pinta en entregas y cobros.** La pregunta que contesta la
+   lista es qué se llevó el cliente, y un apartado lleva su seguro desde el día
+   que se apartó. Lo que no cuenta igual para el KPI ya lo dice la pastilla de al
+   lado.
+
+Lo cubre `pruebas/ventas_dia_seguro.js`, comprobada rompiéndola por los tres
+lados. Mira **lo pintado**, no el mapeo: un campo que se pierde al traducir deja
+la pantalla igual de callada que un campo que no existe.
+
 ### Accesorios · el SKU genérico 43739 *(18-ago-2026, v183)*
 
 Cargadores, micas y kits se venden con el SKU `000043739` y **no pasan por
@@ -481,6 +513,60 @@ documentar el caso y `verificar.py` lo paró: ese archivo es público.
 **Y este archivo también lo es** —`MAPA.md` está rastreado en el repo—, cosa que
 se dio por supuesta al revés el mismo día. Ver «Los datos del equipo llevan
 meses publicados».
+
+#### El POS imprime el mismo producto con dos códigos *(6-sep-2026, v230)*
+
+Visto en piso: *«cada que escaneamos un ticket que tiene un cargador de 100 watts
+la descripción en automático aparece cargador kids»*.
+
+**No era del cargador kids, y renombrarlo no lo arreglaba.** Medido sobre los
+tickets reales guardados en `pruebas/`:
+
+| ticket | lo que imprime el POS | importe |
+|---|---|---|
+| 4 y 5 | `CARGA100WTS` (el OCR lo lee `CARGATOONTS`) | $999 |
+| **7** | **`CARGADOR100`** | **$999** |
+
+Los dos son el mismo producto —el cargador de 100W— y el catálogo solo admitía
+un código, `43739-CARGA-100W`. Normalizado, `CARGADOR100` comparte **ocho**
+letras con `43739 CARGADOR KIDS` y **cinco** con el suyo, así que la adivinanza
+proponía **CARGADOR KIDS, $330**, para una venta de $999. Con toda confianza,
+sin error, y hacia el reporte que se pega en el Excel de la región.
+
+⚠️ **Ninguna regla de prefijo podía separar estos dos casos, y se comprobó antes
+de intentarlo.** El caso bueno —`CARGATOONTS p`, con la basura que el OCR le
+pega detrás— explica el 75 % del código leído; el caso malo, el 73 %. Afinar el
+umbral para partir por ahí habría sido decidir a ciegas por dos puntos, y el
+siguiente producto lo rompe otra vez. **El problema no era la regla: era que el
+catálogo no podía decir la verdad.**
+
+Ahora el campo **Código de artículo admite varios, separados por coma**
+(`accCodigosDe`, `accPrefijoMax` en `acc_codigos.js`). No hizo falta tocar
+Supabase: `articulo` solo lo consumen la adivinanza y el aviso de Admin — **no
+va al Excel**, que sale del nombre del producto.
+
+⚠️ **Tres cosas que, si se deshacen, no dan error:**
+
+1. **Se compara producto a producto, con el mejor de SUS códigos.** Si cada alias
+   entrara por separado, dos códigos del mismo producto se estorbarían en el
+   `largo > segundo` y el producto MEJOR dado de alta sería el único que no se
+   propone nunca. Se lee como «el OCR ya no acierta». *(Solo se nota cuando los
+   dos alias empatan: la primera versión de la prueba usaba los dos códigos del
+   cargador —11 contra 5— y pasaba con el fallo puesto.)*
+2. **El aviso de Admin mira si uno es el PRINCIPIO del otro, no cuántas letras
+   comparten.** `MICAHR` y `MICAHRPLUS` sí chocan; `CARGADOR100` y
+   `CARGADORKIDS` comparten ocho y no. Con la regla vieja, el aviso decía «no
+   hagas esto» justo al dar de alta el alias que arregla el fallo — y quien lo
+   lee no tiene cómo saber que esa vez el aviso se equivoca.
+3. **La coma se parte ANTES de normalizar.** `accClave` convierte `|` en `1`, así
+   que un separador que ella pueda tocar es un separador que a veces desaparece.
+
+⚠️ **Esto NO se arregla solo con código.** Mientras el producto no lleve sus dos
+códigos en el catálogo, la app sigue proponiendo el kids. El dato se pone en
+**Admin → 📦 Catálogo**: `43739-CARGA-100W, CARGADOR100`.
+
+Lo cubre `pruebas/acc_alias_codigos.js`, con los tickets reales y comprobada
+rompiéndola por los tres lados.
 
 #### Mantener el catálogo sin escribir SQL *(20-ago-2026, v198)*
 
@@ -1416,6 +1502,68 @@ en la lista antes de guardar.
 llamadas, con **el mismo `captura_id`** y **una sola foto**. Comprobada
 rompiéndola por los dos lados — un id por línea, y el tipo ignorado.
 
+#### Corregir o borrar un ticket de Mr Fix *(6-sep-2026, v230)*
+
+Visto en piso: *«cuando suben un ticket mal del de Mr Fix no se puede borrar, no
+se puede modificar»*. Las dos cosas, a elección: unas veces sobra el ticket
+entero y otras solo está mal un campo.
+
+**El motivo de fondo no era que faltara la función.** `accesorio_eliminar`
+estaba en la base desde el 18-ago y **no la llamaba ninguna pantalla**: después
+de guardar un ticket de Mr Fix no había dónde volver a verlo. *Una función que
+ninguna pantalla llama es una función que no existe.* De reparaciones no había
+ni eso.
+
+```
+Captura → 🔧 Mr Fix → 🧾 Lo capturado hoy
+      ↓ mrfix_dia(store, token, fecha)     ← las DOS tablas en una lista
+   ✏️ accesorio_editar / reparacion_editar
+   🗑️ accesorio_eliminar / reparacion_eliminar
+      ↓ todo queda en mrfix_ediciones (antes y después)
+```
+
+⚠️ **Cinco cosas que, si se deshacen, no dan error:**
+
+1. **El tipo no se corrige editando.** Un accesorio no se vuelve reparación: son
+   dos tablas, y esa separación es lo único que impide que una reparación acabe
+   en el Excel regional. Se borra y se recaptura, y la pantalla lo dice en vez de
+   dejar que se intente. Mismo criterio que `venta_editar` con la procedencia.
+2. **La foto solo se borra si no queda nadie que la use.** Un ticket de varios
+   artículos son varias filas con el MISMO `captura_id` y **una sola foto**:
+   borrarla al quitar la primera línea deja a las demás sin evidencia justo
+   cuando se cotejan, y esa evidencia es el motivo de guardarlas 31 días.
+3. **`precio × cantidad = importe` se exige también al corregir.** Es cuando más
+   falta hace: al corregir se teclea a mano y ya nadie vuelve a mirar el papel.
+4. **La fecha se mueve por `vendida_en`, no por `dia`.** `dia` es derivado por
+   trigger; ponerlo a mano los desincroniza y el `UNIQUE` deja de proteger sin
+   avisar.
+5. **`borradas: 0` no es un fallo.** Pudo borrarlo otro o ser un reintento. Se
+   dice tal cual —«ese ticket ya no estaba»— en vez de cantar un éxito que no
+   hubo.
+
+**Todo queda en `mrfix_ediciones`, con el antes y el después.** Esto toca dinero
+de gente de OTRAS tiendas: una línea borrada sin rastro no se puede ni detectar
+ni deshacer. Es el mismo argumento de `ventas_ediciones`.
+
+**Y la regla del Excel hubo que rehacerla, porque se apoyaba en los nombres.**
+`r_reparaciones_fuera` permitía en esta pantalla una sola llamada,
+`reparacion_guardar`. Se quedó corta al añadir corregir y borrar — y ya estaba
+corta antes: una lectura llamada `mrfix_dia` trae reparaciones y no lleva
+«reparacion» en el nombre, así que **habría pasado sin decir nada**. Ahora se ata
+**al dato**: `_repFilas` es lo único de lo que se construye el XLSX, y solo puede
+llenarse desde `accesorios_reporte`. Da igual cuántas lecturas de reparaciones
+haya en la pantalla; ninguna llega al pegado sin pasar por ahí.
+
+⚠️ La primera versión de esa regla nueva **no cazaba el caso que importa**:
+buscaba `accesorios_reporte` «cerca» de la asignación, y la llamada está siete
+líneas más arriba, así que cambiar el origen por otra lista la pasaba entera. Se
+vio rompiéndola a propósito. Ahora exige que la variable asignada sea **la
+misma** que recibió esa llamada.
+
+Lo cubre `pruebas/mrfix_corregir.js`, que mira **la llamada que sale a la red** y
+no la pantalla —el único punto donde la decisión ya no se deshace—, comprobada
+rompiéndola por tres lados.
+
 #### Un solo botón: 🔧 Mr Fix *(24-ago-2026, v205)*
 
 Accesorio y reparación empezaron siendo **dos botones** en la barra y dos paneles.
@@ -1825,6 +1973,148 @@ diciendo lo mismo, el cambio se comprueba en piso sin nada en juego.
   siempre, que es cambiar un fallo callado por otro.
 
 ---
+
+## Cadena 2-quater · Cada quien ve su comisión *(6-sep-2026, v230)*
+
+Pedido en piso: que cada integrante vea solo la suya, y el gerente las de todos.
+Al ir a hacerlo apareció **algo más gordo que lo que se pedía**.
+
+⚠️ **`comisiones_lista(p_store)` no pedía NADA salvo el número de tienda, y
+estaba concedida a `anon`.** La clave publicable viaja dentro de
+`comisiones.html`, en un repo público. Comprobado con un `curl`, sin sesión y
+sin PIN: cuatro filas con nombre completo, venta, garantías e importes. No era
+que el equipo se viera entre sí — era que el sueldo del equipo estaba **abierto
+a cualquiera que leyera el HTML publicado**.
+
+```
+comisiones.html
+   ├─ hes_empleado → MI_EMPNO + puesto        ← quién mira
+   ├─ comisiones_lista(store, TOKEN, empno)   ← el servidor decide qué devuelve
+   │     · gestión → todas   · cualquiera → la suya   · sin token/número → nada
+   ├─ soloLoMio_()  ← red del cliente, por las tres puertas de abajo
+   └─ localStorage hes<store>_comisiones      ← se reescribe filtrada al abrir
+```
+
+**El filtro del servidor no basta, y esa es la parte que se olvida.** Había
+**tres** puertas más que devuelven el equipo entero, y cada una sola ya destapa
+el dato:
+
+1. **La caché del teléfono.** Está escrita de cuando la pantalla enseñaba a
+   todos. Sin filtrarla al abrir, el asesor ve el sueldo de sus compañeros **sin
+   red** y para siempre. Se filtra y se vuelve a guardar filtrada, así el dato
+   viejo deja de existir en ese teléfono.
+2. **El respaldo por Apps Script.** Lee una hoja y no sabe filtrar. Olvidarlo
+   dejaba el filtro funcionando solo mientras Supabase contestara — o sea,
+   fallando el día raro, que es cuando nadie mira.
+3. **El rato entre publicar y pegar el SQL.** La app llama primero a la firma
+   nueva; si no existe todavía, PostgREST responde 404 y se cae a la vieja. La
+   pantalla funciona en los dos mundos —da igual el orden— pero **hasta pegar el
+   SQL el dato sigue viajando al teléfono**, y solo lo tapa el cliente.
+
+⚠️ **Sin número no se enseña NADA.** Pasa cuando se entró con el PIN de la
+tienda. «No sé quién eres» no puede acabar en «toma las de todos»: sería el
+agujero más fácil de abrir —basta borrar una clave del localStorage—. Se pide
+entrar con el número, que es lo que falta de verdad.
+
+⚠️ **Esto es un cerrojo, no una caja fuerte, y conviene no confundirlo.** El
+equipo no tiene contraseña propia: se identifica con un número que aparece en
+tickets y reportes. Cierra el caso real y cierra la fuga hacia fuera, pero no
+para a quien conozca el número del gerente y lo teclee a propósito. La caja
+fuerte es que el gerente entre con correo y contraseña; se decide aparte.
+
+**Pegar el SQL basta: no espera a que nadie actualice su celular.** La primera
+versión de esto dejaba el `REVOKE` de `comisiones_lista(p_store)` para «cuando
+todos estén en v230», y Ángel lo devolvió con la razón correcta: *«eso no debería
+importar; cuando yo suba el SQL deberían ver el cambio»*. Lo que hacía falta no
+era esperar — era **cerrar la segunda puerta a la vez**.
+
+```
+app anterior a v230
+   → comisiones_lista(p_store)      ← revocada: ya no contesta
+   → respaldo Apps Script (modo=comisiones)
+        → hoja «Comisiones», sin recibir desde el 7-ago
+        → JULIO, con aspecto del mes en curso   ⛔
+```
+
+Se cierra **sin tocar el Apps Script** —decisión de Ángel el 6-sep: *«ya no
+quiero trabajar con Apps Script»*—, renombrando la pestaña en el propio Sheet:
+
+```
+«Comisiones»  →  «Comisiones_hasta_ago2026»
+```
+
+`leerComisiones_` la busca por ese nombre exacto; sin ella devuelve la lista
+vacía y la app vieja dice «No llegaron datos nuevos» en vez de pintar julio. Se
+renombra y no se borra: el histórico se conserva. **Quedarse sin comisiones un
+rato se nota y se pregunta; ver las de otro mes como si fueran de hoy, no.**
+
+Vale la pena quedarse con la forma del arreglo: **un modo del Apps Script se
+puede apagar quitándole el dato, sin abrir el editor.** Es la vía para retirar el
+resto (ver «Retirar el Apps Script»).
+
+⚠️ Lo único que no se cierra desde el servidor es la copia que cada teléfono ya
+tiene guardada. Se borra sola en cuanto esa persona abre la app en v230.
+
+⚠️ **El respaldo del GAS filtra de más, a propósito.** La hoja no trae número de
+empleado, así que a un asesor no le casa ninguna fila y se quedaría sin ver la
+suya. Es el error correcto de los dos: casar por nombre es exactamente lo que
+descuadró las comisiones de agosto, por un apellido con una letra de más.
+
+`PUESTOS_GESTION_C` es la **tercera** copia de la misma lista de puestos
+(tablero, horarios, comisiones): estas pantallas no comparten ningún `.js`.
+`r_puestos_gestion` compara ya las tres.
+
+Lo cubre `pruebas/comisiones_solo_mia.js`, comprobada rompiéndola por los cuatro
+lados: la caché sin filtrar, la respuesta sin filtrar, todos pasando por
+gerentes, y el número sin mandar.
+
+## Cadena 2-quinquies · La cotización *(6-sep-2026, v230)*
+
+Pedido en piso: *«estamos vendiendo un reloj, selecciona el reloj más la
+garantía; pero también quiere un teléfono… y va haciendo la suma. No se va a
+cobrar desde ahí, solamente necesito que se puedan sumar varios artículos y le
+podamos dar el precio al cliente»*.
+
+**Suma y nada más.** No cobra, no aparta, no toca inventario y no sube nada a la
+nube. Lo que sustituye es la calculadora del celular, donde lo que se pierde es
+un seguro que no se sumó o un precio tecleado de otro producto.
+
+```
+segSelector()  → chips «Sin seguro / 1 año / 2 años»  +  ＋ Sumar
+      ↓ cotAgregar() lee EL CHIP ACTIVO del bloque
+   COT[]  → barra fija con el total  → panel con las líneas
+      ↓ localStorage hes1217_cotizacion
+```
+
+⚠️ **Cinco cosas que, si se deshacen, no dan error:**
+
+1. **El seguro se lee del CHIP ACTIVO, no de una copia.** El DOM es el estado que
+   ve el asesor; con una variable aparte, tocar «1 año» y que la copia no se
+   enterara sumaría sin garantía sin que nada lo dijera.
+2. **El botón vive DENTRO del selector de precio**, no suelto en la tarjeta. Lo
+   que se suma es «este producto con lo que esté elegido ahí»; separarlos invita
+   a elegir garantía en un sitio y sumar en otro.
+3. **Cada línea guarda su total ya hecho.** Así quitar una línea se lleva su
+   seguro con ella. Sumando bases por un lado y seguros por otro, quitar un
+   artículo dejaría su garantía en la cuenta.
+4. **«+1 año» se dice «protege 2».** El contratado se suma al de fábrica, y así
+   se le explica al cliente. Decir «1 año» a secas es vender de menos lo mismo
+   que se cobra. El texto se arma en un solo sitio (`cotTextoSeguro`) para que
+   las dos formas no se separen.
+5. **Sin precio no hay botón.** Un «＋ Sumar» sobre un producto sin precio
+   registrado mete un cero en la cuenta del cliente.
+
+**Sobrevive a recargar la app, a propósito**: se arma con el cliente delante y
+basta una notificación para perderla. Es del teléfono y de nadie más — aquí no
+hay dato de la tienda que proteger, son precios que ya se le dijeron al cliente.
+
+El panel dice **lo que esto NO es**: «no aparta piezas ni registra la venta». Un
+total en pantalla con el cliente delante se confunde con una venta hecha, y de
+aquí no sale ningún apartado ni se descuenta ninguna pieza.
+
+Lo cubre el bloque 11 de `casos_tablero.js`, comprobado rompiéndolo por cuatro
+lados —ignorar la garantía elegida, no leer el chip activo, callar los años que
+protege, y ofrecer sumar sin precio—.
 
 ## Cadena 3 · Del Excel al precio que se cobra
 
@@ -2381,6 +2671,63 @@ Lo que sostiene esto:
   `index.html` es un redirect a este mismo archivo y sería un círculo.
 - `logo_huawei.jpg` va precacheado: es el logo del Excel que exporta el gerente.
 
+### Cada quien ve su horario *(6-sep-2026, v230)*
+
+Pedido en piso: el equipo ve **solo su semana**; el gerente y el subgerente, la
+de todos.
+
+```
+empleados.puesto (Supabase)
+   ├─ login_empleado → emp_puesto      ← URL suelta
+   └─ hes_empleado.puesto              ← heredado del tablero
+        ↓ fijarSesion({ puesto })
+   _verTodo = _puedeEditar || esPuestoDeGestion_(puesto)
+        ↓ veElEquipo_() lo consultan LOS CINCO:
+   tarjetas del resto · botón «Ver tabla completa» · la tabla ·
+   el pie de descansos · verTablaCompleta()
+```
+
+**Cinco sitios, un solo portero.** Es la misma forma que `seccionVisible_` en el
+tablero, y aquí el que menos parece es el que más se olvida: **el pie de
+descansos fijos nombra a todo el equipo** —horario ajeno dicho de otra manera— y
+no tiene aspecto de tabla.
+
+⚠️ **Cuatro cosas que, si se deshacen, no dan error:**
+
+1. **`_verTodo` NO es `_puedeEditar`.** Quien entra con su número no edita, pero
+   el subgerente sí lleva la tienda. Atarlas le daría una vista distinta según
+   entrara con su número o con su correo: la misma persona, el mismo puesto,
+   distinta puerta. Es el fallo de `hoja_auth` y el de `vincular_mi_cuenta`, por
+   tercera vez.
+2. **La tabla no se esconde: no se ESCRIBE.** Taparla por CSS deja el horario de
+   los demás dentro del HTML, a un «inspeccionar» de distancia. Y hace falta
+   además `body.solo-mi-horario`, porque en la tablet de piso o en la
+   computadora de la trastienda la tabla se ve sin pedirla — sin esa clase,
+   «solo su horario» dependería del ancho del aparato.
+3. **`verTablaCompleta` lleva su propia guardia.** Es global: sin ella,
+   teclearla en la consola —o un botón que quede pintado de una versión en
+   caché— abre la tabla del equipo entero.
+4. **Quien no se reconoce ya no ve una pantalla en blanco.** Ese hueco lo abre
+   este mismo cambio: antes, un número que no casaba con ninguna ficha veía
+   igual el horario de todos. Ahora se le dice qué falta y quién lo arregla —una
+   pantalla vacía se lee como «la app no sirve», no como «falta un dato».
+
+⚠️ **Esto le esconde el horario al asesor; no se lo oculta a quien sepa mirar.**
+`horario_equipo` sigue devolviendo el JSON del equipo entero, así que el dato
+baja al teléfono aunque no se pinte. Filtrarlo en el servidor obliga a partir el
+RPC —y con él el respaldo y el restaurar del gerente, que leen esa misma
+estructura—. Se eligió a sabiendas: es el mismo trato que la cadena 1-bis.
+
+**`PUESTOS_GESTION_H` está escrita dos veces a propósito**, aquí y en
+`tablero.html`: este archivo se publica también en `planeador-odemas`, donde no
+existe nada del 1217 de donde importarla. Que no se separen lo vigila
+**`r_puestos_gestion`**, comprobada por los dos lados. Si se separaran, ascender
+a alguien le abriría el tablero y no el horario —o al revés— y nadie ataría el
+síntoma a dos listas distintas.
+
+Lo cubre `pruebas/horario_solo_mio.js`, comprobada rompiendo las **cinco**
+superficies una por una. Mira lo que se ESCRIBIÓ en cada sitio, no lo que se ve.
+
 ### Un solo login *(4-ago-2026)*
 
 El planeador tenía su PROPIO proyecto de Supabase (`lgnyqfstmcqpkbekspte`), con
@@ -2580,6 +2927,49 @@ un aparato con sesión de antes del 1-ago.
 
 No se cierra hasta que ese contador esté en cero. Procedimiento y reversión en
 `GAS_cerrar_candado.md`.
+
+## Retirar el Apps Script *(decidido el 6-sep-2026)*
+
+*«Ya no quiero trabajar con Apps Script».* Era la etapa 5 del plan de migración;
+pasa a ser el rumbo.
+
+**La buena noticia, medida y no supuesta: no hay nada que migrar.** Los once
+modos que las apps siguen pidiendo tienen ya su función en Supabase:
+
+| `modo=` del GAS | quién lo pide | ya existe en Supabase |
+|---|---|---|
+| `todo` | tablero, datos.js | `tablero_todo` |
+| `inventario` | tablero, datos.js | `inventario_vivo` |
+| `promos` | tablero, captura | `promos_vigentes` |
+| `eol_cloud` | tablero, datos.js | `eol_lista` |
+| `eol_venta` | captura | `eol_precio_venta` |
+| `avisos_cloud` | tablero, datos.js | `avisos_vigentes` |
+| `bundles` | tablero | `bundles_vigentes` |
+| `ventas_hoy` | tablero | `ventas_hoy` |
+| `catalogo` | captura | `catalogo_completo` |
+| `estado` | captura | `estado_datos` |
+| `comisiones` | comisiones | `comisiones_lista` |
+
+Y **el GAS solo se llama cuando Supabase no contesta**: `refrescarNube` hace
+`if(await cargarTodoSupabase()) return;` antes de mirarlo. O sea que retirarlo
+**no cambia el camino normal de nada** — quita el segundo camino.
+
+**Qué se pierde, dicho sin adornos:** el respaldo del día que Supabase se caiga.
+Pero el respaldo que de verdad deja vender no es el GAS, es el teléfono:
+`tablero.html` guarda inventario, promos y bundles en `localStorage`
+(`INV_KEY`, `PROMOS_KEY`, `BUNDLES_KEY`), y captura guarda el catálogo. Con
+Supabase caído y sin GAS, el asesor sigue viendo los precios que bajó la última
+vez — que es justo lo que el respaldo protegía.
+
+**Lo que se lleva por delante, y es la mitad del premio:** sin Apps Script no hay
+`gas_url` ni `gas_token`, y con ellos se van la cadena 1 entera, el candado
+`GAS_ESTRICTO` que lleva desde el 3-ago sin cerrarse (punto B de aquí abajo),
+`accesoPermitido_`, `SINTOK_HOY` y las reglas del verificador que los vigilan.
+
+**Un modo se apaga quitándole el dato, sin abrir el editor.** Es lo que se hizo
+con `comisiones` (cadena 2-quater): renombrar la pestaña del Sheet y
+`leerComisiones_` devuelve vacío. Sirve para desconectar de uno en uno y
+comprobar en piso antes de borrar código.
 
 ## Lo que sigue, en orden
 
