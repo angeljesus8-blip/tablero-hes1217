@@ -2235,6 +2235,25 @@ function cardEol(e){
       </div>
       <p class="warn">⚠️ Al 50% pierde garantía de fábrica y NO es elegible para Assurant.</p>
       ${bundleTip(e.sku)}
+      <div class="prod-pie" style="justify-content:flex-end;border-top:none;padding-top:0;margin-top:8px">
+        ${/* El 50% se suma con SU precio, el rebajado, y SIN seguro: al 50% el
+             equipo no es elegible para Assurant y la propia tarjeta lo dice dos
+             líneas más arriba. Aquí no hay chips de garantía, así que
+             `cotSeguroElegido` no encuentra el bloque y devuelve 0 — que es lo
+             correcto, pero por casualidad; por eso se pasan los precios del
+             seguro en cero, para que no dependa de eso.
+             (6-sep-2026: faltaba, y era justo el producto que más se cotiza
+             junto a otro — el cliente que se lleva el de exhibición pregunta
+             qué más le sale a cuenta.) */''}
+        ${/* El nombre lleva de qué pieza se trata. En la cuenta que se le lee al
+             cliente, «WATCH FIT 4» a mitad de precio y el mismo modelo nuevo son
+             dos renglones iguales con distinto importe, y la diferencia —que es
+             la de aparador, sin garantía— hay que decirla, no dejarla al tono de
+             voz del asesor. */''}
+        ${e.precio50 != null ? botonCot(e.sku, e.producto + ' · pieza de exhibición al 50%',
+                                        e.precio50, 0, 0, 0, 0,
+                                        'eol_' + String(e.sku).replace(/\D/g,'')) : ''}
+      </div>
       ${botonApartar(e.sku, e.producto, e.precio)}
     </div>`;
   }

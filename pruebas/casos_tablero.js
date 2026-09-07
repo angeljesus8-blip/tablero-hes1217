@@ -315,6 +315,45 @@ aplicarTodo(Object.assign(_deSupabase(JSON.parse(JSON.stringify(TIENDA))), { __s
   ok('sin precio no se ofrece sumar', botonCot('999', 'X', 0, 0, 0, 0, 0, 'sg_9') === '');
   ok('con precio sí', botonCot('999', 'X', 1000, 0, 0, 0, 0, 'sg_9').indexOf('cotAgregar') >= 0);
 
+  /* ── El 50% también se suma (6-sep-2026) ────────────────────────────
+     Visto en piso al día siguiente de publicar: «los artículos que están al 50%
+     de descuento no los puedo sumar». El botón vivía dentro de `segSelector` y
+     las tarjetas de EOL no lo usan — no tienen chips de garantía porque al 50%
+     el equipo NO es elegible para Assurant.
+
+     Y es justo el producto que más se cotiza junto a otro: el cliente que se
+     lleva la pieza de aparador pregunta qué más le sale a cuenta. */
+  {
+    const eolListo = { estado:'listo', sku:'100259554', producto:'WATCH FIT 4 AL NG',
+                       precio:3499, precio50:1750, exhibe:1, stock:0 };
+    const htmlEol = cardEol(eolListo);
+    ok('la tarjeta del 50% ofrece sumar', htmlEol.indexOf('cotAgregar') >= 0,
+       htmlEol.slice(0, 260));
+    /* Con SU precio, el rebajado. Sumar el de lista en una pieza al 50% le
+       cobraría al cliente el doble de lo que se le está ofreciendo. */
+    ok('y con el precio rebajado, no el de lista',
+       htmlEol.indexOf('1750') >= 0 && htmlEol.indexOf(',3499,') < 0, 'no lleva el 50%');
+    /* Sin garantía: la propia tarjeta avisa de que al 50% no es elegible. Los
+       importes de seguro van en cero para que no dependa de que el bloque de
+       chips no exista. */
+    /* Los importes de seguro van en CERO. Los precios «con seguro» salen iguales
+       al base —`botonCot` cae en `p1||p0`— y da igual: sin chips nunca se elige
+       otra cosa que el 0. Lo que no puede pasar es que aparezca un importe de
+       garantía en un producto que no la admite. */
+    ok('sin importes de seguro', /1750,1750,1750,0,0/.test(htmlEol),
+       (htmlEol.match(/cotAgregar\([^)]*\)/) || [''])[0]);
+    /* Y el renglón dice QUÉ pieza es: en la cuenta que se le lee al cliente, el
+       mismo modelo nuevo y el de aparador son dos líneas iguales con distinto
+       importe. */
+    ok('el nombre dice que es la pieza de exhibición',
+       htmlEol.indexOf('exhibici') >= 0, 'no lo dice');
+
+    // Una pendiente de agotar stock todavía NO se vende al 50%: no hay qué sumar.
+    const htmlPend = cardEol({ estado:'pendiente', sku:'900009', producto:'X', stock:3, exhibe:1 });
+    ok('un EOL que aún no llega al 50% no ofrece sumar',
+       htmlPend.indexOf('cotAgregar') < 0);
+  }
+
   document.getElementById = getIdOrig;
   COT = [];
 }
