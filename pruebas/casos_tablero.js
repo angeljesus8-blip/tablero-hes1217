@@ -251,3 +251,70 @@ aplicarTodo(Object.assign(_deSupabase(JSON.parse(JSON.stringify(TIENDA))), { __s
 }
 
 aplicarTodo(Object.assign(_deSupabase(JSON.parse(JSON.stringify(TIENDA))), { __sb:true }));
+
+
+/* ── 11 · La cotización suma lo que el asesor eligió (6-sep-2026) ────────
+   Pedido en piso: sumar varios artículos con o sin garantía para decirle el
+   total al cliente. No cobra nada — sustituye a la calculadora del celular,
+   donde lo que se pierde es un seguro que no se sumó.
+
+   ⚠️ Lo que se prueba es de dónde sale el número. El seguro elegido se lee del
+   CHIP ACTIVO del bloque de precio, no de una copia propia: si se guardara
+   aparte, tocar «1 año» y que la copia no se enterara sumaría sin garantía sin
+   que nada lo dijera. Se comprueba montando los chips a mano y moviendo el
+   activo, que es lo que hace `selSeg` en el teléfono. */
+{
+  COT = [];
+
+  /* El bloque de precio tal como lo deja `segSelector`: tres chips, el primero
+     activo. `crearEntorno` no está aquí —esta prueba corre sobre el DOM falso
+     de humo_tablero—, así que se arma el mínimo que `cotSeguroElegido` mira. */
+  function bloqueChips(id, activo){
+    const chips = [0,1,2].map(function(i){
+      return { classList: { contains: function(c){ return c === 'active' && i === activo; } } };
+    });
+    document.__nodos = document.__nodos || {};
+    document.__nodos[id] = { querySelectorAll: function(){ return chips; } };
+  }
+  const getIdOrig = document.getElementById;
+  document.getElementById = function(id){
+    if(document.__nodos && document.__nodos[id]) return document.__nodos[id];
+    return getIdOrig.call(document, id);
+  };
+
+  // Un reloj de $3,499 con «1 año» (+$1,549) y un teléfono de $24,999 sin seguro.
+  bloqueChips('sg_1', 1);
+  cotAgregar('100295900', encodeURIComponent('WATCH FIT 5'), 3499, 5048, 5178, 1549, 1679, 'sg_1');
+  bloqueChips('sg_2', 0);
+  cotAgregar('100269146', encodeURIComponent('PURA 80 PRO'), 24999, 28468, 29618, 3469, 4619, 'sg_2');
+
+  ok('se suman los dos artículos', COT.length === 2, String(COT.length));
+  ok('el reloj entra CON su garantía', COT[0].total === 5048, String(COT[0].total));
+  ok('y guarda cuánto costó esa garantía', COT[0].seguro === 1549, String(COT[0].seguro));
+  ok('el teléfono entra sin seguro', COT[1].total === 24999 && COT[1].seguro === 0,
+     COT[1].total + '/' + COT[1].seguro);
+  /* El total es la suma de los totales de cada línea, no el precio base más los
+     seguros por otro lado: así, quitar una línea se lleva su seguro con ella. */
+  ok('el total es lo que se le dice al cliente', cotTotal() === 30047, String(cotTotal()));
+
+  /* «+1 año» PROTEGE DOS: el contratado se suma a la garantía de fábrica, y así
+     es como hay que decírselo al cliente. Si esto se dijera «1 año» a secas, el
+     asesor estaría vendiendo de menos lo mismo que cobra. */
+  ok('un año contratado se cuenta como dos de protección',
+     cotTextoSeguro(COT[0]).indexOf('protege 2') >= 0, cotTextoSeguro(COT[0]));
+  ok('y sin seguro no dice nada de garantías', cotTextoSeguro(COT[1]) === '',
+     cotTextoSeguro(COT[1]));
+
+  // Quitar una línea se lleva su seguro: es lo mismo que devolver el artículo.
+  cotQuitar(0);
+  ok('quitar el reloj se lleva también su garantía', cotTotal() === 24999, String(cotTotal()));
+  ok('y queda un solo artículo', COT.length === 1, String(COT.length));
+
+  /* Sin precio no hay botón. Un «＋ Sumar» sobre un producto sin precio
+     registrado metería un cero en la cuenta del cliente. */
+  ok('sin precio no se ofrece sumar', botonCot('999', 'X', 0, 0, 0, 0, 0, 'sg_9') === '');
+  ok('con precio sí', botonCot('999', 'X', 1000, 0, 0, 0, 0, 'sg_9').indexOf('cotAgregar') >= 0);
+
+  document.getElementById = getIdOrig;
+  COT = [];
+}

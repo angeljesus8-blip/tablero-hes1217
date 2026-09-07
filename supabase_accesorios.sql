@@ -323,6 +323,13 @@ AS $$
   ORDER BY a.dia, a.vendida_en;
 $$;
 
+/* ⚠️ VERSION VIEJA — sustituida el 6-sep-2026 por la de
+   `supabase_mrfix_corregir.sql`, que ademas comprueba QUIEN borra, se lleva la
+   foto solo si no la usa otra linea del mismo ticket, y deja rastro en
+   `mrfix_ediciones`. Esta no hacia ninguna de las tres, y ninguna pantalla la
+   llamaba nunca.
+   Repegar este archivo la devuelve y se pierden las tres cosas SIN dar error:
+   si hace falta tocar algo de aqui, vuelve a pegar el otro archivo despues. */
 CREATE OR REPLACE FUNCTION public.accesorio_eliminar(
   p_store text, p_token text, p_id bigint
 ) RETURNS jsonb
