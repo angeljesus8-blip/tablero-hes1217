@@ -139,6 +139,10 @@ $$;
 -- comprar el seguro, así que un vendedor puede cerrar el mes por encima del
 -- 100 %. Si alguien mete aquí un LEAST(...,100) "para que se vea bien", estará
 -- borrando trabajo hecho de verdad.
+/* ⚠️ VERSION VIEJA Y ABIERTA — la vigente es `comisiones_lista(store, token,
+   empno)` en `supabase_comisiones_privadas.sql`, que filtra por quien mira.
+   Esta se queda sin permisos (ver el REVOKE del final). Repegar este archivo NO
+   la reabre; volver a escribir su GRANT, si. */
 CREATE OR REPLACE FUNCTION public.comisiones_lista(p_store text)
 RETURNS TABLE (empno text, nombre text, puesto text, venta numeric,
                ppto_pct numeric, alcance numeric, gar_pct numeric,
@@ -244,7 +248,17 @@ REVOKE ALL ON FUNCTION public.tablero_todo(text)      FROM public;
 GRANT EXECUTE ON FUNCTION public.catalogo_completo(text) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.eol_lista(text)         TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.apartados_lista(text)   TO anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.comisiones_lista(text)  TO anon, authenticated;
+/* ⚠️ NO SE CONCEDE, y no es un olvido (6-sep-2026).
+   Esta version de un solo argumento devuelve el sueldo del equipo entero sin
+   pedir nada, y la clave publicable viaja dentro de comisiones.html, en un repo
+   publico: con el GRANT puesto, cualquiera podia leerlas desde fuera. Se
+   comprobo con un curl.
+   La buena es `comisiones_lista(store, token, empno)`, en
+   `supabase_comisiones_privadas.sql`. Esta se deja definida —por si algo viejo
+   la referencia— pero sin permisos.
+   Si alguien vuelve a poner este GRANT, la fuga se reabre en silencio: no da
+   error, simplemente vuelve a contestarle a cualquiera. */
+REVOKE ALL ON FUNCTION public.comisiones_lista(text) FROM anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.estado_datos(text)      TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.tablero_todo(text)      TO anon, authenticated;
 
