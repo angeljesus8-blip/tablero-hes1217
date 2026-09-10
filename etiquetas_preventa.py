@@ -28,8 +28,19 @@ SB_KEY = 'sb_publishable_mELjDmCaFpNOxcwPi5MB2A_qSZ5ZA2z'
 STORE  = '1217'
 
 BASE  = os.path.dirname(os.path.abspath(__file__))
-LOGO  = os.path.join(BASE, '..', '07_Look&feel', 'logo odemas Vt color.png')
-SALIDA_DIR = os.path.join(BASE, '..', '_privado_no_publicar')
+# 9-sep-2026: esto buscaba el logo y la salida en carpetas HERMANAS
+# ('..\07_Look&feel' y '..\_privado_no_publicar'), y al reorganizar la carpeta
+# como bóveda de Obsidian dejaron de estar ahí. Ahora ambos salen de la propia
+# carpeta del tablero, que es lo único que sigue siendo verdad después de
+# clonar el repo o de mover las carpetas otra vez.
+#
+# Por qué importaba: sin el logo las etiquetas salían igual pero SIN marca
+# Odemás, avisando solo en gris. Y `_privado_no_publicar` NUNCA estuvo en las
+# $CARPETAS de respaldar_privado.ps1, asi que el PDF no se respaldaba nunca.
+# Sacándolo a `_privado` queda cubierto por el respaldo y fuera de git.
+# El logo_odemas.png de aquí es byte a byte el del manual de marca.
+LOGO  = os.path.join(BASE, 'logo_odemas.png')
+SALIDA_DIR = os.path.join(BASE, '_privado')
 SALIDA = os.path.join(SALIDA_DIR, 'etiquetas_preventa_pura90s.pdf')
 
 # Colores Odemás (Manual-Logo-Odemas.md)
@@ -178,7 +189,8 @@ def main():
 
     logo = LOGO if os.path.exists(LOGO) else None
     if not logo:
-        print('aviso: no encontré el logo en 07_Look&feel — sale sin él')
+        print('AVISO: no encontré el logo, las etiquetas van a salir SIN marca')
+        print('       Odemás. Lo busqué en: %s' % os.path.normpath(LOGO))
 
     W, H = letter
     cols, fils = 2, 5

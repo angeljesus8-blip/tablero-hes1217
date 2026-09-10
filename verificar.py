@@ -12,9 +12,11 @@ import glob, io, json, os, re, subprocess, sys, tempfile
 BASE = os.path.dirname(os.path.abspath(__file__))
 HTML = ['index.html', 'tablero.html', 'captura_series.html', 'admin.html',
         'comisiones.html', 'actualizar_datos.html', 'horarios.html']
-# horarios.html no se edita aquí: es copia de 02_Equipo/horario_semanal.html, que
-# se publica también en el repo planeador-odemas para las demás tiendas.
-COPIAS = {'horarios.html': os.path.join('..', '02_Equipo', 'horario_semanal.html')}
+# horarios.html no se edita aquí: es copia de horario_semanal.html, que se
+# publica también en el repo planeador-odemas para las demás tiendas.
+# 9-sep-2026: la carpeta se reorganizó como bóveda de Obsidian. Antes esta ruta
+# decía '..', '02_Equipo'; ahora las dos apps son hermanas dentro de 02-Apps\.
+COPIAS = {'horarios.html': os.path.join('..', 'horario-semanal', 'horario_semanal.html')}
 # Páginas que se PUBLICAN pero no son la app: no las sirve el service worker ni
 # se enlazan desde el menú. No entran en HTML porque no deben obligar a subir
 # VERSION —no llegan a ningún celular por esa vía— pero sí tienen que pasar por
@@ -315,7 +317,18 @@ def r_copias():
         a, b = leer(copia), leer(origen)
         if a is None:
             falla('copia', 'falta %s (se copia de %s)' % (copia, origen)); continue
-        if b is None: continue   # la fuente no está en esta máquina
+        if b is None:
+            # 9-sep-2026: antes esto era un `continue` mudo. En el runner de
+            # GitHub el repo es SOLO el tablero y la fuente nunca está ahí, así
+            # que callar allá es correcto. Pero en una máquina de trabajo el
+            # silencio quería decir otra cosa: que la carpeta se movió y esta
+            # comprobación se apagó sin avisar —justo la que impide que el
+            # equipo de la 1217 siga viendo el horario de la semana pasada—.
+            if not os.environ.get('GITHUB_ACTIONS'):
+                aviso('copia', 'no encuentro %s. Aqui se comprueba que %s no se '
+                               'quede atras: mientras la fuente no aparezca, esa '
+                               'revision NO se esta haciendo.' % (origen, copia))
+            continue
         if a != b:
             aviso('copia', '%s no es igual a %s. Vuelve a copiarla o el horario '
                            'del tablero se queda atrás.' % (copia, origen))
