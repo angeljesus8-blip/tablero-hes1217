@@ -2176,9 +2176,9 @@ tienda. `saveEolFromPdf` manda `r.pr` —el **PRECIO REGULAR**— a `eol_guardar
 calcula $19,999 cuando el CEA manda cobrar $23,698. Ver «El CEA 265 no es un CEA
 189» abajo.
 
-### El CEA 265 no es un CEA 189, y hoy se tratan igual *(10-sep-2026, abierto)*
+### El CEA 265 no es un CEA 189, y entraban por la misma puerta *(10-sep-2026, v233)*
 
-Dos comunicados distintos comparten la palabra EOL y el tablero los mete por la
+Dos comunicados distintos comparten la palabra EOL y el tablero los metía por la
 misma puerta, porque `parseEolPDF` deduce el estatus **del título**:
 
 | | CEA 189 · *Listado de artículos EOL* | CEA 265 · *Promociones EOL* |
@@ -2197,6 +2197,29 @@ dice al equipo que ahí no se vende seguro, y eso pega directo en el KPI crític
 lleva 9 y 6 MSI, y la regla genérica de `msiInfo` —por importe— solo ofrecería 6
 por estar debajo de $10,000. La pestaña de Promos ya guarda los MSI del
 comunicado; la de EOL no.
+
+**Cómo quedó:** la pestaña de EOL detecta que el comunicado trae precio de
+promoción (`_eolFilasConPromo`: alguna fila con `pp`) y **no deja guardar**.
+Avisa con las cifras de verdad —«en el SKU 100269138 aquí cobrarías $19,999 y el
+CEA manda $23,698»— y manda a Promociones, que ya guarda precio, vigencia y MSI
+sin tocar SQL.
+
+**El camino bueno sigue abierto**, y esa es la mitad que importa: el listado 189
+no trae precio, así que entra igual que siempre. Un aviso que frenara también al
+189 dejaría a la tienda sin poder marcar un EOL.
+
+⚠️ **`carga_promos` no escribe en la tabla `eol`**, aunque Admin diga «N
+productos EOL guardados en la nube automáticamente». Los deja en `promos` con
+`estatus='EOL'`. El texto miente desde antes de esto y **sigue ahí**: si algún
+día hace falta que un CEA de promos marque además el SKU como no resurtible, hay
+que escribirlo, no darlo por hecho.
+
+**Lo que sigue abierto de aquí:** `eol_guardar` responde `existe` y **no toca
+nada** si el SKU ya estaba, así que un 189 repetido nunca refresca el precio
+heredado del catálogo. Distinguir el precio heredado del puesto a mano lleva SQL.
+
+Lo cubre `pruebas/cea_precio_nuevo.js` (bloque 6), comprobado quitando el
+guardián: vuelven los seis fallos, con el panel abierto y las tres filas armadas.
 
 ---
 

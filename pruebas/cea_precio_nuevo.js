@@ -151,9 +151,69 @@ const P = (v, c) => ({ v: v, c: c });
   ok('sin encabezado · a cobrar = el más barato', r.pp === '23,698.00', 'leyó ' + r.pp);
 }
 
-if(fallos.length){
-  console.log('lector de CEA: ' + fallos.length + ' fallo(s)');
-  fallos.forEach(f => console.log('   · ' + f));
-  process.exit(1);
+/* ── 6 · Un CEA con precio NO entra por la puerta de EOL ────────────────── */
+/* El CEA 265 metido por la pestaña de EOL se guarda con el PRECIO REGULAR y la
+   tienda cobra la mitad: $19,999 donde el comunicado manda $23,698. Y peor que
+   el precio, los marca EOL, que para el equipo significa "aquí no se vende
+   seguro" — sobre ocho SKU de la serie que más se mueve, contra el KPI crítico.
+
+   Se comprueba el COMPORTAMIENTO de la pantalla, no solo el filtro: que no deje
+   filas listas para guardar y que el aviso diga a dónde ir. Con solo mirar el
+   valor que devuelve una función, el botón podría seguir armado. */
+function pasarPorPantallaEol(filas){
+  ent.correr('parseEolPDF = async function(){ return ' +
+             JSON.stringify({ rows: filas, vig: '7 al 30 de septiembre de 2026' }) + '; };');
+  const manejador = ent.el('filePdfEol').onchange;
+  return Promise.resolve(manejador({ target: { files: [{ name: 'CEA.pdf' }] } }))
+    .then(function(){
+      return { rows: ent.el('btnSaveEol')._rows,
+               aviso: ent.htmlDe('resEol'),
+               abierto: ent.el('previewEol').style.display };
+    });
 }
-console.log('lector de CEA: el precio a cobrar es el nuevo, con las palabras del título en cualquier orden');
+
+/* Las tres filas del CEA 265, como salen de `parseEolPDF`. */
+const CEA265 = [
+  { sku:'100269138', desc:'HUAWEI PURA 80 ULT 16/512GB DO', pr:'39,998.00', pp:'23,698.00', d1:'', d2:'' },
+  { sku:'100269162', desc:'HUAWEI PURA 80 PRO 12/512GB NG', pr:'29,998.00', pp:'15,548.00', d1:'', d2:'' },
+  { sku:'100272644', desc:'HUAWEI PURA 80 6.6" 12/256GB NG', pr:'21,490.00', pp:'8,890.00',  d1:'', d2:'' }
+];
+
+/* El CEA 189 y sus adendums: SKU, descripción y estatus. Ni un precio. */
+const CEA189 = [
+  { sku:'100250576', desc:'MATEPAD PRO 13.2" 12/512GB DO', pr:'', pp:'', d1:'', d2:'' },
+  { sku:'100274957', desc:'HUAWEI WATCH GT6 1.32" AMLD NG', pr:'', pp:'', d1:'', d2:'' }
+];
+
+Promise.resolve()
+  .then(function(){ return pasarPorPantallaEol(CEA265); })
+  .then(function(r){
+    ok('CEA con precio · no deja filas listas para guardar', !r.rows || !r.rows.length,
+       'quedaron ' + ((r.rows && r.rows.length) || 0) + ' filas armadas');
+    ok('CEA con precio · no abre el panel de guardar', r.abierto !== 'block', 'display=' + r.abierto);
+    ok('CEA con precio · el aviso manda a Promociones', /Promociones/.test(r.aviso), r.aviso.slice(0,90));
+    ok('CEA con precio · el aviso dice el precio que manda el CEA', /23,698/.test(r.aviso), r.aviso.slice(0,90));
+    ok('CEA con precio · el aviso dice lo que se cobraría por aquí', /19,999/.test(r.aviso), r.aviso.slice(0,90));
+    ok('CEA con precio · el aviso menciona Assurant', /Assurant/.test(r.aviso));
+  })
+  .then(function(){ return pasarPorPantallaEol(CEA189); })
+  .then(function(r){
+    /* Y el camino bueno sigue abierto: el listado sin precio entra como siempre.
+       Un aviso que también frene al 189 dejaría la tienda sin poder marcar EOL. */
+    ok('listado EOL sin precio · sigue entrando', !!(r.rows && r.rows.length === 2),
+       'quedaron ' + ((r.rows && r.rows.length) || 0) + ' filas');
+    ok('listado EOL sin precio · abre el panel de guardar', r.abierto === 'block', 'display=' + r.abierto);
+    ok('listado EOL sin precio · sin aviso de promociones', !/Promociones/.test(r.aviso), r.aviso.slice(0,90));
+  })
+  .then(function(){
+    if(fallos.length){
+      console.log('lector de CEA: ' + fallos.length + ' fallo(s)');
+      fallos.forEach(f => console.log('   · ' + f));
+      process.exit(1);
+    }
+    console.log('lector de CEA: el precio a cobrar es el nuevo, y un CEA con precio no entra por la puerta de EOL');
+  })
+  .catch(function(e){
+    console.log('lector de CEA: la prueba reventó -> ' + (e && e.message));
+    process.exit(1);
+  });
