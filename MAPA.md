@@ -2116,6 +2116,49 @@ Lo cubre el bloque 11 de `casos_tablero.js`, comprobado rompiéndolo por cuatro
 lados —ignorar la garantía elegida, no leer el chip activo, callar los años que
 protege, y ofrecer sumar sin precio—.
 
+### Los MSI de la cotización salen del TOTAL *(10-sep-2026, v234)*
+
+Pedido en piso: *«en la cotización no aparecen los msi»*.
+
+**Es donde más valen, y por eso esconderlos costaba ventas.** Los plazos se
+alcanzan por importe, y el importe de la cuenta entera es mayor que el de
+cualquier artículo suelto:
+
+```
+WATCH FIT 5 con garantía   $5,048   → solo 6 MSI
++ PURA 80 PRO             $24,999
+  ────────────────────────────────
+  TOTAL                   $30,047   → 18 MSI · $1,670/mes
+```
+
+El asesor tenía el argumento delante y la pantalla no se lo decía.
+
+⚠️ **Los umbrales viven en `msiPlazos` y en ningún otro sitio.** Estaban
+copiados en dos —el badge de la tarjeta y el WhatsApp del producto— y la
+cotización habría sido la tercera. Con tres copias, mover el mínimo de 6 MSI se
+hace en dos y el que falta **no da error**: solo deja de ofrecer meses que el
+cliente sí tiene. `msiInfo` se reescribió encima y sigue enseñando lo mismo —los
+dos plazos más largos, el mayor primero, el banco solo en los 18—.
+
+⚠️ **Se repinta en cada cambio, no al abrir.** Quitar una línea puede bajar el
+total por debajo de un umbral, y unos MSI heredados de la cuenta anterior serían
+meses ofrecidos que el cliente ya no tiene.
+
+En el mensaje de WhatsApp van **todos** los plazos, no los dos más largos: ahí
+no hay tarjeta estrecha que obligue y el cliente elige. El asterisco del 18
+lleva su nota con los bancos — un asterisco sin nota es una restricción que el
+cliente no puede leer.
+
+Lo cubre el bloque 12 de `casos_tablero.js`, comprobado rompiéndolo por cuatro
+lados: sin pintar el panel, sin MSI en el mensaje, enseñando un solo plazo en el
+badge, y pintando una vez sin refrescar.
+
+⚠️ **Lo que sigue abierto:** los CEA dan los MSI **por SKU** (el 267 da 9 y 6 al
+Watch GT6 de $2,999, donde la regla por importe solo ofrece 6). `carga_promos`
+guarda ese dato en `promos.msi` y **el tablero no lo lee en ninguna parte** — se
+captura y se tira. Mientras siga así, la app ofrece de menos en unos productos y
+podría ofrecer de más en otros.
+
 ## Cadena 3 · Del Excel al precio que se cobra
 
 ```
