@@ -41,12 +41,16 @@ Write-Host ""
 # Se compara por HASH y no por fecha de modificacion. Copiar un archivo le pone
 # fecha nueva, asi que la fecha dice cuando se copio, no si el contenido es el
 # mismo — y un respaldo que dice estar al dia sin estarlo es peor que no tenerlo.
-$copiados = 0; $aldia = 0; $faltaban = 0
+$copiados = 0; $aldia = 0; $faltaban = 0; $ausentes = @()
 
 foreach ($carpeta in $CARPETAS) {
   $src = Join-Path $origen $carpeta
+  # 9-sep-2026: esto decia "no existe, se salta" en gris y terminaba en verde.
+  # Una carpeta que se mueve apagaba el respaldo sin que nadie se enterara, y de
+  # `_privado` no hay otra copia: es justo lo que se decidio no publicar.
   if (-not (Test-Path $src)) {
-    Write-Host "  [--]  $carpeta  no existe en el tablero, se salta" -ForegroundColor DarkGray
+    $ausentes += $carpeta
+    Write-Host ("  [!!]  {0}  NO esta en el tablero. De esa carpeta no se respalda NADA." -f $carpeta) -ForegroundColor Red
     continue
   }
   $dst = Join-Path $destino $carpeta
@@ -76,6 +80,12 @@ foreach ($carpeta in $CARPETAS) {
 
 Write-Host ""
 if ($Revisar) {
+  if ($ausentes.Count -gt 0) {
+    Write-Host "  Falta(n) la(s) carpeta(s): $($ausentes -join ', ')" -ForegroundColor Red
+    Write-Host "  Esto NO es un respaldo al dia: es un respaldo que dejo de mirar ahi."
+    Write-Host "  Si moviste las carpetas, corrige `$CARPETAS al principio del script." -ForegroundColor Yellow
+    exit 1
+  }
   if ($faltaban -gt 0) {
     Write-Host "  $faltaban archivo(s) sin respaldar. Corre el script sin -Revisar." -ForegroundColor Yellow
     exit 1
@@ -102,6 +112,13 @@ foreach ($carpeta in $CARPETAS) {
 if ($mal.Count -gt 0) {
   Write-Host "  NO quedo bien copiado:" -ForegroundColor Red
   $mal | ForEach-Object { Write-Host "    $_" -ForegroundColor Red }
+  exit 1
+}
+
+if ($ausentes.Count -gt 0) {
+  Write-Host "  Se copio lo que habia, pero falta(n): $($ausentes -join ', ')" -ForegroundColor Red
+  Write-Host "  El respaldo esta INCOMPLETO. Si moviste las carpetas, corrige"
+  Write-Host "  `$CARPETAS al principio del script." -ForegroundColor Yellow
   exit 1
 }
 
