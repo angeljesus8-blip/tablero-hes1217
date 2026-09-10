@@ -1053,7 +1053,7 @@ def r_pruebas():
                'cola_ventas.js', 'catalogo_accesorios.js', 'mrfix_tipo.js',
                'mrfix_detecta.js', 'ventas_dia_seguro.js', 'acc_alias_codigos.js',
                'horario_solo_mio.js', 'comisiones_solo_mia.js',
-               'mrfix_corregir.js')
+               'mrfix_corregir.js', 'cea_precio_nuevo.js')
 
     # La lista de arriba es explícita a propósito —así falta un archivo y se
     # nota—, pero eso deja el hueco contrario: una prueba escrita y no añadida

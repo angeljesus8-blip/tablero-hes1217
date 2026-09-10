@@ -2137,6 +2137,67 @@ para siempre" y 132 de 141 estaban así: se cobraban promociones terminadas.
 **Google Sheets convierte a fecha lo que parece fecha.** `leerPromos_` normaliza
 con `isoFecha_`; si lo quitas, ninguna promo pasa el filtro. *(1-ago-2026.)*
 
+### El precio a cobrar era el que la promo venía a bajar *(10-sep-2026, v232)*
+
+El **CEA 265 PROMOCIONES EOL SEPTIEMBRE 2026 3ER BLOQUE** trae dos columnas de
+promoción en el mismo renglón: `PROMOCIÓN ANTERIOR` y `PROMOCIÓN NUEVA`.
+`_ceaPrecios` buscaba la de cobrar con `/NUEVA\s*PROMO/i` —la **frase** del CEA
+257, "NUEVA PROMO"—, que **no casa con las mismas dos palabras al revés**. Sin
+casar, caía al comodín `/PROMO/` y ahí ganaba `PROMOCIÓN ANTERIOR` por venir
+antes en el renglón.
+
+```
+CEA 265, Pura 80 Ultra:   regular $39,998 · anterior $31,999 · NUEVA $23,698
+                                              ↑ se leía esta
+```
+
+⚠️ **Dos columnas de promo es lo normal, no la rareza.** Todo CEA que quiera
+enseñar la rebaja pone el precio viejo al lado del nuevo. Por eso no basta con
+acertarle al título: hay que saber **cuál de los dos es el viejo**, y eso es
+`_CEA_PROMO_VIEJA` (`ANTERIOR|ACTUAL|VIGENTE|PREVIA`). El orden de las palabras
+de un encabezado no puede volver a decidir cuánto se cobra.
+
+El último `find` vuelve a admitir las columnas viejas **a propósito**: un CEA
+cuya única columna de promo se llame `PROMO ACTUAL` tiene ahí el precio a
+cobrar, y quedarse sin precio es peor que quedarse con ese.
+
+⚠️ **Esto es el lector compartido: toca Promos igual que EOL.** El fallo no era
+solo de los EOL — cualquier CEA de promociones con esas dos columnas cobraba el
+precio anterior.
+
+Lo cubre `pruebas/cea_precio_nuevo.js` con los tres renglones reales del CEA
+265, el 257 al derecho, un PRICE MATCH con columna DESCUENTO y un CEA de una
+sola promo. **Comprobada rompiéndola**: con el bloque `pp` original vuelven los
+seis fallos con las cifras del comunicado.
+
+⚠️ **Lo que esto NO arregla, y sigue abierto:** que el precio leído llegue a la
+tienda. `saveEolFromPdf` manda `r.pr` —el **PRECIO REGULAR**— a `eol_guardar`, y
+`eol_precio_venta` lo divide entre dos. Así que en el Pura 80 Ultra la tienda
+calcula $19,999 cuando el CEA manda cobrar $23,698. Ver «El CEA 265 no es un CEA
+189» abajo.
+
+### El CEA 265 no es un CEA 189, y hoy se tratan igual *(10-sep-2026, abierto)*
+
+Dos comunicados distintos comparten la palabra EOL y el tablero los mete por la
+misma puerta, porque `parseEolPDF` deduce el estatus **del título**:
+
+| | CEA 189 · *Listado de artículos EOL* | CEA 265 · *Promociones EOL* |
+|---|---|---|
+| Columnas | SKU · DESCRIPCIÓN · ESTATUS | + REGULAR · ANTERIOR · NUEVA · 18/12/9/6 MSI |
+| Precio | **no trae** | lo dice, explícito |
+| Regla | última pieza de **exhibición** al 50% | precio nuevo para **el SKU**, ajuste manual en POS |
+| Vigencia | mientras haya pieza | fechas (7 al 30 de septiembre) |
+| Assurant | **pierde** elegibilidad | el CEA **no dice** que se pierda |
+
+⚠️ **Lo de Assurant es lo que más caro sale.** Marcar un CEA 265 como EOL le
+dice al equipo que ahí no se vende seguro, y eso pega directo en el KPI crítico
+—attach >25%— sobre ocho SKU de la serie que más se mueve.
+
+⚠️ Y los MSI: el 265 dice **por SKU** cuáles aplican. El Pura 80 6.6" a $8,890
+lleva 9 y 6 MSI, y la regla genérica de `msiInfo` —por importe— solo ofrecería 6
+por estar debajo de $10,000. La pestaña de Promos ya guarda los MSI del
+comunicado; la de EOL no.
+
 ---
 
 ## Cadena 4 · Autollenado en captura
