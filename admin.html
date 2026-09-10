@@ -390,12 +390,13 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
     </div>
     <div class="divider">o desde CEA de Promos (PDF)</div>
     <div class="card">
-      <h2>📎 Desde CEA de Promos (PDF)</h2>
-      <p class="note">Sube el PDF del CEA o del ADENDUM. La app saca los productos EOL: los que traen ESTATUS EOL en su renglón, y también los de un comunicado que ya es de EOL completo (como «PROMOCIONES EOL»), aunque su tabla no traiga esa columna.</p>
+      <h2>📎 Desde CEA de listado EOL (PDF)</h2>
+      <p class="note">Sube el PDF del CEA o del ADENDUM del <b>listado de artículos EOL</b> (el CEA 189 y sus adendums): los renglones con ESTATUS EOL, <b>sin precio</b>. Aquí la tienda cobra la última pieza de exhibición al <b>50% del precio regular</b>.<br><br>⚠️ Si el comunicado trae <b>precio de promoción</b> —como «PROMOCIONES EOL»— va por la pestaña <b>Promociones</b>, no por aquí: ahí se guarda el precio que el CEA manda cobrar, con su vigencia y sus MSI.</p>
       <input type="file" id="filePdfEol" accept="application/pdf,.pdf" hidden>
       <div class="filebox" id="fboxEol" onclick="document.getElementById('filePdfEol').click()">
         <div class="ph" id="fphEol">📄 Toca para elegir el PDF del CEA</div>
       </div>
+      <div class="result" id="resEol"></div>
     </div>
     <div id="previewEol" style="display:none">
       <div class="prev-hdr" id="prevHdrEol"></div>
@@ -2530,15 +2531,66 @@ async function parseEolPDF(file){
   return {rows,vig:t.vig};
 }
 
+/* ⚠️ Dos comunicados distintos comparten la palabra EOL, y por esta puerta solo
+   cabe uno.
+
+     · CEA 189 «LISTADO DE ARTÍCULOS EOL» → SKU · DESCRIPCIÓN · ESTATUS, SIN
+       precio. La regla es la última pieza de EXHIBICIÓN al 50% del regular, y
+       pierde garantía de fábrica y elegibilidad de Assurant.
+     · CEA 265 «PROMOCIONES EOL» → trae PRECIO REGULAR · PROMOCIÓN ANTERIOR ·
+       PROMOCIÓN NUEVA y los MSI por SKU. Es un PRECIO para el SKU, con
+       vigencia, y el comunicado NO dice que se pierda el seguro.
+
+   Metidos por aquí, los del segundo se guardan con el precio REGULAR y
+   `eol_precio_venta` cobra la mitad — un número que el CEA no dice en ninguna
+   parte, y que se equivoca en las dos direcciones (medido en el CEA 265 del
+   7-sep: $19,999 contra los $23,698 que manda cobrar; y $10,745 contra $8,890).
+
+   ⚠️ Y lo que más caro sale no es el precio: marcarlos EOL le dice al equipo
+   que ahí NO se vende seguro. Eso pega en el attach de Assurant, que es el KPI
+   crítico de la tienda, sobre la serie que más se mueve.
+
+   Por eso se avisa y NO se deja guardar: el camino bueno —la pestaña de
+   Promociones— ya guarda el precio del CEA con su vigencia y sus MSI. Si además
+   hay que marcarlos como no resurtibles, para eso está el listado 189, que por
+   aquí entra sin problema porque no trae precio. */
+function _eolFilasConPromo(rows){ return (rows||[]).filter(r=>r&&r.pp); }
+
 document.getElementById('filePdfEol').onchange=async function(e){
   const f=e.target.files&&e.target.files[0]; if(!f) return;
   const ph=document.getElementById('fphEol');
   const fbox=document.getElementById('fboxEol');
   fbox.classList.remove('ok'); ph.innerHTML='<em>Leyendo PDF…</em>';
   document.getElementById('previewEol').style.display='none';
+  /* Se vacía, no solo se esconde: sin esto el aviso del PDF anterior sigue
+     dentro del elemento y cualquier cosa que vuelva a enseñarlo —o que lo
+     lea— saca el texto de un comunicado que ya no está en pantalla. */
+  const res=document.getElementById('resEol');
+  res.className='result'; res.innerHTML='';
   try{
     const result=await parseEolPDF(f);
     if(!result.rows.length) throw new Error('No encontré productos EOL — ¿es el CEA con la tabla de promos?');
+
+    const conPromo=_eolFilasConPromo(result.rows);
+    if(conPromo.length){
+      /* Se enseña con el SKU de verdad y las dos cifras: "va por otra pestaña"
+         se discute, "aquí cobrarías $19,999 y el CEA dice $23,698" no. */
+      const ej=conPromo[0];
+      const num=s=>Number(String(s).replace(/[^0-9.]/g,''))||0;
+      const mitad=num(ej.pr)?('$'+(num(ej.pr)/2).toLocaleString('es-MX',{minimumFractionDigits:2})):'la mitad del regular';
+      fbox.classList.remove('ok');
+      ph.textContent='📄 Toca para elegir el PDF del CEA';
+      document.getElementById('btnSaveEol')._rows=null;
+      showResult('resEol',false,
+        `⚠️ <b>Este comunicado trae precio de promoción</b> (${conPromo.length} de ${result.rows.length} SKU).<br><br>`+
+        `Por aquí se guardaría el <b>precio regular</b> y la tienda cobraría la mitad. `+
+        `En el SKU <b>${ej.sku}</b> eso son <b>${mitad}</b>, y el CEA manda cobrar <b>$${ej.pp}</b>.<br><br>`+
+        `👉 Súbelo por la pestaña <b>Promociones</b>: ahí va el precio del CEA, su vigencia y los MSI que da por SKU — `+
+        `y los productos siguen siendo elegibles para Assurant.<br><br>`+
+        `Por esta pestaña van los <b>listados EOL sin precio</b> (CEA 189 y sus adendums).`);
+      return;
+    }
+
     fbox.classList.add('ok');
     ph.innerHTML=`✓ ${f.name}<br>${result.rows.length} SKU(s) EOL · vigencia ${result.vig||'no detectada'}`;
     document.getElementById('prevHdrEol').textContent=result.rows.length+' productos EOL encontrados:';
