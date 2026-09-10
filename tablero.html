@@ -594,6 +594,11 @@
       <span class="lbl">Total para el cliente</span>
       <span class="n" id="cotTotalPanel">$0</span>
     </div>
+    <!-- Los MSI van sobre el TOTAL, y por eso valen aquí más que en la tarjeta:
+         un reloj de $5,048 solo llega a 6 MSI, pero con un teléfono al lado la
+         cuenta pasa de $20,000 y alcanza 18. Es el argumento que cierra la
+         venta, y hasta ahora la cotización lo escondía. -->
+    <div class="seg-msi" id="cotMsi" style="margin:0 0 10px"></div>
     <!-- Se dice lo que ESTO no es. Un total en pantalla con el cliente delante
          se puede confundir con una venta hecha, y de aquí no sale ningún
          apartado ni se descuenta ninguna pieza. -->
@@ -1036,13 +1041,28 @@ function seguroPara(precio, sku) {
 // "American Express" completo la partía en dos líneas.
 const MSI_18_BANCOS = 'Citibanamex y Amex';
 
+/* Los plazos que alcanza un importe, de menor a mayor. UN SOLO SITIO: lo pintan
+   las tarjetas, lo escribe el WhatsApp del producto y lo suma la cotización.
+   Los umbrales estaban copiados en dos lugares y la cotización habría sido el
+   tercero; con tres copias, subir el mínimo de 6 MSI se hace en dos sitios y el
+   que falta no da error — solo deja de ofrecer meses que el cliente sí tiene. */
+function msiPlazos(total) {
+  const p = [];
+  if (total >= 1500)  p.push(6);
+  if (total >= 10000) p.push(12);
+  if (total >= 20000) p.push(18);
+  return p;
+}
+
 function msiInfo(total) {
   // La cuota va en <b>: es el número que el asesor dice en voz alta.
   const cuota = m => `<b>${money(Math.ceil(total/m))}</b>`;
-  if (total >= 20000) return `<span class="msi-badge msi-18">18 MSI · ${cuota(18)}/mes — ${MSI_18_BANCOS}</span> <span class="msi-badge msi-12">12 MSI · ${cuota(12)}/mes</span>`;
-  if (total >= 10000) return `<span class="msi-badge msi-12">12 MSI · ${cuota(12)}/mes</span> <span class="msi-badge msi-6">6 MSI · ${cuota(6)}/mes</span>`;
-  if (total >= 1500)  return `<span class="msi-badge msi-6">6 MSI · ${cuota(6)}/mes</span>`;
-  return '';
+  /* Los DOS plazos más largos, no todos: el badge vive en una tarjeta estrecha
+     y el plazo corto se deduce del largo. El orden es de mayor a menor porque
+     el que se dice primero es el que baja más la mensualidad. */
+  const dos = msiPlazos(total).slice(-2).reverse();
+  return dos.map(m => `<span class="msi-badge msi-${m}">${m} MSI · ${cuota(m)}/mes${
+    m === 18 ? ' — ' + MSI_18_BANCOS : ''}</span>`).join(' ');
 }
 /* Solo el total, grande. El desglose "2.690 + 299 seguro = 2.989" se retiró el
    8-ago-2026: ahora el chip dice lo que cuesta el seguro, así que la suma en
@@ -1238,6 +1258,11 @@ function cotPintar(){
     : '<div class="cot-linea" style="color:#a09895;justify-content:center">Todavía no has sumado nada.</div>';
   const t = document.getElementById('cotTotalPanel');
   if(t) t.textContent = money(cotTotal());
+  /* Se repinta en cada cambio, no una vez al abrir: quitar una línea puede
+     bajar el total por debajo de un umbral, y unos MSI que se quedaran de la
+     cuenta anterior serían meses ofrecidos que el cliente ya no tiene. */
+  const m = document.getElementById('cotMsi');
+  if(m) m.innerHTML = COT.length ? msiInfo(cotTotal()) : '';
 }
 
 function cotQuitar(i){ COT.splice(i, 1); cotGuardar(); cotPintar(); }
@@ -1262,8 +1287,16 @@ function cotCompartir(){
     return '• ' + (l.producto || ('SKU ' + l.sku)) + ' — ' + money(l.total)
          + (seg ? '\n   ' + seg.replace('🛡️ ', 'con ') + ' incluido' : '');
   }).join('\n');
+  /* Mismos plazos que el panel, escritos como en `compartirWA` para que el
+     cliente que recibe los dos mensajes lea lo mismo. Van sobre el TOTAL: es la
+     cuenta entera la que alcanza el plazo, no cada artículo por su lado. */
+  const plazos = msiPlazos(cotTotal());
+  const msi = plazos.length
+    ? '\n\n💳 ' + plazos.map(m => m + ' MSI' + (m === 18 ? '*' : '')).join(' · ') + ' disponibles'
+      + (plazos.indexOf(18) >= 0 ? '\n   *18 MSI con ' + MSI_18_BANCOS : '')
+    : '';
   const txt = 'Tu cotización HES Angelópolis:\n\n' + lin
-            + '\n\nTOTAL: ' + money(cotTotal())
+            + '\n\nTOTAL: ' + money(cotTotal()) + msi
             + '\n\n*Precios sujetos a disponibilidad.*';
   window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
 }
@@ -1426,10 +1459,10 @@ function compartirWA(prodEnc,sku,pv,pb,sinSeguro,incluyeEnc){
       }
     }
   }
-  const msi=[];
-  if(pv>=1500) msi.push('6 MSI');
-  if(pv>=10000) msi.push('12 MSI');
-  if(pv>=20000) msi.push('18 MSI*');
+  /* Aquí van TODOS los plazos, no los dos más largos: en un mensaje no hay
+     tarjeta estrecha que lo obligue, y el cliente elige. El asterisco del 18
+     avisa de la restricción de banco, igual que el badge la escribe entera. */
+  const msi=msiPlazos(pv).map(m=>m+' MSI'+(m===18?'*':''));
   if(msi.length) msg+='\n\n💳 '+msi.join(' · ')+' disponibles';
   msg+='\n\n_HES Angelópolis Puebla_';
   window.open('https://wa.me/?text='+encodeURIComponent(msg.trim()),'_blank');

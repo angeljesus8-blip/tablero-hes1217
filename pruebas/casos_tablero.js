@@ -357,3 +357,96 @@ aplicarTodo(Object.assign(_deSupabase(JSON.parse(JSON.stringify(TIENDA))), { __s
   document.getElementById = getIdOrig;
   COT = [];
 }
+
+/* ── 12 · Los MSI de la cotización salen del TOTAL (10-sep-2026) ─────────
+   Pedido en piso: «en la cotización no aparecen los msi».
+
+   ⚠️ Aquí es donde más valen, y por eso esconderlos costaba ventas: los plazos
+   se alcanzan por importe, y el importe de la cuenta entera es mayor que el de
+   cualquier artículo suelto. Un reloj de $5,048 llega a 6 MSI; con un teléfono
+   al lado la cuenta pasa de $20,000 y alcanza 18. El asesor tenía el argumento
+   delante y la pantalla no se lo decía.
+
+   ⚠️ Los umbrales viven en `msiPlazos` y NADA MÁS AHÍ. Estaban copiados en dos
+   sitios —el badge de la tarjeta y el WhatsApp del producto— y esto habría sido
+   el tercero. Con tres copias, mover el mínimo de 6 MSI se hace en dos y el que
+   falta no da error: solo deja de ofrecer meses que el cliente sí tiene. */
+{
+  COT = [];
+
+  /* ── Los umbrales, una sola vez ─────────────────────────────────────── */
+  ok('menos de $1,500 no alcanza ningún plazo', msiPlazos(1499).length === 0,
+     JSON.stringify(msiPlazos(1499)));
+  ok('desde $1,500 hay 6 MSI', JSON.stringify(msiPlazos(1500)) === '[6]',
+     JSON.stringify(msiPlazos(1500)));
+  ok('desde $10,000 hay 6 y 12', JSON.stringify(msiPlazos(10000)) === '[6,12]',
+     JSON.stringify(msiPlazos(10000)));
+  ok('desde $20,000 hay 6, 12 y 18', JSON.stringify(msiPlazos(20000)) === '[6,12,18]',
+     JSON.stringify(msiPlazos(20000)));
+
+  /* ── El badge de la tarjeta no cambió al unificar ────────────────────
+     `msiInfo` se reescribió sobre `msiPlazos`, así que lo que hay que probar
+     es que sigue enseñando lo mismo: los DOS plazos más largos, el mayor
+     primero, y el banco solo en los 18 —que es la única condición que
+     restringe—. */
+  const b6 = msiInfo(5048), b12 = msiInfo(12000), b18 = msiInfo(30047);
+  ok('con $5,048 el badge ofrece solo 6 MSI',
+     b6.indexOf('6 MSI') >= 0 && b6.indexOf('12 MSI') < 0, b6);
+  ok('con $12,000 ofrece 12 y 6, el mayor primero',
+     b12.indexOf('12 MSI') >= 0 && b12.indexOf('6 MSI') >= 0
+       && b12.indexOf('12 MSI') < b12.indexOf('6 MSI'), b12);
+  ok('con $30,047 ofrece 18 y 12, y NO baja a 6',
+     b18.indexOf('18 MSI') >= 0 && b18.indexOf('12 MSI') >= 0
+       && b18.indexOf('>6 MSI') < 0, b18);
+  ok('el banco se nombra solo en los 18',
+     b18.indexOf(MSI_18_BANCOS) >= 0 && b12.indexOf(MSI_18_BANCOS) < 0,
+     b12 + ' || ' + b18);
+  ok('sin importe no hay badge', msiInfo(0) === '', msiInfo(0));
+
+  /* ── El panel: el plazo sale de la suma, no de cada artículo ─────────── */
+  COT = [
+    { sku:'100295900', producto:'WATCH FIT 5',  total:5048,  seguro:1549, anios:1 },
+    { sku:'100269146', producto:'PURA 80 PRO', total:24999, seguro:0,    anios:0 }
+  ];
+  cotPintar();
+  const panel = document.getElementById('cotMsi').innerHTML;
+  ok('el panel dice 18 MSI aunque ningún artículo llegue solo',
+     panel.indexOf('18 MSI') >= 0, panel);
+  ok('y el reloj por su cuenta no llegaría', msiPlazos(5048).indexOf(18) < 0);
+
+  /* ⚠️ Se repinta al quitar, no solo al abrir. Quitar el teléfono baja la
+     cuenta a $5,048: unos 18 MSI que se quedaran de la cuenta anterior serían
+     meses ofrecidos al cliente que ya no tiene. */
+  cotQuitar(1);
+  const tras = document.getElementById('cotMsi').innerHTML;
+  ok('al quitar un artículo los MSI bajan con el total',
+     tras.indexOf('18 MSI') < 0 && tras.indexOf('6 MSI') >= 0, tras);
+
+  // Y vaciándola no queda ningún plazo colgado.
+  cotQuitar(0);
+  ok('la cotización vacía no ofrece plazos',
+     document.getElementById('cotMsi').innerHTML === '',
+     document.getElementById('cotMsi').innerHTML);
+
+  /* ── El mensaje que se le manda al cliente ───────────────────────────── */
+  COT = [
+    { sku:'100295900', producto:'WATCH FIT 5',  total:5048,  seguro:1549, anios:1 },
+    { sku:'100269146', producto:'PURA 80 PRO', total:24999, seguro:0,    anios:0 }
+  ];
+  let enviado = '';
+  const openOrig = window.open;
+  window.open = function(url){ enviado = decodeURIComponent(String(url)); };
+  cotCompartir();
+  window.open = openOrig;
+  ok('el mensaje lleva los plazos', enviado.indexOf('MSI') >= 0, enviado.slice(0, 160));
+  ok('los lleva TODOS, que en un mensaje sí caben',
+     enviado.indexOf('6 MSI') >= 0 && enviado.indexOf('12 MSI') >= 0
+       && enviado.indexOf('18 MSI') >= 0, enviado.slice(-160));
+  /* El asterisco sin su nota es una restricción que el cliente no puede leer. */
+  ok('y si hay 18, dice de qué bancos',
+     enviado.indexOf(MSI_18_BANCOS) >= 0, enviado.slice(-160));
+  ok('el total sigue siendo el de la cuenta',
+     enviado.indexOf(money(30047)) >= 0, enviado.slice(-160));
+
+  COT = [];
+}
