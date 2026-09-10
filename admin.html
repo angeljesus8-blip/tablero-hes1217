@@ -1908,14 +1908,30 @@ function _ceaEsPrecio(t,hayDolar){
   const n=_ceaNum(t); return n!==null&&n>=50;
 }
 
+/* Una columna de promo que NO es la que se cobra: el precio del que se viene,
+   puesto ahí para que se vea la rebaja. El CEA 265 la titula "PROMOCIÓN
+   ANTERIOR" y el 257 "PROMO ACTUAL" — las dos son el precio VIEJO. */
+const _CEA_PROMO_VIEJA=/ANTERIOR|ACTUAL|VIGENTE|PREVIA/i;
+
 /* Elige precio regular y precio a cobrar por la etiqueta de la columna; si el
    encabezado no se pudo leer, cae al primero y al último del renglón. */
 function _ceaPrecios(px,etiqueta){
   const como=(p,re)=>re.test(etiqueta(p.c)||'');
   const base=px.filter(p=>!como(p,_CEA_NO_PRECIO));
   const lista=base.length?base:px;
-  let pp = lista.find(p=>como(p,/NUEVA\s*PROMO/i))
+  /* ⚠️ Las dos palabras se buscan POR SEPARADO, no como frase. `/NUEVA\s*PROMO/`
+     casaba el "NUEVA PROMO" del CEA 257 y NO el "PROMOCIÓN NUEVA" del 265 —la
+     misma columna con las palabras al revés—, así que el 265 se caía al
+     comodín de abajo y ahí ganaba "PROMOCIÓN ANTERIOR" por estar antes en el
+     renglón: se cobraba el precio del que se venía. Medido contra el CEA 265
+     del 7-sep: $31,999 en vez de $23,698 en el Pura 80 Ultra. */
+  let pp = lista.find(p=>como(p,/NUEVA?\b/i)&&como(p,/PROMO/i))
         || lista.find(p=>como(p,/PRICE\s*MATCH/i))
+        /* Antes de tirar del comodín se descartan las columnas de precio viejo.
+           El último `find` las vuelve a admitir a propósito: un CEA cuya única
+           columna de promo sea "PROMO ACTUAL" tiene ahí el precio a cobrar, y
+           quedarse sin precio es peor que quedarse con ese. */
+        || lista.find(p=>como(p,/PROMO|OFERTA|ESPECIAL|PREVENTA/i)&&!como(p,_CEA_PROMO_VIEJA))
         || lista.find(p=>como(p,/PROMO|OFERTA|ESPECIAL|PREVENTA/i));
   let pr = lista.find(p=>como(p,/REGULAR|LISTA|P[UÚ]BLICO/i))
         || lista.find(p=>como(p,/VENTA/i))
