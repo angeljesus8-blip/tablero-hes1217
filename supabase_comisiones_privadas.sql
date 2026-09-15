@@ -1,6 +1,19 @@
 -- ============================================================
 --  Cada quien ve SU comisión — 6-sep-2026
 -- ============================================================
+--  ⚠️ YA NO ES LA VERSIÓN VIVA (15-sep-2026). La que está pegada en Supabase es
+--  la de `supabase_comisiones_gerente_correo.sql`, idéntica a esta más una
+--  línea: `admin_de(p_store)`, que es lo que deja al gerente DUEÑO —el que
+--  entra con el correo de la tienda y no tiene ficha de empleado— ver las
+--  comisiones del equipo.
+--
+--  Repegar ESTE archivo revierte aquello SIN DAR ERROR: el gerente vuelve a ver
+--  «entra con tu número de empleado» en su propia tienda y nada lo relaciona
+--  con haber pegado un .sql. Si hay que volver atrás a propósito, adelante —
+--  esa es justo la marcha atrás documentada allí—; si no, pega el otro.
+--
+--  Lo de abajo se conserva porque es donde se decidió QUÉ se protege y por qué.
+-- ============================================================
 --  Pedido en piso: «para el apartado de comisiones me gustaria que solamente
 --  cada integrante pudiera ver el suyo, a excepcion del gerente que podria ver
 --  el de todos».
