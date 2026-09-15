@@ -73,8 +73,8 @@ async function abrir(quien, servidor, cacheVieja){
     return Promise.resolve({ ok:true, status:200, json:()=>Promise.resolve(filas) });
   };
 
-  const ls = { hes_store: JSON.stringify(STORE) };
-  if(quien) ls.hes_empleado = JSON.stringify(quien);
+  const ls = { hes1217_store: JSON.stringify(STORE) };
+  if(quien) ls.hes1217_empleado = JSON.stringify(quien);
   if(cacheVieja){
     /* Tal cual la dejó la versión anterior: el equipo entero, ya mapeado a las
        claves de la pantalla, dentro del teléfono de un asesor. */
@@ -140,7 +140,7 @@ async function abrir(quien, servidor, cacheVieja){
 
   /* ── 4 · Quien entró con el PIN de la tienda ────────────────────────── */
   {
-    /* Sin `hes_empleado` no se sabe quién es. Enseñarle todo sería el agujero
+    /* Sin `hes1217_empleado` no se sabe quién es. Enseñarle todo sería el agujero
        más fácil de abrir —basta borrar una clave del localStorage—, y enseñarle
        «no hay comisiones» sería mentira y le haría pedirle al gerente que suba
        algo que ya está subido. */

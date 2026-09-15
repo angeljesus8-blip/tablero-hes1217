@@ -8,14 +8,19 @@
    daba error por ningún lado.
 
    1 · `arrancar()` le creía a `localStorage`.
-      La tienda salía de `hes_store`, y `localStorage` es POR ORIGEN: todas las
-      apps publicadas en el mismo usuario de GitHub Pages comparten el mismo, y
-      las tres claves de sesión no llevan prefijo de app. Con eso, cualquier
+      La tienda salía de una clave que entonces se llamaba `hes_store` a secas, y
+      `localStorage` es POR ORIGEN: todas las apps publicadas en el mismo usuario
+      de GitHub Pages comparten el mismo almacén, así que esa clave la escribían
+      los dos tableros —que ni siquiera usan la misma base—. Con eso, cualquier
       sesión abierta en ese navegador entraba aquí como gerente de la tienda que
       dijera esa clave. Después `cargarConfig` devolvía cuatro `null` —la RLS no
       da error, da CERO FILAS— y la app pintaba un horario salido del motor de
       rotación, con nombres de plantilla, rotulado «● Semana actual». Un horario
       inventado que se lee como el de verdad.
+
+      Desde el 14-sep-2026 cada app lleva su prefijo (`hes1217_` / `odemas_`),
+      pero eso solo SEPARA. Dentro de una misma app, quien manda en una tienda lo
+      sigue diciendo el servidor, y es lo que prueba este archivo.
 
    2 · El horario se leía UNA vez y nunca más.
       En el celular, volver a la app restaura la pantalla sin recargarla, así que
@@ -83,7 +88,7 @@ async function arrancarCon({ ls, session, manda }){
     })
   };
 
-  const ent = crearEntorno({ html, ruta:'/t/horarios.html', ls,
+  const ent = crearEntorno({ html, ruta:'/tablero-hes1217/horarios.html', ls,
                              extras:{ supabase: SUPABASE_FALSO } });
   if(ent.err) return { error: ent.err };
 
@@ -120,8 +125,8 @@ async function arrancarCon({ ls, session, manda }){
 {
   const r = await arrancarCon({
     session: SESION, manda: false,
-    ls: { hes_store: HES_STORE,
-          hes_empleado: JSON.stringify({ empno:'900003', nombre:'CARO ASESORA', puesto:'Asesor' }) }
+    ls: { hes1217_store: HES_STORE,
+          hes1217_empleado: JSON.stringify({ empno:'900003', nombre:'CARO ASESORA', puesto:'Asesor' }) }
   });
   ok('1 la página no arrancó', !r.error, r.error);
   if(!r.error){
@@ -143,7 +148,7 @@ async function arrancarCon({ ls, session, manda }){
    El login pelado no sirve: su sesión sigue abierta y volvería a entrar por el
    mismo camino. Se le dice qué pasa y se le ofrece cerrarla. */
 {
-  const r = await arrancarCon({ session: SESION, manda: false, ls: { hes_store: HES_STORE } });
+  const r = await arrancarCon({ session: SESION, manda: false, ls: { hes1217_store: HES_STORE } });
   ok('2 la página no arrancó', !r.error, r.error);
   if(!r.error){
     ok('2 sale el aviso de sin permiso', r.sinPermiso === true);
@@ -159,8 +164,8 @@ async function arrancarCon({ ls, session, manda }){
 {
   const r = await arrancarCon({
     session: SESION, manda: true,
-    ls: { hes_store: HES_STORE,
-          hes_empleado: JSON.stringify({ empno:'900002', nombre:'BENI SUBGER', puesto:'Subgerente' }) }
+    ls: { hes1217_store: HES_STORE,
+          hes1217_empleado: JSON.stringify({ empno:'900002', nombre:'BENI SUBGER', puesto:'Subgerente' }) }
   });
   ok('3 la página no arrancó', !r.error, r.error);
   if(!r.error){
@@ -176,8 +181,8 @@ async function arrancarCon({ ls, session, manda }){
 {
   const r = await arrancarCon({
     session: null, manda: false,
-    ls: { hes_store: HES_STORE,
-          hes_empleado: JSON.stringify({ empno:'900003', nombre:'CARO ASESORA', puesto:'Asesor' }) }
+    ls: { hes1217_store: HES_STORE,
+          hes1217_empleado: JSON.stringify({ empno:'900003', nombre:'CARO ASESORA', puesto:'Asesor' }) }
   });
   ok('4 la página no arrancó', !r.error, r.error);
   if(!r.error){
@@ -205,7 +210,7 @@ async function arrancarCon({ ls, session, manda }){
    vista de solo lectura, y el refresco se planta si no está. */
 {
   const r = await arrancarCon({
-    session: SESION, manda: true, ls: { hes_store: HES_STORE }
+    session: SESION, manda: true, ls: { hes1217_store: HES_STORE }
   });
   ok('5 la página no arrancó', !r.error, r.error);
   if(!r.error){

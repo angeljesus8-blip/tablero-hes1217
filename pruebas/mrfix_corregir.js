@@ -69,7 +69,7 @@ async function abrir(quien, dia){
 
   const ent = crearEntorno({
     html, ruta:'/t/captura_series.html', fetch: fetchFalso, confirm:true,
-    ls:{ hes_store: JSON.stringify(STORE), hes_empleado: JSON.stringify(quien) }
+    ls:{ hes1217_store: JSON.stringify(STORE), hes1217_empleado: JSON.stringify(quien) }
   });
   if(ent.err) return { error: ent.err };
 

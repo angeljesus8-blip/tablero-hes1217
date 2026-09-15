@@ -498,9 +498,9 @@ let items = JSON.parse(localStorage.getItem(KEY) || '[]');
 /* ====== NUBE: concentrado de ventas de todos (Hoja de Google) ====== */
 // Pega aquí la URL del Web App de Google Apps Script (termina en /exec):
 const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbwbZFsiDqZrNitPKNLqr4r6xOFu3VKprtXJacScftIJmcQdAl_yytjxK8BymWvy8I1gjA/exec';
-// Token del Apps Script: llega del login (hes_store), nunca escrito aquí —
+// Token del Apps Script: llega del login (hes1217_store), nunca escrito aquí —
 // este archivo es público. gasQS() lo pega a cada llamada.
-const _cfgCS = (function(){ try{ return JSON.parse(localStorage.getItem('hes_store')||'null'); }catch(e){ return null; } })();
+const _cfgCS = (function(){ try{ return JSON.parse(localStorage.getItem('hes1217_store')||'null'); }catch(e){ return null; } })();
 
 /* Sesión de antes del candado (1-ago-2026): no trae gas_token. Hoy el Apps
    Script todavía la deja pasar porque GAS_ESTRICTO está en false, pero en cuanto
@@ -2263,7 +2263,7 @@ function accPartirSkus(txt){
 }
 
 /* Arranca con lo que traiga la sesion, pero NO se queda ahi: `abrirAcc` se lo
-   pregunta al servidor. `hes_store` se escribe una vez, al entrar, y nunca se
+   pregunta al servidor. `hes1217_store` se escribe una vez, al entrar, y nunca se
    refresca —una sesion guardada antes de que el campo existiera se queda sin el
    para siempre—, que es justo por lo que la deteccion nacio apagada en todos
    los telefonos el 24-ago. */
@@ -3696,11 +3696,11 @@ function buildGate(){
        guardado el teléfono. Ahora lo dice él: una foto de esta pantalla basta
        para saber qué falta y dónde mirar. */
     var _diag = [];
-    try{ var _c = JSON.parse(localStorage.getItem('hes_store')||'null');
+    try{ var _c = JSON.parse(localStorage.getItem('hes1217_store')||'null');
          _diag.push('tienda ' + ((_c && _c.store_id) || '—'));
          _diag.push('equipo ' + ((_c && Array.isArray(_c.vendedores) ? _c.vendedores.length : 0)) + ' nombres');
     }catch(e){ _diag.push('sesión de tienda ilegible'); }
-    try{ var _e = JSON.parse(localStorage.getItem('hes_empleado')||'null');
+    try{ var _e = JSON.parse(localStorage.getItem('hes1217_empleado')||'null');
          _diag.push(_e && _e.nombre ? 'entró ' + _e.nombre : 'no se sabe quién entró');
     }catch(e){ _diag.push('empleado ilegible'); }
     if(navigator.serviceWorker && navigator.serviceWorker.controller){
@@ -3763,15 +3763,15 @@ function _esGestionCS(puesto){
   return _PUESTOS_GESTION_CS.some(function(x){ return p.indexOf(x) === 0; });
 }
 let _empCS = null;
-try{ _empCS = JSON.parse(localStorage.getItem('hes_empleado')||'null'); }catch(e){}   // sesión ilegible: se cae en el rol, como el tablero
+try{ _empCS = JSON.parse(localStorage.getItem('hes1217_empleado')||'null'); }catch(e){}   // sesión ilegible: se cae en el rol, como el tablero
 const MI_EMPNO = (_empCS && _empCS.empno) ? String(_empCS.empno) : '';
 const PUEDE_EDITAR = (_empCS && _empCS.puesto)
   ? _esGestionCS(_empCS.puesto)
-  : (localStorage.getItem('hes_role') === 'gerente');
+  : (localStorage.getItem('hes1217_role') === 'gerente');
 
 function vendedorDeLaSesion(){
   let emp = null;
-  try{ emp = JSON.parse(localStorage.getItem('hes_empleado')||'null'); }
+  try{ emp = JSON.parse(localStorage.getItem('hes1217_empleado')||'null'); }
   catch(e){ return ''; }   // sesión ilegible: se pregunta, como siempre
   const nombre = emp && emp.nombre;
   if(!nombre) return '';

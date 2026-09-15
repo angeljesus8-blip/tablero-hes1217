@@ -64,7 +64,7 @@ function conCatalogo(cat){
   const html = fs.readFileSync(path.join(raiz, 'captura_series.html'), 'utf8');
   const ent = crearEntorno({
     html, ruta:'/t/captura_series.html',
-    ls: { hes_store: JSON.stringify(STORE), hes_empleado: JSON.stringify(EMP) }
+    ls: { hes1217_store: JSON.stringify(STORE), hes1217_empleado: JSON.stringify(EMP) }
   });
   if(ent.err){ fallos.push('Captura no arranca: ' + ent.err); return null; }
   // `acc_codigos.js` es un <script src> que el entorno no baja: se inyecta.

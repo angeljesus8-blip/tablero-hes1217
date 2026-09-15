@@ -94,8 +94,8 @@
      archivo traia nombre completo, venta individual, alcance y monto de
      comision de cada persona. Los datos vienen de la nube (modo=comisiones). -->
 <script>
-/* ====== Sesión de tienda: sin hes_store no hay datos que mostrar ====== */
-const _storeConfig = (function(){ try{ return JSON.parse(localStorage.getItem('hes_store')||'null'); }catch(e){ return null; } })();
+/* ====== Sesión de tienda: sin hes1217_store no hay datos que mostrar ====== */
+const _storeConfig = (function(){ try{ return JSON.parse(localStorage.getItem('hes1217_store')||'null'); }catch(e){ return null; } })();
 
 /* Sesión de antes del candado (1-ago-2026): no trae gas_token. Hoy el Apps
    Script todavía la deja pasar porque GAS_ESTRICTO está en false, pero en cuanto
@@ -120,7 +120,7 @@ const _storeConfig = (function(){ try{ return JSON.parse(localStorage.getItem('h
 
 if(!_storeConfig || !_storeConfig.store_id){
   // Se avisa a continuidad.js de que esta salida es voluntaria. Hoy el menú ya
-  // no reanudaría —sin `hes_store` no reanuda nada—, pero eso es una casualidad
+  // no reanudaría —sin `hes1217_store` no reanuda nada—, pero eso es una casualidad
   // de dos condiciones que coinciden, y el día que una cambie esto sería un
   // bucle: comisiones → menú → comisiones.
   if(window.HES_salirAlMenu) window.HES_salirAlMenu();
@@ -157,7 +157,7 @@ let _yo = null;
 // Ficha ilegible: se sigue sin identidad, y sin identidad esta pantalla NO
 // enseña comisiones — se pide entrar con el número. Fallar hacia «no sé quién
 // eres» es lo correcto aquí; lo peligroso sería caer hacia «enséñalo todo».
-try{ _yo = JSON.parse(localStorage.getItem('hes_empleado')||'null'); }catch(e){}
+try{ _yo = JSON.parse(localStorage.getItem('hes1217_empleado')||'null'); }catch(e){}
 const MI_EMPNO = (_yo && _yo.empno) ? String(_yo.empno) : '';
 const VEO_TODAS = esPuestoDeGestion_(_yo && _yo.puesto);
 

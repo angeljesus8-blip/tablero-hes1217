@@ -51,8 +51,8 @@ function arrancar(empno, filas){
   const ent = crearEntorno({
     html: admin,
     ruta: '/t/admin.html',
-    ls: { hes_store: JSON.stringify(STORE), hes_role: 'gerente',
-          hes_empleado: JSON.stringify({ empno: empno, nombre:'Quien sea',
+    ls: { hes1217_store: JSON.stringify(STORE), hes1217_role: 'gerente',
+          hes1217_empleado: JSON.stringify({ empno: empno, nombre:'Quien sea',
                                          puesto:'Gerente de Tienda', admin:true }) }
   });
   if(!ent.err){
@@ -193,8 +193,8 @@ function bloque2(){
   const ent = crearEntorno({
     html: captura,
     ruta: '/t/captura_series.html',
-    ls: { hes_store: JSON.stringify(STORE),
-          hes_empleado: JSON.stringify({ empno:'1000001', nombre:'Quien sea',
+    ls: { hes1217_store: JSON.stringify(STORE),
+          hes1217_empleado: JSON.stringify({ empno:'1000001', nombre:'Quien sea',
                                          puesto:'Gerente de Tienda' }) }
   });
   if(ent.err){ fallos.push('Captura no arranca (bloque 2): ' + ent.err); return; }
