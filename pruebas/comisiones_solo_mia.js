@@ -18,6 +18,14 @@
 
    Los tres primeros son la misma trampa: el filtro parece puesto porque la
    ruta principal filtra, y sigue habiendo puertas que devuelven todo.
+
+   15-sep-2026 · Y una quinta, que es la contraria y también es un fallo: el
+   gerente DUEÑO entra con su correo, no tiene ficha de empleado y la pantalla
+   lo trataba como a un desconocido —«entra con tu número»— en su propia tienda.
+   Se añaden los casos 6 a 8. Lo que se vigila ahí no es solo que vea al equipo,
+   sino que lo vea porque el SERVIDOR lo autorizó: si la pantalla pinta el
+   equipo pero pregunta con la clave publicable, el servidor real devuelve cero
+   filas y lo que se ha construido es una pantalla que miente.
    ============================================================ */
 'use strict';
 const fs = require('fs'), path = require('path');
@@ -51,12 +59,26 @@ const esperar = () => new Promise(r => setTimeout(r, 30));
      'viejo'  – la función de un solo argumento: devuelve a TODOS (es el estado
                 real mientras el SQL no esté pegado)
      'nuevo'  – 404 a la firma vieja y filtrado de verdad a la nueva  */
-async function abrir(quien, servidor, cacheVieja){
+/* La sesión de correo y contraseña, como la sirve supabase-js. `manda` es lo
+   que contestará `admin_de` EN EL SERVIDOR: no lo decide el navegador. */
+const JWT = 'jwt-de-la-sesion';
+function supaFalso(manda){
+  return {
+    createClient: () => ({
+      auth: { getSession: () => Promise.resolve({ data:{ session:{ access_token: JWT,
+                                                                   user:{ email:'gerente@tienda.mx' } } } }) },
+      rpc: (nombre, args) => Promise.resolve({ data: nombre === 'admin_de' ? manda : null })
+    })
+  };
+}
+
+async function abrir(quien, servidor, cacheVieja, sesion){
   const llamadas = [];
   const fetchFalso = (url, opciones) => {
     let body = {};
     try{ body = JSON.parse((opciones && opciones.body) || '{}'); }catch(e){}
-    llamadas.push(body);
+    const auth = ((opciones && opciones.headers) || {}).Authorization || '';
+    llamadas.push(Object.assign({ _auth: auth }, body));
 
     const esNueva = ('p_empno' in body);
     if(servidor === 'nuevo' && !esNueva)
@@ -64,9 +86,15 @@ async function abrir(quien, servidor, cacheVieja){
 
     let filas = FILAS_TODAS;
     if(servidor === 'nuevo'){
-      // Lo que hará el SQL: gestión ve todo, cualquier otro solo su fila.
+      // Lo que hará el SQL: manda quien lo demuestre, cualquier otro solo su fila.
       const mando = String(body.p_empno || '');
-      const gestor = FILAS_TODAS.some(f => f.empno === mando && /gerente/i.test(f.puesto));
+      /* `admin_de(p_store)` mira `auth.uid()`, y `auth.uid()` sale del JWT. Con
+         la clave publicable no hay uid y responde que no — aunque la pantalla
+         crea que sí. Por eso aquí se mira la cabecera y no lo que diga el body:
+         es la diferencia entre proteger y aparentar. */
+      const porSesion = (sesion === 'manda') && auth === 'Bearer ' + JWT;
+      const gestor = porSesion
+        || FILAS_TODAS.some(f => f.empno === mando && /gerente/i.test(f.puesto));
       filas = gestor ? FILAS_TODAS : FILAS_TODAS.filter(f => f.empno === mando);
       if(!body.p_token) filas = [];          // sin token, nada
     }
@@ -86,7 +114,10 @@ async function abrir(quien, servidor, cacheVieja){
     });
   }
 
-  const ent = crearEntorno({ html, ruta:'/t/comisiones.html', fetch: fetchFalso, ls });
+  /* Sin `extras` no hay supabase-js, que es lo que pasa cuando el CDN no
+     responde: la pantalla tiene que seguir funcionando y caer del lado seguro. */
+  const extras = sesion ? { supabase: supaFalso(sesion === 'manda') } : {};
+  const ent = crearEntorno({ html, ruta:'/t/comisiones.html', fetch: fetchFalso, ls, extras });
   if(ent.err) return { error: ent.err };
   return { ent, llamadas, pantalla: () => ent.htmlDe('app'),
            cache: () => ent.lsJson('hes1217_comisiones') };
@@ -169,11 +200,88 @@ async function abrir(quien, servidor, cacheVieja){
     }
   }
 
+  /* ── 6 · El gerente dueño, que entra con su CORREO ──────────────────── */
+  {
+    /* No tiene ficha de empleado —su cuenta vive en `tiendas.user_id`—, así que
+       llega SIN `hes1217_empleado`: exactamente igual que un desconocido. La
+       diferencia la pone la sesión, y quién manda lo dice el servidor. */
+    const r = await abrir(null, 'nuevo', false, 'manda');
+    if(!r.error){
+      await esperar();
+      for(const n of AJENOS) ok('el gerente por correo ve a ' + n, r.pantalla().indexOf(n) >= 0,
+                                r.pantalla().slice(0, 200));
+      ok('y se titula como equipo', r.pantalla().indexOf('Equipo') >= 0);
+      ok('ya no se le pide el número', r.pantalla().indexOf('número de empleado') < 0);
+      ok('y no se queda en «comprobando»', r.pantalla().indexOf('Comprobando') < 0,
+         r.pantalla().slice(0, 200));
+      /* Lo que de verdad sostiene el caso: la consulta viaja FIRMADA con la
+         sesión. Si fuera con la clave publicable, el servidor no sabría quién
+         pregunta y devolvería cero filas — y esta prueba estaría comprobando
+         una pantalla que en producción sale vacía. */
+      const pedida = r.llamadas.find(l => 'p_empno' in l) || {};
+      ok('la consulta se firma con la sesión, no con la clave publicable',
+         pedida._auth === 'Bearer ' + JWT, JSON.stringify(pedida._auth));
+    }
+  }
+
+  /* ── 7 · Una sesión que NO manda en esta tienda ─────────────────────── */
+  {
+    /* Tener sesión abierta no es mandar aquí: `localStorage` lo comparten todas
+       las apps del mismo origen y una sesión de otra tienda llega igual. Es el
+       fallo que ya se cerró en el horario (`horario_sesion_ajena.js`), y aquí
+       tiene la misma respuesta: manda quien diga `admin_de`, no el navegador. */
+    /* Con caché vieja a propósito: es donde se vería. Si la pantalla se fiara de
+       «hay sesión» en vez de preguntar, el servidor no le daría una sola fila
+       —no manda— pero el teléfono ya tiene guardado el equipo entero de antes, y
+       lo pintaría sin que nada fallara. */
+    const r = await abrir(null, 'nuevo', true, 'ajena');
+    if(!r.error){
+      await esperar();
+      ok('con sesión ajena no se enseña ninguna comisión',
+         AJENOS.concat('CARO ASESORA').every(n => r.pantalla().indexOf(n) < 0),
+         r.pantalla().slice(0, 200));
+      ok('y tampoco se le deja la caché entera',
+         (r.cache() || {}).empleados.length === 0,
+         JSON.stringify((r.cache() || {}).empleados));
+      ok('y se le dice que entre con su número',
+         r.pantalla().indexOf('número de empleado') >= 0, r.pantalla().slice(0, 200));
+    }
+  }
+
+  /* ── 8 · La caché del teléfono, según quién resulte ser ─────────────── */
+  {
+    // Del gerente: es suya, y sin señal es lo único que le queda. No se tira.
+    const r = await abrir(null, 'nuevo', true, 'manda');
+    if(!r.error){
+      await esperar();
+      const g = r.cache();
+      ok('al gerente no se le vacía su caché',
+         g && g.empleados.length === FILAS_TODAS.length,
+         JSON.stringify(g && g.empleados.map(e => e.empNo)));
+    }
+  }
+  {
+    // De quien no se sabe quién es: se limpia, como siempre. Que ahora se
+    // pregunte antes no puede convertirse en una excusa para dejarla entera.
+    const r = await abrir(null, 'nuevo', true, null);
+    if(!r.error){
+      await esperar();
+      const g = r.cache();
+      ok('sin sesión y sin número, la caché se queda vacía',
+         g && g.empleados.length === 0,
+         JSON.stringify(g && g.empleados.map(e => e.empNo)));
+      ok('y no se pinta nada de lo que traía',
+         AJENOS.concat('CARO ASESORA').every(n => r.pantalla().indexOf(n) < 0),
+         r.pantalla().slice(0, 200));
+    }
+  }
+
   if(fallos.length){
     console.log('comisiones · solo la mía: ' + fallos.length + ' fallo(s)');
     fallos.forEach(f => console.log('   · ' + f));
     process.exit(1);
   }
-  console.log('comisiones · solo la mía: caché, respaldo y SQL sin pegar — por ninguna de las tres se cuela');
+  console.log('comisiones · solo la mía: caché, respaldo y SQL sin pegar — por ninguna de las tres se cuela; '
+            + 'y el gerente por correo sí ve al equipo, firmando con su sesión');
 
 })();
