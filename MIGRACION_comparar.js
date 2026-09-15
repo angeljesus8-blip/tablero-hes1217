@@ -22,7 +22,7 @@
    ============================================================ */
 
 (async () => {
-  const cfg = JSON.parse(localStorage.getItem('hes_store') || '{}');
+  const cfg = JSON.parse(localStorage.getItem('hes1217_store') || '{}');
   if (!cfg.gas_url || !cfg.gas_token) {
     console.error('No hay sesión. Entra al tablero con tu PIN y vuelve a correr esto.');
     return;

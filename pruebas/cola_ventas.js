@@ -38,8 +38,8 @@ function arrancar(extraLS){
   const ent = crearEntorno({
     html,
     ruta: '/t/captura_series.html',
-    ls: Object.assign({ hes_store: JSON.stringify(STORE),
-                        hes_empleado: JSON.stringify(EMP) }, extraLS || {})
+    ls: Object.assign({ hes1217_store: JSON.stringify(STORE),
+                        hes1217_empleado: JSON.stringify(EMP) }, extraLS || {})
   });
   return Object.assign(ent, {
     colaSb:  () => ent.lsJson('hes1217_sb_pend') || [],
@@ -220,7 +220,7 @@ const ok = (t, c, extra) => { if(!c) fallos.push(t + (extra ? ' -> ' + extra : '
    todos pasaría igual de desapercibido. */
 {
   const sub = { empno:'1000002', nombre:EQUIPO[1], puesto:'Subgerente de Tienda' };
-  const s = arrancar({ hes_empleado: JSON.stringify(sub) });
+  const s = arrancar({ hes1217_empleado: JSON.stringify(sub) });
   if(!s.err){
     ok('el subgerente sí puede abrir Ventas del día',
        s.el('btnCsv').style.display !== 'none',
@@ -241,7 +241,7 @@ const ok = (t, c, extra) => { if(!c) fallos.push(t + (extra ? ' -> ' + extra : '
 {
   // Asesor que NO es el de `hoja_auth`: sigue sin ver la lista, como siempre.
   const ases = { empno:'1000003', nombre:EQUIPO[0], puesto:'Asesor de Tienda' };
-  const s = arrancar({ hes_empleado: JSON.stringify(ases) });
+  const s = arrancar({ hes1217_empleado: JSON.stringify(ases) });
   if(!s.err){
     ok('y un asesor cualquiera sigue sin verla',
        s.el('btnCsv').style.display === 'none',
@@ -262,7 +262,7 @@ const ok = (t, c, extra) => { if(!c) fallos.push(t + (extra ? ' -> ' + extra : '
    viaje en balde. */
 {
   const sub = { empno:'1000002', nombre:EQUIPO[1], puesto:'Subgerente de Tienda' };
-  const s = arrancar({ hes_empleado: JSON.stringify(sub) });
+  const s = arrancar({ hes1217_empleado: JSON.stringify(sub) });
   if(!s.err){
     s.correr(`
       _vdVentas = [

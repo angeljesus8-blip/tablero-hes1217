@@ -63,7 +63,7 @@ const ok = (t, c, extra) => { if(!c) fallos.push(t + (extra ? ' -> ' + extra : '
    quedó escrito en cada uno de los cuatro sitios. */
 function verComo(opciones){
   const ent = crearEntorno({
-    html, ruta:'/t/horarios.html', extras:{ supabase: SUPABASE_FALSO }
+    html, ruta:'/tablero-hes1217/horarios.html', extras:{ supabase: SUPABASE_FALSO }
   });
   if(ent.err) return { error: ent.err };
 
@@ -164,7 +164,7 @@ const NOMBRES_AJENOS = ['BENI SUBGER', 'CARO ASESORA', 'DANI ASESOR'];
      consola —o un botón que quede pintado de una versión en caché— abre la
      tabla del equipo. Aquí ya no hay datos ajenos que enseñar, pero la guardia
      es lo que impide que un cambio futuro los devuelva por esta puerta. */
-  const ent = crearEntorno({ html, ruta:'/t/horarios.html', extras:{ supabase: SUPABASE_FALSO } });
+  const ent = crearEntorno({ html, ruta:'/tablero-hes1217/horarios.html', extras:{ supabase: SUPABASE_FALSO } });
   if(ent.err){ fallos.push('no arranca (bloque 6): ' + ent.err); }
   else{
     ent.correr('aplicarEquipo(' + JSON.stringify(EQUIPO) + ');');

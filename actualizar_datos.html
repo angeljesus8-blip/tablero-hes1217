@@ -126,7 +126,7 @@ const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbwbZFsiDqZrNitPKNLqr4
 // Config de la sesión. Antes había aquí una lista de nombres completos, en un
 // archivo público, y elegir uno era todo el "control de acceso". Ahora la
 // identidad sale del login que ya validó Supabase.
-const _cfgAD = (function(){ try{ return JSON.parse(localStorage.getItem('hes_store')||'null'); }catch(e){ return null; } })();
+const _cfgAD = (function(){ try{ return JSON.parse(localStorage.getItem('hes1217_store')||'null'); }catch(e){ return null; } })();
 
 /* Sesión de antes del candado (1-ago-2026): no trae gas_token. Hoy el Apps
    Script todavía la deja pasar porque GAS_ESTRICTO está en false, pero en cuanto

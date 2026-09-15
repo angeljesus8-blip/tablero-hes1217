@@ -63,7 +63,7 @@ async function capturar(conceptos){
 
   const ent = crearEntorno({
     html, ruta:'/t/captura_series.html', fetch: fetchFalso,
-    ls: { hes_store: JSON.stringify(STORE), hes_empleado: JSON.stringify(EMP) }
+    ls: { hes1217_store: JSON.stringify(STORE), hes1217_empleado: JSON.stringify(EMP) }
   });
   if(ent.err) return { error: ent.err };
 

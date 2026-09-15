@@ -661,7 +661,7 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
 </div>
 
 <script>
-const _cfg  = (function(){ try{ return JSON.parse(localStorage.getItem('hes_store')||'null'); }catch(e){ return null; } })();
+const _cfg  = (function(){ try{ return JSON.parse(localStorage.getItem('hes1217_store')||'null'); }catch(e){ return null; } })();
 
 /* Sesión de antes del candado (1-ago-2026): no trae gas_token. Hoy el Apps
    Script todavía la deja pasar porque GAS_ESTRICTO está en false, pero en cuanto
@@ -684,7 +684,7 @@ const _cfg  = (function(){ try{ return JSON.parse(localStorage.getItem('hes_stor
   else _pintar();
 })();
 
-const _role = localStorage.getItem('hes_role');
+const _role = localStorage.getItem('hes1217_role');
 const API   = (_cfg && _cfg.gas_url) ? _cfg.gas_url : 'https://script.google.com/macros/s/AKfycbwbZFsiDqZrNitPKNLqr4r6xOFu3VKprtXJacScftIJmcQdAl_yytjxK8BymWvy8I1gjA/exec';
 // Token del Apps Script: viene del login, nunca escrito aquí (archivo público).
 const GAS_TOKEN = (_cfg && _cfg.gas_token) || '';
@@ -718,7 +718,7 @@ let sb = null;
 function initSB(){ try{ if(!window.supabase) return false; sb=window.supabase.createClient(SB_URL,SB_KEY); return true; }catch(e){ return false; } }
 
 /* ===== ACCESO =====
-   Antes bastaba con que localStorage dijera hes_role=gerente, y eso lo puede
+   Antes bastaba con que localStorage dijera hes1217_role=gerente, y eso lo puede
    escribir cualquiera desde el navegador. Ahora la puerta es la SESIÓN de
    Supabase (el correo y contraseña con los que entras); si no hay sesión, queda
    el PIN, que se verifica en el servidor (función verificar_pin_admin) para que
@@ -755,7 +755,7 @@ function abrirAdmin(){
   try{
     if(_cfg && _cfg.admin_pin){
       delete _cfg.admin_pin;
-      localStorage.setItem('hes_store', JSON.stringify(_cfg));
+      localStorage.setItem('hes1217_store', JSON.stringify(_cfg));
     }
   }catch(e){}   // limpiar el admin_pin viejo es higiene, no requisito
 })();
@@ -774,7 +774,7 @@ async function verificarAcceso(){
 
   let emp = null;
   // Ficha ilegible: se cae al camino de sesion de gerente.
-  try{ emp = JSON.parse(localStorage.getItem('hes_empleado')||'null'); }catch(e){}
+  try{ emp = JSON.parse(localStorage.getItem('hes1217_empleado')||'null'); }catch(e){}
   const tienda = (_cfg && _cfg.store_id) || '';
   if(!emp || !emp.empno || !tienda) return { ok:false, motivo:'sin_identificar' };
 
@@ -1437,7 +1437,7 @@ let _catAccId = null;    // qué producto se edita; null = alta
 // él que sea gerente o subgerente: `puede_admin` deja entrar a Admin, pero
 // tocar el catálogo de accesorios es un permiso aparte.
 function _miEmpno(){
-  try{ const e = JSON.parse(localStorage.getItem('hes_empleado')||'null');
+  try{ const e = JSON.parse(localStorage.getItem('hes1217_empleado')||'null');
        return (e && e.empno) ? String(e.empno) : ''; }catch(e){ return ''; }
 }
 
@@ -3696,7 +3696,7 @@ document.getElementById('fboxGar').addEventListener('paste', function(e){ alPega
    ================================================================ */
 /* Pinta la config y DESPUES la refresca desde el servidor.
 
-   24-ago-2026: `_cfg` sale de `hes_store`, la sesion guardada en ESTE
+   24-ago-2026: `_cfg` sale de `hes1217_store`, la sesion guardada en ESTE
    dispositivo, que se escribe una vez al entrar y nunca se refresca. El gerente
    veia el campo de los codigos de reparacion VACIO teniendolos puestos en la
    base — y si guardaba desde ahi, los borraba de verdad.
@@ -3736,8 +3736,8 @@ async function refrescarConfig(){
        demas pantallas. Sin esto, el gerente ve el dato bueno en el formulario y
        la app sigue usando el viejo. */
     try{
-      const stored = JSON.parse(localStorage.getItem('hes_store')||'{}');
-      localStorage.setItem('hes_store', JSON.stringify(Object.assign({}, stored, data)));
+      const stored = JSON.parse(localStorage.getItem('hes1217_store')||'{}');
+      localStorage.setItem('hes1217_store', JSON.stringify(Object.assign({}, stored, data)));
       Object.assign(_cfg, data);
     }catch(e){}   // cuota llena: el formulario ya enseña lo bueno, que es lo que se venia a ver
   }catch(e){}     // nunca debe impedir abrir la pestaña
@@ -3760,9 +3760,9 @@ async function guardarConfig(){
   btn.innerHTML = '<span class="spin"></span>Guardando…';
 
   try{
-    const stored = JSON.parse(localStorage.getItem('hes_store')||'{}');
+    const stored = JSON.parse(localStorage.getItem('hes1217_store')||'{}');
     const updated = Object.assign({}, stored, {gas_url, sheet_url, hoja_auth, vendedores, sku_reparacion});
-    localStorage.setItem('hes_store', JSON.stringify(updated));
+    localStorage.setItem('hes1217_store', JSON.stringify(updated));
   }catch(e){}   // cuota llena: lo que importa es que quede en Supabase, abajo
 
   /* Antes esto decía "✅ Guardado" pasara lo que pasara: el catch solo escribía
