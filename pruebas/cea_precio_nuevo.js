@@ -41,10 +41,10 @@ const { crearEntorno } = require('./dom.js');
 const ent = crearEntorno({
   html: admin,
   ruta: '/t/admin.html',
-  ls: { hes_store: JSON.stringify({ store_id:'1217', nombre:'Angelopolis',
+  ls: { hes1217_store: JSON.stringify({ store_id:'1217', nombre:'Angelopolis',
                                     gas_token:'t', vendedores:[] }),
-        hes_role: 'gerente',
-        hes_empleado: JSON.stringify({ empno:'1000001', nombre:'Quien sea',
+        hes1217_role: 'gerente',
+        hes1217_empleado: JSON.stringify({ empno:'1000001', nombre:'Quien sea',
                                        puesto:'Gerente de Tienda', admin:true }) }
 });
 
