@@ -2128,15 +2128,35 @@ function mostrarVolverAlMenu() {
    HES Red, aquí no se le pregunta nada. Solo si no hay nada que heredar se
    enseña el login, que es el caso de la URL suelta (planeador-odemas).
 
-   El tablero deja tres cosas en localStorage al entrar: `hes_store` (la tienda),
-   `hes_role` y `hes_empleado` (quién es). Comparten origen y proyecto de
-   Supabase, así que la sesión de gerente vale tal cual. */
+   El tablero deja tres cosas en localStorage al entrar: la tienda, el rol y
+   quién es. Se heredan tal cual.
+
+   ⚠️ DE QUÉ TABLERO (14-sep-2026). Este archivo se publica en TRES sitios y
+   `localStorage` es por ORIGEN, no por carpeta: las tres apps viven bajo el
+   mismo `angeljesus8-blip.github.io` y comparten el mismo almacén. Mientras las
+   claves se llamaron `hes_store`/`hes_empleado`/`hes_role` a secas, el tablero
+   de la 1217 y el multi-tienda —que ni siquiera usan la misma base de datos— se
+   pisaban la sesión, y el planeador suelto heredaba la del tablero por
+   accidente. Ahora cada tablero tiene su prefijo y aquí se deduce de la ruta.
+
+   Fuera de esos dos, no se hereda NADA: en la URL suelta se entra por el login,
+   que es lo que hacen las tiendas sin tablero propio. Antes heredaba, pero
+   porque veía un almacén que no era suyo. */
+function prefijoDelTablero_() {
+  const p = location.pathname;
+  if (p.indexOf('/tablero-hes1217/') === 0) return 'hes1217_';
+  if (p.indexOf('/tablero-odemas/')  === 0) return 'odemas_';
+  return null;
+}
+
 function sesionDelTablero() {
+  const pre = prefijoDelTablero_();
+  if (!pre) return null;
   try {
-    const cfg = JSON.parse(localStorage.getItem('hes_store') || 'null');
+    const cfg = JSON.parse(localStorage.getItem(pre + 'store') || 'null');
     if (!cfg || !cfg.store_id) return null;
-    const emp = JSON.parse(localStorage.getItem('hes_empleado') || 'null');
-    return { cfg, emp, rol: localStorage.getItem('hes_role') };
+    const emp = JSON.parse(localStorage.getItem(pre + 'empleado') || 'null');
+    return { cfg, emp, rol: localStorage.getItem(pre + 'role') };
   } catch (e) { return null; }
 }
 
@@ -2163,13 +2183,13 @@ async function arrancar() {
   if (session) {
     let tienda = heredada ? heredada.cfg
       : (await _sb.from('tiendas').select(COLS_TIENDA).eq('user_id', session.user.id).maybeSingle()).data;
-    /* ⚠️ `heredada.cfg` sale de `localStorage`, y `localStorage` es POR ORIGEN:
-       todas las apps publicadas en el mismo usuario de GitHub Pages comparten
-       el mismo, y las tres claves de sesión (`hes_store`, `hes_empleado`,
-       `hes_role`) no llevan prefijo de app. O sea que «hay sesión» y «esta es
-       mi tienda» son dos cosas distintas, y creerle a la segunda porque se
-       cumple la primera es lo que hacía que una sesión ajena entrara aquí como
-       gerente. Se pregunta al servidor: `admin_de` responde que sí por los dos
+    /* ⚠️ `heredada.cfg` sale de `localStorage`, que lo comparten todas las apps
+       del mismo origen. Desde el 14-sep-2026 cada tablero tiene su prefijo, así
+       que ya no se pisan — pero el prefijo solo SEPARA: dentro de una misma app
+       «hay sesión» y «esta es mi tienda» siguen siendo dos cosas distintas, y
+       creerle a la segunda porque se cumple la primera es lo que hacía que una
+       sesión ajena entrara aquí como gerente. Quien manda lo dice el servidor,
+       no el navegador: `admin_de` responde que sí por los dos
        caminos —dueña de la tienda, o ficha activa con admin— así que el
        subgerente sigue editando, que es lo que se ganó el 4-ago-2026.
 
