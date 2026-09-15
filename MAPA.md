@@ -166,6 +166,46 @@ comprobados rompiendo su guardia**: firmar con la clave publicable en vez de con
 la sesión, y fiarse de que hay sesión sin preguntar si manda. Los dos se
 detectan.
 
+**Y la otra mitad, en `index.html` (v239).** `doLogin()` preguntaba por la ficha
+del equipo **solo si no encontraba tienda**, y el dueño la encuentra siempre, así
+que nunca llegaba a `vincular_mi_cuenta`. Ahora se pregunta siempre. Dos cosas
+que no son evidentes y que la prueba sujeta (`pruebas/login_por_correo.js`, la
+primera que tiene esta función):
+
+- **`esDuena` manda sobre el `admin` de la ficha.** Hasta que el dueño pudo
+  traer ficha, ese campo daba igual; en cuanto registra su correo empieza a
+  contar, y una ficha sin `admin` lo dejaría de asesor en su propia tienda —sin
+  Admin ni Resurtir— por haber hecho justo lo que se le pidió.
+- **Una ficha de otra tienda no se guarda.** Dejaría en el teléfono un número
+  que aquí no es de nadie, y las pantallas que identifican por número lo usarían
+  sin dudar.
+
+### Cadena 1-quater · Admin, con sesión de otra tienda *(15-sep-2026, v240)*
+
+Encontrado revisando lo anterior: `verificarAcceso()` abría Admin con
+**cualquier** sesión de Supabase abierta.
+
+```js
+const { data } = await sb.auth.getSession();
+if (data && data.session) return { ok:true, via:'sesión de gerente' };   // ← así estaba
+```
+
+La sesión, como el resto de `localStorage`, es **por origen**: la del tablero
+multi-tienda abría el Admin de la 1217. El gerente de cualquier otra tienda de
+la red entraba tecleando la URL, sin un solo error en pantalla. Mismo agujero
+que el horario cerró el 4-ago, misma respuesta: `admin_de(store_id)`, en el
+servidor. La pestaña **Equipo** lo pregunta también, aunque la RLS ya parase la
+escritura: si no, enseña el alta de accesos y la lista del equipo a quien no
+puede tocarlos.
+
+⚠️ **Lo que sujeta esta guardia no es el caso que cierra, son los que deja
+pasar.** Si no manda —o si `admin_de` no contesta— no se corta: se sigue al
+camino del número, que es como entra el subgerente y como entra el gerente
+cuando no hay señal. Una guardia que además deja fuera a quien tiene que pasar
+se quita a la semana, y entonces no queda ninguna. Los casos 3, 4 y 6 de
+`pruebas/admin_sesion_ajena.js` son exactamente eso, y el 5 es su límite: no
+poder comprobar tampoco significa «pasa».
+
 ---
 
 ## Cadena 2 · Escrituras al Apps Script — **ya no queda ninguna** *(17-ago-2026, v170)*
