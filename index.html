@@ -417,18 +417,34 @@ async function doLogin() {
   // apaga y el asesor vuelve a elegir a mano — sin que nada diga por que.
   const COLS = 'store_id,nombre,ciudad,gas_url,gas_token,sheet_url,hoja_auth,vendedores,sku_reparacion';
   let tienda = (await sb.from('tiendas').select(COLS).eq('user_id', data.user.id).maybeSingle()).data;
+  /* Si la cuenta es la DUEÑA, manda en la tienda pase lo que pase con la ficha.
+     Se apunta aquí porque abajo `tienda` puede rellenarse por el otro camino y
+     entonces ya no se distinguiría de quién llegó por su ficha. */
+  const esDuena = !!tienda;
   let ficha = null;
 
-  if (!tienda) {
-    const v = await sb.rpc('vincular_mi_cuenta');
-    const r = v.data;
-    if (r && r.ok) {
-      ficha = r;
-      tienda = (await sb.from('tiendas').select(COLS).eq('store_id', r.store_id).maybeSingle()).data;
-    } else if (v.error) {
-      console.warn('vincular_mi_cuenta no disponible:', v.error.message);
-    }
+  /* Se pregunta SIEMPRE por la ficha del equipo, no solo cuando no hay tienda
+     (15-sep-2026). El gerente dueño también puede tener la suya —basta que su
+     correo esté puesto en Admin → Equipo— y sin esto entraba sin número y sin
+     puesto: se borraba `hes1217_empleado` y cada pantalla que identifica por
+     número lo trataba como a un desconocido. Eso es lo que lo dejaba fuera de
+     sus propias comisiones (MAPA, cadena 1-ter).
+
+     Mientras su correo no esté en ninguna ficha, esto responde «sin ficha» y
+     todo sigue exactamente igual que antes: la llamada sobra, pero no cambia
+     nada. */
+  const v = await sb.rpc('vincular_mi_cuenta');
+  if (v.error) console.warn('vincular_mi_cuenta no disponible:', v.error.message);
+  else if (v.data && v.data.ok) ficha = v.data;
+
+  if (!tienda && ficha) {
+    tienda = (await sb.from('tiendas').select(COLS).eq('store_id', ficha.store_id).maybeSingle()).data;
   }
+
+  /* Una ficha de OTRA tienda no dice nada de ésta, y guardarla sería peor que
+     no tener ninguna: dejaría en el teléfono un número que aquí no es de nadie,
+     y las pantallas que identifican por número lo usarían sin dudar. */
+  if (ficha && tienda && String(ficha.store_id) !== String(tienda.store_id)) ficha = null;
   if (!tienda) {
     showErr('loginErr', ficha
       ? 'Tu cuenta quedó vinculada pero no pude leer la tienda. Avisa al gerente.'
@@ -436,8 +452,12 @@ async function doLogin() {
     return;
   }
   const cfg = { store_id:tienda.store_id, nombre:tienda.nombre, ciudad:tienda.ciudad||'', gas_url:tienda.gas_url||'', gas_token:tienda.gas_token||'', sheet_url:tienda.sheet_url||'', hoja_auth:tienda.hoja_auth||'', vendedores:Array.isArray(tienda.vendedores)?tienda.vendedores:[], sku_reparacion:tienda.sku_reparacion||'' };
-  // Quien entra por su ficha se identifica igual que si hubiera usado su número
-  const rol = (!ficha || ficha.admin) ? 'gerente' : 'asesor';
+  /* Quien entra por su ficha se identifica igual que si hubiera usado su número.
+     `esDuena` va primero desde el 15-sep-2026: ahora el dueño SÍ puede traer
+     ficha, y si la suya no tiene `admin` marcado —cosa que hasta hoy daba
+     igual—, esto lo habría degradado a asesor en su propia tienda, quitándole
+     Admin y Resurtir por haber registrado su correo. */
+  const rol = (esDuena || !ficha || ficha.admin) ? 'gerente' : 'asesor';
   localStorage.setItem('hes1217_store', JSON.stringify(cfg));
   localStorage.setItem('hes1217_role', rol);
   /* El puesto viaja igual que por el otro login (9-ago-2026). El tablero decide
