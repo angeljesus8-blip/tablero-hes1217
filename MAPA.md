@@ -120,6 +120,52 @@ esconde: es la que exige que el producto **siga apareciendo** en el buscador del
 asesor y no acabe en «ya no se maneja en la tienda» — pasar de *«se consigue»* a
 *«no lo pidas»* es peor que enseñarle la lista de pedidos.
 
+### Cadena 1-ter · El gerente que no tiene número *(15-sep-2026, v238)*
+
+**La misma familia de fallo, por tercera vez, y ahora en la pantalla del
+sueldo.** Entrando con su número, el gerente veía las comisiones del equipo.
+Entrando con su correo —la misma persona, la misma tienda— la pantalla le decía
+*«Para ver tu comisión, entra con tu número de empleado»*.
+
+Porque **el gerente dueño no tiene ficha de empleado**: su cuenta vive en
+`tiendas.user_id`, no en `empleados`. `doLogin()` lo encuentra por ahí, nunca
+llega a `vincular_mi_cuenta`, y su `else` hace `removeItem('hes1217_empleado')`.
+Comisiones lee esa clave y solo esa, así que le llegaba un desconocido — y a un
+desconocido, por diseño, no se le enseña nada (`supabase_comisiones_privadas.sql`).
+
+```
+comisiones.html
+   ↓ ¿hay hes1217_empleado?  → sí: puesto (gerente/subgerente) o su propia fila
+   ↓ no  → ¿hay sesión de correo?   ← la tercera vía, 15-sep-2026
+          ↓ admin_de(store) EN EL SERVIDOR
+          ↓ y la RPC se firma con el access_token, no con la clave publicable
+```
+
+**Las dos mitades hacen falta o esto no existe.** `comisiones_lista` lleva
+ahora `admin_de(p_store)` (`supabase_comisiones_gerente_correo.sql`), pero
+`admin_de` mira `auth.uid()` y con la clave publicable no hay uid: si la
+pantalla no mandara el JWT de la sesión, el servidor devolvería cero filas y se
+vería *«aún no hay comisiones cargadas»* — un fallo mudo, con aspecto de que
+falta subir el reporte. Por eso la prueba no comprueba que se pinte el equipo:
+comprueba **con qué cabecera se pidió**.
+
+**Aquí no vale el atajo del tablero.** Resurtir se resuelve cayendo en
+`ROLE === 'gerente'`, y está bien: lo peor que pasa es ver una lista de pedidos.
+Esto es el sueldo del equipo, así que quién manda lo dice `admin_de` y no el
+`localStorage`, que además lo comparten todas las apps del mismo origen (ver
+la regla `r_sesion_prefijada`). Una sesión de otra tienda llega hasta aquí igual
+que la propia; lo único que las distingue es preguntar.
+
+Se le pregunta **solo a quien no traiga ficha**: quien entra con su número no
+paga ni una llamada ni un milisegundo. Y mientras se pregunta, la caché del
+teléfono **no se borra** — si resulta ser el gerente, esa caché es suya y es lo
+único que le queda sin señal.
+
+Lo cubren los casos 6 a 8 de `pruebas/comisiones_solo_mia.js`, **los tres
+comprobados rompiendo su guardia**: firmar con la clave publicable en vez de con
+la sesión, y fiarse de que hay sesión sin preguntar si manda. Los dos se
+detectan.
+
 ---
 
 ## Cadena 2 · Escrituras al Apps Script — **ya no queda ninguna** *(17-ago-2026, v170)*

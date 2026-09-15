@@ -72,6 +72,15 @@
 </head>
 <body>
 <script src="./continuidad.js"></script>
+<!-- supabase-js (15-sep-2026). Aquí NO se usa para leer datos —eso sigue yendo
+     por `fetch` a la RPC— sino para una sola cosa: saber si quien abre esta
+     pantalla tiene una sesión de correo y contraseña, y poder preguntarle al
+     SERVIDOR si manda en esta tienda. Se lee la sesión con la biblioteca y no
+     del `localStorage` a mano porque el token caduca en una hora: leerlo crudo
+     daría 401 a la hora de haber entrado, y la pantalla se vería «sin datos».
+     Si el CDN no responde, no pasa nada grave: se sigue sin sesión, que es el
+     lado seguro — sin comisiones, no con las de todos. -->
+<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 
 
 <header>
@@ -159,7 +168,30 @@ let _yo = null;
 // eres» es lo correcto aquí; lo peligroso sería caer hacia «enséñalo todo».
 try{ _yo = JSON.parse(localStorage.getItem('hes1217_empleado')||'null'); }catch(e){}
 const MI_EMPNO = (_yo && _yo.empno) ? String(_yo.empno) : '';
-const VEO_TODAS = esPuestoDeGestion_(_yo && _yo.puesto);
+
+/* ⚠️ `let`, no `const`, desde el 15-sep-2026: hay una TERCERA forma de mandar
+   aquí y no se sabe al arrancar, hay que preguntarla.
+
+   Las dos que ya había van por la ficha de empleado. La tercera es el gerente
+   DUEÑO de la tienda, que entra con el correo de la tienda: su cuenta vive en
+   `tiendas.user_id` y no en `empleados`, así que `index.html` no le guarda
+   `hes1217_empleado` (ver el `else removeItem` de doLogin) y aquí llegaba sin
+   número y sin puesto — o sea, indistinguible de un desconocido. Resultado: el
+   gerente veía «entra con tu número de empleado» en su propia tienda.
+
+   Es la tercera vez que el mismo fallo sale por otro lado: la misma persona,
+   dos puertas de entrada, distinto resultado (MAPA, cadenas 1 y 1-bis). El
+   tablero ya lo resolvió cayendo en el rol; aquí NO vale ese atajo, porque el
+   rol lo escribe el navegador y esto es el sueldo del equipo. Se le pregunta al
+   servidor —`admin_de`, la misma que usa el horario— y él contesta. */
+let VEO_TODAS = esPuestoDeGestion_(_yo && _yo.puesto);
+
+/* Mientras no se sepa, esta pantalla no es «de nadie»: está preguntando. Solo
+   se pregunta cuando hace falta —sin ficha y sin puesto de gestión—, así que
+   para todo el que entra con su número esto vale `false` y no cambia nada: ni
+   una llamada de más, ni un milisegundo de espera. */
+const SESION_POR_RESOLVER = !VEO_TODAS && !MI_EMPNO;
+let _comprobandoSesion = SESION_POR_RESOLVER;
 
 let D = { empleados: [] };
 // Cache ilegible: se arranca vacio y la nube lo llena; si tampoco responde,
@@ -171,10 +203,23 @@ try{ const c = JSON.parse(localStorage.getItem(COMISKEY)||'null'); if(c && Array
    sueldo de sus compañeros —el dato ya está en SU teléfono— hasta que la nube
    contestara, y para siempre si no hay red. Se filtra al arrancar y se vuelve
    a guardar ya filtrada, así el dato viejo deja de existir ahí. */
+/* Lo que había guardado, antes de filtrar. Se conserva SOLO mientras se
+   pregunta al servidor quién eres: si resulta que mandas, es tu propia caché y
+   se te devuelve entera —así el gerente sin red sigue viendo al equipo—; si
+   resulta que no, se tira y se reescribe filtrada, igual que siempre. */
+const _cacheCruda = D.empleados;
 D.empleados = soloLoMio_(D.empleados);
 // Sin espacio para guardar: se pierde la limpieza de la caché, no el filtro —
 // lo que se pinta ya salió de `soloLoMio_`. Se reintenta en la próxima apertura.
-if(!VEO_TODAS){ try{ localStorage.setItem(COMISKEY, JSON.stringify(D)); }catch(e){} }
+// Mientras se pregunta no se reescribe: borrarla ahora sería tirar la del
+// gerente por una respuesta que aún no ha llegado.
+if(!VEO_TODAS && !SESION_POR_RESOLVER){ guardarCache_(); }
+function guardarCache_(){
+  // Callar es correcto: sin espacio para guardar se pierde la limpieza de la
+  // caché, no el filtro — lo que se pinta ya salió de `soloLoMio_`. Se reintenta
+  // en la próxima apertura, y avisar aquí no le daría a nadie nada que hacer.
+  try{ localStorage.setItem(COMISKEY, JSON.stringify(D)); }catch(e){}
+}
 
 /* La red de seguridad del cliente, para el rato en que el SQL nuevo todavía no
    está pegado y el servidor sigue devolviendo a todos. No sustituye al filtro
@@ -238,6 +283,16 @@ function render(){
      tienda en vez de con el número propio. Se dice qué falta y cómo se arregla:
      un «no hay comisiones» aquí sería mentira y mandaría a pedirle al gerente
      que suba algo que ya está subido. */
+  /* Todavía se le está preguntando al servidor si quien mira manda aquí. No es
+     lo mismo que «no sé quién eres»: decirle al gerente que entre con su número
+     y cambiárselo medio segundo después por el equipo entero es un parpadeo que
+     se lee como un fallo. Dura lo que tarde `admin_de`, y si el CDN no cargó
+     se resuelve solo con el DOMContentLoaded. */
+  if(_comprobandoSesion){
+    document.getElementById('app').innerHTML =
+      '<div class="nota">Comprobando tu sesión…</div>';
+    return;
+  }
   if(!VEO_TODAS && !MI_EMPNO){
     document.getElementById('app').innerHTML =
       '<div class="nota">Para ver tu comisión, entra con <b>tu número de empleado</b>. '
@@ -291,15 +346,60 @@ function avisoNube(msg){
 const SB_URL_CO = 'https://rjdrljtujbwooejrpyqv.supabase.co';
 const SB_KEY_CO = 'sb_publishable_mELjDmCaFpNOxcwPi5MB2A_qSZ5ZA2z';
 
+/* ── El gerente que entró con su correo (15-sep-2026) ─────────────────────
+   Tres piezas, y las tres hacen falta: sin biblioteca no hay sesión, sin sesión
+   no hay token, y sin token el servidor no tiene forma de saber quién pregunta
+   —la clave publicable no identifica a nadie, que es justo lo que la hace
+   publicable—. */
+
+// 1 · Esperar a supabase-js sin colgar la pantalla si el CDN no llega. El
+//     <script> es `defer`, así que ya está listo para el DOMContentLoaded; si
+//     falló la descarga, ese evento llega igual y se sigue sin sesión.
+function supaListo_(){
+  return new Promise(function(res){
+    function ya(){ res((window.supabase && window.supabase.createClient) ? window.supabase : null); }
+    if(window.supabase && window.supabase.createClient) return ya();
+    if(document.readyState !== 'loading') return ya();
+    addEventListener('DOMContentLoaded', ya);
+    // El CDN que ni responde ni falla: a los 5 s se sigue sin él.
+    setTimeout(ya, 5000);
+  });
+}
+
+// 2 · El token de la sesión, para que la RPC viaje firmada. Vacío = se pregunta
+//     con la clave publicable, igual que siempre.
+let _tokenSesion = '';
+
+/* 3 · ¿Manda en esta tienda? Lo dice el SERVIDOR. `admin_de` responde que sí
+   por los dos caminos —dueña de la tienda, o ficha activa con admin—, es la
+   misma que usa el horario, y con la clave publicable responde que no porque
+   `auth.uid()` viene vacío. Nada de esto se decide mirando `hes1217_role`: ese
+   lo escribe el navegador, y aquí se enseña el sueldo del equipo. */
+async function confirmarSesion_(){
+  try{
+    const lib = await supaListo_();
+    if(!lib) return false;
+    const cli = lib.createClient(SB_URL_CO, SB_KEY_CO);
+    const ses = ((await cli.auth.getSession()).data || {}).session;
+    if(!ses || !ses.access_token) return false;
+    _tokenSesion = ses.access_token;
+    const r = await cli.rpc('admin_de', { p_store_id: String(_storeId) });
+    return !!(r && r.data === true);
+  }catch(e){ return false; }
+}
+
 /* Una llamada a la RPC, con el cuerpo que se le pase. Separada para poder
    intentar la firma nueva y caer a la vieja sin repetir la fontanería. */
 async function _rpcComisiones(cuerpo){
   const ctl = new AbortController();
   const t = setTimeout(function(){ ctl.abort(); }, 8000);
   try{
+    /* Con sesión se firma con ella; sin sesión, con la clave publicable. Es lo
+       único que separa «soy el gerente de la 1217» de «traigo la clave que
+       viene dentro del HTML». */
     const r = await fetch(SB_URL_CO + '/rest/v1/rpc/comisiones_lista', {
       method:'POST', signal: ctl.signal,
-      headers:{ apikey:SB_KEY_CO, Authorization:'Bearer '+SB_KEY_CO, 'Content-Type':'application/json' },
+      headers:{ apikey:SB_KEY_CO, Authorization:'Bearer '+(_tokenSesion || SB_KEY_CO), 'Content-Type':'application/json' },
       body: JSON.stringify(cuerpo)
     });
     if(!r.ok) return null;
@@ -309,6 +409,7 @@ async function _rpcComisiones(cuerpo){
   finally{ clearTimeout(t); }
 }
 
+let _motivoVacio = '';
 async function comisionesDeSupabase(){
   if(!_storeId) return null;
   try{
@@ -322,6 +423,10 @@ async function comisionesDeSupabase(){
                                        p_token: GAS_TOKEN,
                                        p_empno: MI_EMPNO });
     if(filas === null) filas = await _rpcComisiones({ p_store: String(_storeId) });
+    /* «No contestó» y «contestó que no hay nada» acaban los dos en `null`, y para
+       quien mira significan cosas distintas. Se anota cuál fue para poder
+       avisar de lo que de verdad pasó. */
+    _motivoVacio = (filas === null) ? 'sin-respuesta' : 'vacio';
     if(!filas || !filas.length) return null;
     // Supabase devuelve filas; esta pantalla espera el objeto del Apps Script.
     return {
@@ -349,12 +454,42 @@ async function comisionesDeSupabase(){
 
 // Trae la versión más reciente desde la nube de esta tienda (si Admin ya la configuró)
 async function refreshComisionesCloud(){
+  /* Primero, quién mira — y solo si no se sabía ya. Va ANTES de pedir las
+     comisiones porque decide dos cosas de la misma petición: con qué se firma
+     y qué se puede pintar de lo que vuelva. */
+  if(SESION_POR_RESOLVER){
+    const manda = await confirmarSesion_();
+    _comprobandoSesion = false;
+    if(manda){
+      // Era su caché: se le devuelve entera mientras llega la nube. Sin esto, el
+      // gerente sin señal ve la pantalla vacía teniendo el dato en el teléfono.
+      VEO_TODAS = true;
+      D.empleados = _cacheCruda;
+    }else{
+      // No manda: ahora sí se limpia lo que quedó guardado de antes.
+      guardarCache_();
+    }
+    render();
+  }
+
   const sb = await comisionesDeSupabase();
   if(sb){
     D = sb;
-    localStorage.setItem(COMISKEY, JSON.stringify(D));
+    guardarCache_();
     pintarPeriodos();
     render();
+    return;
+  }
+
+  /* El servidor contestó, y contestó que nada — teniendo sesión de quien manda.
+     Son dos causas y el gerente no puede distinguirlas desde la pantalla, así
+     que se nombran las dos en vez de dejarle «no hay comisiones», que puede ser
+     falso. Este aviso vive exactamente en la ventana entre publicar la app y
+     pegar el SQL; cuando el permiso está aplicado, no aparece. */
+  if(_tokenSesion && VEO_TODAS && _motivoVacio === 'vacio'){
+    avisoNube('No llegaron comisiones. O todavía no se sube el reporte de este '
+            + 'periodo, o falta aplicar en Supabase el permiso del gerente por '
+            + 'correo (supabase_comisiones_gerente_correo.sql).');
     return;
   }
   if(!CLOUD_URL) return;
