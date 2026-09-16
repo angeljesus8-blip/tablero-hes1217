@@ -185,6 +185,36 @@
   /* Accesorios (18-ago-2026). Naranja para que no se confunda con capturar una
      venta con serie: es otro flujo y otra tabla. */
   .btn-acc{ background:var(--naranja); color:#fff; flex:1; }
+  /* Concurso ORO/PLATA (15-sep-2026). Dorado, que es de lo que va, y nunca de
+     los tres colores de marca: los de marca ya significan «con serie» y «Mr
+     Fix», y repetirlos aqui haria pensar que va a la misma tabla. No va. */
+  .btn-cn{ background:#b8860b; color:#fff; flex:1; }
+  /* ── Concurso ── */
+  .cn-tabs{ display:flex; gap:6px; margin-bottom:14px; }
+  .cn-tabs button{ flex:1; border:1px solid var(--linea); background:#fff;
+    border-radius:9px; padding:9px 4px; font:inherit; font-size:12.5px;
+    font-weight:700; color:#666; cursor:pointer; }
+  .cn-tabs button.on{ background:#b8860b; border-color:#b8860b; color:#fff; }
+  .cn-nivel{ display:inline-block; padding:3px 10px; border-radius:999px;
+    font-size:11.5px; font-weight:800; letter-spacing:.3px; }
+  .cn-oro{ background:#fdf3d4; color:#8a6400; }
+  .cn-plata{ background:#eef1f4; color:#5b6670; }
+  .cn-nada{ background:#fdeaea; color:#a33; }
+  .cn-fila{ display:flex; align-items:center; gap:9px; padding:9px 2px;
+    border-bottom:1px solid #f0f0f2; font-size:13px; }
+  .cn-fila b{ margin-left:auto; }
+  /* Ambar, no rojo: un producto sin papel NO es un error del asesor, es un
+     hueco de la tabla de roles. El rojo le diria que hizo algo mal. */
+  .cn-sinrol{ background:#fff7e6; border-left:3px solid #e0a300; }
+  .cn-marc{ width:100%; border-collapse:collapse; font-size:13.5px; }
+  .cn-marc th{ text-align:right; font-size:11px; color:var(--gris);
+    font-weight:800; padding:4px 6px; }
+  .cn-marc th:first-child{ text-align:left; }
+  .cn-marc td{ padding:10px 6px; border-top:1px solid #f0f0f2; text-align:right; }
+  .cn-marc td:first-child{ text-align:left; font-weight:700; }
+  .cn-aviso{ background:#fff7e6; border:1px solid #f0d089; border-radius:9px;
+    padding:10px 12px; font-size:12.5px; color:#7a5a00; line-height:1.45;
+    margin-bottom:10px; }
   /* Selector de tipo dentro del panel de Mr Fix (24-ago-2026). Empezó siendo un
      segundo botón en la barra y se juntó con el primero: son la misma venta del
      mismo proveedor, y lo que hay que separar son las TABLAS, no la pantalla.
@@ -387,6 +417,13 @@
 <body>
 <script src="./continuidad.js"></script>
 <script src="./acc_codigos.js"></script>
+<!-- Concurso ORO/PLATA (15-sep-2026). Tres archivos y no uno porque cada uno
+     contesta una pregunta distinta: qué dice el papel, qué papel juega cada
+     producto, y qué nivel alcanza el ticket. El de en medio es el que se va a
+     tocar cuando cambie la circular. -->
+<script src="./concurso_ticket.js"></script>
+<script src="./concurso_roles.js"></script>
+<script src="./concurso_nivel.js"></script>
 
 
 <!-- Pantalla de inicio: selección de vendedor -->
@@ -483,6 +520,8 @@
 
 <div class="footbar">
   <button class="btn btn-acc" id="btnAcc" title="Accesorios y reparaciones de Mr Fix">🔧 Mr Fix</button>
+  <button class="btn btn-cn" id="btnCn" onclick="abrirConcurso()"
+          title="Concurso de tickets Oro y Plata">🏆 Concurso</button>
   <button class="btn btn-csv" id="btnCsv">📋 Ventas del día</button>
   <div class="lock-msg" id="lockMsg">🔒 Solo <b>Laura</b> abre la hoja de ventas</div>
 </div>
@@ -3909,6 +3948,649 @@ reindexarPorSku(); // con lo que haya en caché, antes de que responda la nube
   });
 })();
 
+
+/* ============================================================
+   CONCURSO ORO / PLATA  (15-sep-2026)
+   ============================================================
+   El asesor fotografía el ticket COMPLETO, la app lo lee, lo califica y se lo
+   suma en el marcador. La regla no vive aquí: la reparten `concurso_roles.js`
+   (qué papel juega cada producto) y `concurso_nivel.js` (qué nivel alcanza).
+   Esto es sólo la pantalla.
+
+   ------------------------------------------------------------
+   POR QUÉ SE ENSEÑAN LAS LÍNEAS ANTES DE GUARDAR
+   ------------------------------------------------------------
+   Sería más corto leer la foto y decir «ORO» directamente. No se hace, y la
+   razón es que el OCR se equivoca en silencio: una línea que no lee baja el
+   ticket de ORO a PLATA con toda naturalidad, sin dar un solo error. El asesor
+   vería un nivel más bajo y no tendría a qué atribuirlo.
+
+   Enseñando las líneas, esa falta se ve: son doce artículos en el papel y once
+   en la pantalla. Es lo mismo que pidió Ángel para validar, sólo que puesto
+   ANTES de guardar en vez de después — cuando todavía se puede arreglar.
+   ============================================================ */
+
+let _cnPeriodo  = null;   // {id, desde, hasta, vigente, dias_restantes}
+let _cnTabla    = null;   // tabla de roles de Supabase, por SKU
+let _cnLeido    = null;   // lo último que se leyó: {res, lineas, nivel}
+let _cnFoto     = null;   // dataURL de la foto, para subirla al guardar
+let _cnGuardando = false;
+let _cnFilas    = [];     // la lista de validar, para no pedirla dos veces
+
+/* Anclas del ticket COMPLETO. No son las de accesorios: allí se buscaba la
+   línea del 43739 y aquí se busca que el papel entero esté enfocado, así que
+   se pide el pie (TOTAL) y la cabecera (Atendido por) a la vez. Un ticket
+   fotografiado a medias acierta las de arriba y falla las de abajo. */
+const CN_ANCLAS = [/atendido/i, /\bTOTAL\b/i, /articulo/i, /importe/i,
+                   /1217/, /reimprimir/i, /precio/i];
+
+/* Lee el ticket entero y devuelve el TEXTO, no un extracto: quien lo
+   interpreta es `concursoLeerTicket`, que sabe de líneas, garantías y
+   descuentos. Aquí sólo se le da el papel lo mejor leído posible.
+
+   Va a 2600 px y no a los 2200 de accesorios porque este ticket tiene doce
+   líneas y no una: con menos resolución, los SKU de nueve dígitos de la parte
+   baja del papel se leen con un dígito de más o de menos. */
+async function cnLeerFoto(file){
+  await loadTesseract();
+  const img = await new Promise((res, rej) => {
+    const i = new Image(); i.onload = () => res(i); i.onerror = rej;
+    i.src = URL.createObjectURL(file);
+  });
+  const worker = await Tesseract.createWorker('spa');
+  try{
+    let mejor = { giro:0, anclas:-1 };
+    for(const giro of [0, 90, 180, 270]){
+      const cv = accPreparar(img, giro, 900 / Math.max(img.width, img.height));
+      const { data } = await worker.recognize(cv);
+      const n = CN_ANCLAS.filter(re => re.test(data.text)).length;
+      if(n > mejor.anclas) mejor = { giro, anclas:n };
+      if(n >= 4) break;
+    }
+    const cv = accPreparar(img, mejor.giro,
+                 Math.min(2.6, 2600 / Math.max(img.width, img.height)));
+    const { data } = await worker.recognize(cv);
+    return data.text;
+  } finally { await worker.terminate(); }
+}
+
+/* ---------- Abrir y cerrar ---------- */
+window.abrirConcurso = async function(){
+  $('cnPanel').classList.add('show');
+  cnVista('subir');
+  if(!_cnPeriodo) await cnCargarConfig();
+};
+window.cerrarConcurso = function(){ $('cnPanel').classList.remove('show'); };
+
+async function cnCargarConfig(){
+  const filas = await sbCallCS('concurso_config', {}, 10000);
+  _cnPeriodo = (filas && filas[0]) || null;
+
+  /* La tabla de roles se trae UNA vez y se guarda: se consulta por cada línea
+     de cada ticket, y pedirla doce veces por foto es doce viajes que el asesor
+     espera de pie con el cliente enfrente. */
+  const roles = await sbCallCS('concurso_roles_lista', {}, 10000);
+  _cnTabla = {};
+  (roles || []).forEach(function(r){
+    _cnTabla[String(r.sku)] = { roles: r.roles || [], clase: r.clase, nota: r.nota };
+  });
+
+  const d = $('cnDias'), fuera = $('cnFuera');
+  if(!_cnPeriodo){
+    d.textContent = '—';
+    fuera.style.display = 'block';
+    fuera.innerHTML = 'No hay ningún concurso abierto ahora mismo. ' +
+      'Los tickets que subas no se van a poder guardar.';
+    return;
+  }
+  d.textContent = _cnPeriodo.vigente
+    ? (_cnPeriodo.dias_restantes + (_cnPeriodo.dias_restantes === 1 ? ' día' : ' días'))
+    : 'cerrado';
+  if(!_cnPeriodo.vigente){
+    fuera.style.display = 'block';
+    fuera.innerHTML = 'El concurso va del <b>' + cnFecha(_cnPeriodo.desde) +
+      '</b> al <b>' + cnFecha(_cnPeriodo.hasta) + '</b>, y hoy queda fuera. ' +
+      'Puedes mirar el marcador, pero no se admiten tickets nuevos.';
+  } else {
+    fuera.style.display = 'none';
+  }
+}
+
+function cnFecha(iso){
+  if(!iso) return '—';
+  const p = String(iso).slice(0,10).split('-');
+  return p.length === 3 ? (p[2] + '/' + p[1] + '/' + p[0]) : String(iso);
+}
+
+window.cnVista = function(cual){
+  const v = { subir:'cnVSubir', marcador:'cnVMarc', validar:'cnVVal' };
+  const t = { subir:'cnTabSubir', marcador:'cnTabMarc', validar:'cnTabVal' };
+  Object.keys(v).forEach(function(k){
+    $(v[k]).style.display = (k === cual) ? '' : 'none';
+    $(t[k]).classList.toggle('on', k === cual);
+  });
+  if(cual === 'marcador') cnCargarMarcador();
+  if(cual === 'validar')  cnCargarLista();
+};
+
+
+
+/* ---------- La foto ---------- */
+window.cnFoto = async function(inp){
+  const file = inp.files && inp.files[0];
+  inp.value = '';                       // para poder repetir la misma foto
+  if(!file) return;
+
+  $('cnResultado').style.display = 'none';
+  $('cnLeyendo').style.display = 'block';
+  _cnLeido = null; _cnFoto = null;
+
+  try{
+    /* La foto se guarda ANTES de leerla y en pequeño. Es lo único que sobrevive
+       a un OCR malo: con el papel guardado, un ticket mal leído se arregla
+       mirándolo; sin él, hay que pedirle al cliente el ticket que se llevó. */
+    _cnFoto = await cnMiniatura(file);
+    const texto = await cnLeerFoto(file);
+    const res   = concursoLeerTicket(texto);
+    const lin   = concursoAplicarRoles(res.lineas, _cnTabla);
+    _cnLeido = { res: res, lineas: lin, texto: texto };
+    cnPintarResultado();
+  }catch(e){
+    toast('No se pudo leer la foto', 'warn');
+    $('cnResultado').style.display = 'block';
+    $('cnResultado').innerHTML =
+      '<div class="cn-aviso">No se pudo leer esa foto (' +
+      cnEsc(String(e && e.message || e).slice(0,80)) + '). Inténtalo otra vez ' +
+      'con más luz y el ticket plano.</div>';
+  }finally{
+    $('cnLeyendo').style.display = 'none';
+  }
+};
+
+/* Igual que la de las ventas: ancho tope y JPEG, para que quepa en la base y
+   suba con la señal de la tienda. */
+function cnMiniatura(file){
+  return new Promise(function(res){
+    const i = new Image();
+    i.onload = function(){
+      const k = Math.min(1, 1100 / Math.max(i.width, i.height));
+      const cv = document.createElement('canvas');
+      cv.width = Math.round(i.width * k); cv.height = Math.round(i.height * k);
+      cv.getContext('2d').drawImage(i, 0, 0, cv.width, cv.height);
+      res(cv.toDataURL('image/jpeg', 0.72));
+    };
+    i.onerror = function(){ res(null); };
+    i.src = URL.createObjectURL(file);
+  });
+}
+
+/* ---------- Pintar lo leído ---------- */
+const CN_PAPEL = [
+  ['',        '— sin papel —'],
+  ['core',    'Producto Core'],
+  ['acc_hw',  'Accesorio Huawei'],
+  ['ts_serv', 'TechSmart / Servicio']
+];
+
+function cnPintarResultado(){
+  const L = _cnLeido; if(!L) return;
+  const res = L.res;
+  const cal = concursoCalificar(L.lineas);
+  L.nivel = cal;
+
+  const sinRol = concursoSinClasificar(L.lineas).length;
+  let h = '';
+
+  /* El nivel, primero y grande: es lo que el asesor abrió la pantalla a ver. */
+  const clase = cal.nivel === 'oro' ? 'cn-oro' : cal.nivel === 'plata' ? 'cn-plata' : 'cn-nada';
+  const etiq  = cal.nivel === 'oro' ? '🥇 ORO' : cal.nivel === 'plata' ? '🥈 PLATA' : 'No califica';
+  h += '<div style="text-align:center;margin-bottom:12px">' +
+       '<span class="cn-nivel ' + clase + '" style="font-size:15px;padding:7px 18px">' +
+       etiq + '</span>' +
+       '<div style="font-size:12.5px;color:var(--gris);margin-top:8px;line-height:1.5">' +
+       cnEsc(cal.porque) + '</div></div>';
+
+  /* Los avisos del lector: suma que no cuadra, línea sin cantidad, ticket sin
+     número. Van ARRIBA de las líneas y en ámbar porque son lo que decide si
+     este nivel se puede creer. */
+  (res.avisos || []).forEach(function(a){
+    h += '<div class="cn-aviso">⚠️ ' + cnEsc(a) + '</div>';
+  });
+  if(sinRol){
+    const aMano = L.lineas.some(function(l){
+      return l.clase === 'sin_rol' && l.nota === 'se lo quitó el asesor';
+    });
+    h += '<div class="cn-aviso">' +
+         (aMano
+           ? (sinRol === 1
+               ? 'Hay un producto sin papel. Elige uno en la lista, o vuelve a ' +
+                 'ponerle el que tenía.'
+               : 'Hay ' + sinRol + ' productos sin papel. Elige el suyo a cada ' +
+                 'uno, o vuelve a ponerles el que tenían.')
+           : (sinRol === 1
+               ? 'Hay un producto que no reconozco. Ponle el papel abajo.'
+               : 'Hay ' + sinRol + ' productos que no reconozco. Ponles el ' +
+                 'papel abajo.')) +
+         (sinRol === 1
+           ? ' Mientras le falte, este ticket no se puede guardar.</div>'
+           : ' Mientras les falte, este ticket no se puede guardar.</div>');
+  }
+
+  /* Cabecera del ticket, editable. El número y el vendedor se corrigen a mano
+     porque son los dos campos por los que se rechaza el guardado, y que el
+     asesor no pueda arreglarlos aquí lo dejaría atascado. */
+  h += '<div style="display:flex;gap:8px;margin-bottom:10px">' +
+       '<label style="flex:1;font-size:11.5px;color:var(--gris)">Ticket<br>' +
+       '<input id="cnTicket" value="' + cnEsc(res.ticket || '') + '" ' +
+       'style="width:100%;padding:8px;border:1px solid var(--linea);border-radius:8px;font:inherit"></label>' +
+       '<label style="flex:1;font-size:11.5px;color:var(--gris)">Fecha<br>' +
+       '<input id="cnFecha" value="' + cnEsc(res.fecha || '') + '" placeholder="dd/mm/aa" ' +
+       'style="width:100%;padding:8px;border:1px solid var(--linea);border-radius:8px;font:inherit"></label>' +
+       '</div>' +
+       '<label style="font-size:11.5px;color:var(--gris)">Atendido por<br>' +
+       '<input id="cnVend" value="' + cnEsc(res.vendedor || '') + '" ' +
+       'placeholder="APELLIDOS, NOMBRE" ' +
+       'style="width:100%;padding:8px;border:1px solid var(--linea);border-radius:8px;font:inherit;margin-bottom:12px"></label>';
+
+  /* Las líneas. Se enseñan TODAS, incluidas las que no juegan ningún papel:
+     lo que se está comprobando es que estén las doce del papel, y una lista
+     filtrada no sirve para contar. */
+  h += '<div class="vd-cab" style="margin-bottom:2px"><span>Artículos leídos</span>' +
+       '<b>' + L.lineas.length + '</b></div>';
+
+  L.lineas.forEach(function(l, i){
+    const amb = l.clase === 'sin_rol' ? ' cn-sinrol' : '';
+    h += '<div class="cn-fila' + amb + '" style="flex-wrap:wrap;padding:9px 6px">' +
+         '<div style="flex:1;min-width:0">' +
+         '<div style="font-weight:700;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+         cnEsc(l.nombre || l.desc || l.sku) + '</div>' +
+         '<div style="font-size:11px;color:var(--gris)">SKU ' + cnEsc(l.sku) +
+         ' · $' + cnMoneda(l.importe) +
+         (l.descuento ? ' · desc. $' + cnMoneda(l.descuento) : '') + '</div>' +
+         '</div>';
+    if(l.es_garantia){
+      h += '<span class="cn-nivel cn-plata">Garantía</span>';
+    }else{
+      h += '<select onchange="cnPapel(' + i + ', this.value)" ' +
+           'style="font:inherit;font-size:11.5px;padding:6px;border:1px solid var(--linea);border-radius:8px">';
+      const actual = (l.roles && l.roles[0]) || '';
+      CN_PAPEL.forEach(function(op){
+        h += '<option value="' + op[0] + '"' + (op[0] === actual ? ' selected' : '') +
+             '>' + op[1] + '</option>';
+      });
+      h += '</select>';
+    }
+    h += '</div>';
+  });
+
+  h += '<div class="cn-fila" style="font-weight:800"><span>Total del ticket</span>' +
+       '<b>$' + cnMoneda(res.total) + '</b></div>';
+
+  const dudoso = (res.avisos && res.avisos.length) ? true : false;
+  h += '<button class="btn" id="cnGuardar" onclick="cnGuardar()"' +
+       (sinRol ? ' disabled' : '') +
+       ' style="width:100%;margin-top:14px;color:#fff;background:' +
+       (sinRol ? '#c9c9cf' : dudoso ? '#8a6a1f' : '#b8860b') + '">' +
+       (sinRol ? 'Falta el papel de ' + sinRol +
+                 (sinRol === 1 ? ' producto' : ' productos')
+        : dudoso ? 'Guardar de todas formas'
+        : 'Guardar este ticket') + '</button>';
+  h += '<button class="btn" onclick="cnVerTexto()" ' +
+       'style="width:100%;margin-top:8px;background:#f2f2f4;color:#666;font-size:12px">' +
+       'Ver el texto que leyó</button>';
+
+  $('cnResultado').style.display = 'block';
+  $('cnResultado').innerHTML = h;
+}
+
+/* Cambiar el papel de una línea a mano. Recalcula el nivel al momento: el
+   asesor tiene que VER que ponerle «Accesorio Huawei» a la funda lo subió a
+   ORO, o no va a entender qué acaba de hacer. */
+window.cnPapel = function(i, rol){
+  if(!_cnLeido) return;
+  const l = _cnLeido.lineas[i];
+  l.roles = rol ? [rol] : [];
+  l.clase = rol ? rol : 'sin_rol';
+  l.nota  = rol ? 'puesto a mano' : 'se lo quitó el asesor';
+  cnPintarResultado();
+};
+
+/* El texto crudo del OCR. Existe por lo mismo que en accesorios: sin poder
+   verlo, «no lee bien mi ticket» no se puede depurar en piso — y aquí además
+   distingue dos cosas que se confunden, que la foto no cogiera una línea o
+   que el sistema la haya descartado. */
+window.cnVerTexto = function(){
+  if(!_cnLeido) return;
+  $('cnDetTitulo').textContent = 'Lo que leyó el OCR';
+  $('cnDetCuerpo').innerHTML =
+    '<p style="font-size:12px;color:var(--gris);line-height:1.5">' +
+    'Tal cual salió de la foto. Si aquí falta una línea, es que la foto no la ' +
+    'cogió — no que el sistema la haya descartado.</p>' +
+    '<pre style="font-size:11px;white-space:pre-wrap;word-break:break-word;' +
+    'background:#fafafa;border:1px solid var(--linea);border-radius:8px;padding:10px">' +
+    cnEsc(_cnLeido.texto || '') + '</pre>';
+  $('cnDetPanel').classList.add('show');
+};
+
+function cnEsc(t){
+  return String(t == null ? '' : t)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+function cnMoneda(n){
+  if(n == null || isNaN(n)) return '—';
+  return Number(n).toLocaleString('es-MX', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+
+
+
+/* ---------- Guardar ----------
+   La fecha sale del campo de texto, que el asesor puede haber corregido, y la
+   interpreta `concursoFechaISO` — la misma pieza que lee el ticket, y probada
+   en `pruebas/concurso_oro_plata.js`. Aquí no se vuelve a escribir: el día que
+   el POS cambie de formato, se cambia en un sitio. */
+window.cnGuardar = async function(){
+  if(!_cnLeido || _cnGuardando) return;
+  const L = _cnLeido;
+  const ticket = ($('cnTicket').value || '').trim();
+  const vend   = ($('cnVend').value   || '').trim();
+
+  if(!ticket){ toast('Falta el número de ticket', 'warn'); return; }
+  if(!vend){   toast('Falta quién lo vendió', 'warn');    return; }
+
+  /* Un producto sin papel es un ticket que puede estar mal calificado, así que
+     se para aquí. No es un capricho: si se guardara, el nivel quedaría grabado
+     contando ese artículo como si no existiera, y la pantalla de validar
+     enseñaría ese mismo nivel sin nada que delate el hueco. */
+  if(concursoSinClasificar(L.lineas).length){
+    toast('Ponle el papel a los productos en ámbar', 'warn');
+    return;
+  }
+
+  _cnGuardando = true;
+  const btn = $('cnGuardar');
+  const btnTxt = btn ? btn.textContent : '';
+  if(btn){ btn.disabled = true; btn.textContent = 'Guardando…'; }
+
+  /* El captura_id ata el ticket con su foto en `venta_fotos`. Mismo formato
+     que el de Mr Fix, con prefijo propio para que se vea de dónde salió. */
+  const capturaId = 'c' + Date.now() + Math.random().toString(36).slice(2,6);
+
+  const lineas = L.lineas.map(function(l, i){
+    return {
+      orden: i + 1, sku: l.sku, nombre: l.nombre || l.desc || '',
+      cantidad: l.cantidad, precio: l.precio, importe: l.importe,
+      descuento: l.descuento || 0, serie: l.serie || '',
+      es_garantia: !!l.es_garantia, clase: l.clase || '',
+      roles: l.roles || [], rol: cnRolUsado(L.nivel, i)
+    };
+  });
+
+  const d = await sbCallCS('concurso_guardar', {
+    p_token: GAS_TOKEN, p_ticket: ticket, p_atendido: vend,
+    p_fecha: concursoFechaISO($('cnFecha').value), p_hora: L.res.hora || null,
+    p_nivel: L.nivel.nivel, p_porque: L.nivel.porque, p_total: L.res.total,
+    p_lineas: lineas, p_captura_id: capturaId,
+    p_quien: MI_EMPNO || null,
+    p_ocr: L.texto || null, p_regla: 'core+2de3 v1',
+    p_avisos: (L.res.avisos && L.res.avisos.length) ? L.res.avisos : null
+  }, 20000);
+
+  _cnGuardando = false;
+  if(btn){ btn.disabled = false; btn.textContent = btnTxt; }
+
+  if(!d){ toast('Sin señal: no se guardó', 'warn'); return; }
+
+  /* OJO: el duplicado vuelve con `ok:true`, porque para el servidor no es un
+     fallo — el ticket está donde tiene que estar. Para esta pantalla SÍ lo es:
+     si se dejara seguir, se subiría la foto con un captura_id que no cuelga de
+     ningún ticket (una foto huérfana que nadie va a poder mirar) y se le diría
+     al asesor que acaba de guardar algo que ya estaba. */
+  if(d.duplicado){
+    const caja = document.createElement('div');
+    caja.className = 'cn-aviso';
+    caja.style.marginTop = '10px';
+    caja.textContent = d.error || 'Ese ticket ya estaba registrado';
+    if(btn) btn.parentNode.insertBefore(caja, btn.nextSibling);
+    return;
+  }
+
+  if(d.ok !== true){
+    /* El error se enseña ENTERO y donde estaba el botón, no en un toast que se
+       va en segundo y medio: los tres que manda el servidor —fuera de fechas,
+       no reconozco a quién, ya estaba— piden hacer algo distinto en cada caso,
+       y no se puede hacer nada con un mensaje que ya desapareció. */
+    const caja = document.createElement('div');
+    caja.className = 'cn-aviso';
+    caja.style.marginTop = '10px';
+    caja.textContent = d.error || 'No se pudo guardar';
+    if(btn) btn.parentNode.insertBefore(caja, btn.nextSibling);
+    return;
+  }
+
+  /* La foto va después y sin bloquear, igual que en las ventas. */
+  if(_cnFoto) subirFoto(capturaId, _cnFoto);
+
+  const nom = d.nivel === 'oro' ? '🥇 ORO' : d.nivel === 'plata' ? '🥈 PLATA' : 'sin nivel';
+  toast('Guardado · ' + nom, 'ok');
+
+  let extra = '';
+  /* Si el asesor no sale en el marcador de este periodo hay que decírselo AQUÍ.
+     Su ticket se guardó de verdad —no se perdió— pero si se va al marcador a
+     buscarse y no se encuentra, la conclusión natural es que falló, y lo va a
+     volver a subir. */
+  if(d.en_marcador === false){
+    extra = '<div class="cn-aviso" style="margin-top:10px">Tu ticket quedó ' +
+            'registrado, pero en este periodo el marcador es sólo de los ' +
+            'asesores inscritos, así que no vas a verte en él.</div>';
+  }
+
+  $('cnResultado').innerHTML =
+    '<div style="text-align:center;padding:16px 0">' +
+    '<div style="font-size:34px">' + (d.nivel === 'oro' ? '🥇' : d.nivel === 'plata' ? '🥈' : '📄') + '</div>' +
+    '<div style="font-weight:800;margin-top:6px">Ticket ' + cnEsc(ticket) + ' guardado</div>' +
+    '<div style="font-size:12.5px;color:var(--gris);margin-top:4px">' +
+    cnEsc(d.vendedor || vend) + ' · ' + cnEsc(nom) + '</div>' +
+    extra +
+    '<button class="btn" onclick="cnVista(\'marcador\')" ' +
+    'style="width:100%;margin-top:14px;background:#b8860b;color:#fff">Ver el marcador</button>' +
+    '<button class="btn" onclick="cnOtro()" ' +
+    'style="width:100%;margin-top:8px;background:#f2f2f4;color:#666">Subir otro ticket</button>' +
+    '</div>';
+  _cnLeido = null; _cnFoto = null;
+};
+
+/* Qué papel acabó jugando cada línea, para guardarlo. Se saca del reparto que
+   hizo `concursoCalificar`: es lo que permite que la pantalla de validar
+   explique POR QUÉ salió ese nivel y no otro, meses después. */
+function cnRolUsado(cal, i){
+  if(!cal || !cal.roles) return null;
+  const r = cal.roles;
+  for(const k in r) if(r.hasOwnProperty(k) && r[k] === i) return k;
+  return null;
+}
+
+window.cnOtro = function(){
+  $('cnResultado').style.display = 'none';
+  $('cnResultado').innerHTML = '';
+};
+
+/* ---------- Marcador ---------- */
+async function cnCargarMarcador(){
+  const cont = $('cnMarcador');
+  cont.innerHTML = '<p class="empty" style="font-size:13px">Cargando…</p>';
+  const filas = await sbCallCS('concurso_marcador', {}, 10000);
+  if(!filas){
+    cont.innerHTML = '<p class="empty" style="font-size:13px">Sin señal. ' +
+                     'Vuelve a abrir el marcador cuando haya.</p>';
+    return;
+  }
+  /* LISTA VACÍA: no es «nadie ha vendido». Es que no hay nadie dado de alta y
+     el servidor tampoco encontró tickets, y decirlo importa porque lo segundo
+     se arregla vendiendo y lo primero sólo desde Admin. */
+  if(!filas.length){
+    cont.innerHTML = '<p class="empty" style="font-size:13px;line-height:1.5">' +
+      'El marcador está vacío: no hay asesores inscritos ni tickets en este ' +
+      'periodo. Se dan de alta desde Admin.</p>';
+    return;
+  }
+
+  let h = '<table class="cn-marc"><tr><th>Asesor</th><th>🥇</th><th>🥈</th>' +
+          '<th>Tickets</th></tr>';
+  filas.forEach(function(f){
+    h += '<tr><td>' + cnEsc(f.vendedor) + '</td>' +
+         '<td style="font-weight:800;color:#8a6400">' + f.oro + '</td>' +
+         '<td style="font-weight:800;color:#5b6670">' + f.plata + '</td>' +
+         '<td style="color:var(--gris)">' + f.tickets + '</td></tr>';
+  });
+  h += '</table>';
+  if(_cnPeriodo){
+    h += '<p style="font-size:11.5px;color:var(--gris);margin-top:12px;' +
+         'text-align:center;line-height:1.5">Del ' + cnFecha(_cnPeriodo.desde) +
+         ' al ' + cnFecha(_cnPeriodo.hasta) + '</p>';
+  }
+  cont.innerHTML = h;
+}
+
+/* ---------- Validar: la lista ---------- */
+async function cnCargarLista(){
+  const cont = $('cnLista');
+  cont.innerHTML = '<p class="empty" style="font-size:13px">Cargando…</p>';
+  const filas = await sbCallCS('concurso_lista', {}, 12000);
+  if(!filas){
+    cont.innerHTML = '<p class="empty" style="font-size:13px">Sin señal.</p>';
+    return;
+  }
+  _cnFilas = filas;
+  if(!filas.length){
+    cont.innerHTML = '<p class="empty" style="font-size:13px">' +
+                     'Todavía no hay ningún ticket en este periodo.</p>';
+    return;
+  }
+  let h = '';
+  filas.forEach(function(f){
+    const clase = f.nivel === 'oro' ? 'cn-oro' : f.nivel === 'plata' ? 'cn-plata' : 'cn-nada';
+    const etiq  = f.nivel === 'oro' ? 'ORO' : f.nivel === 'plata' ? 'PLATA' : 'no califica';
+    h += '<div class="cn-fila" style="cursor:pointer" onclick="cnDetalle(' + f.id + ')">' +
+         '<div style="flex:1;min-width:0">' +
+         '<div style="font-weight:700;font-size:12.5px">#' + cnEsc(f.ticket) +
+         ' · ' + cnEsc(f.vendedor || f.atendido_por) + '</div>' +
+         '<div style="font-size:11px;color:var(--gris)">' + cnFecha(f.dia) +
+         ' · ' + f.articulos + ' art. · ' + f.garantias + ' gar. · $' + cnMoneda(f.total) +
+         ((f.avisos && f.avisos.length) ? ' · ⚠️' : '') + '</div>' +
+         '</div>' +
+         '<span class="cn-nivel ' + clase + '">' + etiq + '</span></div>';
+  });
+  cont.innerHTML = h;
+}
+
+/* ---------- Validar: el detalle de un ticket ---------- */
+window.cnDetalle = async function(id){
+  $('cnDetTitulo').textContent = 'Ticket';
+  $('cnDetCuerpo').innerHTML = '<p class="empty" style="font-size:13px">Cargando…</p>';
+  $('cnDetPanel').classList.add('show');
+
+  const lineas = await sbCallCS('concurso_detalle', { p_id: id }, 12000);
+  const t = _cnFilas.filter(function(x){ return x.id === id; })[0];
+
+  if(!lineas || !t){
+    $('cnDetCuerpo').innerHTML = '<p class="empty" style="font-size:13px">' +
+      'No se pudo traer el detalle.</p>';
+    return;
+  }
+
+  const clase = t.nivel === 'oro' ? 'cn-oro' : t.nivel === 'plata' ? 'cn-plata' : 'cn-nada';
+  const etiq  = t.nivel === 'oro' ? '🥇 ORO' : t.nivel === 'plata' ? '🥈 PLATA' : 'No califica';
+
+  let h = '<div style="text-align:center;margin-bottom:12px">' +
+    '<span class="cn-nivel ' + clase + '" style="font-size:14px;padding:6px 16px">' + etiq + '</span>' +
+    '<div style="font-size:12.5px;color:var(--gris);margin-top:8px;line-height:1.5">' +
+    cnEsc(t.porque || '') + '</div></div>';
+
+  h += '<div class="cn-fila"><span>Ticket</span><b>#' + cnEsc(t.ticket) + '</b></div>' +
+       '<div class="cn-fila"><span>Vendió</span><b>' + cnEsc(t.vendedor || t.atendido_por) + '</b></div>' +
+       '<div class="cn-fila"><span>Fecha</span><b>' + cnFecha(t.dia) + '</b></div>' +
+       '<div class="cn-fila"><span>Total</span><b>$' + cnMoneda(t.total) + '</b></div>';
+
+  (t.avisos || []).forEach(function(a){
+    h += '<div class="cn-aviso" style="margin-top:10px">⚠️ ' + cnEsc(a) + '</div>';
+  });
+
+  h += '<div class="vd-cab" style="margin-top:14px"><span>Artículos de esta venta</span>' +
+       '<b>' + lineas.length + '</b></div>';
+
+  const NOMBRE_ROL = { core:'Core', acc_hw:'Acc. Huawei', ts_serv:'TechSmart/Serv.' };
+  lineas.forEach(function(l){
+    h += '<div class="cn-fila">' +
+         '<div style="flex:1;min-width:0">' +
+         '<div style="font-weight:700;font-size:12.5px">' + cnEsc(l.nombre || l.sku) + '</div>' +
+         '<div style="font-size:11px;color:var(--gris)">SKU ' + cnEsc(l.sku) +
+         ' · $' + cnMoneda(l.importe) +
+         (l.descuento ? ' · desc. $' + cnMoneda(l.descuento) : '') + '</div></div>';
+    /* El papel que JUGÓ va marcado, y el que sólo podía jugar va en gris. Es lo
+       que contesta «¿por qué esto es plata y no oro?» sin tener que rehacer la
+       cuenta a mano: se ve qué casilla llenó cada artículo y cuál quedó sola. */
+    if(l.es_garantia){
+      h += '<span class="cn-nivel cn-plata">Garantía</span>';
+    }else if(l.rol){
+      h += '<span class="cn-nivel cn-oro">' + (NOMBRE_ROL[l.rol] || l.rol) + '</span>';
+    }else{
+      h += '<span style="font-size:11px;color:#bbb">' +
+           ((l.roles && l.roles.length) ? 'no hizo falta' : 'sin papel') + '</span>';
+    }
+    h += '</div>';
+  });
+
+  if(t.tiene_foto){
+    h += '<button class="btn" onclick="verFoto(\'' + cnEsc(t.captura_id) +
+         '\', \'Ticket #' + cnEsc(t.ticket) + '\')" ' +
+         'style="width:100%;margin-top:14px;background:#eee;color:#444">' +
+         '📷 Ver la foto del ticket</button>';
+  }else{
+    h += '<p style="font-size:11.5px;color:var(--gris);margin-top:14px;text-align:center">' +
+         'Sin foto: este ticket no se va a poder cotejar con el papel.</p>';
+  }
+
+  /* Borrar sólo gerente y subgerente. Esto ESCONDE, no impide: quien manda es
+     el token y el puesto que comprueba el servidor. */
+  if(PUEDE_EDITAR){
+    h += '<button class="btn" onclick="cnBorrar(' + id + ', this)" ' +
+         'style="width:100%;margin-top:8px;background:#fdeaea;color:#a33">' +
+         'Borrar este ticket</button>';
+  }
+
+  $('cnDetCuerpo').innerHTML = h;
+};
+
+window.cnCerrarDetalle = function(){ $('cnDetPanel').classList.remove('show'); };
+
+/* Sin `confirm()`: un diálogo del navegador bloquea la página entera si algo
+   sale mal a medias. Se pide el segundo toque en el propio botón, que además
+   deja ver qué se está a punto de borrar. */
+let _cnBorrarArmado = null;
+window.cnBorrar = async function(id, b){
+  if(_cnBorrarArmado !== id){
+    _cnBorrarArmado = id;
+    if(b){ b.textContent = 'Toca otra vez para borrarlo'; b.style.background = '#a33'; b.style.color = '#fff'; }
+    setTimeout(function(){
+      if(_cnBorrarArmado !== id) return;
+      _cnBorrarArmado = null;
+      if(b){ b.textContent = 'Borrar este ticket'; b.style.background = '#fdeaea'; b.style.color = '#a33'; }
+    }, 4000);
+    return;
+  }
+  _cnBorrarArmado = null;
+  const d = await sbCallCS('concurso_borrar', { p_token: GAS_TOKEN, p_id: id }, 12000);
+  if(!d || d.ok !== true){
+    toast((d && d.error) || 'No se pudo borrar', 'warn');
+    return;
+  }
+  toast('Ticket borrado', 'ok');
+  cnCerrarDetalle();
+  cnCargarLista();
+};
+
+
 refreshCatalogo(); // trae el catálogo más reciente de la nube
 refreshPromos();   // trae las promociones vigentes
 refreshEolVenta(); // trae los EOL con 50% activo (solo exhibición)
@@ -3935,6 +4617,89 @@ refreshEolVenta(); // trae los EOL con 50% activo (solo exhibición)
         Haz clic en una serie para copiarla
       </div>
     </div>
+  </div>
+</div>
+
+<!-- ── Concurso ORO / PLATA (15-sep-2026) ──────────────────────────────────
+     Tres vistas en un panel y no tres pantallas: subir, marcador y validar son
+     lo mismo visto de tres formas, y el asesor que acaba de subir un ticket
+     quiere ver el marcador SIN salir y volver a entrar.
+
+     z-index 76: encima del panel de Mr Fix (75), porque se puede abrir desde
+     él y taparlo es lo correcto. -->
+<div id="cnPanel" class="vd" style="z-index:76">
+  <div class="vd-box" style="max-height:94vh">
+    <div class="vd-top">
+      <h2>🏆 Concurso</h2>
+      <span class="n" id="cnDias">—</span>
+      <button class="vd-cerrar" onclick="cerrarConcurso()" aria-label="Cerrar">×</button>
+    </div>
+    <div class="vd-lista" style="padding:14px 16px">
+
+      <div class="cn-tabs">
+        <button id="cnTabSubir"  class="on" onclick="cnVista('subir')">📷 Subir ticket</button>
+        <button id="cnTabMarc"   onclick="cnVista('marcador')">🏅 Marcador</button>
+        <button id="cnTabVal"    onclick="cnVista('validar')">🔍 Validar</button>
+      </div>
+
+      <!-- ── Vista 1 · Subir ── -->
+      <div id="cnVSubir">
+        <div id="cnFuera" class="cn-aviso" style="display:none"></div>
+
+        <p style="font-size:12.5px;color:var(--gris);line-height:1.5;margin:0 0 12px">
+          Foto del <b>ticket completo</b>, de arriba abajo. Se lee solo y te dice
+          si salió Oro, Plata o no califica.
+        </p>
+
+        <label class="btn" for="cnFile"
+               style="display:block;text-align:center;background:#b8860b;color:#fff">
+          📷 Tomar foto del ticket</label>
+        <input id="cnFile" type="file" accept="image/*" capture="environment"
+               style="display:none" onchange="cnFoto(this)">
+
+        <div id="cnLeyendo" style="display:none;text-align:center;padding:22px 0;
+             font-size:13px;color:var(--gris)">
+          Leyendo el ticket…<br>
+          <span style="font-size:11.5px">Tarda unos segundos. No cierres la pantalla.</span>
+        </div>
+
+        <div id="cnResultado" style="display:none;margin-top:14px"></div>
+      </div>
+
+      <!-- ── Vista 2 · Marcador ── -->
+      <div id="cnVMarc" style="display:none">
+        <div id="cnMarcador">
+          <p class="empty" style="font-size:13px">Cargando…</p>
+        </div>
+      </div>
+
+      <!-- ── Vista 3 · Validar ── -->
+      <div id="cnVVal" style="display:none">
+        <p style="font-size:12.5px;color:var(--gris);line-height:1.5;margin:0 0 10px">
+          Todos los tickets del periodo. Toca uno para ver los artículos que se
+          fueron en esa venta.
+        </p>
+        <div id="cnLista"><p class="empty" style="font-size:13px">Cargando…</p></div>
+      </div>
+
+    </div>
+    <div class="vd-pie">
+      <button class="btn" style="width:100%;background:#eee;color:#444"
+              onclick="cerrarConcurso()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- El detalle de UN ticket. Panel propio y no un despliegue dentro de la
+     lista: aquí abajo va la foto, y con la foto dentro de la lista se pierde
+     de vista el ticket que se está mirando en cuanto se hace scroll. -->
+<div id="cnDetPanel" class="vd" style="z-index:77">
+  <div class="vd-box" style="max-height:94vh">
+    <div class="vd-top">
+      <h2 id="cnDetTitulo">Ticket</h2>
+      <button class="vd-cerrar" onclick="cnCerrarDetalle()" aria-label="Cerrar">×</button>
+    </div>
+    <div class="vd-lista" id="cnDetCuerpo" style="padding:14px 16px"></div>
   </div>
 </div>
 

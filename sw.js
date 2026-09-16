@@ -2,7 +2,7 @@ importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
 // ÚNICO lugar donde vive la versión de la app. Las páginas ya no la repiten:
 // registran './sw.js' con updateViaCache:'none' y el navegador detecta el
 // cambio al ver que este archivo es distinto. Subir el número aquí y ya.
-const VERSION = 'v240';
+const VERSION = 'v241';
 const CACHE = 'hes1217-' + VERSION;
 const ARCHIVOS = [
   './index.html',
@@ -19,6 +19,12 @@ const ARCHIVOS = [
   // La regla de los codigos de accesorio, compartida por captura_series
   // (adivina el producto) y admin (avisa de codigos que van a empatar).
   './acc_codigos.js',
+  // El concurso ORO/PLATA. Van al precache por la misma razon que todo lo de
+  // arriba: un <script src> que no llega NO rompe la pagina, deja la pestana
+  // abierta y sin reaccionar al boton. Falla callando.
+  './concurso_ticket.js',
+  './concurso_roles.js',
+  './concurso_nivel.js',
   // La fuente va al precache: si no, el primer arranque sin red dibuja el
   // tablero con otra letra, que es justo lo que se quiso evitar al traerla
   // del CDN al repo (8-ago-2026).
