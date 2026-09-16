@@ -28,8 +28,8 @@
 
    Para qué
    --------
-   Laura sube a otra plataforma el número de serie de cada equipo, uno
-   por uno, y necesita ver descripción y precio para cotejar. `ventas_hoy`
+   El número de serie de cada equipo se sube a otra plataforma, uno
+   por uno, y hay que ver descripción y precio para cotejar. `ventas_hoy`
    no sirve: devuelve conteos por vendedor para el leaderboard, no las
    series.
 
@@ -50,7 +50,7 @@
 //     payload = leerVentasDetalle_(e.parameter.fecha || '');
 
 /* ===================== VENTAS DEL DIA — DETALLE ===================== */
-// 2-ago-2026. Laura sube a otra plataforma la serie de cada equipo, una por una.
+// 2-ago-2026. las series se suben a otra plataforma una por una, a mano.
 // leerVentasHoy_ no sirve: devuelve conteos por vendedor para el leaderboard,
 // no las series. De ahi este modo, que usa Captura de Series.
 function leerVentasDetalle_(fecha) {

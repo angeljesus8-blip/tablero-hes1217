@@ -1,7 +1,7 @@
 # Modos del Apps Script que usa el tablero
 
-El GAS ("tablero 1217", vinculado a la hoja *ventas laura*) **no está en este
-repositorio** — vive en Google, y ese es un riesgo abierto: si se borra, se pierde
+El GAS ("tablero 1217", vinculado a su hoja de ventas, cuyo nombre exacto está en
+`_privado/nombres_operacion.txt` porque nombra a una persona) **no está en este repositorio** — vive en Google, y ese es un riesgo abierto: si se borra, se pierde
 entero (923 líneas). No hay copia en ningún otro lado. Esta nota deja registro de qué le pide la app y de
 los dos modos añadidos el 28-jul-2026.
 
@@ -35,8 +35,8 @@ contra ~20 s cuando van por separado (van de una en una porque Apps Script desca
 en silencio las llamadas encimadas).
 
 **`ventas_detalle`** (2-ago-2026) — devuelve las series del dia con su
-descripcion y precio. Laura las sube una por una a otra plataforma; `ventas_hoy`
-no le sirve porque solo cuenta ventas por vendedor. Lo consume el panel "Ventas
+descripcion y precio. Se suben una por una a otra plataforma; `ventas_hoy`
+no sirve porque solo cuenta ventas por vendedor. Lo consume el panel "Ventas
 del dia" de Captura de Series.
 
 ## Tres detalles de la hoja `Ventas` que hay que respetar

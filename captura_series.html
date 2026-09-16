@@ -305,7 +305,7 @@
   .vd.show{ display:flex; }
   .vd-box{ background:#fff; width:100%; max-width:560px; max-height:86vh;
     border-radius:20px 20px 0 0; display:flex; flex-direction:column; }
-  /* Laura las copia desde su laptop: en pantalla grande el panel se centra y
+  /* Se copian desde una laptop: en pantalla grande el panel se centra y
      se ve completo, en vez de quedar pegado abajo como hoja de celular. */
   @media (min-width:760px){
     .vd{ align-items:center; }
@@ -319,7 +319,7 @@
   .vd-top .n{ font-size:12px; color:var(--gris); font-weight:700; }
   .vd-cerrar{ background:none; border:none; font-size:26px; color:#bbb;
     cursor:pointer; line-height:1; padding:0 4px; }
-  /* Barra de días: Laura no siempre sube las series el mismo día que se venden,
+  /* Barra de días: las series no siempre se suben el mismo día que se venden,
      así que tiene que poder regresarse. Adelante de hoy no hay nada que ver. */
   .vd-nav{ display:flex; align-items:center; gap:8px; padding:9px 12px;
     border-bottom:1px solid var(--linea); background:#fafafa; }
@@ -523,7 +523,7 @@
   <button class="btn btn-cn" id="btnCn" onclick="abrirConcurso()"
           title="Concurso de tickets Oro y Plata">🏆 Concurso</button>
   <button class="btn btn-csv" id="btnCsv">📋 Ventas del día</button>
-  <div class="lock-msg" id="lockMsg">🔒 Solo <b>Laura</b> abre la hoja de ventas</div>
+  <div class="lock-msg" id="lockMsg">🔒 Solo quien tiene el permiso abre la hoja de ventas</div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -1599,8 +1599,8 @@ function fechaBonita(d){
   return _VD_DIAS[d.getDay()] + ' ' + d.getDate() + ' de ' + _VD_MESES[d.getMonth()];
 }
 
-/* Qué series ya copió, por día. Vive en este aparato: si Laura se distrae, cambia
-   de día y regresa, no pierde el hilo de dónde iba. Es una ayuda, no un registro:
+/* Qué series ya se copiaron, por día. Vive en este aparato: al cambiar
+   de día y regresar, no se pierde el hilo de dónde iba. Es una ayuda, no un registro:
    si se borra, se vuelven a ver todas — nunca se pierde una venta por esto. */
 const VDKEY = 'hes' + (_cfgCS && _cfgCS.store_id || '') + '_vd_copiadas';
 function _vdLeerMarcas(){
@@ -3595,7 +3595,7 @@ function vdIrHoy(){ cargarVentasDia(new Date()); }
 
 function cerrarVentasDia(){ $('vdPanel').classList.remove('show'); }
 
-/* Se copia UNA serie por toque: Laura las sube de una en una a la otra
+/* Se copia UNA serie por toque: se suben de una en una a la otra
    plataforma, así que copiar todas juntas no le sirve. La fila copiada se marca
    para no perder el hilo cuando son muchas. */
 async function copiarSerie(i){
@@ -3686,7 +3686,7 @@ const VKEY = 'hes1217_vend';
 // Quién puede abrir la hoja de ventas. Antes era un nombre escrito aquí; sale
 // de la config de tienda, campo hoja_auth (se edita en Admin -> Configuración).
 // OJO: se llamó "descarga_autorizada" por error del 1-ago-2026 y ese campo no
-// existe, así que el botón quedó oculto para todos, incluida Laura.
+// existe, así que el botón quedó oculto para todos, incluida quien lo usa.
 const DESCARGA_AUTORIZADA = (_cfgCS && _cfgCS.hoja_auth) || '';
 let currentVend = '';
 
