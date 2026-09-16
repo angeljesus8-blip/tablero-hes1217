@@ -51,7 +51,7 @@ falsa para siempre. Nada truena, simplemente nadie ve la función.
 *(2-ago-2026: `hoja_auth` decide quién ve las ventas del día en Captura de
 Series. El 1-ago se corrigió el nombre del campo en el cliente y se dio por
 cerrado, pero el SQL nunca lo entregó — el botón llevaba un día oculto para
-todos, incluida Laura, que es la única que lo usa. Lo cierra
+todos, incluida la única persona que lo usa. Lo cierra
 `supabase_hoja_auth.sql`.)*
 
 `verificar.py` ahora compara las dos listas: cada `data.X` que lee `index.html`
@@ -85,7 +85,7 @@ equivocado el día que se separen, sin que nadie lo notara.
 
 **Las dos puertas tienen que entregar el puesto, y la segunda no lo hacía.**
 `vincular_mi_cuenta` devolvía store_id, nombre, admin y empno — no el puesto — y
-`index.html` guardaba `puesto:''`. O sea que Miguel veía una cosa entrando con
+`index.html` guardaba `puesto:''`. O sea que el subgerente veía una cosa con
 su número y otra con su correo: la misma persona, el mismo puesto, distinta
 puerta. Es exactamente el fallo de `hoja_auth` de arriba, repetido. Lo cierra
 `supabase_puesto_en_sesion.sql`.
@@ -3014,6 +3014,116 @@ escrita a mano, y compara contra `_privado/datos_equipo.txt`. Si ese archivo no
 está, **falla**: no saber qué buscar no es lo mismo que no encontrar nada. Y
 `verificar.py` ya no se excluye a sí mismo — antes llevaba los apellidos dentro,
 o sea que el archivo que vigilaba la fuga era parte de la fuga.
+
+#### La lista de personas no escala, y por eso hay una regla que no la usa *(15-sep-2026)*
+
+`r_personales()` compara contra `_privado/datos_equipo.txt`: una lista de
+personas escrita a mano. En la 1217 son seis y no se mueven. En
+**`tablero-odemas` eso no funciona**, y lo dijo Ángel con la frase exacta del
+problema: *«cada gerente haría eso para cada asesor que se dé de alta y
+operativamente no lo veo viable»*. Tiene razón, y no es un detalle: las altas de
+asesor se hacen **desde la app**, no desde el repo —los 21 commits de odemas son
+todos de la misma cuenta—, así que nadie va a venir a anotar aquí a nadie. La
+lista se queda vieja el primer día, **y una lista vieja es peor que ninguna
+porque aparenta estar cubriendo**.
+
+`r_nombres_forma()` no pregunta quién es: pregunta si algo tiene **forma** de
+nombre de persona. Lo único que mantiene son los nombres de ejemplo
+—inventados, los mismos siempre—, y ésos no crecen con el equipo. **Coste por
+asesor dado de alta: cero.** Es la misma regla para una tienda que para
+cincuenta, y corre en los tres repos por el mismo `--solo-datos`.
+
+Tres formas, y las tres se midieron **antes** de apretarlas, porque una regla
+que grita en cuarenta archivos corrientes deja de leerse:
+
+| Forma | Qué caza | Ruido medido (1217 / odemas / horario) |
+|---|---|---|
+| Tres palabras Capitalizadas | «Nombre y dos apellidos» | 13 / 9 / 0 |
+| Detrás de etiqueta de persona | `atendido por`, `nombre_reporte` | 12 en total |
+| TRES MAYÚSCULAS + nº de empleado | una fila del concentrado | 9 / 8 / 0 |
+
+Lo que se **descartó**, con su número, para que no se vuelva a proponer:
+
+- **TRES MAYÚSCULAS sueltas**: 293 cadenas. Aun filtrando SQL y palabras vacías
+  se queda en 44 —catálogo de accesorios y basura del OCR—. Por eso se pide el
+  número de empleado al lado: una fila del concentrado siempre lo trae.
+- **El número de empleado de CINCO dígitos** es exactamente la forma de un SKU.
+  Pedirlo encendía los trece accesorios con nombre de tres palabras en alta, y
+  **ese catálogo crece**: sería otra lista que mantener. El de cinco sólo cuenta
+  si el renglón además dice `asesor`, `gerente`, `empleado`…
+- **`APELLIDOS, Nombre`** (como lo imprime el POS): 35 y 18, casi todas
+  `KEY, JSON` de desestructurar en JS.
+- **Aceptar minúscula tras la etiqueta**: costaba 21 fallas falsas, porque
+  `nombre_reporte text NOT NULL` se lee como una persona en cada `.sql`.
+
+Se auditó con **veinte cebos** armados desde `_privado/` —nunca tecleando un
+nombre, y corriendo la función de verdad, no una copia—. Se le iban ocho. Tres
+se arreglaron: la etiqueta sólo casaba en minúscula, la inicial con punto no
+contaba como palabra, y **el número de empleado se pedía de seis dígitos cuando
+los reales son de cinco y de seis** —la fila del concentrado pasaba por un
+dígito—. Los otros cinco están escritos en el docstring de la regla, con lo que
+costaría cerrarlos, para que no se descubran otra vez.
+
+El hueco que no se cierra: el **apellido suelto** de alguien de otra tienda. Una
+palabra capitalizada no se distingue de ninguna otra palabra. Para la gente de
+la 1217 lo cubre `r_personales()`; para el resto, nada puede.
+
+
+#### Y el mismo error, repetido: la tercera columna tampoco era viable *(15-sep-2026)*
+
+Quitado el mantenimiento a mano de `tablero-odemas`, se le volvió a pedir a
+Ángel exactamente lo mismo por otra puerta: **llenar a mano la tercera columna
+—los nombres de pila— en los dos `datos_equipo.txt`**. Lo paró otra vez:
+
+> «te dije que este no es viable»
+
+Tenía razón las dos veces. Y no hacía falta pedirlo: **`_privado/mapeo_nombres.sql`
+ya trae el `nombre_reporte` de cada persona**, que es «APELLIDOS NOMBRE».
+Quitándole los apellidos —que ya están en la lista— lo que queda es el nombre de
+pila. `_pilas_deducidas()` lo hace en cada commit, sin que nadie escriba nada, y
+ese archivo no se queda viejo por su cuenta: es el que cuadra las comisiones
+contra el Excel regional, así que si le falta alguien se nota en el sueldo de esa
+persona mucho antes que aquí. El aviso que pedía llenar la columna se quitó: un
+aviso que nadie va a atender enseña a no leer los avisos.
+
+Lo que deduce hoy, medido:
+
+| | |
+|---|---|
+| Palabras del mapeo que ya eran apellido | 10 (ya cubiertas) |
+| **Nombres de pila que ahora se vigilan** | **4** |
+| Del dueño del repo, fuera a propósito | 2 |
+| Hueco: nombres de **menos de 4 letras** | 1 |
+
+Los dos que se dejan fuera son deliberados. El del dueño porque su nombre es
+suyo y lo publica él —sale de `git config user.email`—; sin eso el repo fallaría
+por llevar la firma de quien lo firma. Los de menos de cuatro letras porque se
+buscan con frontera de palabra y tres letras casan con demasiada palabra
+corriente; **ése sí es un hueco real y está abierto.**
+
+⚠️ **Y al medirlo aparecieron dos fugas vivas.** Los nombres de pila de dos
+personas del equipo estaban en **22 sitios de 13 archivos ya publicados** de este
+repo (`tablero-odemas` y `horario-semanal` estaban limpios). No se cambiaron por
+un nombre inventado: se cambiaron por **el papel que hace esa persona** —«quien
+captura», «el subgerente»—. Un nombre inventado habría sido peor que el real,
+porque alguien lo buscaría en la tienda y no existe.
+
+Dos no se arreglaban sustituyendo:
+
+- `captura_series.html` decía «Solo *Fulana* abre la hoja de ventas» **en la
+  pantalla que ve el equipo**. Ahora dice «Solo quien tiene el permiso»: dice lo
+  mismo y no nombra a nadie.
+- `GAS_MODOS.md` nombraba **la pestaña del Sheet**, que sí tiene valor operativo
+  —un modo se apaga renombrándola—. El nombre se fue a
+  `_privado/nombres_operacion.txt` y la nota apunta ahí.
+
+Un detalle que costó una prueba falsa: en ese SQL **el número de empleado va
+entre comillas igual que el nombre**, así que la primera versión los dedujo como
+si fueran nombres. El cebo de punta a punta pareció pasar, pero lo que había
+cazado era un número, no un nombre. Con `isalpha()` la cuenta bajó de 8 a 4 —y
+ésa es la buena—.
+
+
 
 ⚠️ **Limpiar el HEAD no bastaba: los datos seguían en el historial.** Se
 reescribió con `git filter-repo` y se forzó el push. Cualquier clon anterior a

@@ -172,7 +172,7 @@ WHERE e.activo = true
             login_empleado → 5 empleados entran, los 5 con hoja_auth y token,
                              2 admins. Nada se rompió.
 
-   FALTA: que Laura SALGA y vuelva a ENTRAR en Captura de Series. La sesión
+   FALTA: SALIR y volver a ENTRAR en Captura de Series. La sesión
    se guarda en el aparato al entrar; con la vieja sigue sin hoja_auth y el
    botón sigue oculto aunque aquí ya esté todo bien.
    ============================================================ */

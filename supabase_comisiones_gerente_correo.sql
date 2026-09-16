@@ -17,8 +17,8 @@
 --
 --  Es EL MISMO fallo que el MAPA ya documenta dos veces (cadena 1 y 1-bis):
 --  la misma persona, dos puertas de entrada, distinto resultado. `hoja_auth`
---  costó dos días; `vincular_mi_cuenta` no devolvía el puesto y a Miguel le
---  aparecía Resurtir con su número y no con su correo. Esta es la tercera vez,
+--  costó dos días; `vincular_mi_cuenta` no devolvía el puesto y al subgerente
+--  le aparecía Resurtir con su número y no con su correo. Esta es la tercera vez,
 --  y ahora en la pantalla del sueldo.
 --
 --  Lo que cambia: se añade UNA condición —`admin_de(p_store)`— a la lista de
