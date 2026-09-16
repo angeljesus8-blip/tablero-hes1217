@@ -767,6 +767,10 @@ def r_git():
 # 1-ago-2026: el repo es público y traía nombres completos, números de empleado
 # y —en comisiones_datos.js— venta individual y monto de comisión de cada quien.
 PRIVADO = os.path.join('_privado', 'datos_equipo.txt')
+# Vive al lado de la lista y tampoco se versiona. Trae el `nombre_reporte` de
+# cada quien —«APELLIDOS NOMBRE»—, así que de ahí salen los nombres de pila sin
+# que nadie los escriba a mano. Ver `_pilas_deducidas`.
+MAPEO = 'mapeo_nombres.sql'
 # 15-sep-2026: esto era una lista BLANCA de once extensiones. Cada fuga por
 # extensión ha sido la misma frase: «es que .csv no estaba en la lista». Y las
 # que faltaban no eran raras —`.csv` es como sale el equipo del sistema, `.ps1`
@@ -790,6 +794,59 @@ def _espacios(s):
     un pegado le meta dos espacios. Comparar contra el texto tal cual escrito es
     comparar contra la maquetación."""
     return re.sub(r'\s+', ' ', s)
+
+
+def _duenno():
+    """Los trozos del nombre de quien firma los commits.
+
+    Su propio nombre no es una fuga: es suyo, y es él quien decide publicarlo.
+    Sin esto, la deducción de abajo lo metería en la lista y el repo fallaría por
+    llevar la firma de su propio dueño."""
+    trozos = set()
+    for clave in ('user.email', 'user.name'):
+        try:
+            r = subprocess.run(['git', 'config', '--get', clave], cwd=BASE,
+                               capture_output=True, text=True, timeout=10)
+        except Exception:
+            continue
+        if r.returncode == 0 and (r.stdout or '').strip():
+            trozos.add(_sin_acentos(r.stdout.strip().split('@')[0]))
+    return trozos
+
+
+def _pilas_deducidas(apellidos, sueltos):
+    """Los nombres de pila, SIN que nadie los teclee.
+
+    15-sep-2026. La tercera columna de `datos_equipo.txt` pedía escribir a mano
+    el nombre de pila de cada quien. Eso no lo hace nadie dos veces: en la 1217
+    son seis personas, pero en `tablero-odemas` cada gerente tendría que venir a
+    anotar aquí a cada asesor que da de alta desde la app. Una lista que se
+    mantiene a mano se queda vieja el primer día, y una lista vieja es peor que
+    ninguna porque aparenta estar cubriendo.
+
+    No hace falta teclearlos: `_privado/mapeo_nombres.sql` ya trae el
+    `nombre_reporte` de cada persona, que es «APELLIDOS NOMBRE». Quitándole los
+    apellidos —que ya están en la lista— lo que queda es el nombre de pila. Y
+    ese archivo no se queda viejo por su cuenta: es el que cuadra las comisiones
+    contra el Excel regional, así que si le falta alguien se nota en el sueldo
+    de esa persona mucho antes que aquí.
+
+    Se dejan fuera tres cosas: lo que no sea todo letras —en ese SQL el número
+    de empleado va entre comillas igual que el nombre, y colarlo aquí haría que
+    esta función dijera «nombre» donde hay un número—, los trozos del nombre del
+    dueño del repo, y lo que tenga menos de cuatro letras —se busca con frontera
+    de palabra, y tres letras casan con demasiada palabra corriente—."""
+    s = leer(os.path.join(os.path.dirname(PRIVADO), MAPEO))
+    if s is None: return []
+    s = '\n'.join(l for l in s.split('\n') if not l.strip().startswith('--'))
+    mio, fuera, pilas = _duenno(), set(sueltos), set()
+    for cadena in re.findall(r"'([^']{6,60})'", s):
+        for w in _sin_acentos(cadena).split():
+            if len(w) < 4 or not w.isalpha() or w in fuera: continue
+            if any(w in a.split() for a in apellidos): continue
+            if any(w in trozo for trozo in mio): continue
+            pilas.add(w)
+    return sorted(pilas)
 
 
 def _datos_equipo():
@@ -827,6 +884,11 @@ def _datos_equipo():
             for palabra in entero.split():
                 if len(palabra) >= 4: sueltos.append(palabra)
         if len(partes) > 1 and partes[1]: numeros.append(partes[1])
+    # La tercera columna viene vacía, y va a venir vacía siempre: es trabajo a
+    # mano y no escala a las demás tiendas. Los nombres de pila se deducen.
+    deducidas = _pilas_deducidas(apellidos, sueltos)
+    sueltos.extend(deducidas)
+    pilas.extend(deducidas)
     sueltos = sorted(set(w for w in sueltos if w not in salvo))
     return ((apellidos, sueltos, numeros, pilas)
             if (apellidos or sueltos or numeros) else None)
@@ -884,10 +946,15 @@ def r_personales():
         # Aviso y no falla: que falten no es una fuga, es media regla. Pero
         # callarlo sí lo sería — el POS imprime «APELLIDOS, NOMBRE» y el nombre
         # de pila se copia igual de fácil que el apellido.
-        aviso('datos', '%s no trae ningún nombre de pila (tercera columna, '
-                       '`apellidos | numero | nombres`). Sin ellos, un archivo '
-                       'que escriba solo el nombre de alguien pasa limpio.'
-              % PRIVADO)
+        #
+        # Esto ya no pide teclear nada: los nombres de pila salen solos del
+        # mapeo (ver `_pilas_deducidas`). Si este aviso aparece, es que tampoco
+        # está el mapeo, y entonces sí no hay de dónde sacarlos.
+        aviso('datos', 'no hay nombres de pila contra qué comparar: %s no trae '
+                       'tercera columna y falta %s, de donde se deducen solos. '
+                       'Sin ellos, un archivo que escriba solo el nombre de '
+                       'alguien pasa limpio.'
+              % (PRIVADO, os.path.join(os.path.dirname(PRIVADO), MAPEO)))
 
     publicados = por_publicar()
     if publicados is None:
@@ -921,7 +988,10 @@ def r_personales():
                 if re.search(r'(?<![\wáéíóúñ])%s(?![\wáéíóúñ])' % re.escape(w), plano):
                     hallado = w; break
         if hallado:
-            falla('datos', '%s trae un apellido del equipo ("%s"). Los datos '
+            # «un nombre», no «un apellido»: desde el 15-sep-2026 la lista lleva
+            # también los nombres de pila, deducidos del mapeo. Decir «apellido»
+            # mandaba a buscar lo que no era.
+            falla('datos', '%s trae un nombre del equipo ("%s"). Los datos '
                            'reales van en _privado/, no en el repo.'
                   % (p, hallado[:24]))
         for n in numeros:
@@ -949,6 +1019,216 @@ def r_personales():
         if hits:
             falla('datos', '%s parece traer un número de empleado (ej. "%s")'
                   % (p, str(hits[0])[:24]))
+
+
+# ── 4-bis · Nombres de persona, sin saber de quién ──────────────────
+# 15-sep-2026. `r_personales` compara contra una LISTA de personas, y esa lista
+# hay que mantenerla a mano. En la 1217 son seis y no se mueven. En
+# `tablero-odemas` no se puede: cada tienda tiene su gerente, y las altas de
+# asesor las hace cada quien desde la app, no desde el repo. Nadie va a venir a
+# anotar aquí a cada asesor que entre. La lista se queda vieja el primer día —y
+# una lista vieja es peor que ninguna, porque aparenta estar cubriendo.
+#
+# Esta regla no pregunta QUIÉN es. Pregunta si algo tiene FORMA de nombre de
+# persona. Lo único que se mantiene son los nombres de ejemplo —inventados, los
+# mismos siempre— y ésos no crecen con el equipo. Coste por asesor dado de alta:
+# cero. Sirve igual con una tienda que con cincuenta.
+#
+# Tres formas, y las tres se midieron sobre los tres repos antes de apretarlas,
+# porque una regla que grita en cuarenta archivos corrientes deja de leerse:
+#
+#   1. Tres palabras Capitalizadas .......... 13 + 9 + 0 cadenas distintas.
+#   2. Detrás de una etiqueta de persona .... 12 en total. La etiqueta `nombre`
+#      a secas daba 347: arrastra producto («Mica HR») y código (`nombres.map`).
+#   3. TRES MAYÚSCULAS —como sale del concentrado— sólo en un renglón que además
+#      lleva un número de empleado ......... 9 + 8 + 0. Suelta daba 293 y hubo
+#      que descartarla; con el número al lado no se parece a nada más, y es la
+#      única que caza el concentrado de una tienda AJENA, que es justo lo que
+#      `r_personales` no puede ver.
+
+# Nombres inventados que sí pueden aparecer. Ninguno es de nadie.
+NOMBRES_EJEMPLO = (
+    'ana ramirez solis', 'luis ortega vidal', 'jesus ortega vidal',
+    'elena navarro galvez', 'jorge medina rejon', 'maria fuentes bravo',
+    'ana quiroga', 'luis bermudez', 'maria zepeda',
+    'perez ramirez', 'ramirez soto', 'lopez', 'perez', 'martinez',
+    'tadeo', 'luis', 'maria', 'ana', 'elena',
+)
+
+# Casan el patrón y no son personas: encabezados del ticket, herramientas,
+# producto, nombres de caso de prueba. Van en lista APARTE a propósito: decir
+# «esto no es un nombre» no es lo mismo que decir «este nombre se puede
+# publicar», y mezclarlas haría que mañana nadie sepa por qué está cada una.
+NO_SON_NOMBRES = (
+    'google apps script', 'con orange ocean', 'least one target',
+    'tipo importe impuesto', 'tino importe impuesto', 'cantidad precio importe',
+    'informe articulos totales', 'par por mao',
+    'articulo cantidad precio',      # encabezado del ticket
+    'prueba uno', 'prueba dos', 'equipo', 'asesor', 'gerente', 'subgerente',
+    'alguien que no vende', 'string', 'bundle', 'respuesta', 'otro', 'otra',
+    # renglones con SKU: producto, no personas (patrón 3)
+    'disco duro adata', 'prueba tel con', 'prueba tel sin', 'prueba se trae',
+    'prueba solo pieza', 'prueba eol con', 'prueba eol agotado',
+    'prueba sin precio', 'prueba promo sin',
+)
+
+# Un nombre nunca lleva una de éstas. Sirven para separar un nombre de una
+# frase: el ruido de las MAYÚSCULAS era casi todo encabezado de comentario en
+# español («POR QUE ESTE», «HAY QUE COMPROBAR»).
+_VACIAS = frozenset('''por que este esta esto con las los del en el la un una
+unos unas mas ya hay se es son era ser ha han de a y o u ni pero sino como
+cuando donde quien cual cada todo toda todos todas otro otra otros otras mismo
+misma solo sola sobre entre hasta desde sin tras ante bajo muy mucho poco nada
+algo alguien nadie siempre nunca tambien tampoco si no aun aunque porque pues
+asi bien mal mejor peor antes despues luego hacer hace hecho puede pueden debe
+deben tiene tienen va van ir dos tres cuatro cinco seis siete ocho nueve diez
+mil ciento leer lee escribir subir bajar abrir cerrar poner quitar dar dejar
+al lo le les su sus mi tu nuestro verdad mano nuevo nueva para'''.split())
+
+_MAY = 'A-ZÁÉÍÓÚÑ'
+_MIN = 'a-záéíóúñ'
+
+# 1) Tres palabras Capitalizadas: «nombre y los dos apellidos», que es como se
+#    escribe una persona en México y como sale del sistema.
+_FORMA_NOMBRE = re.compile(
+    r'\b[%s][%s]{2,}(?: [%s][%s]{2,}){2}\b' % (_MAY, _MIN, _MAY, _MIN))
+
+# 2) Dos palabras no se pueden pedir: «Mica HR», «Office Personal» y media
+#    tienda tienen esa forma. Y un nombre de pila suelto detrás de «atendido
+#    por» —que fue la fuga de verdad, en un texto de prueba de OCR— tampoco se
+#    caza por la forma: son dos palabras y una es la etiqueta. Se caza por la
+#    ETIQUETA: lo que viene detrás de «atendido por» o de `nombre_reporte` es
+#    una persona, tenga una palabra o cuatro.
+_ETIQUETA = re.compile(
+    r'(?i:\b(?:atendido\s+por|vendedor|asesor|nombre_reporte|'
+    r'nombre_completo|nombre_asesor|vendedor_nombre)\b)\s*[:=]?\s*[\'"]?'
+    # La ETIQUETA se busca sin distinguir mayusculas —«Vendedor:» con V se
+    # colaba entera—, pero lo que sigue tiene que empezar en MAYUSCULA.
+    # Aceptando minuscula se cazaba tambien «atendido por fernando», y
+    # costaba 21 fallas falsas: `nombre_reporte text NOT NULL` se leia
+    # como una persona en cada .sql del repo. Un nombre en minuscula
+    # detras de la etiqueta es prosa; escrito de verdad, viene en alta.
+    r'([%s][%s%s. ]{2,40})' % (_MAY, _MAY, _MIN))
+
+# La inicial con punto cuenta como palabra: el vendedor escrito con inicial y
+# apellido se le escapaba por empezar con algo de dos caracteres.
+_PARECE_NOMBRE = re.compile(
+    r'^(?:[%s]\.|[%s][%s]+|[%s]{3,}|[%s]{3,})'
+    r'(?: (?:[%s]\.|[%s][%s]+|[%s]{2,}|[%s]{2,})){0,3}\.?$'
+    % (_MAY, _MAY, _MIN, _MAY, _MIN, _MAY, _MAY, _MIN, _MAY, _MIN))
+
+# 3) La fila del concentrado: APELLIDO APELLIDO NOMBRE, en el mismo renglón que
+#    el número de empleado.
+_TRES_MAY = re.compile(
+    r'(?<![%s])[%s]{3,}(?: [%s]{2,}){2}(?![%s])' % (_MAY, _MAY, _MAY, _MAY))
+# Un numero de empleado de seis digitos no se parece a nada mas en estos
+# repos. Uno de CINCO si: es exactamente la forma de un SKU, y el catalogo
+# de accesorios trae trece productos con nombre de tres palabras en alta
+# —MEMORIA USB ADATA, DISCO DURO TOSHIBA—. Pedir cinco digitos encendia el
+# catalogo entero, y ese catalogo CRECE: seria otra lista que mantener, que
+# es justo lo que esta regla existe para no tener. Asi que el de cinco solo
+# cuenta si el renglon ademas habla de una persona.
+_EMPNO = re.compile(r'(?<!\d)\d{6}(?!\d)')
+_EMPNO_CORTO = re.compile(r'(?<!\d)\d{4,7}(?!\d)')
+_ES_DE_PERSONA = re.compile(
+    r'(?i)\b(?:asesor|asesora|gerente|subgerente|empleado|empleada|'
+    r'vendedor|vendedora|nomina|n[o\u00f3]mina|colaborador|puesto)\b')
+
+
+def r_nombres_forma():
+    """Que no se publique NADA con forma de nombre de persona.
+
+    `r_personales` necesita saber a quién buscar; ésta no, y por eso es la única
+    que sirve donde el equipo lo da de alta otro y cambia sin avisar.
+
+    Se auditó con veinte cebos armados desde `_privado/` —nunca tecleando un
+    nombre, y corriendo esta función, no una copia de su lógica—. En la primera
+    pasada se le iban ocho. Tres eran arreglables y están cerrados:
+
+      · la etiqueta sólo casaba en minúscula, así que «Vendedor: …» con V
+        mayúscula pasaba entero;
+      · la inicial con punto —«A. APELLIDO»— no contaba como palabra;
+      · el número de empleado se pedía de seis dígitos, y los reales son de
+        CINCO y de seis. La fila del concentrado pasaba por un dígito.
+
+    Los cuatro que quedan abiertos están aquí para que no se vuelvan a
+    descubrir, y ninguno se cierra sin pagarlo:
+
+      · apellido SUELTO de alguien de otra tienda. Una palabra capitalizada no
+        se distingue de ninguna otra palabra. `r_personales` lo cubre para la
+        gente de la 1217 y nada puede cubrirlo para el resto.
+      · DOS apellidos en MAYÚSCULAS sin número al lado. El patrón suelto da 293
+        cadenas en este repo, y aun quitando SQL y palabras vacías se queda en
+        44: catálogo de accesorios y basura del OCR. Se pide el número al lado
+        porque una fila del concentrado siempre lo trae —para eso es una fila
+        del concentrado— y así baja a 9 y 8.
+      · «APELLIDOS, Nombre», que es como lo imprime el POS: 35 y 18 cadenas, casi
+        todas `KEY, JSON` de desestructurar en JS. No se puede usar como falla.
+      · el valor lejos de su columna: en `insert ... (nombre_reporte) values
+        (...)` el nombre queda a media línea de la etiqueta y no se alcanza.
+      · un nombre en minúscula detrás de la etiqueta.
+      · un nombre partido por un salto de línea. Se mira renglón por renglón a
+        propósito: juntando líneas, dos celdas de una tabla se leen como un
+        nombre que nadie escribió, y eso encendía siete archivos corrientes.
+
+    FALLA en vez de avisar. Un nombre de persona en un repo público no es un
+    matiz, y el mensaje dice qué cadena y en qué archivo: eso se arregla en un
+    minuto, que es lo que hace que una regla se respete en vez de esquivarse."""
+    publicados = por_publicar()
+    if publicados is None: return
+    permitido = set(NOMBRES_EJEMPLO) | set(NO_SON_NOMBRES)
+
+    def _limpio(t):
+        """Normalizado para comparar, o None si no puede ser un nombre."""
+        t = t.strip(' .')
+        if not t: return None
+        clave = _sin_acentos(t)
+        if clave in permitido: return None
+        if any(w in _VACIAS for w in clave.split()): return None
+        return clave
+
+    for p in sorted(publicados):
+        if p.lower().endswith(BINARIO): continue
+        if p.replace(os.sep, '/').startswith('_privado/'): continue
+        s = leer(p)
+        if s is None: continue
+
+        vistos = set()
+
+        def _grita(texto, molde):
+            clave = _limpio(texto)
+            if clave is None or clave in vistos: return
+            vistos.add(clave)
+            falla('nombres', molde % (p, texto.strip(' .')[:44]))
+
+        # OJO: aquí NO se juntan las líneas. `_espacios` sirve para un apellido
+        # partido por un salto, pero aplicado a la FORMA inventa nombres que no
+        # existen: dos celdas de una tabla en renglones distintos se leen como
+        # un nombre que nadie escribió. Una persona se escribe en un renglón.
+        # Sólo se aplastan los espacios horizontales.
+        for linea in s.splitlines():
+            linea = re.sub(r'[ \t]+', ' ', linea)
+
+            for m in _FORMA_NOMBRE.findall(linea):
+                _grita(m, '%s trae «%s», que tiene forma de nombre de persona. '
+                          'Si es de alguien real, va en _privado/. Si es un '
+                          'ejemplo, usa uno de NOMBRES_EJEMPLO en verificar.py, '
+                          'o añade ahí el tuyo.')
+
+            for m in _ETIQUETA.findall(linea):
+                if not _PARECE_NOMBRE.match(m.strip(' .')): continue
+                _grita(m, '%s dice «... %s»: eso es el nombre de quien vendió. '
+                          'Ese campo lo llena el sistema con la persona de '
+                          'verdad; en el repo sólo puede llevar un nombre de '
+                          'NOMBRES_EJEMPLO.')
+
+            if (_EMPNO.search(linea)
+                    or (_EMPNO_CORTO.search(linea)
+                        and _ES_DE_PERSONA.search(linea))):
+                for m in _TRES_MAY.findall(linea):
+                    _grita(m, '%s trae «%s» junto a un número de empleado: eso '
+                              'es una fila del concentrado. Ese archivo no se '
+                              'publica, va en _privado/.')
 
 
 # ── 5 · Secretos ────────────────────────────────────────────
@@ -1051,7 +1331,7 @@ def r_cadenas():
     # 2-ago-2026: index.html leía data.hoja_auth y login_asesor no lo devolvía.
     # Quedaba '' y `currentVend === DESCARGA_AUTORIZADA` era falso siempre, así
     # que el botón de las ventas del día estuvo oculto para todos —incluida
-    # Laura, la única que lo usa— sin que nada fallara a la vista. El 1-ago se
+    # la única persona que lo usa— sin que nada fallara a la vista. El 1-ago se
     # arregló el nombre del campo en el cliente y se dio por cerrado; el lado
     # del servidor nunca se tocó.
     if idx:
@@ -1659,6 +1939,7 @@ def main():
         BASE = otro
         globals()['PRIVADO'] = os.path.relpath(privado, otro)
         r_personales()
+        r_nombres_forma()
         for regla, msg in avisos: print('  aviso  [%s] %s' % (regla, msg))
         for regla, msg in fallas: print('  FALLA  [%s] %s' % (regla, msg))
         if fallas:
@@ -1676,7 +1957,7 @@ def main():
     r_preventa_sb(); r_preventa_stock(); r_cargas_sb(); r_lectura_con_escritura()
     r_porteros(); r_contrato_sql(); r_join_sql()
     r_sql_volatilidad(); r_galeria(); r_reparaciones_fuera(); r_alias_variable(); r_returns_table_drop(); r_funcion_repetida()
-    r_personales(); r_secretos(); r_silencios(); r_cadenas(); r_precache(); r_scripts_locales(); r_pruebas()
+    r_personales(); r_nombres_forma(); r_secretos(); r_silencios(); r_cadenas(); r_precache(); r_scripts_locales(); r_pruebas()
 
     for regla, msg in avisos:
         print('  aviso  [%s] %s' % (regla, msg))

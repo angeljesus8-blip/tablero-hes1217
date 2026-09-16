@@ -52,7 +52,7 @@ descripción ni precio: solo serie y vendedor.
 | 58 | 4-jul | 8609720807… | Jorge |
 | 88 | 9-jul | 6UTBB264300… | Jorge |
 | 112 | 12-jul | 4SMBB255261… | Jorge |
-| 176 | 25-jul | 55KXC263190… | Miguel |
+| 176 | 25-jul | 55KXC263190… | Subgerente |
 
 **El número de serie da el modelo, pero no el color — y el SKU distingue color.**
 Cruzando el prefijo contra las ventas que sí tienen SKU:

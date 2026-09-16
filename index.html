@@ -250,7 +250,7 @@ const CARDS = [
 
 function renderMenuCards(role) {
   // La tarjeta de Admin la ven el gerente (con su correo) y quien tenga el
-  // permiso marcado en la base — hoy Ángel y Miguel, el subgerente.
+  // permiso marcado en la base — hoy el gerente y el subgerente.
   let emp = null;
   // Ficha ilegible: se sigue sin nombre; el login la vuelve a guardar.
   try { emp = JSON.parse(localStorage.getItem('hes1217_empleado')||'null'); } catch(e) {}
@@ -314,8 +314,8 @@ function pinLimpiar() {
     if (d) d.classList.remove('on');
   }
 }
-/* Los números no miden todos igual: los de la tienda son de 6 dígitos y el de
-   Laura es de 5. Así que se intenta solo al completar 6, y también cuando lleva
+/* Los números no miden todos igual: los de la tienda son de 6 dígitos y hay
+   uno de 5. Así que se intenta solo al completar 6, y también cuando lleva
    5 o más y deja de teclear un momento. Ese intento automático es SILENCIOSO si
    falla: si estaba a medias de escribir un número más largo, no le borra lo que
    ya puso ni le grita "número incorrecto". */
