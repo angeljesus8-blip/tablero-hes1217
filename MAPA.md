@@ -555,8 +555,8 @@ que es como está escrito en las pruebas desde que se limpió el repo:
 | `tiendas.vendedores` (jsonb, Admin → Equipo) | `Maria Fuentes bravvo` *(dos V)* |
 
 `accesorios_reporte` las casa con `upper(unaccent_(…))`. Eso salva a los otros
-cuatro, cuya única diferencia son los acentos —`Galán`/`Galan`,
-`Jesús`/`Jesus`—, pero **una letra de más no la arregla ningún `unaccent_`**:
+cuatro, cuya única diferencia son los acentos —`Martínez`/`Martinez`,
+`Pérez`/`Perez`—, pero **una letra de más no la arregla ningún `unaccent_`**:
 el `LEFT JOIN` se queda sin empleado, `nombre_reporte` sale `NULL` y la fila se
 marca `sin_nombre`.
 
@@ -3534,3 +3534,36 @@ del proyecto, sin depender de Cloud Logging, y la rotación por día quedó prob
 ⚠️ Ojo al leerlo: `SINTOK_HOY` **solo se escribe cuando hay rechazos**, así que
 conserva la fecha del último día que sí los tuvo. Si la fecha no es la de hoy, no
 hubo llamadas sin token hoy — no es que el contador se haya parado.
+
+## Concurso Oro/Plata *(15-sep-2026, v241)*
+
+Pestaña propia dentro de **Captura de Series** (botón 🏆). El asesor sube la foto
+del ticket **completo**, el lector lo clasifica y el gerente valida el detalle de
+artículos. Tres vistas en `#cnPanel`: subir, marcador y lista para validar.
+
+**La regla vive en `concurso_nivel.js`, no en el SQL ni en el HTML.** ORO son los
+cuatro papeles —Core, Accesorio Huawei, Garantía y TechSmart/Servicio—; PLATA es
+Core más dos de los otros tres. Core es **solo** MatePad, teléfono y MateBook: la
+band, el watch, el router y los audífonos son Accesorio Huawei. Esto se preguntó
+tres veces y la respuesta está escrita en la cabecera de ese archivo y en
+`pruebas/concurso_oro_plata.js`; **no se cambia sin volver a preguntar**.
+
+Piezas: `concurso_ticket.js` (lee el OCR), `concurso_roles.js` (qué papel juega
+cada SKU), `concurso_nivel.js` (reparte papeles con backtracking y califica),
+`supabase_concurso.sql` (nueve funciones).
+
+⚠️ **El ticket se guarda para TODO el equipo**; el filtro está en el marcador
+(`concurso_participantes`), no en la puerta. Por eso `concurso_marcador` tiene
+una red: si la lista de alta está vacía, cae a los `empno` de los tickets. Un
+marcador en blanco mientras entran tickets se lee como «nadie ha vendido», que
+es justo lo contrario de lo que estaría pasando. Y `concurso_guardar` devuelve
+`en_marcador`: al asesor que no sale en el marcador se le dice que su ticket sí
+se guardó, o vuelve a subirlo pensando que falló.
+
+⚠️ **La fecha es día/mes.** Leer `09/10/26` como mes/día convierte un 10-sep en
+un 9-oct, el ticket se sale de la ventana y el rechazo es indiscutible con el
+papel en la mano. `concursoFechaISO` está aparte y probada por eso.
+
+**Pendiente:** el Admin para editar `concurso_roles` y dar de alta participantes
+sin pegar SQL. Hoy eso se hace a mano con
+`select public.concurso_participante('1217', <token>, <empno>, true);`
