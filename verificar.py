@@ -693,6 +693,31 @@ def versionados():
         return None
 
 
+def por_publicar():
+    """Lo versionado MAS lo que esta a punto de serlo.
+
+    15-sep-2026: el concurso llego con seis archivos nuevos. El escaneo de
+    privacidad solo miraba `versionados()` —lo que git YA rastrea— asi que los
+    seis pasaron limpios sin haberse mirado, y uno traia el numero de empleado
+    real de un asesor en el texto de prueba. El aviso habria llegado al commit
+    siguiente, es decir, despues de publicarlo.
+
+    `versionados()` no se amplia porque otras reglas dependen de que deje fuera
+    los respaldos sueltos. Aqui hace falta lo contrario: un archivo sin `git
+    add` es exactamente el que nadie ha revisado todavia."""
+    base = versionados()
+    if base is None: return None
+    try:
+        r = subprocess.run(['git', 'ls-files', '--others', '--exclude-standard'],
+                           cwd=BASE, capture_output=True, timeout=20,
+                           encoding='utf-8', errors='replace')
+        if r.returncode == 0:
+            base = base | set(x.strip() for x in (r.stdout or '').splitlines() if x.strip())
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return base
+
+
 def git_cambiados(staged):
     cmd = ['git', 'diff', '--name-only'] + (['--cached'] if staged else ['HEAD'])
     try:
@@ -801,7 +826,7 @@ def r_personales():
         return
     apellidos, numeros = datos
 
-    publicados = versionados()
+    publicados = por_publicar()
     if publicados is None:
         # Sin git ya falla `r_git()`. Aquí se cae a lo que se pueda enumerar,
         # para no dejar de mirar del todo.
@@ -1100,7 +1125,8 @@ def r_pruebas():
                'mrfix_detecta.js', 'ventas_dia_seguro.js', 'acc_alias_codigos.js',
                'horario_solo_mio.js', 'horario_sesion_ajena.js', 'comisiones_solo_mia.js',
                'login_por_correo.js', 'admin_sesion_ajena.js',
-               'mrfix_corregir.js', 'cea_precio_nuevo.js')
+               'mrfix_corregir.js', 'cea_precio_nuevo.js',
+               'concurso_oro_plata.js')
 
     # La lista de arriba es explícita a propósito —así falta un archivo y se
     # nota—, pero eso deja el hueco contrario: una prueba escrita y no añadida
