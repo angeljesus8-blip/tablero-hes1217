@@ -241,7 +241,7 @@ const T_MIX = [
   '100175545        1      1124.390   $1,124.39  I'
 ].join('\n');
 
-const T_NADA = 'ATENDIDO POR ARTURO\nTOTAL 149.00';
+const T_NADA = 'ATENDIDO POR TADEO\nTOTAL 149.00';
 
 const CASOS = [
   ['ticket REAL de reparacion',     queEs,         T_REAL_REP,  'rep', true ],
