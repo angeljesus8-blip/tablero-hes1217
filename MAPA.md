@@ -3809,6 +3809,43 @@ se guardó, o vuelve a subirlo pensando que falló.
 un 9-oct, el ticket se sale de la ventana y el rechazo es indiscutible con el
 papel en la mano. `concursoFechaISO` está aparte y probada por eso.
 
-**Pendiente:** el Admin para editar `concurso_roles` y dar de alta participantes
-sin pegar SQL. Hoy eso se hace a mano con
-`select public.concurso_participante('1217', <token>, <empno>, true);`
+### Admin → 🏆 Concurso *(17-sep-2026, v246)*
+
+Las dos cosas que se hacían pegando SQL en el panel de Supabase —dar de alta a
+quien sale en el marcador y corregir el papel de un producto— ya tienen
+pantalla, en una pestaña propia de `admin.html`. Pestaña aparte a propósito: el
+concurso tiene fecha de término, y el día que acabe se quita entera sin tocar
+nada más.
+
+**Quién concursa se elige por NOMBRE.** Lo que decidió el diseño es el fallo que
+la base no puede ver: un `empno` inventado lo rechaza la función —comprueba que
+exista el empleado—, pero el de OTRO asesor lo acepta encantada, y lo que se ve
+entonces es a alguien que no concursa sumando tickets, sin un solo error. La
+lista de nombres sale de la sesión de gerente; con la otra puerta, el PIN de
+Admin, la RLS de `empleados` no la deja leer y se cae al número tecleado. Por
+eso, venga por donde venga, **lo que se enseña al terminar es el nombre que
+devolvió el servidor**, no el que se eligió aquí: es la única comprobación que
+queda en la puerta del PIN, y no sobra en la otra.
+
+**El papel se elige entero** —Core / Accesorio Huawei / TechSmart / Servicio—, y
+no `roles` por un lado y `clase` por otro. Sueltas se puede guardar «cuenta como
+Core» con la etiqueta «Servicio»: eso no da ningún error, da un ORO que nadie
+sabe explicar. Cada fila enseña al lado **lo que la app diría por sí sola**
+(`concursoRolesDe`, el mismo archivo que usa Captura), para que una corrección
+que repite lo que ya decía se vea como lo que es.
+
+**Las tres lecturas van por `cnLeer`, no por `sbLeer`.** `sbLeer` se traga el
+error y devuelve `[]`, que aquí significaría a la vez «no hay concurso activo» y
+«no pude preguntar». La primera es normal el 16-oct; la segunda es una pantalla
+que miente.
+
+**Sin pantalla a propósito: borrar una fila de `concurso_roles`.** No existe
+función para borrarla y no se añadió — una fila se corrige poniéndole el papel
+que le toca, y la lista ya dice cuándo ese papel es el que la app daría sola, o
+sea cuándo la fila ya no hace nada.
+
+Probado contra la base real: el periodo, los participantes y los papeles llegan
+y se pintan, y `43739` se anuncia como TechSmart antes de guardar nada. Las dos
+escrituras llegan a su función y se paran en el token (`no_autorizado`), que es
+justo lo que prueba que los parámetros cuadran. **La escritura con token bueno
+no se probó**: habría dado de alta a alguien de verdad.
