@@ -191,6 +191,23 @@ const CON_FIN = [
     est:'EOL', msi:'', d1:'2026-09-07', d2:'2026-09-30' }
 ];
 
+/* ── 6 · Lo que dice la pantalla DESPUÉS de subir ───────────────────────── */
+/* El otro fallo del 269, y el que hizo que nadie se enterara en seis días: con
+   `promos: 0` la pantalla pintaba VERDE —"Enviado (11 promos, 0 EOL)"— porque
+   contaba las filas leídas del archivo, no las que la nube aceptó. Se leía
+   como éxito habiendo entrado ninguna.
+
+   Aquí se sustituye `sbCargaAdmin` por la respuesta real de `carga_promos`
+   —{ok, promos, sin_fecha, precio_invalido}— para mirar sólo lo que se pinta.
+   La clase la pone `showResult`: 'ok' es verde y 'bad' es rojo. */
+function subirConRespuesta(resp){
+  ent.correr('sbCargaAdmin = async function(){ return ' + JSON.stringify(resp) + '; };');
+  return Promise.resolve(ent.correr('subirPromos()')).then(function(){
+    return { clase: ent.el('resPromos').className,
+             texto: (ent.htmlDe('resPromos') || '').replace(/<[^>]+>/g, ' ') };
+  });
+}
+
 Promise.resolve()
   .then(function(){ return pasarPorPantallaPromos(GT7, 'a partir del 11 de septiembre'); })
   .then(function(r){
@@ -227,6 +244,43 @@ Promise.resolve()
     ok('CEA con las dos fechas · se precargan las del documento',
        r.d1 === '2026-09-07' && r.d2 === '2026-09-30',
        'precargó ' + r.d1 + ' al ' + r.d2);
+  })
+  .then(function(){ return pasarPorPantallaPromos(GT7, 'a partir del 11 de septiembre'); })
+  .then(function(){
+    ent.el('vigD2Promos').value = '2026-09-30';
+    ent.correr('vigPromosTocada=true; _vigPromosPintar();');
+    /* Lo que devolvió la nube con el CEA 269: leyó las filas y no guardó ninguna. */
+    return subirConRespuesta({ ok:true, promos:0, sin_fecha:2, precio_invalido:0 });
+  })
+  .then(function(r){
+    ok('ninguna guardada · el resultado se pinta en ROJO', /\bbad\b/.test(r.clase),
+       'clase=' + r.clase + ' — cero guardadas se dio por bueno');
+    ok('ninguna guardada · lo dice con todas sus letras',
+       /no se guardó ninguna promoción/i.test(r.texto), r.texto.trim().slice(0,110));
+    ok('ninguna guardada · dice POR QUÉ las rechazó',
+       /sin fecha de vigencia/i.test(r.texto), r.texto.trim().slice(0,110));
+    ok('ninguna guardada · avisa que el tablero sigue con el precio regular',
+       /precio regular/i.test(r.texto), r.texto.trim().slice(0,110));
+    ok('ninguna guardada · no cuenta las leídas como guardadas',
+       !/\b2\b[^]{0,24}promos actualizadas/i.test(r.texto), r.texto.trim().slice(0,110));
+  })
+  .then(function(){
+    /* Guardadas unas sí y otras no: el número que se anuncia es el de la nube. */
+    return subirConRespuesta({ ok:true, promos:1, sin_fecha:1, precio_invalido:0 });
+  })
+  .then(function(r){
+    ok('unas sí y otras no · se anuncia lo guardado, no lo leído',
+       /1\s+de\s+2\s+promos actualizadas/i.test(r.texto), r.texto.trim().slice(0,110));
+    ok('unas sí y otras no · las que faltan se quedan en pantalla',
+       /se quedaron fuera/i.test(r.texto), r.texto.trim().slice(0,110));
+  })
+  .then(function(){
+    return subirConRespuesta({ ok:true, promos:2, sin_fecha:0, precio_invalido:0 });
+  })
+  .then(function(r){
+    ok('todas guardadas · verde, y con la vigencia con la que se subieron',
+       /\bok\b/.test(r.clase) && /2026-09-11\s+al\s+2026-09-30/.test(r.texto),
+       r.clase + ' | ' + r.texto.trim().slice(0,110));
   })
   .then(function(){
     if(fallos.length){
