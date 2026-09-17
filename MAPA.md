@@ -3223,7 +3223,54 @@ Y es la tercera vez que lo dice. **Cualquier arreglo que pida editar un archivo
 del repo está muerto antes de empezar.** Esto lo tiene que resolver el código:
 para los nombres que chocan con palabra corriente, pedir una segunda señal en el
 mismo renglón —`asesor`, `gerente`, un número de empleado, un apellido al lado—
-en vez del nombre a secas. Sin hacer.
+en vez del nombre a secas.
+
+#### Cerrado: lo que decide no es la palabra, es la compañía *(17-sep-2026)*
+
+Hecho como estaba dicho, y sin lista ninguna que mantener. La diferencia la
+marca **quién identifica solo**:
+
+- un **apellido** identifica a una persona él solo, y sigue cayendo solo;
+- un **nombre de pila** no. Es el que choca con el color y con la palabra
+  corriente, así que ahora sólo cuenta como fuga si a menos de 80 caracteres
+  hay algo que diga que ahí hay una persona: una palabra de puesto, una de las
+  etiquetas que preceden a un nombre (`atendido por`, `nombre_reporte`…), o un
+  apellido del equipo.
+
+El vocabulario no es nuevo ni se mantiene aparte: es el mismo que ya usaban las
+dos reglas de la sección 4-bis, sacado a una constante. **Coste por asesor dado
+de alta: cero**, que era la condición.
+
+Medido antes de darlo por bueno, sobre los tres repos, inyectando veinte
+nombres de pila que además son palabra corriente como si acabaran de entrar al
+equipo:
+
+| | Antes | Ahora |
+|---|---|---|
+| Archivos encendidos sin fuga | 74 | **3** |
+| Y si varios del equipo se llaman así a la vez | — | **0** |
+| Cebos de fuga cazados (de 20) | 20 | **17** |
+
+Los 3 que siguen encendiendo son frases que **sí** nombran a una persona
+(«lo pidió Fulano», con «gerente» en la misma línea): la regla acierta, el cebo
+era artificial. Los 3 cebos que se pierden son el mismo caso —el nombre de pila
+a secas, sin nada al lado— y ninguno lleva a nadie: una fuga de verdad sale del
+POS, del concentrado o del Excel regional, y ésos imprimen el renglón entero.
+
+Dos cosas se cayeron al medirlas, y las dos por la misma razón —lo que no
+estorba dentro de un renglón no sirve suelto a 80 caracteres—:
+
+- **el número de empleado como señal.** El SKU `304271` de `tablero.html` caía
+  a un palmo de la palabra «rosa» del catálogo y la convertía en persona.
+- **`puesto` a secas**, que en español es también el participio de poner: «el
+  código estaba puesto en admin» hacía persona a quien pasara cerca.
+
+Y una tercera se probó y se tiró: **«otro nombre de pila del equipo al lado»**.
+Recuperaba uno de los tres cebos perdidos, pero encendía `MAPA.md` y
+`verificar.py` — los dos archivos que explican este problema enumerando nombres
+corrientes uno detrás de otro. **Un archivo que explica la regla no puede
+dispararla**, y acortar la distancia hasta que dejaran de tocarse habría sido
+ajustar el número hasta que la medición saliera bien, que es medir al revés.
 
 #### Decía «Todo en orden» sin haber comprobado *(28-ago-2026)*
 

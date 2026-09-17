@@ -852,15 +852,10 @@ def _pilas_deducidas(apellidos, sueltos):
     nombre sea además una palabra corriente**, y eso pasa igual con cuatro
     letras que con tres.
 
-    ⚠️ HUECO ABIERTO, y no se tapa con la salida de siempre. Si entra alguien
-    que se llame como una palabra corriente —Luz, Rosa, Cruz—, esta regla va a
-    fallar en archivos que no tienen ninguna fuga. La salida que existía era
-    poner `!palabra` en `datos_equipo.txt`, pero eso es editar un archivo del
-    repo, y **los demás gerentes no salen de la app**: un arreglo que pide tocar
-    el repo no se va a hacer nunca. Tiene que resolverlo el código, pidiendo una
-    segunda señal en el mismo renglón (`asesor`, `gerente`, un número de
-    empleado, un apellido al lado) para los nombres que chocan. Está sin
-    hacer."""
+    El día que entre alguien llamado como una palabra corriente, esta lista lo
+    va a traer igual —y eso está bien: el que decide si es una fuga ya no es el
+    largo de la palabra ni una lista de excepciones, es lo que tenga al lado.
+    Ver `_con_senal`, que es donde se cerró ese hueco el 17-sep-2026."""
     s = leer(os.path.join(os.path.dirname(PRIVADO), MAPEO))
     if s is None: return []
     s = '\n'.join(l for l in s.split('\n') if not l.strip().startswith('--'))
@@ -886,6 +881,9 @@ def _datos_equipo():
     s = leer(PRIVADO)
     if s is None: return None
     apellidos, sueltos, numeros, pilas, salvo = [], [], [], [], set()
+    # Cuáles de `sueltos` son nombre de PILA. No cambia qué se busca: cambia qué
+    # hace falta para darlo por fuga. Ver `r_personales`.
+    de_pila = set()
     for linea in s.split('\n'):
         linea = linea.split('#')[0].strip()
         if not linea: continue
@@ -898,7 +896,7 @@ def _datos_equipo():
             # «APELLIDOS, NOMBRE», y de ahí se copian los dos. Vigilar solo los
             # apellidos deja publicable la mitad de cada persona.
             for pila in _espacios(_sin_acentos(partes[2])).split():
-                if len(pila) >= 4: sueltos.append(pila)
+                if len(pila) >= 4: sueltos.append(pila); de_pila.add(pila)
             pilas.append(partes[2])
         if partes[0]:
             entero = _espacios(_sin_acentos(partes[0]))
@@ -915,9 +913,76 @@ def _datos_equipo():
     deducidas = _pilas_deducidas(apellidos, sueltos)
     sueltos.extend(deducidas)
     pilas.extend(deducidas)
+    de_pila.update(deducidas)
     sueltos = sorted(set(w for w in sueltos if w not in salvo))
-    return ((apellidos, sueltos, numeros, pilas)
+    # Un apellido que además es nombre de pila de otro —pasa a menudo— se
+    # queda del lado fuerte: el apellido identifica solo.
+    de_pila = frozenset(w for w in de_pila
+                        if w in sueltos
+                        and not any(w in a.split() for a in apellidos))
+    return ((apellidos, sueltos, numeros, pilas, de_pila)
             if (apellidos or sueltos or numeros) else None)
+
+
+# Cuánto texto alrededor cuenta como «al lado». No es el renglón de verdad:
+# `_espacios` ya juntó el archivo en una sola línea —eso es lo que caza el
+# apellido partido por un salto—, así que se mide en caracteres. 80 es una línea
+# de código larga; con 200 empezaba a alcanzar el comentario del bloque de
+# arriba, que habla de otra cosa.
+_VENTANA = 80
+
+
+def _con_senal(plano, m, fuertes, apellidos):
+    """¿Algo junto a este nombre de pila dice que ahí hay una persona?
+
+    17-sep-2026. El hueco que quedó abierto el 15: un nombre de pila que además
+    es palabra corriente hacía fallar archivos sin
+    ninguna fuga. La salida que existía era escribir `!palabra` en
+    `datos_equipo.txt`, y no sirve: ese archivo vive en la 1217 y **los demás
+    gerentes no salen de la app**. Un arreglo que pide entrar al repo a mano no
+    se hace nunca, y mientras tanto la regla grita donde no hay nada —que es
+    como se deja de leer una regla—.
+
+    Así que la diferencia no la marca la palabra, la marca la compañía. Un
+    APELLIDO identifica a alguien él solo y sigue cayendo solo. Un nombre de
+    pila, no: «rosa» es un color y «luz» es lo que pide la cámara. Lo que
+    convierte un nombre de pila en una persona es lo que tiene al lado — un
+    puesto, una etiqueta de las que anteceden a una persona, un número de
+    empleado, o un apellido del equipo—. Eso es esto.
+
+    No hay lista de palabras corrientes que mantener, y por tanto no hay lista
+    que se quede vieja: el vocabulario que se consulta es el que ya usan las dos
+    reglas de la sección 4-bis, y ése no crece con el equipo.
+
+    Lo que se paga, dicho claro: un nombre de pila SOLO, sin nada alrededor, ya
+    no falla. Se midió antes de aceptarlo (ver MAPA.md): de veinte cebos armados
+    desde `_privado/`, se pierden tres, y los tres son el mismo caso —el nombre
+    a secas, sin nada que lleve a nadie—. Una fuga de verdad llega con su
+    compañía, porque sale de un sistema que imprime el renglón entero: el POS,
+    el concentrado, el Excel regional.
+
+    Y una señal MÁS que se probó y se tiró: «otro nombre de pila del equipo al
+    lado», que recuperaba uno de esos tres cebos. Encendía MAPA.md y este mismo
+    archivo, porque los dos explican el problema enumerando nombres corrientes
+    uno detrás de otro. Un archivo que EXPLICA la regla no puede dispararla —y
+    acortar la distancia hasta que dejaran de tocarse era ajustar el número
+    hasta que la medición saliera bien, que es medir al revés—. Por un cebo que
+    además no identifica a nadie, no vale."""
+    v = plano[max(0, m.start() - _VENTANA):m.end() + _VENTANA]
+    # Un nombre INVENTADO de los que el repo usa a propósito no vuelve persona a
+    # nadie: para eso existe `NOMBRES_EJEMPLO`. Sin esto, el día que entre al
+    # equipo alguien que se llame como el asesor de mentira de las pruebas, los
+    # seis archivos de prueba se encienden a la vez —y no llevan a nadie real—.
+    quien = m.group(0)
+    for ej in NOMBRES_EJEMPLO:
+        if quien in ej.split() and ej in v: return False
+    if _SENAL_PILA.search(v): return True
+    for a in apellidos:
+        if a in v: return True
+    for w in fuertes:
+        if re.search(r'(?<![\wáéíóúñ])%s(?![\wáéíóúñ])' % re.escape(w), v):
+            return True
+    return False
 
 
 def r_personales():
@@ -958,6 +1023,10 @@ def r_personales():
     trozo se encendía en veintidós archivos corrientes, y una regla que grita
     donde no hay nada deja de leerse, que es otra forma de no tenerla.
 
+    17-sep-2026: y por eso mismo, lo que se busca ya no pesa todo igual. El
+    apellido identifica solo; el nombre de pila necesita compañía, porque
+    también es un color o lo que pide la cámara. Ver `_con_senal`.
+
     (Y esta explicación no puede nombrarlas: este archivo se audita a sí mismo,
     que es precisamente lo que hizo falta para llegar hasta aquí.)"""
     datos = _datos_equipo()
@@ -967,7 +1036,9 @@ def r_personales():
                        'callar aquí es dar permiso para publicar los nombres.'
               % PRIVADO)
         return
-    apellidos, sueltos, numeros, pilas = datos
+    apellidos, sueltos, numeros, pilas, de_pila = datos
+    # Los que identifican solos: el apellido entero y el apellido suelto.
+    fuertes = [w for w in sueltos if w not in de_pila]
     if not pilas:
         # Aviso y no falla: que falten no es una fuga, es media regla. Pero
         # callarlo sí lo sería — el POS imprime «APELLIDOS, NOMBRE» y el nombre
@@ -1011,8 +1082,14 @@ def r_personales():
                 # apellido suelto como subcadena lo enciende dentro de palabras
                 # corrientes, y una regla que grita en veinte archivos deja de
                 # leerse — que es otra manera de no tenerla.
-                if re.search(r'(?<![\wáéíóúñ])%s(?![\wáéíóúñ])' % re.escape(w), plano):
+                for m in re.finditer(
+                        r'(?<![\wáéíóúñ])%s(?![\wáéíóúñ])' % re.escape(w), plano):
+                    # El apellido cae solo. El nombre de pila necesita que algo
+                    # cerca diga que ahí hay una persona: ver `_con_senal`.
+                    if w in de_pila and not _con_senal(plano, m, fuertes, apellidos):
+                        continue
                     hallado = w; break
+                if hallado: break
         if hallado:
             # «un nombre», no «un apellido»: desde el 15-sep-2026 la lista lleva
             # también los nombres de pila, deducidos del mapeo. Decir «apellido»
@@ -1125,16 +1202,22 @@ _FORMA_NOMBRE = re.compile(
 #    caza por la forma: son dos palabras y una es la etiqueta. Se caza por la
 #    ETIQUETA: lo que viene detrás de «atendido por» o de `nombre_reporte` es
 #    una persona, tenga una palabra o cuatro.
+#    Las palabras van en su propia constante porque las comparte `r_personales`
+#    (sección 4) como segunda señal: lo que aquí dice «detrás de esto viene una
+#    persona» dice allá «esto de aquí al lado es una persona». Una sola lista;
+#    dos copias del mismo vocabulario y la que se queda corta es la que nadie
+#    mira, que es la lección del 15-sep-2026.
+_PALABRAS_ETIQUETA = (r'atendido\s+por|vendedor|asesor|nombre_reporte|'
+                      r'nombre_completo|nombre_asesor|vendedor_nombre')
 _ETIQUETA = re.compile(
-    r'(?i:\b(?:atendido\s+por|vendedor|asesor|nombre_reporte|'
-    r'nombre_completo|nombre_asesor|vendedor_nombre)\b)\s*[:=]?\s*[\'"]?'
+    r'(?i:\b(?:%s)\b)\s*[:=]?\s*[\'"]?'
     # La ETIQUETA se busca sin distinguir mayusculas —«Vendedor:» con V se
     # colaba entera—, pero lo que sigue tiene que empezar en MAYUSCULA.
     # Aceptando minuscula se cazaba tambien «atendido por fernando», y
     # costaba 21 fallas falsas: `nombre_reporte text NOT NULL` se leia
     # como una persona en cada .sql del repo. Un nombre en minuscula
     # detras de la etiqueta es prosa; escrito de verdad, viene en alta.
-    r'([%s][%s%s. ]{2,40})' % (_MAY, _MAY, _MIN))
+    r'([%s][%s%s. ]{2,40})' % (_PALABRAS_ETIQUETA, _MAY, _MAY, _MIN))
 
 # La inicial con punto cuenta como palabra: el vendedor escrito con inicial y
 # apellido se le escapaba por empezar con algo de dos caracteres.
@@ -1156,9 +1239,28 @@ _TRES_MAY = re.compile(
 # cuenta si el renglon ademas habla de una persona.
 _EMPNO = re.compile(r'(?<!\d)\d{6}(?!\d)')
 _EMPNO_CORTO = re.compile(r'(?<!\d)\d{4,7}(?!\d)')
-_ES_DE_PERSONA = re.compile(
-    r'(?i)\b(?:asesor|asesora|gerente|subgerente|empleado|empleada|'
-    r'vendedor|vendedora|nomina|n[o\u00f3]mina|colaborador|puesto)\b')
+_PALABRAS_PUESTO = (r'asesor|asesora|gerente|subgerente|empleado|empleada|'
+                    r'vendedor|vendedora|nomina|n[o\u00f3]mina|colaborador')
+# `puesto` va aparte porque `_SENAL_PILA` no lo quiere suelto. Ver ah\u00ed.
+_ES_DE_PERSONA = re.compile(r'(?i)\b(?:%s|puesto)\b' % _PALABRAS_PUESTO)
+
+# La segunda se\u00f1al que pide `r_personales` (secci\u00f3n 4) para dar por fuga un
+# NOMBRE DE PILA: el vocabulario de las dos reglas de arriba, reunido.
+#
+# Dos cosas se cayeron al medirlo, y las dos por lo mismo \u2014lo que no estorba
+# dentro de un rengl\u00f3n del concentrado s\u00ed estorba suelto en un archivo\u2014:
+#
+#   \u00b7 el N\u00daMERO DE EMPLEADO. Seis d\u00edgitos no se parecen a nada en un rengl\u00f3n de
+#     TRES MAY\u00daSCULAS (patr\u00f3n 3), pero a 80 caracteres de distancia s\u00ed: el SKU
+#     `304271` de `tablero.html` ca\u00eda a un palmo de la palabra \u00abrosa\u00bb del
+#     cat\u00e1logo y la convert\u00eda en persona. Los n\u00fameros de empleado de verdad ya
+#     los caza `r_personales` por su cuenta, uno por uno.
+#   \u00b7 \u00abPUESTO\u00bb a secas, que en espa\u00f1ol es tambi\u00e9n el participio de poner: \u00abel
+#     c\u00f3digo estaba puesto en admin\u00bb hac\u00eda persona a quien pasara cerca. Con
+#     dos puntos o igual detr\u00e1s es el campo, y \u00e9se s\u00ed cuenta \u2014y adem\u00e1s el campo
+#     siempre trae al lado el valor, que ya es \u00abasesor\u00bb o \u00abgerente\u00bb\u2014.
+_SENAL_PILA = re.compile(r'(?i)\b(?:%s|%s)\b|\bpuesto\s*[:=]'
+                         % (_PALABRAS_PUESTO, _PALABRAS_ETIQUETA))
 
 
 def r_nombres_forma():
