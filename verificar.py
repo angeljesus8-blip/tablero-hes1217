@@ -771,6 +771,11 @@ PRIVADO = os.path.join('_privado', 'datos_equipo.txt')
 # cada quien —«APELLIDOS NOMBRE»—, así que de ahí salen los nombres de pila sin
 # que nadie los escriba a mano. Ver `_pilas_deducidas`.
 MAPEO = 'mapeo_nombres.sql'
+# Trozos de apellido compuesto que el mapeo trae sueltos. No son el nombre de
+# nadie, y buscarlos encendería todos los archivos. Esta lista NO crece con el
+# equipo: es castellano, no personas.
+_PARTICULAS = frozenset(
+    'de del la las los y san santa santos mac von van der da dos e i'.split())
 # 15-sep-2026: esto era una lista BLANCA de once extensiones. Cada fuga por
 # extensión ha sido la misma frase: «es que .csv no estaba en la lista». Y las
 # que faltaban no eran raras —`.csv` es como sale el equipo del sistema, `.ps1`
@@ -834,15 +839,36 @@ def _pilas_deducidas(apellidos, sueltos):
     Se dejan fuera tres cosas: lo que no sea todo letras —en ese SQL el número
     de empleado va entre comillas igual que el nombre, y colarlo aquí haría que
     esta función dijera «nombre» donde hay un número—, los trozos del nombre del
-    dueño del repo, y lo que tenga menos de cuatro letras —se busca con frontera
-    de palabra, y tres letras casan con demasiada palabra corriente—."""
+    dueño del repo, y las partículas de los apellidos compuestos («de», «del»,
+    «la»), que no son el nombre de nadie y encenderían todos los archivos.
+
+    El mínimo son TRES letras, y ese número está medido, no supuesto. Estuvo en
+    cuatro por miedo a que un nombre corto casara con palabra corriente. Se
+    midieron diez nombres de pila de tres letras sobre los tres repos —179
+    archivos—: nueve dan cero, y el único que enciende algo es «luz», que sale
+    en los avisos de la cámara («con buena luz»). Mientras tanto, a cuatro
+    letras —que ya se aceptaban— «rosa» enciende 5 archivos y 2 en odemas, por
+    el color. O sea que **el ruido no viene del largo del nombre, sino de que el
+    nombre sea además una palabra corriente**, y eso pasa igual con cuatro
+    letras que con tres.
+
+    ⚠️ HUECO ABIERTO, y no se tapa con la salida de siempre. Si entra alguien
+    que se llame como una palabra corriente —Luz, Rosa, Cruz—, esta regla va a
+    fallar en archivos que no tienen ninguna fuga. La salida que existía era
+    poner `!palabra` en `datos_equipo.txt`, pero eso es editar un archivo del
+    repo, y **los demás gerentes no salen de la app**: un arreglo que pide tocar
+    el repo no se va a hacer nunca. Tiene que resolverlo el código, pidiendo una
+    segunda señal en el mismo renglón (`asesor`, `gerente`, un número de
+    empleado, un apellido al lado) para los nombres que chocan. Está sin
+    hacer."""
     s = leer(os.path.join(os.path.dirname(PRIVADO), MAPEO))
     if s is None: return []
     s = '\n'.join(l for l in s.split('\n') if not l.strip().startswith('--'))
     mio, fuera, pilas = _duenno(), set(sueltos), set()
     for cadena in re.findall(r"'([^']{6,60})'", s):
         for w in _sin_acentos(cadena).split():
-            if len(w) < 4 or not w.isalpha() or w in fuera: continue
+            if len(w) < 3 or not w.isalpha() or w in fuera: continue
+            if w in _PARTICULAS: continue
             if any(w in a.split() for a in apellidos): continue
             if any(w in trozo for trozo in mio): continue
             pilas.add(w)
