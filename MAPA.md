@@ -2346,7 +2346,6 @@ comportamiento de la pantalla. **Comprobada rompiéndola**: quitar el camino
 nuevo, dispararlo siempre, armar el botón sin fecha de fin o inventar un `d2`
 —los cuatro cebos fallan con su cifra.
 
-
 ⚠️ **Lo que esto NO arregla, y sigue abierto:** que el precio leído llegue a la
 tienda. `saveEolFromPdf` manda `r.pr` —el **PRECIO REGULAR**— a `eol_guardar`, y
 `eol_precio_venta` lo divide entre dos. Así que en el Pura 80 Ultra la tienda
@@ -3184,6 +3183,47 @@ esa fecha queda inservible y hay que volver a clonarlo.
 Las 15 reglas de `verificar.py` nacieron cada una de un fallo que ya había
 llegado a producción, así que por diseño miran hacia atrás. En un día con tres
 fallos nuevos eso se notó, y el diagnóstico no fue "faltan reglas":
+
+#### El hueco de los nombres cortos era otro hueco *(15-sep-2026)*
+
+La deducción de nombres de pila se quedaba con los de **cuatro letras o más**,
+por miedo a que un nombre corto casara con palabra corriente. Se midió, y el
+miedo apuntaba al sitio equivocado.
+
+Primero, **hoy el hueco no existe**: la única palabra de menos de cuatro letras
+que sale del mapeo tiene dos, y es la partícula de un apellido compuesto, no el
+nombre de nadie. Nadie del equipo tiene nombre corto. El hueco era del futuro.
+
+Después se midió qué costaría el día que entre alguien así, con diez nombres de
+pila de tres letras corrientes en México, sobre los tres repos (**179 archivos**):
+
+| Nombre | Enciende (1217 / odemas / horario) |
+|---|---|
+| nueve de los diez de 3 letras | 0 / 0 / 0 |
+| `luz` | 1 / 1 / 0 — los avisos de la cámara, «con buena luz» |
+| `rosa`, que **ya se aceptaba** con 4 letras | 5 / 2 / 0 — el color |
+| `juan`, que **ya se aceptaba** | 3 / 0 / 0 — los fixtures de pruebas |
+
+O sea que **el ruido no viene del largo del nombre, sino de que el nombre sea
+además una palabra corriente** — y eso pasa igual con cuatro letras que con
+tres. `rosa` mete más ruido él solo que los diez nombres cortos juntos. El
+mínimo bajó a **tres**, y las partículas de apellido compuesto («de», «del»,
+«la», «san»…) se sacaron por lista aparte: es castellano, no personas, así que
+esa lista no crece con el equipo.
+
+⚠️ **Y queda un hueco abierto, que NO se tapa a mano.** Si entra alguien que
+se llame como una palabra corriente —Luz, Rosa, Cruz—, la regla va a fallar en
+archivos donde no hay ninguna fuga. La salida que existía era poner `!palabra` en
+`datos_equipo.txt`; Ángel la descartó con la razón de siempre:
+
+> «no es funcional, ninguno de los demás gerentes van a realizar o mover más que
+> dentro de la app»
+
+Y es la tercera vez que lo dice. **Cualquier arreglo que pida editar un archivo
+del repo está muerto antes de empezar.** Esto lo tiene que resolver el código:
+para los nombres que chocan con palabra corriente, pedir una segunda señal en el
+mismo renglón —`asesor`, `gerente`, un número de empleado, un apellido al lado—
+en vez del nombre a secas. Sin hacer.
 
 #### Decía «Todo en orden» sin haber comprobado *(28-ago-2026)*
 
