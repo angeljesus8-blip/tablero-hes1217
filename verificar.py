@@ -1489,7 +1489,7 @@ def r_pruebas():
                'mrfix_detecta.js', 'ventas_dia_seguro.js', 'acc_alias_codigos.js',
                'horario_solo_mio.js', 'horario_sesion_ajena.js', 'comisiones_solo_mia.js',
                'login_por_correo.js', 'admin_sesion_ajena.js',
-               'mrfix_corregir.js', 'cea_precio_nuevo.js',
+               'mrfix_corregir.js', 'cea_precio_nuevo.js', 'cea_vigencia.js',
                'concurso_oro_plata.js')
 
     # La lista de arriba es explícita a propósito —así falta un archivo y se
