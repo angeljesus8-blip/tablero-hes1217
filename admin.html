@@ -184,6 +184,10 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
 <body>
 <script src="./continuidad.js"></script>
 <script src="./acc_codigos.js"></script>
+<!-- El mismo archivo que usa Captura para clasificar. Aquí sirve para enseñar
+     qué papel le da la app por sí sola a un SKU, al lado del que se le puso a
+     mano: sin esa referencia, «corregir» un papel es a ciegas. -->
+<script src="./concurso_roles.js"></script>
 
 
 <!-- PIN -->
@@ -221,6 +225,7 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
     <button onclick="tab('avisos',this);cargarListaAvisos()">📢 Avisos</button>
     <button onclick="tab('comis',this);cargarComisionesCloud()">💰 Comisiones</button>
     <button onclick="tab('equipo',this);cargarEquipo();cargarTecnicos();repaMeses()">👥 Equipo</button>
+    <button onclick="tab('concurso',this);cargarConcursoAdmin()">🏆 Concurso</button>
     <button onclick="tab('config',this);loadConfig()">⚙️ Config</button>
   </div>
 
@@ -601,6 +606,67 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
       </div>
       <div id="repaResumen" class="note" style="margin-bottom:8px"></div>
       <div id="repaLista"><p class="note">Elige un mes para verlas.</p></div>
+    </div>
+  </div>
+
+  <!-- Concurso Oro y Plata (17-sep-2026). Pestaña propia a propósito: es un
+       periodo con fecha de término, y el día que acabe se quita entera sin
+       tocar nada de lo demás. Hasta hoy las dos cosas de aquí se hacían
+       pegando SQL en el panel de Supabase. -->
+  <div class="pane" id="pane-concurso">
+    <div class="card">
+      <h2>🏆 Quién sale en el marcador</h2>
+      <div id="cnPeriodo" class="note">Cargando…</div>
+      <p class="note">El ticket de <b>cualquiera</b> del equipo se guarda igual: esta lista
+        decide a quién se le <b>enseña en el marcador</b>. Si la dejas vacía, el marcador
+        enseña a todos los que tengan tickets — así olvidar el alta no deja una tabla en
+        blanco mientras entran ventas.</p>
+      <div id="cnPartLista"></div>
+      <div class="eq-grid" style="margin-top:12px">
+        <div class="field">
+          <label>A quién agregar</label>
+          <select id="cnPartQuien"></select>
+        </div>
+        <div class="field" id="cnPartNumCampo" style="display:none">
+          <label>Número de empleado</label>
+          <input id="cnPartNum" inputmode="numeric" placeholder="Número de empleado" maxlength="10">
+        </div>
+      </div>
+      <button class="btn-pri" onclick="cnAltaParticipante()">➕ Agregar al concurso</button>
+      <div class="result" id="resCnPart"></div>
+    </div>
+
+    <div class="card">
+      <h2>🏷️ Papel de un producto</h2>
+      <p class="note">La app ya clasifica sola: <b>Core</b> son MatePad, teléfono y MateBook;
+        todo el SKU <b>43739</b> es TechSmart; lo demás de marca Huawei es accesorio. Esto es
+        para <b>corregirla</b> cuando se equivoque o cuando entre algo que no reconoce —lo que
+        pongas aquí manda sobre lo que ella deduzca, y vale desde el siguiente ticket, sin
+        actualizar la app.</p>
+      <div id="cnRolLista"></div>
+      <div class="eq-grid" style="margin-top:12px">
+        <div class="field">
+          <label>SKU (como sale en el ticket)</label>
+          <input id="cnRolSku" inputmode="numeric" placeholder="9 dígitos" maxlength="12"
+                 oninput="cnRolMirarSku()">
+        </div>
+        <div class="field">
+          <label>Nombre (solo para reconocerlo en esta lista)</label>
+          <input id="cnRolNombre" placeholder="MatePad 11.5 S">
+        </div>
+        <div class="field">
+          <label>Qué papel juega</label>
+          <select id="cnRolPapel">
+            <option value="core">Core — MatePad, teléfono o MateBook</option>
+            <option value="acc_hw">Accesorio Huawei — watch, band, router, pencil…</option>
+            <option value="techsmart">Accesorio TechSmart</option>
+            <option value="servicio">Servicio — Office, licencia, reparación</option>
+          </select>
+        </div>
+      </div>
+      <div id="cnRolSolo" class="note" style="display:none"></div>
+      <button class="btn-pri" onclick="cnGuardarRol()">💾 Guardar el papel</button>
+      <div class="result" id="resCnRol"></div>
     </div>
   </div>
 
@@ -3952,6 +4018,303 @@ async function guardarConfig(){
      escribió mal de nuevo, lo dice en el momento y no a fin de mes. */
   pintarDivergencias();
 }
+/* ================================================================
+   TAB CONCURSO — Oro y Plata (17-sep-2026)
+   ================================================================
+   Las dos cosas de esta pestaña se hacían pegando SQL en el panel de Supabase:
+
+     select public.concurso_participante('1217','<token>','<empno>', true);
+
+   y el número salía de otra consulta a mano. Lo que eso deja abierto no es que
+   no funcione: un empno INVENTADO lo rechaza la función —comprueba que exista
+   el empleado—, pero uno EQUIVOCADO, el de otro asesor, lo acepta encantada. Y
+   lo que se ve entonces es a alguien que no concursa sumando tickets, sin un
+   solo error por ningún lado.
+
+   Por eso aquí se elige por NOMBRE, y lo que se enseña al terminar es el nombre
+   que devolvió el servidor — no el que se tecleó.
+
+   `sbLeer` se traga los errores y devuelve []. Para una lista con su propio
+   "Error al cargar" está bien, pero aquí [] significa «no hay concurso activo»,
+   que es una frase distinta de «no pude preguntar»: la primera es normal el
+   16-oct y la segunda es una pantalla que miente. Por eso estas tres lecturas
+   van por `cnLeer`, que sí devuelve el motivo. */
+async function cnLeer(fn, params){
+  try{
+    if(!sb && !initSB()) return { filas:[], error:'Supabase no cargó' };
+    const { data, error } = await sb.rpc(fn, Object.assign({
+      p_store: String((_cfg && _cfg.store_id) || '')
+    }, params || {}));
+    if(error) return { filas:[], error: error.message || 'error de red' };
+    return { filas: Array.isArray(data) ? data : [], error:'' };
+  }catch(e){
+    return { filas:[], error:(e && e.message) || 'sin conexión' };
+  }
+}
+
+let _cnPart  = [];   // quién sale hoy en el marcador
+let _cnRoles = [];   // los papeles puestos a mano
+
+/* Los cuatro papeles de la circular, cada uno con lo que se guarda en la tabla.
+   Se ofrecen como UNA sola elección —y no roles por un lado y clase por otro—
+   porque las dos columnas tienen que concordar: `roles` decide el nivel del
+   ticket y `clase` es lo que se lee en la pantalla de validación. Dejarlas
+   sueltas permite guardar «cuenta como Core» con la etiqueta «Servicio», que no
+   da ningún error: da un ORO que nadie sabe explicar. */
+const CN_PAPEL = {
+  core:      { roles:['core'],    clase:'core',      nombre:'Core' },
+  acc_hw:    { roles:['acc_hw'],  clase:'acc_hw',    nombre:'Accesorio Huawei' },
+  techsmart: { roles:['ts_serv'], clase:'techsmart', nombre:'TechSmart' },
+  servicio:  { roles:['ts_serv'], clase:'servicio',  nombre:'Servicio' }
+};
+const CN_NOMBRE_CLASE = { core:'Core', acc_hw:'Accesorio Huawei',
+                          techsmart:'TechSmart', servicio:'Servicio',
+                          garantia:'Garantía', sin_rol:'no lo reconoce' };
+
+function cnError(e){
+  const t = String(e || 'error');
+  // El 404 de PostgREST cuando la función no está en la base. Sin traducirlo,
+  // el gerente lee un mensaje en inglés sobre un esquema y no sabe qué hacer.
+  if(/Could not find the function|PGRST202/i.test(t))
+    return 'esta tienda todavía no tiene el concurso instalado en Supabase';
+  if(/no_autorizado/i.test(t))
+    return 'el token de la tienda no cuadra — revisa Config';
+  return t;
+}
+
+async function cargarConcursoAdmin(){
+  cnPintarPeriodo();
+  if(!(_equipo && _equipo.length)){
+    /* La lista del equipo la carga la pestaña de al lado. Si todavía no se
+       abrió, aquí no habría a quién elegir por nombre y el alta caería al
+       número tecleado, que es justo el fallo que la base no puede ver. */
+    try{ await cargarEquipo(); }catch(e){ /* sin sesión no hay lista: se cae al número a mano */ }
+  }
+  await cargarCnParticipantes();
+  cargarCnRoles();
+}
+
+async function cnPintarPeriodo(){
+  const el = document.getElementById('cnPeriodo');
+  const { filas, error } = await cnLeer('concurso_config');
+  if(error){
+    el.style.background = '#fff1f1'; el.style.borderColor = '#ffc9c9'; el.style.color = '#8a1f1f';
+    el.innerHTML = '⚠ No se pudo consultar el concurso: ' + escHtml(cnError(error)) +
+                   '. Lo de abajo puede estar incompleto.';
+    return;
+  }
+  if(!filas.length){
+    el.style.background = '#fff6e5'; el.style.borderColor = '#ffd28a'; el.style.color = '#8a6100';
+    el.innerHTML = 'No hay ningún concurso activo. Las altas de aquí abajo las va a rechazar la base hasta que lo haya.';
+    return;
+  }
+  const c = filas[0];
+  el.style.background = ''; el.style.borderColor = ''; el.style.color = '';
+  el.innerHTML = '<b>' + escHtml(c.nombre) + '</b> · del ' + cnFechaCorta(c.desde) +
+    ' al ' + cnFechaCorta(c.hasta) +
+    (c.vigente
+      ? ' · quedan <b>' + Number(c.dias_restantes || 0) + '</b> día(s)'
+      : ' · <b>ya terminó</b>');
+}
+
+// Día/mes, como se lee el ticket. Ver la nota de `concursoFechaISO`.
+function cnFechaCorta(iso){
+  const p = String(iso || '').slice(0,10).split('-');
+  return p.length === 3 ? (p[2] + '/' + p[1] + '/' + p[0]) : String(iso || '—');
+}
+
+async function cargarCnParticipantes(){
+  const cont = document.getElementById('cnPartLista');
+  cont.innerHTML = '<p class="note" style="text-align:center;color:#bbb">Cargando…</p>';
+  const { filas, error } = await cnLeer('concurso_participantes_lista');
+  if(error){
+    _cnPart = [];
+    cont.innerHTML = '<p class="note" style="background:#fff1f1;border-color:#ffc9c9;color:#8a1f1f">' +
+      'No se pudo cargar la lista: ' + escHtml(cnError(error)) + '</p>';
+    cnLlenarQuien();
+    return;
+  }
+  _cnPart = filas;
+  cont.innerHTML = filas.length
+    ? filas.map(function(p){
+        return '<div class="eq-row">' +
+          '<span class="eq-num">' + escHtml(p.empno) + '</span>' +
+          '<div class="eq-info"><b>' + escHtml(p.nombre) + '</b></div>' +
+          '<div class="eq-tags"><button class="eq-btn" onclick="cnQuitarParticipante(\'' +
+            escHtml(p.empno) + '\')">Quitar del marcador</button></div></div>';
+      }).join('')
+    : '<p class="note" style="background:#fff6e5;border-color:#ffd28a;color:#8a6100">' +
+      'Nadie dado de alta. El marcador está enseñando a <b>todo el que suba tickets</b>.</p>';
+  cnLlenarQuien();
+}
+
+/* Elegir por nombre solo se puede con la lista del equipo, y ésa la lee la
+   sesión de gerente (la RLS de `empleados` no la deja pasar de otro modo). Con
+   la otra puerta —el PIN de Admin— no hay lista, así que se cae al número: el
+   alta sigue siendo posible y el nombre lo confirma el servidor al volver. */
+function cnLlenarQuien(){
+  const sel   = document.getElementById('cnPartQuien');
+  const campo = document.getElementById('cnPartNumCampo');
+  const ya = {};
+  _cnPart.forEach(function(p){ ya[String(p.empno)] = true; });
+  const gente = (_equipo || []).filter(function(e){
+    return e.activo && !ya[String(e.empno)];
+  });
+  if(!(_equipo && _equipo.length)){
+    sel.parentNode.style.display = 'none';
+    campo.style.display = '';
+    return;
+  }
+  sel.parentNode.style.display = '';
+  campo.style.display = 'none';
+  sel.innerHTML = gente.length
+    ? gente.map(function(e){
+        return '<option value="' + escHtml(e.empno) + '">' +
+               escHtml(e.nombre) + ' · ' + escHtml(e.empno) + '</option>';
+      }).join('')
+    : '<option value="">Ya está dado de alta todo el equipo</option>';
+}
+
+async function cnAltaParticipante(){
+  const sel   = document.getElementById('cnPartQuien');
+  const campo = document.getElementById('cnPartNumCampo');
+  const empno = (campo.style.display === 'none')
+    ? String(sel.value || '')
+    : document.getElementById('cnPartNum').value.trim();
+  if(!empno){ showResult('resCnPart', false, 'Elige a quién agregar.'); return; }
+
+  const r = await sbEscribir('concurso_participante', { p_empno: empno, p_dentro: true });
+  if(!r.ok){
+    showResult('resCnPart', false, '⚠ NO se agregó: ' + escHtml(cnError(r.error)));
+    return;
+  }
+  /* El nombre que se enseña es el que devolvió la base, no el que se eligió
+     aquí: es lo único que delata haber dado de alta al asesor equivocado. */
+  showResult('resCnPart', true, '✅ <b>' + escHtml(r.nombre) +
+    '</b> ya sale en el marcador. Compruébalo en la lista de arriba.');
+  document.getElementById('cnPartNum').value = '';
+  await cargarCnParticipantes();
+}
+
+async function cnQuitarParticipante(empno){
+  const p = _cnPart.filter(function(x){ return String(x.empno) === String(empno); })[0];
+  if(!p) return;
+  if(!confirm('¿Quitar a ' + p.nombre + ' del marcador?\n\nSus tickets se quedan guardados: solo deja de aparecer en el marcador.')) return;
+  const r = await sbEscribir('concurso_participante', { p_empno: String(empno), p_dentro: false });
+  if(!r.ok){ toast(cnError(r.error), false); return; }
+  toast(p.nombre.split(' ')[0] + ' ya no sale en el marcador', true);
+  await cargarCnParticipantes();
+}
+
+/* ── El papel de cada producto ─────────────────────────────────────────
+   La tabla manda sobre los patrones de `concurso_roles.js`; los patrones son
+   el arranque. Por eso la lista enseña las dos cosas: lo que se puso a mano y
+   lo que la app diría sola. Sin esa segunda columna, «corregir» un papel es a
+   ciegas — y una corrección que repite lo que ya decía la app se queda ahí
+   para siempre pareciendo que hace algo. */
+function cnPapelGuardado(r){
+  const clase = String(r.clase || '');
+  if(CN_PAPEL[clase]) return CN_PAPEL[clase].nombre;
+  const roles = (r.roles || []).join('+');
+  return roles ? ('a mano · ' + roles) : 'sin papel';
+}
+
+function cnPapelSolo(sku, nombre){
+  if(!window.concursoRolesDe) return null;
+  return concursoRolesDe({ sku: String(sku || ''), desc: String(nombre || '') });
+}
+
+async function cargarCnRoles(){
+  const cont = document.getElementById('cnRolLista');
+  cont.innerHTML = '<p class="note" style="text-align:center;color:#bbb">Cargando…</p>';
+  const { filas, error } = await cnLeer('concurso_roles_lista');
+  if(error){
+    _cnRoles = [];
+    cont.innerHTML = '<p class="note" style="background:#fff1f1;border-color:#ffc9c9;color:#8a1f1f">' +
+      'No se pudieron cargar los papeles puestos a mano: ' + escHtml(cnError(error)) + '</p>';
+    return;
+  }
+  _cnRoles = filas;
+  if(!filas.length){
+    cont.innerHTML = '<p class="note">Ningún producto corregido a mano: la app está clasificando todo ella sola.</p>';
+    return;
+  }
+  cont.innerHTML = filas.map(function(r){
+    const solo = cnPapelSolo(r.sku, r.nombre);
+    const mismo = solo && CN_PAPEL[String(r.clase || '')] &&
+                  solo.clase === String(r.clase || '');
+    return '<div class="eq-row">' +
+      '<span class="eq-num">' + escHtml(r.sku) + '</span>' +
+      '<div class="eq-info"><b>' + escHtml(r.nombre || '—') + '</b><span>' +
+        (solo
+          ? ('la app sola diría: ' + escHtml(CN_NOMBRE_CLASE[solo.clase] || solo.clase) +
+             (mismo ? ' — <b>lo mismo</b>, esta corrección ya no hace falta' : ''))
+          : '') +
+      '</span></div>' +
+      '<div class="eq-tags"><span class="eq-tag admin">' + escHtml(cnPapelGuardado(r)) + '</span>' +
+        '<button class="eq-btn" onclick="cnEditarRol(\'' + escHtml(r.sku) + '\')">Editar</button>' +
+      '</div></div>';
+  }).join('');
+}
+
+function cnEditarRol(sku){
+  const r = _cnRoles.filter(function(x){ return String(x.sku) === String(sku); })[0];
+  if(!r) return;
+  document.getElementById('cnRolSku').value    = r.sku;
+  document.getElementById('cnRolNombre').value = r.nombre || '';
+  const papel = CN_PAPEL[String(r.clase || '')] ? String(r.clase) : 'core';
+  document.getElementById('cnRolPapel').value = papel;
+  cnRolMirarSku();
+  document.getElementById('cnRolSku').scrollIntoView({ behavior:'smooth', block:'center' });
+}
+
+/* Avisa, no rellena. Rellenar el formulario mientras se teclea pisaría lo que
+   el gerente está escribiendo; para editar está el botón de la lista. */
+function cnRolMirarSku(){
+  const sku = document.getElementById('cnRolSku').value.trim();
+  const el  = document.getElementById('cnRolSolo');
+  if(!sku){ el.style.display = 'none'; return; }
+  const ya   = _cnRoles.filter(function(x){ return String(x.sku) === sku; })[0];
+  const solo = cnPapelSolo(sku, document.getElementById('cnRolNombre').value);
+  let t = '';
+  if(ya) t += '⚠ Este SKU ya tiene puesto a mano <b>' + escHtml(cnPapelGuardado(ya)) +
+              '</b>. Guardar lo reemplaza. ';
+  if(solo) t += (solo.clase === 'sin_rol'
+    ? 'Por sí sola la app <b>no lo reconoce</b>: hoy sale en ámbar para que el asesor le ponga el papel.'
+    : 'Por sí sola la app lo llamaría <b>' + escHtml(CN_NOMBRE_CLASE[solo.clase] || solo.clase) + '</b>.');
+  el.innerHTML = t;
+  el.style.display = t ? '' : 'none';
+}
+
+async function cnGuardarRol(){
+  const sku    = document.getElementById('cnRolSku').value.trim();
+  const nombre = document.getElementById('cnRolNombre').value.trim();
+  const papel  = document.getElementById('cnRolPapel').value;
+  if(!/^\d{3,12}$/.test(sku)){
+    showResult('resCnRol', false, 'El SKU son los dígitos que salen en su columna del ticket.');
+    return;
+  }
+  if(!nombre){
+    showResult('resCnRol', false, 'Ponle un nombre: es lo único que hace reconocible esta lista dentro de un mes.');
+    return;
+  }
+  const p = CN_PAPEL[papel];
+  const r = await sbEscribir('concurso_rol_guardar', {
+    p_sku: sku, p_nombre: nombre, p_roles: p.roles, p_clase: p.clase,
+    p_nota: 'puesto a mano en Admin'
+  });
+  if(!r.ok){
+    showResult('resCnRol', false, '⚠ NO se guardó: ' + escHtml(cnError(r.error)));
+    return;
+  }
+  showResult('resCnRol', true, '✅ El SKU <b>' + escHtml(sku) + '</b> cuenta como <b>' +
+    escHtml(p.nombre) + '</b> desde el siguiente ticket. No hace falta actualizar la app.');
+  document.getElementById('cnRolSku').value = '';
+  document.getElementById('cnRolNombre').value = '';
+  document.getElementById('cnRolSolo').style.display = 'none';
+  await cargarCnRoles();
+}
+
 if('serviceWorker' in navigator){
   navigator.serviceWorker.register('./sw.js', {updateViaCache:'none'}).catch(()=>{});
 }
