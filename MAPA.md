@@ -2299,6 +2299,54 @@ Lo cubre `pruebas/cea_precio_nuevo.js` con los tres renglones reales del CEA
 sola promo. **Comprobada rompiéndola**: con el bloque `pp` original vuelven los
 seis fallos con las cifras del comunicado.
 
+### Un CEA de lanzamiento no dice "Vigencia:", y se perdía entero *(17-sep-2026, v244)*
+
+El **CEA HUAWEI 269 LANZAMIENTO WATCH GT 7 Y GT 7 PRO** (10-sep) se cargó por
+Promos y **no se guardó ni una de sus 11 filas**. El lector las leyó perfectas
+—SKU, descripción, $8,999 → $6,999, los MSI—; lo que faltó fue la fecha.
+
+`_ceaVigencia` sólo entendía la frase `Vigencia: X al Y de MES de AÑO`, y un CEA
+de **lanzamiento no la trae**: el precio nuevo no tiene término anunciado. Lo
+único fechado del 269 es `"Las promociones se verán reflejadas en punto de venta
+a partir de 11 de septiembre 2026"`. Sin `d2`, `carga_promos` descarta por
+`vigente_hasta IS NOT NULL` y `promos_vigentes` no devuelve nada: **seis días
+cobrando $8,999 donde el CEA manda $6,999, en 11 SKU.**
+
+⚠️ **El 269 es el raro, no la regla.** Comprobado en Chrome con la misma pdf.js
+que carga la página: el 223, el 265 y el 267 **sí** traen su `Vigencia:` y se
+leen bien. Sólo los CEA de lanzamiento caen por aquí.
+
+⚠️ **Un CEA trae varias "a partir de" y sólo una es de precio.** El 269 tiene
+tres: *10 de septiembre* (venta exclusiva) y *17 de septiembre* (venta al
+público) son de **disponibilidad**; la de **punto de venta** —11 de septiembre—
+es la única que dice desde cuándo la caja cobra la promoción. Tomar una de
+disponibilidad promete un precio que el POS todavía no da. Por eso el regex
+exige `punto de venta` y un **día** en la misma oración.
+
+Y por eso mismo sólo corre si no hubo `Vigencia:`: un comunicado puede traer las
+dos frases, y entonces manda la ventana. *(Al CEA 223 no lo salva ese guard sino
+el regex —su frase de punto de venta dice "a partir de la fecha de inicio de
+cada vigencia", sin día—; el guard cubre el caso de las dos frases, y las dos
+cosas están probadas por separado.)*
+
+⚠️ **La fecha de FIN no se inventa.** La escribe el gerente en los dos campos
+nuevos de la pestaña Promos, precargados con lo que el PDF sí trajo. Mientras
+falte, **el botón de subir se queda apagado**: "sin fecha de fin" ya significó
+una vez "vigente para siempre" y se cobraron promociones terminadas.
+
+⚠️ **Y la pantalla daba el fallo por bueno.** Con `promos: 0` caía a un mensaje
+**verde** —"Enviado (11 promos, 0 EOL)"— que contaba las **leídas del archivo**,
+no las guardadas. Ahora cero guardadas es rojo y dice por qué; y si entran unas
+sí y otras no, el conteo de las que faltan se queda en pantalla en vez de irse
+con el toast.
+
+Lo cubre `pruebas/cea_vigencia.js` con los textos reales de los cuatro CEA
+(tal como los parte pdf.js: `"3 0 de septiembre"`, `"202 6"`) y con el
+comportamiento de la pantalla. **Comprobada rompiéndola**: quitar el camino
+nuevo, dispararlo siempre, armar el botón sin fecha de fin o inventar un `d2`
+—los cuatro cebos fallan con su cifra.
+
+
 ⚠️ **Lo que esto NO arregla, y sigue abierto:** que el precio leído llegue a la
 tienda. `saveEolFromPdf` manda `r.pr` —el **PRECIO REGULAR**— a `eol_guardar`, y
 `eol_precio_venta` lo divide entre dos. Así que en el Pura 80 Ultra la tienda
