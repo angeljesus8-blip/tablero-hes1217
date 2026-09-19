@@ -1031,6 +1031,25 @@ def r_personales():
     que es precisamente lo que hizo falta para llegar hasta aquí.)"""
     datos = _datos_equipo()
     if datos is None:
+        # 19-sep-2026: en GitHub Actions este archivo no existe NI PUEDE existir
+        # —vive en `_privado/`, que es exactamente lo que no se publica—, así que
+        # «Verificar tablero» llevaba en rojo desde que se creó, en todos los
+        # push. Un rojo permanente no avisa de nada: es el mismo «nadie lee el
+        # rojo» que ya se pagó el 4-ago con el working-directory, y es lo que
+        # dejó pasar un archivo con las ventas de la tienda al repo público.
+        #
+        # Allí es aviso, no falla, y se dice qué se deja de comprobar. Lo que sí
+        # corre en CI es `r_nombres_forma`, que no necesita la lista: caza la
+        # FORMA de un nombre y es la única que ve el concentrado de otra tienda.
+        # En la máquina donde se trabaja sigue siendo FALLA — ahí el archivo
+        # tiene que estar, y no saber contra qué comparar es no comprobar nada.
+        if os.environ.get('GITHUB_ACTIONS') == 'true':
+            aviso('datos', 'aquí no está %s y no puede estar: vive en _privado/. '
+                           'Lo que NO se comprueba en este job es el cotejo contra '
+                           'los nombres y números reales; eso se comprueba antes de '
+                           'cada commit, en la máquina del gerente. Lo que sí corre '
+                           'aquí es la regla de la FORMA de un nombre.' % PRIVADO)
+            return
         falla('datos', 'no se pudo leer %s, así que no hay contra qué comparar. '
                        'Créalo (ver MAPA.md) o esta regla no comprueba nada — y '
                        'callar aquí es dar permiso para publicar los nombres.'

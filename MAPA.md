@@ -3349,6 +3349,36 @@ cazado era un número, no un nombre. Con `isalpha()` la cuenta bajó de 8 a 4 �
 reescribió con `git filter-repo` y se forzó el push. Cualquier clon anterior a
 esa fecha queda inservible y hay que volver a clonarlo.
 
+#### Y aun así quedó un archivo dentro *(19-sep-2026)*
+
+Tres semanas después, `comisiones_datos.js` seguía descargándose. Había salido
+del árbol el 1-ago —el commit se llama «saca datos personales del repo»—, pero
+su blob vivía en los **52 commits** en los que el archivo existió, y
+`raw.githubusercontent.com/.../<sha>/comisiones_datos.js` contestaba **200**.
+
+Lo que traía, mirado antes de borrarlo: el puesto y **la venta del mes de cada
+persona** de la 1217. Los nombres resultaron ser los inventados de
+`NOMBRES_EJEMPLO` —eso sí se había limpiado en su día—; las cifras no. Se
+comprobó además que esas cifras **no aparecen en ningún otro archivo** del
+historial: `git grep` de las cuatro contra las 414 revisiones solo enciende ése.
+
+Se reescribió con `git filter-repo --path comisiones_datos.js --invert-paths` y
+se forzó el push. Comprobado después: los 414 commits siguen ahí, el árbol de
+HEAD es **el mismo objeto** que antes (`6be3ab1…`, así que no se movió ni un
+byte de lo publicado), el blob no existe en ningún commit y la URL de `main` da
+404.
+
+⚠️ **Lo que una reescritura NO hace.** GitHub conserva los objetos que quedan
+sueltos hasta que los recoge, así que **el SHA viejo siguió contestando 200
+después del push**: eso solo lo purga GitHub Support, pidiéndolo desde la cuenta
+dueña del repo. El respaldo de antes de reescribir quedó en `_revisar/` de la
+bóveda, fuera de todo repo.
+
+**La regla que deja esto:** un archivo con datos **no se arregla borrándolo en
+un commit**. Mientras no se reescriba el historial, sigue publicado en la URL de
+cualquier commit viejo — y el `git log` del día siguiente ya no lo enseña, que
+es lo que hace que se olvide.
+
 ---
 
 ## El verificador y las pruebas *(17-ago-2026)*
@@ -3356,6 +3386,25 @@ esa fecha queda inservible y hay que volver a clonarlo.
 Las 15 reglas de `verificar.py` nacieron cada una de un fallo que ya había
 llegado a producción, así que por diseño miran hacia atrás. En un día con tres
 fallos nuevos eso se notó, y el diagnóstico no fue "faltan reglas":
+
+#### El rojo que nadie leía era el de la regla de los nombres *(19-sep-2026)*
+
+«Verificar tablero» llevaba fallando en **todos** los push desde que existe, y
+siempre por lo mismo: en GitHub Actions no está `_privado/datos_equipo.txt` —ni
+puede estar, porque `_privado/` es justo lo que no se publica—, así que
+`r_personales` no tenía contra qué comparar y fallaba a propósito. Correcto en
+la máquina del gerente; en CI convertía el check en un rojo permanente.
+
+Un rojo que siempre está rojo no avisa de nada. Es el mismo error del 4-ago con
+`working-directory` —que ese mismo archivo ya documenta— y es el ambiente en el
+que un archivo con las ventas de la tienda pasó tres semanas publicado.
+
+Ahora en CI es un **aviso que dice qué se deja de comprobar** (el cotejo contra
+los nombres y números reales, que se hace antes de cada commit en la máquina
+donde se trabaja) y la **falla sigue intacta fuera de CI**. Probado con cebo:
+en CI, un archivo con «APELLIDOS NOMBRE» junto a un número de empleado tumba el
+job igual, porque `r_nombres_forma` no necesita la lista; y el árbol limpio sale
+verde. El verde vuelve a significar algo.
 
 #### El hueco de los nombres cortos era otro hueco *(15-sep-2026)*
 
