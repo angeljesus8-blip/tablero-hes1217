@@ -140,7 +140,7 @@ var RE_CIFRAS = /(?:^|\s)(\d{5,10})\s+(\d{1,3})\s+([\d.,]+)\s+\$?\s*(-?[\d.,]+)/
    El TICKET es el penúltimo número. El último es el cajero que cobró, y ese es
    justamente el que NO sirve: el vendedor es «Atendido por». Confundirlos le da
    el oro al gerente en vez de a quien vendió (MAPA, 18-ago-2026). */
-var RE_PIE = /(?:^|\s)(\d{4})\s+(\d{1,2})\s+(\d{1,2}\/\d{1,2}\/\d{2,4})\s+(\d{1,2}:\d{2}\s*[AP]\.?M\.?)\s+(\d{3,10})\s+(\d{3,10})\s*$/i;
+var RE_PIE = /(?:^|\s)(\d{4})\s+(\d{1,2})\s+(\d{1,2}\/\d{1,2}\/\d{2,4})\s+(\d{1,2}:\d{2}\s*[AP]\.?M\.?)\s+(\d{3,10})\s+(\w{3,10})(?:\s|$)/i;
 
 /* ── Por qué ninguna de estas expresiones empieza en `^` ─────
    19-sep-2026, ticket 34273. El papel se fotografió sobre el teclado y con
@@ -165,9 +165,28 @@ var RE_PIE = /(?:^|\s)(\d{4})\s+(\d{1,2})\s+(\d{1,2}\/\d{1,2}\/\d{2,4})\s+(\d{1,
    pedírselo es pedirle que haga de escáner.
 
    Lo que NO se relaja es la forma del dato: el pie sigue exigiendo tienda,
-   caja, fecha, hora y dos números; el renglón de cifras sigue exigiendo SKU,
+   caja, fecha, hora y dos campos; el renglón de cifras sigue exigiendo SKU,
    cantidad, precio e importe en ese orden. Lo que se admite es basura ANTES,
-   separada por un espacio — nunca en medio. */
+   separada por un espacio — nunca en medio.
+
+   ── Y DESPUÉS, que es la mitad que se me pasó (19-sep, 5:39 PM) ──
+   La segunda foto del mismo 34273 volvió a quedarse sin número de ticket y sin
+   fecha. El pie terminaba en `\s*$`: relajé la cabeza del renglón y dejé la
+   cola clavada al final. Contado sobre el volcado real, el margen DERECHO
+   ensucia 18 renglones y el izquierdo 9 — o sea que atendí el lado limpio.
+   Cualquier mota bastaba: ` I`, ` z`, ` |`, ` MN`, ` Ctrl`, ` ————`.
+
+   El último campo pasó de `(\d{3,10})` a `(\w{3,10})` por la misma razón: el
+   número de cajero se lee tan mal como el resto (`900001` → `9O000l`) y al no
+   casar se llevaba por delante al TICKET, que es el que sí importa.
+
+   Lo que se conserva a propósito: el ticket sigue siendo el PENÚLTIMO campo,
+   no «el último número que aparezca». Por eso el cajero es opcional en su
+   FORMA pero no en su PRESENCIA: si el pie sólo trae un número no se sabe cuál
+   de los dos sobrevivió, y guardar el número de empleado del cajero como folio
+   es peor que no leerlo — es constante entre tickets, así que el siguiente se
+   rechazaría por duplicado. Sin folio la pantalla avisa; con el folio
+   equivocado, no. */
 
 /* ── Qué es una garantía ─────────────────────────────────────
    Se lee del ticket, no se deduce. Tiene línea propia, SKU propio y precio
@@ -222,6 +241,7 @@ function leerTicket(texto) {
 
   var desc = '';        // la última línea útil: candidata a descripción
   var ultima = null;    // el último artículo leído, para colgarle su garantía
+  var dudosas = [];     // líneas donde precio × cantidad no da el importe
 
   for (var i = 0; i < lineas.length; i++) {
     var cruda = lineas[i];
@@ -265,9 +285,9 @@ function leerTicket(texto) {
          redondeo del OCR. */
       if (art.precio != null && art.importe != null &&
           Math.abs(art.precio * art.cantidad - art.importe) > 1) {
-        res.avisos.push('Línea «' + (desc || art.sku) + '»: ' + art.cantidad +
-          ' × ' + art.precio + ' debería dar ' + (art.precio * art.cantidad) +
-          ' y el ticket dice ' + art.importe + '. Revísala.');
+        // El aviso no se da aquí: primero hay que ver si el Total lo resuelve.
+        art.importe_dudoso = true;
+        dudosas.push({ linea: art, etiqueta: desc || art.sku });
       }
 
       if (art.es_garantia && ultima) art.protege_a = ultima.sku;
@@ -297,6 +317,61 @@ function leerTicket(texto) {
     }
 
     if (!esRuido(cruda)) desc = n;
+  }
+
+  /* ── Un importe mal leído, cuando el propio ticket dice cuál era ──
+     19-sep-2026, segunda foto del 34273: la garantía impresa en $1,679.00 se
+     leyó `1673`, y la pantalla soltaba DOS avisos sobre el mismo dígito — la
+     línea no cuadra, y la suma no cierra por $6. Ninguno de los dos se puede
+     atender: el asesor no tiene otra cosa que hacer que repetir la foto y
+     rezar, porque el `9` seguirá pareciéndose a un `3`.
+
+     Pero el número no está perdido: el ticket lo dice DOS VECES más. El precio
+     unitario está impreso aparte del importe (`1 1679.000 $1,673.00`), y el
+     Total del POS cierra al centavo con el precio y no con el importe. Dos
+     testigos independientes que coinciden entre sí y desmienten al tercero.
+
+     Por eso la reparación no es «confiar en el precio»: es confiar en que la
+     SUMA CIERRE. Se repara sólo si, cambiando el importe por precio × cantidad,
+     el ticket cuadra exacto contra el Total Y antes no cuadraba. Si repararlo
+     no hace cerrar la cuenta, no se toca nada y el aviso queda como estaba:
+     entonces lo que falta puede ser una línea entera, que es otro problema.
+
+     Y aunque cuadre, se DICE. El dinero no se corrige en silencio: queda el
+     importe original en `importe_ocr` y un aviso que nombra la línea. */
+  if (dudosas.length) {
+    var sumarCon = function (usarPrecio) {
+      var s = 0;
+      for (var q = 0; q < res.lineas.length; q++) {
+        var l = res.lineas[q];
+        s += ((usarPrecio && l.importe_dudoso) ? l.precio * l.cantidad
+                                               : (l.importe || 0))
+             - (l.descuento || 0);
+      }
+      return s;
+    };
+    var reparar = res.total != null &&
+                  Math.abs(sumarCon(false) - res.total) > 0.5 &&
+                  Math.abs(sumarCon(true)  - res.total) < 0.5;
+
+    for (var d = 0; d < dudosas.length; d++) {
+      var ld = dudosas[d].linea;
+      var etq = dudosas[d].etiqueta;
+      var esperado = ld.precio * ld.cantidad;
+      if (reparar) {
+        ld.importe_ocr = ld.importe;
+        ld.importe = esperado;
+        ld.importe_corregido = true;
+        res.avisos.push('Línea «' + etq + '»: el importe se leyó $' +
+          ld.importe_ocr.toFixed(2) + ', pero con el precio ($' + ld.precio +
+          ' × ' + ld.cantidad + ') el ticket cuadra exacto contra el Total. Se ' +
+          'tomó $' + esperado.toFixed(2) + '.');
+      } else {
+        res.avisos.push('Línea «' + etq + '»: ' + ld.cantidad + ' × ' +
+          ld.precio + ' debería dar ' + esperado + ' y el ticket dice ' +
+          ld.importe + '. Revísala.');
+      }
+    }
   }
 
   /* ── Lo que decide si el ticket se puede registrar ── */

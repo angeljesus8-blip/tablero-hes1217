@@ -94,11 +94,17 @@ const nivelDe = (...lineas) => calificar(lineas).nivel;
   ok('una línea que falta se caza por la suma',
      a.avisos.some(v => /suman/.test(v)), JSON.stringify(a.avisos));
 
+  /* Esto antes sólo se avisaba dos veces —por la línea y por la suma— y desde
+     el 19-sep-2026 se REPARA: el precio unitario y el Total coinciden entre sí
+     y desmienten al importe. Lo que la prueba cuida sigue siendo lo mismo, que
+     el error no pase; lo que cambió es que ahora además se recupera el dato. */
   const micaMal = TICKET.replace('$149.00', '$14.90');
   const b = leerTicket(micaMal);
-  ok('un importe mal leído se caza por la línea',
-     b.avisos.some(v => /Revísala/.test(v)), JSON.stringify(b.avisos));
-  ok('y también por la suma', b.avisos.some(v => /suman/.test(v)));
+  const mica = b.lineas.find(l => l.sku === '43739');
+  ok('un importe mal leído se corrige con el precio', mica.importe === 149, mica.importe);
+  ok('y el que salió de la foto queda a la vista', mica.importe_ocr === 14.9, mica.importe_ocr);
+  ok('la corrección se dice en pantalla',
+     b.avisos.some(v => /14\.90/.test(v) && /149/.test(v)), JSON.stringify(b.avisos));
 
   const sinTotal = TICKET.replace(/^ *Total .*$/m, '');
   const c = leerTicket(sinTotal);
@@ -475,6 +481,61 @@ const nivelDe = (...lineas) => calificar(lineas).nivel;
      tres se hubiera perdido, esto avisaría. */
   ok('con los tres datos, el ticket sucio no deja avisos de suma',
      !s.avisos.some(a => /suman/.test(a)), s.avisos.join(' // '));
+}
+
+
+/* ── 12 · La segunda foto del mismo ticket ────────────────── */
+{
+  /* 19-sep-2026, 5:39 PM. Ángel volvió a fotografiar el 34273 con v249 ya
+     publicada y la pantalla seguía sin número de ticket y sin fecha, más dos
+     avisos por el mismo dígito. El volcado de esa toma no se guardó, así que
+     el caso NO finge ser uno real: parte del volcado real de la primera foto y
+     le aplica las dos únicas diferencias que su pantalla demostraba.
+
+     1) Basura a la DERECHA del pie. En v249 la cabeza del renglón admitía
+        motas y la cola seguía clavada en `\s*$`. Contado sobre el volcado
+        real: 18 renglones ensuciados por la derecha contra 9 por la izquierda.
+     2) El importe de la garantía leído `1673` con el precio en `1679.000`. */
+  const crudo = fs.readFileSync(path.join(__dirname, 'ocr_ticket_real10.txt'), 'utf8');
+  const segunda = crudo
+    .replace('4:45 PM 34273 900001', '4:45 PM 34273 9O000l | Ctrl')
+    .replace('$1,679.00', '$1,673.00');
+  const g = leerTicket(segunda);
+
+  /* El cajero salió ilegible Y el margen metió basura detrás. Ninguna de las
+     dos cosas es asunto del TICKET, que es el único dato que impide registrar
+     dos veces la misma venta. */
+  ok('el ticket sobrevive a la basura de la cola', g.ticket === '34273', g.ticket);
+  ok('y la fecha, que sale del mismo renglón', fechaISO(g.fecha) === '2026-09-19', g.fecha);
+
+  /* El ticket sigue siendo el PENÚLTIMO campo, no «el último número». Si el
+     pie sólo trae uno no se sabe cuál de los dos sobrevivió, y guardar el
+     número de empleado del cajero como folio rechazaría por duplicado la venta
+     siguiente de ese mismo cajero. Mejor sin folio: eso sí avisa. */
+  const solo = leerTicket('1217 2 19/9/26 4:45 PM 900001');
+  ok('con un solo campo en el pie no se inventa folio', solo.ticket === '', solo.ticket);
+
+  /* La reparación del importe: el precio y el Total coinciden entre sí y
+     desmienten al importe. Se repara, y el original queda a la vista. */
+  const gar = g.lineas.filter(l => l.es_garantia)[0];
+  ok('el importe mal leído se corrige con el precio', gar.importe === 1679, gar.importe);
+  ok('y el número que salió de la foto no se pierde', gar.importe_ocr === 1673, gar.importe_ocr);
+  ok('la corrección se dice, no se hace callando',
+     g.avisos.some(a => /1673/.test(a) && /1679/.test(a)), g.avisos.join(' // '));
+  ok('y ya no quedan dos avisos por el mismo dígito',
+     !g.avisos.some(a => /suman/.test(a)), g.avisos.join(' // '));
+  ok('bien leído sigue siendo PLATA',
+     calificar(aplicarRoles(g.lineas, null)).nivel === 'plata');
+
+  /* Y la red no se afloja: si lo que falta es una LÍNEA ENTERA, cambiar el
+     importe por el precio no hace cerrar la cuenta, y entonces no se toca
+     nada. Aquí se borra la mica ($149) además de ensuciar el importe. */
+  const rota = segunda.replace('000043739 1 149.000 $149.00 1', '');
+  const r = leerTicket(rota);
+  ok('si reparar no hace cuadrar, el importe NO se toca',
+     r.lineas.filter(l => l.es_garantia)[0].importe === 1673);
+  ok('y el aviso de la suma sigue ahí', r.avisos.some(a => /suman/.test(a)),
+     r.avisos.join(' // '));
 }
 
 
