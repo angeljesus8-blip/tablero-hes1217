@@ -134,13 +134,40 @@ function esRuido(linea) {
      100259554   1   3498.000   $3,498.00  I
      000043739   1    149.000     $149.00  I
    El SKU lleva de 5 a 10 dígitos (el genérico va con ceros a la izquierda). */
-var RE_CIFRAS = /^\s*(\d{5,10})\s+(\d{1,3})\s+([\d.,]+)\s+\$?\s*(-?[\d.,]+)/;
+var RE_CIFRAS = /(?:^|\s)(\d{5,10})\s+(\d{1,3})\s+([\d.,]+)\s+\$?\s*(-?[\d.,]+)/;
 
 /* El pie:  1217 2 14/9/26 6:03 PM 34140 900001
    El TICKET es el penúltimo número. El último es el cajero que cobró, y ese es
    justamente el que NO sirve: el vendedor es «Atendido por». Confundirlos le da
    el oro al gerente en vez de a quien vendió (MAPA, 18-ago-2026). */
-var RE_PIE = /^\s*(\d{4})\s+(\d{1,2})\s+(\d{1,2}\/\d{1,2}\/\d{2,4})\s+(\d{1,2}:\d{2}\s*[AP]\.?M\.?)\s+(\d{3,10})\s+(\d{3,10})\s*$/i;
+var RE_PIE = /(?:^|\s)(\d{4})\s+(\d{1,2})\s+(\d{1,2}\/\d{1,2}\/\d{2,4})\s+(\d{1,2}:\d{2}\s*[AP]\.?M\.?)\s+(\d{3,10})\s+(\d{3,10})\s*$/i;
+
+/* ── Por qué ninguna de estas expresiones empieza en `^` ─────
+   19-sep-2026, ticket 34273. El papel se fotografió sobre el teclado y con
+   otro ticket al lado, así que el OCR metió lo de los márgenes DENTRO de los
+   renglones: la tecla `Intro` al final de «PRODUCTOS VARIOS», un `8 Y` delante
+   de «GARANTÍA Y SEGURO», un `( ))` delante de «Promoción» y un `4` suelto
+   delante del pie.
+
+   Con las anclas pegadas al principio del renglón, cada una de esas motas
+   tiraba un dato entero y CALLANDO:
+
+     · el `4` del pie      → sin número de ticket, y sin él no se registra;
+     · el `8 Y`            → la garantía dejaba de ser garantía, y la pantalla
+                             decía «no hay Garantía» con la garantía impresa;
+     · el `( ))`           → la promoción de −$1,000 no se descontaba, y la
+                             suma de líneas no cerraba contra el Total;
+     · el `Intro`          → la mica se quedaba llamándose «PRODUCTOS VARIOS».
+
+   Es el mismo error que `verificar.py` ya tuvo con los apellidos (MAPA,
+   15-sep-2026): comparar contra CÓMO está escrito en vez de contra lo que
+   dice. Un asesor no va a fotografiar el ticket sobre un fondo limpio, y
+   pedírselo es pedirle que haga de escáner.
+
+   Lo que NO se relaja es la forma del dato: el pie sigue exigiendo tienda,
+   caja, fecha, hora y dos números; el renglón de cifras sigue exigiendo SKU,
+   cantidad, precio e importe en ese orden. Lo que se admite es basura ANTES,
+   separada por un espacio — nunca en medio. */
 
 /* ── Qué es una garantía ─────────────────────────────────────
    Se lee del ticket, no se deduce. Tiene línea propia, SKU propio y precio
@@ -157,7 +184,9 @@ var RE_PIE = /^\s*(\d{4})\s+(\d{1,2})\s+(\d{1,2}\/\d{1,2}\/\d{2,4})\s+(\d{1,2}:\
    quedaría corta el día que Assurant meta un plazo nuevo — callando, y
    convirtiendo oros en platas. */
 function esGarantia(desc) {
-  return /^GARANTIA Y SEGURO\b/.test(norm(desc));
+  // Sin `^`: el OCR le pega lo del margen delante («8 Y GARANTIA Y SEGURO
+  // 1 ANO MAS» en el ticket 34273). Ver la nota de RE_PIE.
+  return /\bGARANTIA Y SEGURO\b/.test(norm(desc));
 }
 
 /* ── Cómo se llama la línea en pantalla ──────────────────────
@@ -174,7 +203,7 @@ function nombreDe(linea) {
   var s = String((linea && linea.serie) || '').trim();
   // Una serie de verdad son 15+ caracteres de máquina; un código de artículo es
   // corto y legible. Sólo el segundo sirve como nombre.
-  if (/^PRODUCTOS VARIOS$/.test(d) && s && s.length <= 20 && /[A-Z]/i.test(s)) {
+  if (/\bPRODUCTOS VARIOS\b/.test(d) && s && s.length <= 20 && /[A-Z]/i.test(s)) {
     return s.toUpperCase();
   }
   return d;
@@ -207,13 +236,13 @@ function leerTicket(texto) {
       continue;
     }
 
-    var mVend = n.match(/^ATENDIDO POR\s*:?\s*(.+)$/);
+    var mVend = n.match(/(?:^|\s)ATENDIDO POR\s*:?\s*(.+)$/);
     if (mVend) { res.vendedor = mVend[1].replace(/\s*,\s*/, ', ').trim(); continue; }
 
     var mRec = n.match(/^RECUENTO DE ARTICULOS VENDIDOS\s*=\s*(\d+)/);
     if (mRec) { res.recuento = parseInt(mRec[1], 10); continue; }
 
-    var mTot = n.match(/^TOTAL\s+([\d.,]+)\s*$/);
+    var mTot = n.match(/(?:^|\s)TOTAL\s+\$?([\d.,]+)(?:\s|$)/);
     if (mTot && res.total == null) { res.total = aNumero(mTot[1]); continue; }
 
     var mCif = cruda.match(RE_CIFRAS);
@@ -251,7 +280,9 @@ function leerTicket(texto) {
     /* El descuento y la promoción son del artículo de ARRIBA, no del de abajo.
        Van después del renglón de cifras, así que el importe leído es el de
        lista: el MatePad de $29,990 se cobró en $14,995. */
-    var mDesc = n.match(/^(?:DESCUENTO\s*\$?|PROMOCION\b.*?)\s+(-[\d.,]+)\s*$/);
+    // Y el menos puede venir separado de la cifra («- 1,000.00»): `aNumero`
+    // ya quita los espacios, pero la expresión tenía que dejarlo pasar.
+    var mDesc = n.match(/(?:^|\s)(?:DESCUENTO\s*\$?|PROMOCION\b.*?)\s+(-\s*[\d.,]+)\s*$/);
     if (mDesc && res.lineas.length) {
       res.lineas[res.lineas.length - 1].descuento += Math.abs(aNumero(mDesc[1]) || 0);
       continue;

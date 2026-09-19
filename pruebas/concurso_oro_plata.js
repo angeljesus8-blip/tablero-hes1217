@@ -395,6 +395,89 @@ const nivelDe = (...lineas) => calificar(lineas).nivel;
 }
 
 
+/* ── 10 · El ticket fotografiado sobre el teclado ──────────────── */
+{
+  /* 19-sep-2026, ticket 34273, foto de Ángel. El papel iba sobre el teclado y
+     con otro ticket al lado, y el OCR metió los márgenes dentro de los
+     renglones: `4 1217 2 19/9/26…`, `8 Y GARANTÍA Y SEGURO`, `( )) Promoción`,
+     `PRODUCTOS VARIOS Intro`.
+
+     Cada mota tiraba un dato entero y sin ruido. El texto de `ocr_ticket_real10`
+     es el que salió de `cnLeerFoto` con esa foto —literal, salvo los nombres—,
+     así que si alguien vuelve a anclar una expresión en `^`, esto se cae. */
+  const su = leerTicket(fs.readFileSync(path.join(__dirname, 'ocr_ticket_real10.txt'), 'utf8'));
+
+  ok('el número de ticket sobrevive al `4` de más del pie', su.ticket === '34273', su.ticket);
+  ok('y la fecha también', fechaISO(su.fecha) === '2026-09-19', su.fecha);
+
+  const gar = su.lineas.filter(l => l.es_garantia);
+  ok('la garantía con basura delante sigue siendo garantía',
+     gar.length === 1 && gar[0].sku === '100272100',
+     su.lineas.map(l => l.sku + (l.es_garantia ? ' (gar)' : '')).join(' | '));
+
+  /* La promoción traia `( ))` delante Y el menos separado de la cifra. Si
+     cualquiera de las dos cosas no se admite, la suma no cierra. */
+  const suma = su.lineas.reduce((a, l) => a + (l.importe || 0) - (l.descuento || 0), 0);
+  ok('la promoción de -$1,000 se descuenta y la suma cierra contra el Total',
+     Math.abs(suma - su.total) < 0.5, suma + ' vs ' + su.total);
+
+  /* La red de avisos es lo que el asesor ve. Con el papel bien leído tiene que
+     estar VACÍA: tres avisos sobre un ticket correcto enseñan a ignorarlos. */
+  ok('un ticket bien leído no deja ningún aviso', su.avisos.length === 0,
+     su.avisos.join(' // '));
+
+  /* Y la mica recupera su nombre: `PRODUCTOS VARIOS` con la tecla `Intro`
+     pegada seguía siendo el genérico. Sin esto, validar es imposible. */
+  ok('la mica se llama por su código y no «PRODUCTOS VARIOS»',
+     su.lineas.some(l => l.nombre === 'MICATRANSP'),
+     su.lineas.map(l => l.nombre).join(' | '));
+
+  /* LO QUE EL TICKET ES DE VERDAD, bien leído: celular + garantía + mica del
+     43739 (TechSmart entero, por regla de Ángel en concurso_roles.js). Eso es
+     la TERCERA pareja de `concurso_nivel.js` —Core + Garantía + TechSmart—,
+     así que el ticket es PLATA.
+
+     Y ahí está lo que costaba de verdad: mal leído decía «No califica». El
+     asesor se queda sin su plata y nadie tiene forma de notarlo, porque la
+     pantalla da una razón que suena correcta. */
+  const cal = calificar(aplicarRoles(su.lineas, null));
+  ok('bien leído, el 34273 es PLATA', cal.nivel === 'plata',
+     cal.nivel + ': ' + cal.porque);
+  ok('y se le dice qué le faltó para el oro', /ORO/.test(cal.porque), cal.porque);
+}
+
+
+/* ── 11 · La mota puede caer en CUALQUIER renglón ─────────────── */
+{
+  /* El volcado del 34273 trae la basura en cuatro renglones, pero no en todos.
+     En la foto que Ángel subió desde el celular cayó en otros: su pantalla
+     leyó DOS artículos de tres y sumó $149 —o sea que la mota le tocó al
+     renglón de cifras de la garantía, que aquí salió limpio—.
+
+     Que la prueba dependa de dónde cayó la basura ESE día es no tener prueba:
+     se comprobó con cebos y, volviendo a anclar en `^`, estas tres no las
+     cazaba nadie. Así que van a mano, una por ancla. */
+  const sucio = [
+    'K PRODUCTOS VARIOS',
+    '| 000043739 1 149.000 $149.00 I',
+    'M Total 149.00',
+    ') Atendido por :LOPEZ, CARLOS'
+  ].join('\n');
+  const s = leerTicket(sucio);
+
+  ok('un artículo con basura delante del SKU se lee igual',
+     s.lineas.length === 1 && s.lineas[0].sku === '43739' && s.lineas[0].importe === 149,
+     JSON.stringify(s.lineas));
+  ok('el Total con basura delante se lee igual', s.total === 149, s.total);
+  ok('y el asesor también', s.vendedor === 'LOPEZ, CARLOS', s.vendedor);
+
+  /* Y la suma cierra, que es la red que protege el concurso: si alguna de las
+     tres se hubiera perdido, esto avisaría. */
+  ok('con los tres datos, el ticket sucio no deja avisos de suma',
+     !s.avisos.some(a => /suman/.test(a)), s.avisos.join(' // '));
+}
+
+
 if (fallos.length) {
   console.log('concurso oro/plata: ' + fallos.length + ' fallo(s)');
   fallos.forEach(f => console.log('   · ' + f));
