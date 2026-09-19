@@ -2532,6 +2532,122 @@ diciendo que no hay nada que vender.
 *(Anotado porque estuve a punto de "arreglar" esto sin entenderlo. La ausencia en
 el archivo no es falta de dato: es el dato.)*
 
+### El cero del agotado se llevaba la pieza de piso *(17-sep-2026)*
+
+Tres reglas, que en piso son una sola:
+
+1. El **reporte de exhibición es la foto completa** del piso, y se sube cada vez
+   que entra mercancía nueva al aparador.
+2. **EOL con el On Hand en cero, pieza exhibida y una venta** → esa venta *es* la
+   de exhibición, y el tablero la descuenta solo. No hay casilla que marcar:
+   cuando no queda bodega, la casilla ni aparece —el 50 % se aplica automático
+   (`EOL_VENTA` en captura_series.html)—, así que **el descuento automático es
+   la única vía que hay**.
+3. **Lo que no es EOL no vende su pieza de piso.** Con el On Hand en cero, una
+   venta es un equipo de traspaso o del CEDIS que el informe aún no refleja. El
+   aparador no se toca.
+
+Hasta el 17-sep el excedente sobre el On Hand se le cobraba al aparador de
+*cualquier* artículo (rompía la 3), y además lo hacía sobre un corte viejo:
+
+```
+vendido     = ventas − corte           corte viejo  →  vendido > 0
+exh_vendida = exh_marcada + greatest(0, vendido − onhand)
+onhand = 0  →  ventas de bodega de días pasados se leen como piezas de aparador
+```
+
+Porque desde el 5-sep `carga_catalogo` pone en cero el On Hand de lo que ya no
+viene en el informe —correcto— pero **no retomaba su corte**. Así, el descuento
+de la regla 2 dejaba de ser «una venta después de que la bodega quedó vacía» y
+pasaba a ser «todo lo vendido desde hace semanas»: **el aparador se vaciaba solo
+al agotarse el almacén**. No da error, porque el stock sí queda bien —cero es
+cero— y lo roto es el lado que solo se sube de vez en cuando, el que no se
+corrige con el informe del día siguiente.
+
+Encontrado en piso con el **Watch Fit 4 1.82" NG (100259554)**: pieza de piso
+puesta, artículo EOL, y el tablero decía «ya no». `onhand 0 · vendido 3 ·
+exhibición 1 · exh_vendida 3` — las tres ventas salieron de las tres cajas que
+hubo en bodega. Había **36 SKU con el corte huérfano**, 13 con pieza de piso y 4
+EOL sin su remate.
+
+Tres cambios, cada uno en su sitio:
+
+| Dónde | Qué |
+|---|---|
+| `inventario_vivo` (`supabase_venta_exhibicion.sql`) | el excedente pasa por un `CASE`: solo lo paga el aparador de un EOL **no pausado** |
+| `carga_catalogo` (`supabase_cargas_admin.sql`) | el `UPDATE … onhand = 0` es ahora un CTE que devuelve los SKU y les reescribe el corte con `corte_tomar_`, en la misma transacción |
+| `carga_exhibicion` (íd.) | la foto del piso retoma también el corte de On Hand **de los que trae con On Hand en cero**: una medición manda sobre una deducción, y sin esto reponer la exhibición de un EOL agotado no serviría de nada |
+
+Los 36 de hoy no se arreglan solos —el `UPDATE` solo toca los que tenían On Hand
+distinto de cero—, así que se repararon una vez con `supabase_corte_agotados.sql`,
+que retoma el corte **solo hasta la última subida del informe**: las ventas
+posteriores a ese momento sí son el descuento de la regla 2 y no se borran.
+
+En el tablero la segunda barrera sigue en pie: `finalizarStock` resta
+`exh_vendida` únicamente en los EOL, así que un SQL viejo sin pegar no puede
+vaciar el aparador de un producto activo. Las dos direcciones están fijadas en
+`pruebas/casos_tablero.js` (SKU 900008 y 900009), comprobadas con cebos.
+
+Reparar hacia atrás tiene un precio, y se pagó *(19-sep-2026)*. Retomar el corte
+también borra la señal de las piezas de piso que **ya se habían vendido sin
+marcar**: para el sistema esas ventas eran el excedente, y al recortar vuelven a
+ser de bodega. La reparación devolvió 13 piezas de piso y Ángel las cotejó
+contra el mueble: el Watch Fit 4 NG estaba, pero el **Watch GT6 41 mm BN
+(100274973)**, la **MatePad Pro 13.2" DO (100250576)** y el **Watch Kid AZ
+(100074525)** no — `onhand 0 · vendido 0 · exhibición 1`, sin ninguna venta que
+descontarles. Se corrigen por donde vive el dato equivocado, que es cuántas
+piezas hay exhibidas: **subir el reporte de exhibición**, que pone en cero lo
+que no viene y retoma los cortes. Por eso la comprobación 3 de
+`supabase_corte_agotados.sql` se lee con el aparador delante y no desde el
+escritorio: es la única que ningún SQL puede contestar.
+
+### Una pausa que solo conocía una app *(19-sep-2026)*
+
+Comercial puede detener el remate de un EOL. Esa pausa vivía en una constante de
+`tablero.html`:
+
+```js
+const EOL_PAUSADOS = new Set(['100280724']);  // pendiente autorizacion
+```
+
+y solo escondía **una** de las tres puertas por las que ese producto se ofrece:
+
+| Puerta | Qué hacía con el MatePad 11.5" VD+TCL |
+|---|---|
+| Sección EOL del tablero | lo escondía — la única que respetaba la lista |
+| Buscador (`estadoSku`) | lo daba en `50`: «última pieza de piso, 50%» |
+| Captura de Series | lee `eol_precio_venta` y **ponía el precio a la mitad solo** |
+
+Las tres leen el mismo producto y dos no sabían de la pausa. **Una regla escrita
+en un cliente no es una regla**: es una regla de ese archivo. La captura ni
+siquiera tenía de dónde enterarse — no importa la app, `eol_precio_venta` no
+distinguía porque en la tabla `eol` el SKU nunca se pausó.
+
+Ahora la pausa es un dato, `eol.pausado`, y cada quien la lee de ahí:
+
+- `eol_precio_venta` ya filtraba `NOT e.pausado` → la captura queda cubierta sin
+  tocarla.
+- `eol_lista` **deja de filtrar** y devuelve la columna `pausado`. Filtrarla era
+  lo que obligaba a la lista del cliente: sin la fila, el tablero no sabía que
+  el SKU era EOL, lo sacaba de `eolSkuSet` y lo mandaba a **Resurtir** —«pedir
+  caja»— de un producto descontinuado del que no va a llegar ninguna.
+- `tablero.html` filtra la sección EOL por `e.pausado`, y `estadoSku` devuelve
+  `piso` («en piso, en pausa») en vez de `50`.
+- `admin.html` lista los pausados con la etiqueta **EN PAUSA**. Antes no
+  aparecían en ningún lado: la pausa los volvía invisibles hasta para quien
+  tenía que administrarlos.
+
+Ser EOL y estar detenido son dos cosas distintas, y el error fue meterlas en el
+mismo `NOT e.pausado`. Para detener o soltar uno:
+
+```sql
+update public.eol set pausado = <bool> where store_id='1217' and sku='...';
+```
+
+Fijado en `pruebas/casos_tablero.js` con el SKU 900010 y comprobado con dos
+cebos: quitar el filtro de la sección EOL y quitar la rama de `estadoSku` hacen
+fallar la suite por separado.
+
 ### Tener una pieza y poder venderla no es lo mismo *(8-ago-2026, v150)*
 
 La pieza de exhibición de un producto **activo no se vende**. Se queda en el
@@ -2690,6 +2806,63 @@ rechaza con "Cupo agotado".
 De paso, el trigger sumaba `NEW.piezas` incluso al marcar un apartado como
 **Cancelado** —la pieza que se libera contaba como ocupada—, así que con el cupo
 lleno habría impedido cancelar. Corregido en el mismo archivo.
+
+### La preventa se abre y se termina sin deploy *(17-sep-2026, v247)*
+
+Lo de arriba describe cómo era hasta hoy, y **por qué tenía que cambiar**: la
+preventa era código. Para abrirla había que editar `const PREVENTA` en
+`tablero.html`, correr `preventa_cupo_gen.py`, pegar el SQL y publicar; para
+cerrarla, otra vez lo mismo.
+
+**Lo que costó (5-sep-2026).** Un cliente quiso apartar un PURA 90S PRO MAX NJ y
+la app contestó «Cupo agotado: 6 de 6 piezas ya apartadas». Los 6 llevaban
+semanas **entregados**: `apartado_cabe` cuenta todo lo que no esté Cancelado, así
+que el SKU se bloqueó *justamente por haberse vendido bien*. Y quitarle el tope
+no estaba en ninguna pantalla.
+
+```
+Admin · 🎁 Preventa ──► carga_preventa      ┐
+                   ──► preventa_terminar    ├──►  tabla `preventa_cupo`
+                                            │      (producto, precio, cupo,
+tablero.html · cargarPreventaNube           │       activa)
+   └── preventa_lista ──► PREVENTA ──► sección 🎁 + botón de apartar
+                                            │
+                       apartado_cabe  ◄─────┘   el tope, solo si `activa`
+```
+
+Tres decisiones, con su motivo:
+
+- **El cupo sigue contando los entregados.** No se cambió la cuenta: el cupo es
+  cuántas piezas tiene asignadas la tienda, y una entregada ocupó su lugar de
+  verdad. Lo que faltaba era poder decir *«ya terminó»* — eso es `activa`.
+- **`cupo` puede ser NULL, y NULL no es cero.** Preventa abierta sin tope es el
+  caso normal antes de que el corporativo reparta piezas. En pantalla se dice con
+  palabras («sin límite» / «SIN CUPO»), no con el número: pintados igual, uno
+  bloquea y el otro no, y no habría error que lo delatara.
+- **`producto` y `precio` viven en la fila.** Un equipo en preventa no está en el
+  catálogo ni en el inventario —ese es el caso—, así que sin esos dos datos no
+  hay con qué dibujar la tarjeta, y sin tarjeta no hay dónde apartar.
+
+**La preventa viaja en su propia llamada**, no dentro de `tablero_todo`. Meterla
+ahí obligaba a redefinir `tablero_todo` en el .sql de la preventa, y entonces la
+misma función queda escrita en dos archivos: el día que alguien repegue el otro,
+la sección desaparece sin un solo error. Cuesta ~0,2 s en paralelo y a cambio la
+función sigue estando en un solo sitio.
+
+El botón de apartar de esta sección **no** pasa por `botonApartar`. Aquél decide
+por existencia (solo `traer` y `piso`), y en preventa eso daría los dos errores
+opuestos: dejaría apartar sin mirar el cupo, y dejaría de ofrecerlo el día que
+llegue el embarque — que es cuando más se aparta.
+
+`preventa_cupo_gen.py` y la regla `cupo` de `verificar.py` quedan por si alguien
+vuelve al camino viejo; el camino vivo es Admin. Las nueve comprobaciones nuevas
+de `pruebas/casos_tablero.js` cubren lo que no da error al romperse: la tarjeta
+de un SKU que no está en el inventario, el agotado sin botón, el sin-límite con
+botón, y que sin preventa la sección no exista.
+
+**Lo que NO se probó:** abrir y terminar contra la base de verdad. Requiere el
+token bueno de la tienda, y una preventa de mentira en `1217` la habría visto el
+equipo en su tablero.
 
 ---
 

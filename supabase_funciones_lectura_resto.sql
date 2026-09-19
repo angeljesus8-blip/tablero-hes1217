@@ -84,20 +84,40 @@ $$;
 -- Se devuelven igual, con precio NULL: el tablero los tiene que listar aunque
 -- no pueda calcularles el remate. Filtrarlos aquí los haría desaparecer de la
 -- pantalla sin que nadie supiera por qué.
-CREATE OR REPLACE FUNCTION public.eol_lista(p_store text)
-RETURNS TABLE (sku text, precio numeric, precio_efectivo numeric)
+--
+-- Los pausados TAMBIÉN se devuelven, con `pausado = true` (19-sep-2026). Antes
+-- se filtraban aquí y el tablero los perdía de vista: sin estar en `eolSkuSet`,
+-- un EOL pausado con pieza de piso caía en **Resurtir** —"pedir caja"— y con
+-- botón de apartar. De un EOL no llega caja: es prometer lo que no va a pasar.
+-- El tablero necesita saber que ES un EOL y que está detenido; son dos cosas
+-- distintas y solo la segunda esconde la tarjeta del 50%.
+--
+-- Quien no los debe ver es `eol_precio_venta` —esa sí filtra `NOT e.pausado`—,
+-- que es la que fija el precio automático en Captura de Series. Así la pausa
+-- vive SOLO en la tabla `eol` y la respetan las dos apps. Antes vivía en una
+-- constante de tablero.html (`EOL_PAUSADOS`) que la captura no leía: el tablero
+-- escondía el MatePad 11.5" VD+TCL y la captura se lo cobraba al 50% igual.
+--
+-- Cambia el tipo de retorno, así que CREATE OR REPLACE no basta: va DROP antes.
+DROP FUNCTION IF EXISTS public.eol_lista(text);
+
+CREATE FUNCTION public.eol_lista(p_store text)
+RETURNS TABLE (sku text, precio numeric, precio_efectivo numeric, pausado boolean)
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
 AS $$
   SELECT e.sku,
          e.precio,
          -- el que se usaría para el 50%: propio, y si no, el del catálogo
-         coalesce(nullif(e.precio, 0), c.precio) AS precio_efectivo
+         coalesce(nullif(e.precio, 0), c.precio) AS precio_efectivo,
+         coalesce(e.pausado, false)              AS pausado
   FROM public.eol e
   LEFT JOIN public.catalogo c ON c.store_id = e.store_id AND c.sku = e.sku
   WHERE e.store_id = p_store
-    AND NOT e.pausado
   ORDER BY e.sku;
 $$;
+
+REVOKE ALL ON FUNCTION public.eol_lista(text) FROM public;
+GRANT EXECUTE ON FUNCTION public.eol_lista(text) TO anon, authenticated;
 
 
 -- ------------------------------------------------------------
