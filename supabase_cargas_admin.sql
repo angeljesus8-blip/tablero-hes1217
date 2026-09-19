@@ -160,10 +160,39 @@ BEGIN
   IF n_con_stock > 0 AND (SELECT count(*) FROM _carga WHERE onhand > 0) * 2 < n_con_stock THEN
     n_cero := -1;   -- lo lee la app: archivo sospechosamente corto
   ELSE
-    UPDATE public.inventario i SET onhand = 0
-     WHERE i.store_id = p_store
-       AND coalesce(i.onhand,0) <> 0
-       AND NOT EXISTS (SELECT 1 FROM _carga g WHERE g.sku = i.sku);
+    /* EL CERO VA CON SU CORTE — 17-sep-2026.
+       Poner el On Hand en cero sin retomar el corte deja el dato a medias: el
+       SKU se queda con `vendidas` del ultimo dia que SI vino en el archivo, y
+       `inventario_vivo` sigue calculando `vendido = ventas - ese corte viejo`.
+       Con onhand ya en 0, esas ventas pasan a leerse como excedente sobre el
+       almacen — y el excedente se le imputa a la EXHIBICION:
+
+           exh_vendida = exh_marcada + greatest(0, vendido - onhand)
+
+       Resultado: el aparador se vacia solo al agotarse la bodega. El 17-sep el
+       Watch Fit 4 negro (100259554) tenia su pieza de piso puesta, era EOL, y
+       el tablero decia «ya no» en vez de ofrecerla al 50 %. Eran 36 SKU con el
+       corte huerfano, 13 con pieza de piso y 4 EOL que perdieron su remate.
+
+       No da ningun error: el stock queda bien (0 es 0) y lo que se rompe es el
+       otro lado, el que solo se sube de vez en cuando y por eso no se corrige
+       solo al dia siguiente.
+
+       Retomarlo aqui es lo mismo que se hace con los SKU presentes, y en la
+       MISMA transaccion por el mismo motivo: una venta que entre en medio se
+       contaria dos veces. */
+    WITH cero AS (
+      UPDATE public.inventario i SET onhand = 0
+       WHERE i.store_id = p_store
+         AND coalesce(i.onhand,0) <> 0
+         AND NOT EXISTS (SELECT 1 FROM _carga g WHERE g.sku = i.sku)
+      RETURNING i.sku
+    )
+    INSERT INTO public.inventario_corte (store_id, tipo, sku, vendidas)
+    SELECT p_store, 'onhand', c.sku, public.corte_tomar_(p_store, 'onhand', c.sku)
+    FROM cero c
+    ON CONFLICT (store_id, tipo, sku) DO UPDATE
+      SET vendidas = excluded.vendidas, tomado_en = now();
     GET DIAGNOSTICS n_cero = ROW_COUNT;
   END IF;
   GET DIAGNOSTICS n_inv = ROW_COUNT;
@@ -238,6 +267,27 @@ BEGIN
   INSERT INTO public.inventario_corte (store_id, tipo, sku, vendidas)
   SELECT p_store, 'exhibicion', e.sku, public.corte_tomar_(p_store, 'exhibicion', e.sku)
   FROM _exh e
+  ON CONFLICT (store_id, tipo, sku) DO UPDATE
+    SET vendidas = excluded.vendidas, tomado_en = now();
+
+  /* LA FOTO DEL PISO MANDA SOBRE EL DESCUENTO AUTOMATICO — 17-sep-2026.
+     `inventario_vivo` le cobra al aparador de un EOL las ventas que pasan del
+     On Hand. Eso es lo que hace que la pieza de piso baje sola al venderse,
+     pero es una DEDUCCION, y esta foto es una MEDICION: si el reporte dice que
+     hoy hay una pieza puesta, la hay — aunque el sistema hubiera deducido que
+     ya se fue. Sin esto, reponer la exhibicion de un EOL agotado (un traspaso
+     que el informe de bodega todavia no ve) no serviria de nada: el excedente
+     viejo se la seguiria comiendo y la pieza no volveria a ofrecerse.
+
+     SOLO donde el On Hand esta en cero, y por eso no mueve una sola cifra de
+     bodega: ahi `stock = greatest(0, 0 - vendido)` ya es cero con corte viejo o
+     nuevo. Con On Hand positivo el corte NO se toca — retomarlo ahi subiria el
+     stock a mano y taparia ventas sin capturar. */
+  INSERT INTO public.inventario_corte (store_id, tipo, sku, vendidas)
+  SELECT p_store, 'onhand', e.sku, public.corte_tomar_(p_store, 'onhand', e.sku)
+  FROM _exh e
+  JOIN public.inventario i ON i.store_id = p_store AND i.sku = e.sku
+   WHERE coalesce(i.onhand, 0) = 0 AND e.exhibe > 0
   ON CONFLICT (store_id, tipo, sku) DO UPDATE
     SET vendidas = excluded.vendidas, tomado_en = now();
 

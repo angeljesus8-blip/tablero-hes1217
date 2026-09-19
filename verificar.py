@@ -1173,6 +1173,7 @@ NO_SON_NOMBRES = (
     'disco duro adata', 'prueba tel con', 'prueba tel sin', 'prueba se trae',
     'prueba solo pieza', 'prueba eol con', 'prueba eol agotado',
     'prueba sin precio', 'prueba promo sin',
+    'prueba eol piso', 'prueba activo traido', 'prueba eol detenido',
 )
 
 # Un nombre nunca lleva una de éstas. Sirven para separar un nombre de una
@@ -1618,7 +1619,7 @@ def r_pruebas():
                'horario_solo_mio.js', 'horario_sesion_ajena.js', 'comisiones_solo_mia.js',
                'login_por_correo.js', 'admin_sesion_ajena.js',
                'mrfix_corregir.js', 'cea_precio_nuevo.js', 'cea_vigencia.js',
-               'concurso_oro_plata.js')
+               'concurso_oro_plata.js', 'admin_preventa.js')
 
     # La lista de arriba es explícita a propósito —así falta un archivo y se
     # nota—, pero eso deja el hueco contrario: una prueba escrita y no añadida

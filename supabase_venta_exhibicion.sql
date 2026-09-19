@@ -76,6 +76,24 @@ COMMENT ON COLUMN public.ventas.de_exhibicion IS
 
 
 -- ── 2 · El inventario, con las dos procedencias ─────────────
+--
+--  ACTUALIZADO EL 17-sep-2026 · el excedente solo lo paga el aparador de un EOL
+--  ------------------------------------------------------------------------
+--  El excedente sobre el On Hand se le cobraba a la exhibicion de CUALQUIER
+--  articulo, y eso solo es cierto para los EOL:
+--
+--    · EOL agotado en bodega  -> la pieza de piso SI se vende (al 50 %), y la
+--      casilla «es la pieza de exhibicion» ni siquiera aparece: cuando no queda
+--      bodega el 50 % se pone solo (`EOL_VENTA` en captura_series.html). O sea
+--      que para estos el descuento automatico es la UNICA via, y tiene que
+--      seguir existiendo.
+--    · Cualquier otro articulo -> su pieza de piso NO se vende. Si el On Hand
+--      esta en cero y aun asi se registra una venta, esa pieza viene de un
+--      traspaso o del CEDIS y todavia no la refleja el informe. Descontarla del
+--      aparador era inventar que se vendio la muestra.
+--
+--  Asi que el excedente pasa por un CASE, y el aparador de lo que no es EOL
+--  solo baja si alguien marco la venta a mano.
 CREATE OR REPLACE FUNCTION public.inventario_vivo(p_store text)
 RETURNS TABLE (
   sku text, descripcion text, precio numeric,
@@ -108,10 +126,16 @@ AS $$
       c.sku, c.descripcion, c.precio,
       coalesce(i.onhand, 0)     AS onhand,
       coalesce(i.exhibicion, 0) AS exhibicion,
+      -- Pausado NO cuenta: mientras no haya autorizacion comercial su pieza de
+      -- piso no se remata, asi que una venta suya tampoco pudo salir de ahi.
+      -- Es el mismo criterio que usa `eol_precio_venta` para ofrecer el 50 %.
+      (e.sku IS NOT NULL)       AS es_eol,
       greatest(0, coalesce(b.total,0) - coalesce(co.vendidas,0))::int AS vendido,
       greatest(0, coalesce(a.total,0) - coalesce(ce.vendidas,0))::int AS exh_marcada
     FROM public.catalogo c
     LEFT JOIN public.inventario i ON i.store_id = c.store_id AND i.sku = c.sku
+    LEFT JOIN public.eol e ON e.store_id = c.store_id AND e.sku = c.sku
+                          AND NOT e.pausado
     LEFT JOIN bodega   b  ON b.sku  = c.sku
     LEFT JOIN aparador a  ON a.sku  = c.sku
     LEFT JOIN public.inventario_corte co
@@ -127,11 +151,17 @@ AS $$
     -- stock vendible = solo almacén. La exhibición NO se suma ni se resta.
     greatest(0, onhand - vendido)::int AS stock,
     exhibicion,
-    /* Las marcadas de exhibición MÁS el excedente sobre el On Hand. Lo segundo
-       es lo que ya hacía el modelo viejo y se conserva a propósito: sin ello,
-       las ventas que se comieron una pieza de piso ANTES de que existiera la
-       marca volverían a aparecer como piezas disponibles. */
-    (exh_marcada + greatest(0, vendido - onhand))::int AS exh_vendida
+    /* Las marcadas de exhibición MÁS el excedente sobre el On Hand — este
+       segundo sumando SOLO si el artículo es EOL (ver la cabecera de arriba).
+       Es el descuento automático: bodega en cero + pieza en el aparador + una
+       venta = se vendió la de piso, sin que nadie tenga que marcar nada.
+
+       Y depende de que el corte se retome el día que el On Hand se pone en
+       cero, cosa que `carga_catalogo` no hacía hasta el 17-sep: con un corte
+       viejo, `vendido` arrastra ventas de bodega de días pasados y el aparador
+       se vacía solo en cuanto se agota el almacén. */
+    (exh_marcada
+      + CASE WHEN es_eol THEN greatest(0, vendido - onhand) ELSE 0 END)::int AS exh_vendida
   FROM base;
 $$;
 

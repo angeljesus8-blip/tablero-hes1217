@@ -73,9 +73,23 @@ const TIENDA = {
     { sku:'900006', descripcion:'PRUEBA SE TRAE DE OTRA',    precio:7999,  onhand:0, vendido:0, stock:0, exhibicion:0, exh_vendida:0 },
     // sin precio: el apartado tiene que pedirlo
     { sku:'900007', descripcion:'PRUEBA SIN PRECIO',         precio:null,  onhand:0, vendido:0, stock:0, exhibicion:0, exh_vendida:0 },
+    /* Los dos casos del 17-sep-2026, uno por cada lado de la misma regla.
+       El servidor manda `exh_vendida` ya decidido: le cobra el excedente al
+       aparador SOLO si el artículo es EOL. Estas dos filas fijan lo que el
+       tablero tiene que hacer con esa respuesta. */
+    // EOL agotado cuya pieza de piso YA se vendió -> no se ofrece al 50%
+    { sku:'900008', descripcion:'PRUEBA EOL PISO VENDIDO',   precio:1299,  onhand:0, vendido:1, stock:0, exhibicion:1, exh_vendida:1 },
+    // ACTIVO agotado con pieza de piso: se vendieron equipos traídos de otra
+    // tienda (vendido > onhand) y aun así el aparador NO baja
+    { sku:'900009', descripcion:'PRUEBA ACTIVO TRAIDO',      precio:5999,  onhand:0, vendido:2, stock:0, exhibicion:1, exh_vendida:0 },
+    // EOL detenido por comercial: hay pieza de piso, pero no se remata
+    { sku:'900010', descripcion:'PRUEBA EOL DETENIDO',       precio:6999,  onhand:0, vendido:0, stock:0, exhibicion:1, exh_vendida:0 },
   ],
-  eol: [ { sku:'900004', precio:1999, precio_efectivo:1999 },
-         { sku:'900005', precio:1499, precio_efectivo:1499 } ],
+  // `pausado` lo manda `eol_lista` en cada fila desde el 19-sep-2026
+  eol: [ { sku:'900004', precio:1999, precio_efectivo:1999, pausado:false },
+         { sku:'900005', precio:1499, precio_efectivo:1499, pausado:false },
+         { sku:'900008', precio:1299, precio_efectivo:1299, pausado:false },
+         { sku:'900010', precio:6999, precio_efectivo:6999, pausado:true  } ],
   eol_venta: {},
   // Lista, no diccionario: así la manda `tablero_todo`
   promos: [

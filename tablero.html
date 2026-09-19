@@ -698,6 +698,11 @@ let PUEDE_GESTIONAR = (YO && YO.puesto)
    uno lo decidiera por su cuenta, bastaría olvidar uno para que la sección
    siguiera alcanzable por ahí. */
 function seccionVisible_(id){
+  /* La preventa no es cuestión de permiso sino de que exista: sin ninguna
+     abierta, `#preventa` tecleado o restaurado por continuidad.js abriría una
+     sección vacía con su cabecera y su flecha de volver. Se comprueba aquí —y
+     no solo en `seccionTieneItems`— porque esta es la puerta que mira la URL. */
+  if(id === 'preventa') return PREVENTA.length > 0;
   return id !== 'resurtir' || PUEDE_GESTIONAR;
 }
 
@@ -789,7 +794,39 @@ const FILTROS = [
     sub:'Piezas de exhibición que ya se pueden rematar' },
   { id:'resurtir', label:'🔄 Resurtir', icono:'🔄', color:'var(--azul)',
     sub:'Sin existencia — hay que pedir' },
+
+  /* Va al final de la lista, pero solo existe mientras haya una preventa
+     abierta: `seccionTieneItems` la esconde el resto del año. */
+  { id:'preventa', label:'🎁 Preventa', icono:'🎁', color:'#7c3aed',
+    sub:'Se paga hoy, se entrega cuando llegue' },
 ];
+/* La preventa viene de la base (`preventa_lista`), ya no de una lista escrita
+   aquí (17-sep-2026).
+
+   Estuvo escrita a mano hasta el 8-ago: doce SKU de Pura 90S con su cupo, en un
+   `const PREVENTA` de este archivo. Eso obligaba a un deploy para abrir una
+   preventa y a OTRO para cerrarla, y el 5-sep se vio lo que cuesta: el PRO MAX
+   NJ no se pudo apartar —«Cupo agotado: 6 de 6»— con los 6 entregados desde
+   hacía semanas. El SKU se bloqueó por haberse vendido, y quitarle el tope no
+   estaba en ninguna pantalla.
+
+   Ahora la preventa se abre y se termina desde Admin → 🎁 Preventa, y aquí solo
+   se pinta lo que esté ABIERTO. Vacío es lo normal: sin preventa, esta sección
+   ni siquiera aparece en el Inicio.
+
+   Se declara ANTES de `_deLaUrl` a propósito: esa función corre al cargar el
+   archivo y pregunta por `seccionVisible_('preventa')`, que mira esta lista. Más
+   abajo —donde está APARTADOS, que sería su sitio— entrar con `#preventa` en el
+   hash reventaría el script entero antes de pintar nada. */
+let PREVENTA = [];
+
+/* Qué sección pidió la URL al abrir, antes de que nadie la reescriba. Hace falta
+   solo para la preventa: Captura de Series devuelve a `#preventa` al terminar de
+   escanear una serie, y en ese instante la lista todavía está vacía —viaja en su
+   propia llamada—, así que `_deLaUrl` cae a Inicio y `_urlAlDia` borra la
+   intención. Con esto, cuando la respuesta llega, se vuelve a donde se pedía. */
+const _SECCION_PEDIDA = decodeURIComponent((location.hash||'').replace(/^#/,'')).split('/')[0];
+
 /* La pestaña se puede fijar desde fuera con #preventa. Lo usa Captura de Series
    para devolver al asesor justo donde estaba después de escanear una serie: sin
    esto vuelve al Inicio y tiene que buscar otra vez al cliente en la lista. */
@@ -829,6 +866,7 @@ function _urlAlDia(){
 }
 
 let APARTADOS = [];
+
 /* El total decía "de 36" escrito a mano. Al habilitar una pieza más en Orange
    Ocean (5-ago-2026) el banner habría dicho "quedan 1 de 36" con 37 repartidas:
    se suma de los cupos para que no vuelva a mentir. */
@@ -930,7 +968,12 @@ let _invEdadHoras = null;
     if(horas > INV_HORAS_MAX){ localStorage.removeItem(INV_KEY); return; }
     _invEdadHoras = horas;
     D.inventario = c.inventario;
-    if(Array.isArray(c.eol) && c.eol.length) D.eol = c.eol;
+    /* Solo si el cache ya trae `pausado` (19-sep-2026). Uno guardado antes de
+       ese dia no lo tiene, y sin el un EOL detenido volveria a ofrecerse al
+       50% hasta la primera carga con red. Se descarta el eol, no el
+       inventario: sin eol el tablero no inventa remates, solo no los muestra. */
+    if(Array.isArray(c.eol) && c.eol.length &&
+       c.eol.every(function(e){ return e && 'pausado' in e; })) D.eol = c.eol;
   }catch(e){}   // cache ilegible: se arranca sin inventario y la nube lo trae
 })();
 
@@ -943,10 +986,21 @@ const esc = s => String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':
 const money = n => '$'+Number(n||0).toLocaleString('es-MX');
 const money2 = n => '$'+Number(n||0).toLocaleString('es-MX',{minimumFractionDigits:2, maximumFractionDigits:2});
 const eolSkuSet = new Set((D.eol||[]).map(e=>e.sku));
+/* Los detenidos por comercial. Son EOL —por eso siguen en `eolSkuSet` y no
+   caen en Resurtir pidiendo una caja que no va a llegar— pero no se rematan.
+   Sin este set, `estadoSku` los daba en '50': el buscador ofrecia al 50% lo
+   que la seccion EOL escondia, y nadie veia la contradiccion porque son dos
+   pantallas distintas. */
+const eolPausadoSet = new Set((D.eol||[]).filter(e=>e.pausado===true).map(e=>e.sku));
 
-// SKUs EOL pausados por indicacion del area comercial — no mostrar como vendibles
-// aunque el sistema ya los marque "listo" (ver [[project_hes_ang...]] combos EOL)
-const EOL_PAUSADOS = new Set(['100280724']); // MatePad 11.5" VD+TCL — pendiente autorizacion comercial
+/* La pausa comercial ya NO se escribe aqui (19-sep-2026). Vive en la tabla
+   `eol` de Supabase y llega en cada fila como `pausado`, porque esta app no es
+   la unica que la necesita: Captura de Series lee `eol_precio_venta` —que
+   filtra los pausados— y con la lista en este archivo le cobraba al 50% un
+   MatePad que el tablero se negaba a ofrecer. Una regla en un solo cliente no
+   es una regla.
+   Para detener o soltar un EOL:  update public.eol set pausado = <bool>
+                                   where store_id='1217' and sku='...';   */
 
 // Variables recalculables cuando llegan datos de la nube
 let EOL = [], eolMap = {}, RESURTIR = [], AGOTADOS = [];
@@ -1504,7 +1558,13 @@ function finalizarStock(item){
 
      Visto en piso el mismo día: el aparador seguía marcando una pieza que ya se
      había vendido. Cambiar lo que significa un campo del servidor obliga a
-     mirar quién lo consume — el campo llegaba bien, la cuenta era la vieja. */
+     mirar quién lo consume — el campo llegaba bien, la cuenta era la vieja.
+
+     17-sep-2026: `exh_vendida` ya viene decidido POR ARTÍCULO. El servidor le
+     cobra el excedente sobre el On Hand solo al aparador de un EOL; en lo que
+     no lo es, una venta con la bodega en cero es un equipo de traspaso o del
+     CEDIS y el piso no se toca. El `? :` de aquí abajo se queda igual y a
+     propósito: es la segunda barrera, la que aguanta un SQL sin pegar. */
   item.exhibe = eolSkuSet.has(item.sku) ? Math.max(0, e - ev) : e;
 }
 function calcDerivados(){
@@ -1516,8 +1576,9 @@ function calcDerivados(){
     const estado = (stock===0 && exhibe>0) ? 'listo' : (stock>0 ? 'pendiente' : 'agotado');
     const precio = e.precio || inv.precio || 0;
     return { sku:e.sku, producto:e.producto||inv.producto||('SKU '+e.sku),
-      precio:precio, precio50:precio?precio/2:null, stock, exhibe, estado };
-  }).filter(e=>e.exhibe>0 && !EOL_PAUSADOS.has(e.sku));
+      precio:precio, precio50:precio?precio/2:null, stock, exhibe, estado,
+      pausado: e.pausado === true };
+  }).filter(e=>e.exhibe>0 && !e.pausado);
   eolMap = {}; EOL.forEach(e=>{ eolMap[e.sku]=e.estado; });
   RESURTIR = (D.inventario||[]).filter(x=>x.stock===0 && x.exhibe>0 && !eolSkuSet.has(x.sku))
               .sort((a,b)=> a.producto.localeCompare(b.producto));
@@ -1563,6 +1624,7 @@ function seccionTieneItems(id){
   if(id==='eol')      return EOL.length>0;
   if(id==='inv')      return (D.inventario||[]).length>0;
   if(id==='resurtir') return RESURTIR.length>0 || AGOTADOS.length>0;
+  if(id==='preventa') return PREVENTA.length>0;
   return false;
 }
 
@@ -1600,6 +1662,9 @@ function estadoSku(sku){
   const inv = invBySku[sku] || {};
   const st = inv.stock || 0, ex = inv.exhibe || 0;
   const esEol = eolSkuSet.has(sku);
+  // Detenido: hay pieza de piso, pero no se vende ni al 50% ni entera.
+  if(ex > 0 && esEol && eolPausadoSet.has(sku))
+    return { k:'piso', n:0, txt:'para vender', pie:`${ex} en piso, en pausa` };
   if(st > 0)              return { k:'hay',   n:st, txt: st===1?'pieza':'piezas', pie:ex?`${ex} en exhibición`:'' };
   if(ex > 0 && esEol)     return { k:'50',    n:'50%', txt:'última', pie:'Última pieza de piso' };
   if(ex > 0)              return { k:'piso',  n:0,  txt:'para vender', pie:`${ex} en piso, no se vende` };
@@ -1707,6 +1772,13 @@ function buscarEnTodo(){
   push('💰 Precio regular', sinPromo.filter(conPiezas_), cardPrecioReg);
 
   push('🏷️ Vender al 50%', EOL.filter(e=>coincide(e.producto,e.sku) && e.estado==='listo'), cardEol);
+
+  /* La preventa va ARRIBA del bloque de "se trae de otra tienda" porque es el
+     mismo producto contestado de dos maneras: si está en preventa, el cliente
+     lo aparta hoy y con su precio de lanzamiento, no se le pide a otra tienda.
+     Sin esto, buscar el equipo nuevo por su nombre no daría nada —no está en el
+     catálogo todavía— y parecería que la tienda no lo maneja. */
+  push('🎁 En preventa', PREVENTA.filter(p=>coincide(p.producto,p.sku)), cardPreventa);
 
   /* Los apartados también se buscan: "¿lo de Mayra ya llegó?" es una pregunta
      de todos los días, y antes había que ir a la sección a mirar la lista. */
@@ -2131,6 +2203,17 @@ function guardarApartado(){
         telefono:tel, precio:String(precio||''), seguro:seguro, vend:vend,
         estatus:'Apartado', transaccion:transaccion, serie:'',
         tipo:'traspaso', origen:origen.trim(), promesa:promesa||'', diasTarde:null});
+      /* La preventa lleva su cuenta aparte —la calcula la base en
+         `preventa_lista`, no sale de `apartados_lista`—, así que sin esto la
+         tarjeta seguiría diciendo el mismo "quedan N" hasta el próximo viaje
+         completo. Quien aparta dos seguidos vería el cupo quieto y creería que
+         no se guardó. `quedan` en null es "sin límite" y se queda en null. */
+      const pvFila = PREVENTA.filter(function(p){ return p.sku === sku; })[0];
+      if(pvFila){
+        pvFila.apartadas = (pvFila.apartadas||0) + 1;
+        if(pvFila.quedan !== null && pvFila.quedan !== undefined)
+          pvFila.quedan = Math.max(0, pvFila.quedan - 1);
+      }
       cerrarApartado(); render(); cargarApartadosNube();
     } else if(data && data.error){
       // "Cupo agotado: 4 de 4 piezas ya apartadas" llega tal cual desde la
@@ -2151,6 +2234,36 @@ function guardarApartado(){
    una foto vieja de apartados es prometerle a un cliente una pieza que ya tiene
    dueño—. Si Supabase no contesta, se marca la carga como fallida y el banner
    dice "no prometas la última pieza todavía", que es la verdad. */
+/* La preventa viaja aparte y NO dentro de `tablero_todo` (17-sep-2026).
+   Meterla ahí habría ahorrado esta llamada, pero obligaba a redefinir
+   `tablero_todo` en el .sql de la preventa, y entonces la misma función queda
+   escrita en dos archivos: el día que alguien repegue el otro, la preventa
+   desaparece del tablero sin dar un solo error. Es el caso que `verificar.py`
+   ya marca con `resincronizar`.
+
+   Va en paralelo, no encadenada: si tarda o falla, el tablero se pinta igual.
+   `null` (función que no existe: tienda sin el SQL pegado, o sin red) NO vacía
+   lo que ya se tenía — solo una respuesta buena manda. */
+async function cargarPreventaNube(){
+  const filas = await sbRpc('preventa_lista');
+  if(!Array.isArray(filas)) return;
+  /* `cupo` y `quedan` se conservan en null cuando la preventa es sin límite:
+     volverlos 0 con un Number() diría "agotado" sobre algo que no tiene tope. */
+  const num = function(v){ return (v===null||v===undefined||v==='') ? null : Number(v); };
+  PREVENTA = filas.filter(function(p){ return p.activa; }).map(function(p){
+    return { sku:String(p.sku), producto:p.producto||'', precio:Number(p.precio)||0,
+             cupo:num(p.cupo), quedan:num(p.quedan), apartadas:Number(p.apartadas)||0 };
+  });
+  /* Volver a donde se pedía. Solo si el asesor no se ha movido (sigue en Inicio
+     y sin buscar nada): llevárselo de una pantalla que ya estaba usando sería
+     peor que no restaurar nada. */
+  if(_SECCION_PEDIDA === 'preventa' && PREVENTA.length && filtroActivo === 'inicio' && !busqueda){
+    irA('preventa');
+    return;
+  }
+  render();
+}
+
 async function cargarApartadosNube(){
   const filas = await sbCall('apartados_lista');
   if(!Array.isArray(filas)){ marcarCarga('apartados', false); return; }
@@ -2424,6 +2537,77 @@ function seccionBundles(titulo, items){
   return `<div class="grupo-titulo">${titulo}</div>` + html;
 }
 
+/* ===================== PREVENTA =====================
+   Una tarjeta por SKU abierto. El precio y el nombre salen de la fila de
+   `preventa_cupo`, NO del catálogo: un equipo en preventa todavía no existe en
+   el inventario —ese es justo el caso— y sin esos dos datos no habría con qué
+   dibujarla.
+
+   El botón se pinta aquí y no con `botonApartar` a propósito. Aquél decide por
+   existencia (solo 'traer' y 'piso'), y en preventa eso daría dos errores
+   opuestos: dejaría apartar sin mirar el cupo, y dejaría de ofrecerlo el día que
+   llegue el embarque — que es cuando más se aparta. */
+function cardPreventa(p){
+  const sinTope   = (p.cupo === null || p.cupo === undefined || p.cupo === '');
+  const quedan    = sinTope ? null : Math.max(0, Number(p.quedan) || 0);
+  const agot      = !sinTope && quedan <= 0;
+  const cls       = agot ? 'agot' : (sinTope || quedan > 2) ? 'ok' : quedan <= 1 ? 'ultima' : 'pocas';
+  /* "Sin límite" y "quedan 0" se parecen si se pinta el número solo, y son lo
+     contrario: uno deja apartar y el otro bloquea. Van con palabras distintas. */
+  const cupoTxt   = agot    ? 'SIN CUPO'
+                  : sinTope ? (Number(p.apartadas)||0) + ' apartadas'
+                            : `Quedan ${quedan} de ${p.cupo}`;
+  const precio    = Number(p.precio) || 0;
+  const s         = precio ? seguroPara(precio, p.sku) : null;
+  const segLine   = s ? `<div class="pv-seg">🛡️ Con Seguro 1 año: <b>${money(precio + s.p1)}</b></div>` : '';
+  const est       = estadoSku(p.sku);
+  /* Que ya haya llegado no cierra la preventa: el cliente sigue pagando hoy y
+     recogiendo después. Pero el asesor necesita saberlo para no decirle que
+     espere tres semanas por algo que está en la vitrina. */
+  const llegó     = est.k === 'hay'
+    ? `<div class="pv-seg" style="color:var(--verde)">✅ Ya llegó: ${est.n} en tienda</div>` : '';
+  return `<div class="card t-preventa${agot?' pv-agot':''}">
+    ${eyebrowSku(p.sku)}
+    <div class="top">
+      <h3>${esc(p.producto || ('SKU '+p.sku))}</h3>
+      <span class="pv-cupo ${cls}">${cupoTxt}</span>
+    </div>
+    <div class="pv-meta">
+      <span class="precio">${precio ? money(precio) : 'sin precio'}</span>
+    </div>
+    ${segLine}${llegó}
+    <div class="pv-btns">
+      ${/* Sin cupo se queda SIN onclick, no solo deshabilitado: un botón inerte
+           que aún nombra `abrirApartado` invita a que alguien lo reactive por
+           CSS o por prisa, y el formulario terminaría en un "Cupo agotado" de la
+           base con el cliente enfrente. */''}
+      ${agot
+        ? `<button class="btn-apartar" disabled>Sin cupo</button>`
+        : `<button class="btn-apartar"
+             onclick="abrirApartado('${p.sku}','${encodeURIComponent(p.producto||'')}',${precio})">
+             📋 Apartar para un cliente</button>`}
+    </div>
+  </div>`;
+}
+
+function seccionPreventa(){
+  const lista = PREVENTA.filter(p => coincide(p.producto, p.sku));
+  if(!lista.length) return '';
+  const conTope = PREVENTA.filter(p => p.cupo !== null && p.cupo !== undefined);
+  /* El banner suma los cupos en vez de llevar un total escrito: la lista del
+     5-ago decía "de 36" a mano y esa misma semana se habilitó una pieza más,
+     así que el banner habría dicho "quedan 1 de 36" con 37 repartidas. */
+  const tope   = conTope.reduce((a,p) => a + (Number(p.cupo)||0), 0);
+  const libres = conTope.reduce((a,p) => a + Math.max(0, Number(p.quedan)||0), 0);
+  return `<div class="pv-banner">
+    <div class="pv-banner-t">🎁 Preventa</div>
+    <div class="pv-banner-s">El cliente paga completo y aparta su pieza. Se entrega en cuanto
+      llegue el embarque, y la serie se le liga al recibirla.</div>
+    ${conTope.length ? `<div class="pv-banner-n">Quedan <b>${libres}</b> de ${tope} piezas de tu cupo</div>`
+                     : `<div class="pv-banner-n">Sin límite de piezas</div>`}
+  </div>` + lista.map(cardPreventa).join('');
+}
+
 function render(){
   // Cruzar la medianoche con la app abierta también cuenta como cambio de día.
   if(tocarDia()){ refiltrarCaches(); pintarUpdated(); }
@@ -2511,7 +2695,8 @@ function render(){
     /* Las tarjetas sustituyen a la rejilla de números y a la barra de chips:
        cada una dice a dónde lleva Y cuánto hay dentro, así que se ve de un
        vistazo dónde hay trabajo sin tener que entrar a mirar. */
-    const cuentas = { promo:promoAct, apartados:cuenta('apartados'), eol:eolList, resurtir:resurtirN };
+    const cuentas = { promo:promoAct, apartados:cuenta('apartados'), eol:eolList, resurtir:resurtirN,
+                      preventa:PREVENTA.length };
     const subs = { promo:`${promoAct} con promo · ${sinPromoConPiezasN()} a precio regular`,
                    apartados:(function(){
                      const v=APARTADOS.filter(a=>{const e=String(a.estatus||'').toLowerCase();
@@ -2520,7 +2705,13 @@ function render(){
                      return t ? `${v.length} por entregar · ⏰ ${t} con la fecha pasada`
                               : `${v.length} pagados, pendientes de entregar`; })(),
                    eol:'Piezas de exhibición al 50%',
-                   resurtir:'Sin existencia — hay que pedir' };
+                   resurtir:'Sin existencia — hay que pedir',
+                   preventa:(function(){
+                     const conTope = PREVENTA.filter(p=>p.cupo!==null&&p.cupo!==undefined);
+                     if(!conTope.length) return 'Se paga hoy, se entrega cuando llegue';
+                     const libres = conTope.reduce((a,p)=>a+Math.max(0,Number(p.quedan)||0),0);
+                     return libres ? `Quedan ${libres} piezas de tu cupo`
+                                   : 'Cupo agotado — ya no se puede apartar'; })() };
     html += `<div class="ir-grid">` + FILTROS.filter(f=>seccionTieneItems(f.id) && seccionVisible_(f.id)).map(f=>`
       <button class="ir-card" onclick="irA('${f.id}')">
         <span class="ir-ico" style="background:${f.color}1a">${f.icono}</span>
@@ -2533,6 +2724,7 @@ function render(){
     html += seccion('⏳ EOL próximos · agotar stock cerrado', eolPend, cardEol);
     html += seccion('Agotados', eolAgot, cardEol);
   }
+  if(f==='preventa')  html += seccionPreventa();
   if(f==='apartados') html += seccionApartados();
   if(f==='promo'){
     const promoSkus = new Set(PROMOS.map(p => p.sku));
@@ -2861,10 +3053,21 @@ function aplicarInventario(data){
 function aplicarEol(data){
   const skusLocales = new Set((D.eol||[]).map(function(e){ return e.sku; }));
   data.forEach(function(e){
-    if(skusLocales.has(e.sku)) return;
+    if(skusLocales.has(e.sku)){
+      /* Ya lo teniamos (cache). La pausa se refresca igual: es lo unico de esta
+         fila que cambia sin que cambie el SKU, y un cache de ayer diciendo que
+         no esta pausado volveria a ofrecerlo al 50%. */
+      const loc = (D.eol||[]).find(function(x){ return x.sku === e.sku; });
+      if(loc) loc.pausado = e.pausado === true;
+      if(e.pausado === true) eolPausadoSet.add(e.sku);
+      else                   eolPausadoSet.delete(e.sku);
+      return;
+    }
     // SKU subido via admin (ADENDUM PDF) que no estaba en datos.js
-    (D.eol = D.eol||[]).push({ sku: e.sku, precio: parseFloat(e.precio)||0 });
+    (D.eol = D.eol||[]).push({ sku: e.sku, precio: parseFloat(e.precio)||0,
+                               pausado: e.pausado === true });
     eolSkuSet.add(e.sku);
+    if(e.pausado === true) eolPausadoSet.add(e.sku);
   });
 }
 
@@ -3189,7 +3392,9 @@ function _deSupabase(d){
     inventario: inv,
     promos: pro,
     eol: (d.eol||[]).map(function(e){
-      return { sku:e.sku, precio: e.precio!=null ? e.precio : e.precio_efectivo }; }),
+      return { sku:e.sku, precio: e.precio!=null ? e.precio : e.precio_efectivo,
+               // detenido por comercial: sigue siendo EOL, pero no se remata
+               pausado: e.pausado === true }; }),
     bundles: (d.bundles||[]).map(function(b){
       return { id:String(b.id), nombre:b.nombre,
                // en Supabase skus es un array de verdad; aquí se espera "a,b,c"
@@ -3288,6 +3493,10 @@ async function refrescarNube(){
   if(_refrescando) return;
   _refrescando = true;
   _ultimoIntento = Date.now();
+  /* Sin `await` y antes del try: la preventa no puede retrasar al inventario ni
+     desaparecer si el camino de abajo se va por el respaldo del Apps Script —
+     que no sabe nada de preventa. Se pinta sola cuando conteste. */
+  cargarPreventaNube();
   try{
     /* Supabase primero: un viaje y sin cola (~0,25 s contra ~7 s).
        El Apps Script queda de respaldo mientras dure la migración.

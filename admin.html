@@ -222,6 +222,7 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
          Supabase y los 20 combos históricos siguen intactos. Para reactivarlo,
          devolver este botón. -->
     <button onclick="tab('eol',this)">🏷️ EOL</button>
+    <button onclick="tab('preventa',this);cargarPreventaAdmin()">🎁 Preventa</button>
     <button onclick="tab('avisos',this);cargarListaAvisos()">📢 Avisos</button>
     <button onclick="tab('comis',this);cargarComisionesCloud()">💰 Comisiones</button>
     <button onclick="tab('equipo',this);cargarEquipo();cargarTecnicos();repaMeses()">👥 Equipo</button>
@@ -613,6 +614,48 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
        periodo con fecha de término, y el día que acabe se quita entera sin
        tocar nada de lo demás. Hasta hoy las dos cosas de aquí se hacían
        pegando SQL en el panel de Supabase. -->
+  <!-- PREVENTA -->
+  <div class="pane" id="pane-preventa">
+    <div class="card">
+      <h2>🎁 Preventa abierta</h2>
+      <p class="note">Un equipo en preventa <b>aparece en el tablero y se puede apartar aunque
+        no haya llegado</b>: no está en el catálogo ni en el inventario, así que el nombre y el
+        precio salen de aquí. Mientras la preventa esté abierta, el cupo <b>frena</b> los
+        apartados; al terminarla, el SKU se libera y sigue su vida normal en el tablero.</p>
+      <div id="pvLista"></div>
+      <button class="btn-del" id="pvBtnTodo" style="width:100%;margin-top:12px;display:none"
+              onclick="pvTerminar(null)">🛑 Terminar toda la preventa</button>
+      <div class="result" id="resPvFin"></div>
+    </div>
+
+    <div class="card">
+      <h2>➕ Abrir preventa de un equipo</h2>
+      <p class="note">Sube lo que dice la circular. El <b>cupo</b> es cuántas piezas tiene
+        asignadas la tienda; déjalo <b>vacío</b> si el corporativo todavía no lo dice —así la
+        preventa abre igual y nadie se queda sin apartar por un número inventado.</p>
+      <div class="eq-grid" style="margin-top:12px">
+        <div class="field">
+          <label>SKU (como sale en el ticket)</label>
+          <input id="pvSku" inputmode="numeric" placeholder="9 dígitos" maxlength="12">
+        </div>
+        <div class="field">
+          <label>Producto (así se ve en la tarjeta)</label>
+          <input id="pvProducto" placeholder="PURA 90S 12+512 NEGRO">
+        </div>
+        <div class="field">
+          <label>Precio</label>
+          <input id="pvPrecio" inputmode="decimal" placeholder="19999">
+        </div>
+        <div class="field">
+          <label>Cupo en piezas (vacío = sin límite)</label>
+          <input id="pvCupo" inputmode="numeric" placeholder="36" maxlength="5">
+        </div>
+      </div>
+      <button class="btn-pri" onclick="pvAbrir()">🎁 Abrir la preventa</button>
+      <div class="result" id="resPvAlta"></div>
+    </div>
+  </div>
+
   <div class="pane" id="pane-concurso">
     <div class="card">
       <h2>🏆 Quién sale en el marcador</h2>
@@ -2931,7 +2974,10 @@ document.getElementById('fileEolXlsx').onchange=async function(e){
 
 async function loadEol(){
   document.getElementById('listE').innerHTML='<div class="empty">Cargando…</div>';
-  // eol_lista ya devuelve {sku, precio}: renderEol lo consume tal cual.
+  /* eol_lista devuelve {sku, precio, precio_efectivo, pausado}: renderEol lo
+     consume tal cual. Desde el 19-sep-2026 trae TAMBIEN los pausados; antes se
+     filtraban en la funcion y un EOL detenido no se veia aqui, asi que no habia
+     donde enterarse de que existia. */
   try{ renderEol(await sbLeer('eol_lista')); }
   catch{ document.getElementById('listE').innerHTML='<div class="empty">Error al cargar</div>'; }
 }
@@ -2942,8 +2988,8 @@ function renderEol(list){
   el.innerHTML=list.map(x=>`
     <div class="item">
       <div class="item-info">
-        <strong>SKU ${x.sku}</strong>
-        <span>Precio: ${x.precio?money(x.precio):'—'}</span>
+        <strong>SKU ${x.sku}${x.pausado?' <span style="font-weight:600;font-size:.72rem;color:#F37021;border:1px solid #F37021;border-radius:10px;padding:1px 7px;vertical-align:middle">EN PAUSA</span>':''}</strong>
+        <span>Precio: ${x.precio?money(x.precio):'—'}${x.pausado?' · no se remata hasta que comercial lo autorice':''}</span>
       </div>
       <button class="btn-del" onclick="delEol('${x.sku}')">🗑️</button>
     </div>`).join('');
@@ -4038,8 +4084,9 @@ async function guardarConfig(){
    "Error al cargar" está bien, pero aquí [] significa «no hay concurso activo»,
    que es una frase distinta de «no pude preguntar»: la primera es normal el
    16-oct y la segunda es una pantalla que miente. Por eso estas tres lecturas
-   van por `cnLeer`, que sí devuelve el motivo. */
-async function cnLeer(fn, params){
+   van por `sbLeerMotivo`, que sí devuelve el motivo. La Preventa lo usa por lo
+   mismo: [] ahí significa «no hay preventa», no «no pude preguntar». */
+async function sbLeerMotivo(fn, params){
   try{
     if(!sb && !initSB()) return { filas:[], error:'Supabase no cargó' };
     const { data, error } = await sb.rpc(fn, Object.assign({
@@ -4096,7 +4143,7 @@ async function cargarConcursoAdmin(){
 
 async function cnPintarPeriodo(){
   const el = document.getElementById('cnPeriodo');
-  const { filas, error } = await cnLeer('concurso_config');
+  const { filas, error } = await sbLeerMotivo('concurso_config');
   if(error){
     el.style.background = '#fff1f1'; el.style.borderColor = '#ffc9c9'; el.style.color = '#8a1f1f';
     el.innerHTML = '⚠ No se pudo consultar el concurso: ' + escHtml(cnError(error)) +
@@ -4126,7 +4173,7 @@ function cnFechaCorta(iso){
 async function cargarCnParticipantes(){
   const cont = document.getElementById('cnPartLista');
   cont.innerHTML = '<p class="note" style="text-align:center;color:#bbb">Cargando…</p>';
-  const { filas, error } = await cnLeer('concurso_participantes_lista');
+  const { filas, error } = await sbLeerMotivo('concurso_participantes_lista');
   if(error){
     _cnPart = [];
     cont.innerHTML = '<p class="note" style="background:#fff1f1;border-color:#ffc9c9;color:#8a1f1f">' +
@@ -4227,7 +4274,7 @@ function cnPapelSolo(sku, nombre){
 async function cargarCnRoles(){
   const cont = document.getElementById('cnRolLista');
   cont.innerHTML = '<p class="note" style="text-align:center;color:#bbb">Cargando…</p>';
-  const { filas, error } = await cnLeer('concurso_roles_lista');
+  const { filas, error } = await sbLeerMotivo('concurso_roles_lista');
   if(error){
     _cnRoles = [];
     cont.innerHTML = '<p class="note" style="background:#fff1f1;border-color:#ffc9c9;color:#8a1f1f">' +
@@ -4313,6 +4360,122 @@ async function cnGuardarRol(){
   document.getElementById('cnRolNombre').value = '';
   document.getElementById('cnRolSolo').style.display = 'none';
   await cargarCnRoles();
+}
+
+/* ================================================================
+   TAB PREVENTA — abrir y terminar  (17-sep-2026)
+   ================================================================
+   El 5-sep no se pudo apartar un PURA 90S PRO MAX NJ: «Cupo agotado: 6 de 6».
+   Los 6 llevaban semanas ENTREGADOS, pero el trigger `apartado_cabe` cuenta
+   todo lo que no esté Cancelado, así que el SKU se bloqueó por haberse vendido.
+   Y no había dónde destrabarlo: el cupo se escribía a mano en un .sql que había
+   que pegar en Supabase. Esta pestaña es ese botón que faltaba.
+
+   El cupo NO cambió de cuenta a propósito (sigue contando entregados): el cupo
+   es cuántas piezas tiene asignadas la tienda, y una entregada ocupó su lugar
+   de verdad. Lo que faltaba era poder decir «ya terminó».
+
+   `producto` y `precio` se guardan aquí porque un equipo en preventa no está en
+   el catálogo ni en el inventario: sin esos dos datos el tablero no tiene con
+   qué dibujar la tarjeta, y sin tarjeta no hay dónde apartar. */
+let _pv = [];
+
+function pvError(e){
+  const t = String(e || 'error');
+  if(/Could not find the function|PGRST202/i.test(t))
+    return 'falta pegar supabase_preventa_abrir.sql en Supabase';
+  return cnError(t);   // el resto de los motivos son los mismos
+}
+
+async function cargarPreventaAdmin(){
+  const cont = document.getElementById('pvLista');
+  const todo = document.getElementById('pvBtnTodo');
+  cont.innerHTML = '<p class="note" style="text-align:center;color:#bbb">Cargando…</p>';
+  const { filas, error } = await sbLeerMotivo('preventa_lista');
+  if(error){
+    _pv = []; todo.style.display = 'none';
+    cont.innerHTML = '<p class="note" style="background:#fff1f1;border-color:#ffc9c9;color:#8a1f1f">' +
+      'No se pudo leer la preventa: ' + escHtml(pvError(error)) + '</p>';
+    return;
+  }
+  _pv = filas;
+  const activas = filas.filter(function(r){ return r.activa; });
+  todo.style.display = activas.length ? '' : 'none';
+  if(!filas.length){
+    cont.innerHTML = '<p class="note">No hay ninguna preventa. Mientras esté así, el cupo no ' +
+      'frena ningún apartado y el tablero solo enseña lo que hay en inventario.</p>';
+    return;
+  }
+  cont.innerHTML = filas.map(function(r){
+    const sinTope = (r.cupo === null || r.cupo === undefined);
+    /* «Quedan 0» y «sin límite» se ven parecido si se pinta el número a secas, y
+       son lo contrario: uno bloquea y el otro no. Van con palabras distintas. */
+    const cuenta = sinTope
+      ? (r.apartadas + ' apartadas · sin límite')
+      : (r.apartadas + ' de ' + r.cupo + ' · quedan ' + r.quedan);
+    return '<div class="eq-row">' +
+      '<span class="eq-num">' + escHtml(r.sku) + '</span>' +
+      '<div class="eq-info"><b>' + escHtml(r.producto || '(sin nombre)') + '</b><span>' +
+        (r.precio ? money(r.precio) + ' · ' : '') + escHtml(cuenta) +
+      '</span></div>' +
+      '<div class="eq-tags">' +
+        (r.activa
+          ? '<span class="eq-tag admin">abierta</span>' +
+            '<button class="eq-btn" onclick="pvTerminar(\'' + escHtml(r.sku) + '\')">Terminar</button>'
+          : '<span class="eq-tag">terminada</span>') +
+      '</div></div>';
+  }).join('');
+}
+
+async function pvAbrir(){
+  const sku      = document.getElementById('pvSku').value.trim();
+  const producto = document.getElementById('pvProducto').value.trim();
+  const precio   = document.getElementById('pvPrecio').value.trim();
+  const cupo     = document.getElementById('pvCupo').value.trim();
+  if(!sku){       showResult('resPvAlta', false, 'Falta el SKU.'); return; }
+  if(!producto){
+    /* Sin nombre la tarjeta del tablero sale muda —el asesor ve un precio y un
+       número de 9 dígitos— y nadie sabría qué está apartando. */
+    showResult('resPvAlta', false, 'Falta el producto: es lo que se va a leer en la tarjeta.');
+    return;
+  }
+  if(cupo && !/^\d+$/.test(cupo)){
+    showResult('resPvAlta', false, 'El cupo son piezas: un número entero, o vacío para sin límite.');
+    return;
+  }
+  const r = await sbEscribir('carga_preventa', {
+    p_filas: [{ sku: sku, producto: producto,
+                precio: precio || null, cupo: cupo || null }],
+    p_by: 'Admin'
+  });
+  if(!r.ok){
+    showResult('resPvAlta', false, '⚠ NO se abrió: ' + escHtml(pvError(r.error)));
+    return;
+  }
+  showResult('resPvAlta', true, '✅ <b>' + escHtml(producto) + '</b> ya se puede apartar en el ' +
+    'tablero' + (cupo ? ', con cupo de ' + escHtml(cupo) + ' piezas' : ', sin límite de piezas') +
+    '. Se ve al recargar el tablero.');
+  document.getElementById('pvSku').value = '';
+  document.getElementById('pvProducto').value = '';
+  document.getElementById('pvPrecio').value = '';
+  document.getElementById('pvCupo').value = '';
+  await cargarPreventaAdmin();
+}
+
+async function pvTerminar(sku){
+  const r0 = sku ? _pv.filter(function(x){ return String(x.sku) === String(sku); })[0] : null;
+  const que = r0 ? ('la preventa de ' + (r0.producto || sku)) : 'TODAS las preventas abiertas';
+  if(!confirm('¿Terminar ' + que + '?\n\nDeja de frenar apartados y el equipo sale del ' +
+              'tablero como preventa. Los apartados que ya existen no se tocan.')) return;
+  const r = await sbEscribir('preventa_terminar', { p_sku: sku || null });
+  if(!r.ok){
+    showResult('resPvFin', false, '⚠ NO se terminó: ' + escHtml(pvError(r.error)));
+    return;
+  }
+  showResult('resPvFin', true, '✅ ' + (r.cerradas || 0) + ' ' +
+    ((r.cerradas === 1) ? 'preventa terminada' : 'preventas terminadas') +
+    '. Ese SKU ya no tiene tope: vuelve a apartarse según lo que haya en inventario.');
+  await cargarPreventaAdmin();
 }
 
 if('serviceWorker' in navigator){

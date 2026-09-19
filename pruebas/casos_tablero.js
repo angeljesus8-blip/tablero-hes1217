@@ -29,12 +29,42 @@ for(const q of ['prueba','900003','cliente','zzzz']){
 busqueda = '';
 
 // ── 3 · Los cinco estados de existencia ─────────────────────
+/* 900008 y 900009 son la regla del 17-sep-2026: con la bodega en cero, una
+   venta se come la pieza de piso SOLO si el artículo es EOL. En lo demás esa
+   venta es un equipo traído de otra tienda o llegado del CEDIS, y el aparador
+   se queda como está.
+
+   Quien la aplica de verdad es `inventario_vivo`, que manda `exh_vendida` ya
+   resuelto; esto es la SEGUNDA barrera, la del tablero, y cada fila prueba la
+   suya. Comprobado con cebos:
+     · 900008 (EOL, el servidor dice que la de piso ya se fue) — si el tablero
+       dejara de restar `exh_vendida`, esta fila dice "50" y se cae. Ofrecer al
+       50% una pieza vendida manda al asesor a buscar lo que no está.
+     · 900009 (ACTIVO con más ventas que On Hand) — se queda en "piso" aunque
+       el servidor mandara excedente, porque el tablero solo resta en los EOL.
+       Es la barrera que sobrevive a un SQL viejo sin pegar.
+
+   900010 es la pausa comercial (19-sep-2026): un EOL detenido tiene pieza de
+   piso pero NO se remata. Antes la pausa era una lista dentro de tablero.html
+   y solo escondía la tarjeta de la sección EOL: `estadoSku` seguía diciendo
+   "50" en el buscador y Captura de Series cobraba a mitad de precio. Ahora la
+   pausa es un campo de `eol_lista` y esta fila la fija: tiene que decir
+   "piso" —hay pieza, no se vende— y no "50" ni "traer". */
 const esperado = { '900001':'hay', '900002':'hay', '900003':'piso',
-                   '900004':'50', '900005':'no', '900006':'traer', '900007':'traer' };
+                   '900004':'50', '900005':'no', '900006':'traer', '900007':'traer',
+                   '900008':'no', '900009':'piso', '900010':'piso' };
 for(const sku of Object.keys(esperado)){
   const k = estadoSku(sku).k;
   ok('SKU '+sku+' es "'+esperado[sku]+'"', k === esperado[sku], 'dice "'+k+'"');
 }
+
+/* Un EOL en pausa sigue siendo EOL: no puede caer en Resurtir, porque ahí el
+   mensaje es "pedir caja" y de un descontinuado no va a llegar ninguna. */
+ok('el EOL en pausa no se ofrece ni se pide',
+   !EOL.some(e => e.sku === '900010') &&
+   !RESURTIR.some(x => x.sku === '900010') &&
+   !AGOTADOS.some(x => x.sku === '900010') &&
+   !tieneExistencia_('900010'));
 
 /* Solo se vende lo que hay en bodega, o la de piso si está descontinuada.
    La exhibición de un producto ACTIVO no se vende — ver MAPA, cadena 5. */
@@ -449,4 +479,85 @@ aplicarTodo(Object.assign(_deSupabase(JSON.parse(JSON.stringify(TIENDA))), { __s
      enviado.indexOf(money(30047)) >= 0, enviado.slice(-160));
 
   COT = [];
+}
+
+/* ============================================================
+   PREVENTA  (17-sep-2026)
+   ============================================================
+   El 5-sep un cliente no pudo apartar un PURA 90S PRO MAX NJ: la base contestó
+   «Cupo agotado: 6 de 6» con los 6 equipos entregados desde hacía semanas. El
+   SKU se bloqueó por haberse vendido bien, y no había pantalla para destrabarlo.
+
+   Lo que se comprueba aquí es lo que, roto, no da ningún error: una tarjeta que
+   no se puede pintar porque el equipo aún no existe en el inventario, y la
+   diferencia entre «sin límite» y «cupo agotado», que se ven parecido y mandan
+   lo contrario.
+   ============================================================ */
+{
+  const guardada = PREVENTA;
+  PREVENTA = [
+    // El caso del 5-sep: no está en el inventario ni en el catálogo de prueba.
+    { sku:'900201', producto:'PRUEBA PREVENTA SIN CUPO', precio:22999,
+      cupo:6, quedan:0, apartadas:6 },
+    // Preventa abierta sin tope: el corporativo aún no reparte piezas.
+    { sku:'900202', producto:'PRUEBA PREVENTA SIN LIMITE', precio:18999,
+      cupo:null, quedan:null, apartadas:3 },
+    // Ya llegó el embarque (900001 tiene stock) y la preventa sigue abierta.
+    { sku:'900001', producto:'PRUEBA PREVENTA CON STOCK', precio:9999,
+      cupo:10, quedan:7, apartadas:3 }
+  ];
+
+  filtroActivo = 'preventa'; busqueda = ''; render();
+  const h = app.innerHTML;
+
+  /* La razón de ser de la preventa: el equipo NO está en inventario, así que si
+     la tarjeta dependiera del catálogo no habría nada que enseñar. */
+  ok('la preventa pinta un equipo que no está en el inventario',
+     h.indexOf('PRUEBA PREVENTA SIN CUPO') >= 0 && !invBySku['900201'],
+     'no salió la tarjeta del SKU que no existe todavía');
+
+  const conBotonPv = [...new Set([...h.matchAll(/abrirApartado\('(\d+)'/g)].map(m => m[1]))];
+
+  /* Cupo agotado = no se aparta. Dejarlo apartar manda al asesor a llenar un
+     formulario que la base va a rechazar, con el cliente delante. */
+  ok('el cupo agotado no ofrece apartar', conBotonPv.indexOf('900201') < 0,
+     '900201 tiene botón con quedan 0');
+
+  /* Y al revés: "sin límite" NO es "agotado". Es el mismo hueco en la pantalla
+     y significan lo contrario; pintarlos igual bloquea una preventa que estaba
+     abierta de par en par. */
+  ok('sin límite sí deja apartar', conBotonPv.indexOf('900202') >= 0,
+     '900202 (cupo null) se quedó sin botón');
+  /* Se busca la pastilla —`>SIN CUPO<`— y no el texto suelto: el nombre del
+     producto de prueba también lleva esas palabras, y contar apariciones a secas
+     daría una prueba que pasa o falla según cómo se llame el equipo. */
+  ok('y no se anuncia como agotado',
+     h.split('>SIN CUPO<').length === 2,
+     'la pastilla "SIN CUPO" sale ' + (h.split('>SIN CUPO<').length - 1) +
+     ' vez/veces: el de cupo null también se dio por agotado');
+
+  /* Que ya haya llegado no cierra la preventa: el cliente paga hoy y recoge
+     cuando pueda. Esta es la diferencia con `botonApartar`, que solo ofrece
+     apartar lo que NO se puede vender hoy. */
+  ok('con existencia se sigue pudiendo apartar en preventa',
+     conBotonPv.indexOf('900001') >= 0 && estadoSku('900001').k === 'hay');
+
+  // El buscador tiene que encontrarlo por nombre: no está en ninguna otra lista.
+  busqueda = 'preventa sin cupo'; render();   // el buscador guarda lo tecleado en minúsculas
+  ok('el buscador encuentra lo que está en preventa',
+     app.innerHTML.indexOf('PRUEBA PREVENTA SIN CUPO') >= 0);
+  busqueda = '';
+
+  ok('con preventa, el Inicio la ofrece', seccionTieneItems('preventa'));
+
+  /* Y el resto del año no existe: sin preventa abierta, ni tarjeta en Inicio ni
+     sección a la que entrar. Vacío es el estado normal. */
+  PREVENTA = [];
+  ok('sin preventa, la sección desaparece',
+     !seccionTieneItems('preventa') && !seccionVisible_('preventa'));
+  filtroActivo = 'inicio'; render();
+  ok('y el Inicio no la nombra', app.innerHTML.indexOf('🎁 Preventa') < 0);
+
+  PREVENTA = guardada;
+  filtroActivo = 'inicio'; busqueda = ''; render();
 }
