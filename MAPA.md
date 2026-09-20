@@ -3643,8 +3643,10 @@ vez — que es justo lo que el respaldo protegía.
 
 **Lo que se lleva por delante, y es la mitad del premio:** sin Apps Script no hay
 `gas_url` ni `gas_token`, y con ellos se van la cadena 1 entera, el candado
-`GAS_ESTRICTO` que lleva desde el 3-ago sin cerrarse (punto B de aquí abajo),
-`accesoPermitido_`, `SINTOK_HOY` y las reglas del verificador que los vigilan.
+`GAS_ESTRICTO` —cerrado el 4-ago y **vuelto a comprobar el 19-sep**: contra el
+`/exec` sin token, `estado`, `zzz_inventado`, `catalogo` y `ventas` devuelven
+las cuatro `{"error":"no_autorizado"}`—, `accesoPermitido_`, `SINTOK_HOY` y las
+reglas del verificador que los vigilan.
 
 **Un modo se apaga quitándole el dato, sin abrir el editor.** Es lo que se hizo
 con `comisiones` (cadena 2-quater): renombrar la pestaña del Sheet y
@@ -3667,7 +3669,8 @@ explicación. Además numeraba sobre el JS extraído, así que mandaba a una lí
 que no era. Los tres quedaron arreglados y **probados con casos falsos**: un
 `catch` vacío nuevo, en una línea o en varias, ahora sí detiene el commit.
 
-**B · Cerrar el Apps Script, bien esta vez** ← *lo siguiente*
+**B · Cerrar el Apps Script, bien esta vez** — ✅ **hecho** *(4-ago-2026, y
+comprobado de nuevo el 19-sep contra el `/exec`)*
 Ya no depende de A. Estado comprobado el 3-ago: `GAS_ESTRICTO=false`,
 `GAS_TOKEN` puesto (64 caracteres), `ADMIN_PIN=1217`, y el guardián llamado
 desde `doGet` **y** `doPost`. Falta la condición de cero llamadas sin token —
@@ -3981,9 +3984,53 @@ Arreglado y resincronizado: los seis pasos en verde.
 Lo que se gana: montar una tienda pasa de cuatro pasos manuales a un `INSERT`.
 
 **D · Limpieza pendiente** *(independiente, se puede hacer cuando sea)*
-Historial de git del tablero (todavía guarda `comisiones_datos.js` con nombres,
-ventas y comisiones) · ticket a GitHub por los commits huérfanos del planeador ·
+Historial de git del tablero — ✅ **reescrito el 19-sep**, ver «Y aun así quedó
+un archivo dentro» · los commits huérfanos del planeador — **medidos el 19-sep,
+ver aquí abajo**; lo único que queda es el ticket, que solo puede mandar Ángel ·
 `exhibAt` para detectar cuándo el On Hand quedó viejo.
+
+#### Los commits huérfanos del planeador, ya con nombre y apellido *(19-sep-2026)*
+
+Esta línea llevaba semanas en el mapa sin decir qué había dentro. Ya está
+medido, y **pesa más que lo del tablero**: son datos de personas, no cifras de
+venta.
+
+Cómo se encuentra sin adivinar: la API de GitHub publica la actividad del repo
+—`/repos/<owner>/<repo>/activity`, que contesta **sin credenciales**— y ahí
+aparece el único `force_push` de `planeador-odemas`, el **30-jul-2026**, que
+dejó atrás la cabeza vieja. Con esa SHA, `git fetch origin <sha>` la trae al
+clon aunque ya no cuelgue de ninguna rama.
+
+| Qué se midió | Resultado |
+|---|---|
+| Commits que quedaron fuera de `main` | **63** |
+| De esos, con `horario_semanal.html` dentro | **63**, todos |
+| Nombres completos del equipo en ese archivo | **5** personas |
+| Números de empleado | **3** |
+| Secretos (JWT, `service_role`, llaves) | ninguno |
+| `main` hoy, los 73 commits vivos | **limpio**: cero coincidencias |
+
+O sea: el force push del 30-jul **sí** limpió la rama, y desde entonces lo
+publicado no trae nombres. Lo que quedó es el rastro de antes, que GitHub sigue
+sirviendo por SHA — comprobado: `raw.githubusercontent.com/.../<sha vieja>/
+horario_semanal.html` contesta **200**.
+
+**Aquí no hay nada que reescribir.** La rama ya está limpia; el objeto es
+inalcanzable y aun así se descarga. Lo único que lo quita es que GitHub recoja
+los objetos inalcanzables, y eso **solo lo puede pedir el dueño de la cuenta**.
+Mientras tanto, la SHA está a la vista de cualquiera en esa misma API de
+actividad: no hace falta saberla de antes.
+
+Del lado de esta máquina sí se cerró: el clon de `horario-semanal` tenía además
+dos objetos sueltos con un apellido y un número de empleado —de una edición que
+nunca se subió; comprobado contra la API, **404** en GitHub—. Se expiró el
+reflog y se corrió `git gc --prune=now`: ya no existen aquí, y `main` quedó
+intacto.
+
+**La regla que sale de esto, y vale para los dos repos:** un force push no
+borra nada, solo deja de nombrarlo. Lo que de verdad protege es no publicarlo,
+y por eso `deploy.ps1` nombra archivo por archivo y el hook revisa los nombres
+antes de cada commit.
 
 ## Lo que todavía puede fallar callando
 
