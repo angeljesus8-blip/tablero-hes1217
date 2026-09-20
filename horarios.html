@@ -2039,18 +2039,34 @@ function renderTareas() {
     </div>`;
   };
 
+  /* ⚠️ El asesor ve SOLO lo suyo (20-sep-2026). Antes el panel listaba la
+     semana entera con «un compañero» al lado, y lo que se leía desde el piso
+     era una lista de pendientes sin dueño claro: el asesor entraba a su turno y
+     tenía que buscar cuál de las seis líneas era la de él. Quien reparte el
+     trabajo es gerencia, y es quien necesita verlo completo.
+
+     Va aquí y no en el motor: el reparto sigue siendo el mismo para todos —de
+     eso vive que no haya dos verdades—, lo que cambia es lo que se enseña. */
+  const yo   = quienSoy();
+  const veTodo = veElEquipo_();
+  const mias = veTodo ? _reparto
+             : _reparto.filter(t => yo && t.quienes.indexOf(yo) >= 0);
+
   let html = `<div class="tar-panel">
-    <div class="tar-head">🧽 Tareas de la semana
+    <div class="tar-head">🧽 ${veTodo ? 'Tareas de la semana' : 'Tus tareas'}
       <small>Se reparten solas con el horario · nadie las asigna a mano</small></div>`;
 
-  const hoyTareas = _reparto.filter(t => t.dia === diaHoy);
+  const hoyTareas = mias.filter(t => t.dia === diaHoy);
   if (hoyTareas.length) {
     const f = new Date(_tareasCtx.domingo); f.setDate(f.getDate() + diaHoy);
     html += `<div class="tar-sec">Hoy · ${DIAS_NOMBRES[diaHoy]} ${f.getDate()}</div>`;
     hoyTareas.forEach(t => { html += fila(t); });
   }
 
-  const resto = _reparto.filter(t => t.dia !== diaHoy && t.frec === 'semanal');
+  /* Las semanales de otros días sí se siguen viendo: son suyas y caen un día
+     concreto, así que enterarse el mismo día es enterarse tarde. Las diarias de
+     otros días no, que ya están en su tarjeta. */
+  const resto = mias.filter(t => t.dia !== diaHoy && t.frec === 'semanal');
   if (resto.length) {
     html += `<div class="tar-sec">${hoyTareas.length ? 'Lo demás de la semana' : 'Esta semana'}</div>`;
     resto.forEach(t => { html += fila(t); });
@@ -2062,8 +2078,11 @@ function renderTareas() {
   /* Solo cuando la tarea es SUYA y de nadie más. En la bodega también participa,
      pero ahí la hace el equipo entero: decir «le toca a Laura» dejaría a los
      demás pensando que esa semana no van. */
-  const suyas = _reparto.filter(t =>
-    t.externos.length && t.frec === 'semanal' && !t.quienes.length);
+  /* Y solo para gerencia: al asesor esta nota le diría el pendiente de alguien
+     más, que es justo lo que se quitó de este panel. Palomearla es de gerencia
+     —el apoyo no tiene con qué entrar— y gerencia abre la tienda a diario. */
+  const suyas = veTodo ? _reparto.filter(t =>
+    t.externos.length && t.frec === 'semanal' && !t.quienes.length) : [];
   externosTareas_().forEach(e => {
     const mias = suyas.filter(t => t.externos.indexOf(e.key) >= 0);
     mias.forEach(t => {
@@ -2073,7 +2092,8 @@ function renderTareas() {
   });
 
   if (!hoyTareas.length && !resto.length)
-    html += `<div class="tar-vacia">Sin tareas esta semana.</div>`;
+    html += `<div class="tar-vacia">${veTodo ? 'Sin tareas esta semana.'
+                                             : 'Hoy no te toca ninguna tarea.'}</div>`;
 
   cont.innerHTML = html + '</div>';
   cont.querySelectorAll('.tar-chk').forEach(chk => {
