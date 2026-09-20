@@ -45,7 +45,7 @@ const EQUIPO = {
   /* Quien limpia y no lleva turno. Viene de la CONFIGURACIÓN, no del código:
      su nombre real vive en `horarios_config` (Supabase) porque estos dos repos
      son públicos. Aquí va uno de los de `NOMBRES_EJEMPLO`. */
-  externos: [ { key:'@elena', nombre:'ELENA', dia:2 } ]   // martes
+  externos: [ { key:'@elena', nombre:'ELENA', dias:[1,2,3,4,5,6] } ]   // todos menos el domingo
 };
 
 const SUPABASE_FALSO = {
@@ -67,12 +67,12 @@ const ok = (t, c, extra) => { if(!c) fallos.push(t + (extra ? ' -> ' + extra : '
 
 /* Arranca la página como alguien, pinta la semana y devuelve lo que se decidió
    (`_reparto`), el horario del que salió (`dias`) y lo que se escribió. */
-function repartirComo(opciones, tienda) {
+function repartirComo(opciones, tienda, equipo) {
   const ent = crearEntorno({ html, ruta:'/tablero-hes1217/horarios.html',
                              extras:{ supabase: SUPABASE_FALSO } });
   if (ent.err) return { error: ent.err };
   try {
-    ent.correr('aplicarEquipo(' + JSON.stringify(EQUIPO) + ');');
+    ent.correr('aplicarEquipo(' + JSON.stringify(equipo || EQUIPO) + ');');
     ent.correr('fijarSesion({ store_id:"' + (tienda || '1217') + '", nombre:"Angelopolis" }, '
                + JSON.stringify(opciones) + ');');
     ent.correr('var _d = generarSemana(_semana, null, null);'
@@ -90,6 +90,8 @@ function repartirComo(opciones, tienda) {
 
 const NO_ESTA = ['descanso','vacante','ausente','permiso','capacitacion'];
 const ABREN   = ['apertura','apertura_10','doble','comp_apertura'];
+// Los días que viene el apoyo del equipo de prueba: todos menos el domingo.
+const DIAS_APOYO = EQUIPO.externos[0].dias;
 
 const ger = repartirComo({ puedeEditar:true });
 ok('la página arranca para el gerente', !ger.error, ger.error);
@@ -131,11 +133,11 @@ if (!ger.error) {
     ok('y hay tareas de apertura que comprobar', deApertura > 0);
   }
 
-  /* ── 3 · El apoyo sin horario: su día fijo y su nota al pie ─────────── */
+  /* ── 3 · El apoyo sin horario: sus días y su nota al pie ───────────── */
   {
     /* La rueda del sanitario incluye a quien no tiene horario. Se recorren las
        semanas hasta que le toca: lo que se comprueba es que cuando le toca, le
-       toca en SU día —martes— y que se dice en alguna parte. */
+       toca un día que ella SÍ viene y que se dice en alguna parte. */
     let visto = false;
     for (let s = 1; s <= 12 && !visto; s++) {
       const rep = JSON.parse(ger.ent.correr(
@@ -144,7 +146,8 @@ if (!ger.error) {
       ok('el sanitario siempre tiene a alguien (semana ' + s + ')', !!san);
       if (san && san.externos.indexOf('@elena') >= 0) {
         visto = true;
-        ok('cuando le toca al apoyo, cae en su día fijo (martes)', san.dia === 2, 'día ' + san.dia);
+        ok('cuando le toca al apoyo, cae en un día que sí viene',
+           DIAS_APOYO.indexOf(san.dia) >= 0, 'día ' + san.dia);
         ok('y nadie del equipo la acompaña esa semana', san.quienes.length === 0);
       }
     }
@@ -161,10 +164,71 @@ if (!ger.error) {
          !!bod && (bod.quienes.length + bod.externos.length) > 0);
       if (bod && bod.externos.indexOf('@elena') >= 0) {
         notaBodega = true;
-        ok('la bodega del apoyo cae en su día fijo (martes)', bod.dia === 2, 'día ' + bod.dia);
+        ok('la bodega del apoyo cae en un día que sí viene',
+           DIAS_APOYO.indexOf(bod.dia) >= 0, 'día ' + bod.dia);
       }
     }
     ok('al apoyo también le toca la bodega dentro de las primeras 12 semanas', notaBodega);
+  }
+
+  /* ── 3-quater · Las mesas: el domingo el asesor las hace solo ───────── */
+  {
+    /* El apoyo viene todos los días menos el domingo. Los días que viene, las
+       mesas y pantallas son suyas —con el asesor de apertura si lo hay, y ella
+       sola si no—. El domingo no viene: ese día las hace el asesor solo, y
+       nadie puede quedarse esperándola.
+
+       Sin esta prueba el error se ve al revés de como es: el panel del domingo
+       enseñaría el nombre de alguien que no está en la tienda. */
+    for (let s = 1; s <= 8; s++) {
+      const rep = JSON.parse(ger.ent.correr(
+        'JSON.stringify(repartirTareas(_d, ' + s + '))'));
+      const mesas = rep.filter(t => t.id === 'mesas');
+      for (const t of mesas)
+        ok('las mesas del día ' + t.dia + ' no llaman al apoyo si no viene',
+           t.externos.indexOf('@elena') < 0 || DIAS_APOYO.indexOf(t.dia) >= 0,
+           'semana ' + s);
+
+      const dom = mesas.find(t => t.dia === 0);
+      ok('el domingo las mesas tienen dueño (semana ' + s + ')',
+         !!dom && dom.quienes.length > 0, JSON.stringify(dom || null));
+      if (dom) {
+        ok('y el domingo las hace alguien del equipo, sin apoyo',
+           dom.externos.length === 0, dom.externos.join(','));
+        ok('y ese alguien abre el domingo',
+           ABREN.indexOf(ger.dias[0][dom.quienes[0]]) >= 0,
+           dom.quienes[0] + ' hace ' + ger.dias[0][dom.quienes[0]]);
+      }
+      for (const d of DIAS_APOYO) {
+        const t = mesas.find(x => x.dia === d);
+        ok('el día ' + d + ' las mesas son del apoyo (semana ' + s + ')',
+           !!t && t.externos.indexOf('@elena') >= 0, JSON.stringify(t || null));
+      }
+    }
+  }
+
+  /* ── 3-quinquies · Si no abre ningún asesor, el apoyo lo hace solo ─── */
+  {
+    /* Con un único asesor que descansa el martes, ese día no hay quien abra de
+       su grupo. Las mesas NO pueden saltar al gerente —él ya está barriendo— ni
+       quedarse sin hacer: ese día son del apoyo, sola.
+
+       El equipo normal de prueba nunca cae en este hueco, así que sin montar
+       uno a propósito la rama se quedaría sin probar y solo se vería en tienda,
+       el martes, con el gerente limpiando pantallas. */
+    const solo = Object.assign({}, EQUIPO, {
+      asesores: [ { key:'A1', nombre:'CARO ASESORA', cargo:'Asesor', emp:'900003', descFijo:2 } ]
+    });
+    const v = repartirComo({ puedeEditar:true }, '1217', solo);
+    ok('la página arranca con un solo asesor', !v.error, v.error);
+    if (!v.error) {
+      const mar = v.reparto.find(t => t.id === 'mesas' && t.dia === 2);
+      ok('el martes las mesas siguen ahí', !!mar, JSON.stringify(v.reparto.filter(t => t.id === 'mesas')));
+      if (mar) {
+        ok('y las hace el apoyo', mar.externos.indexOf('@elena') >= 0, mar.externos.join(','));
+        ok('sola, sin llamar a gerencia', mar.quienes.length === 0, mar.quienes.join(','));
+      }
+    }
   }
 
   /* ── 3-bis · Las dos semanales no caen en la misma persona ───────────── */
