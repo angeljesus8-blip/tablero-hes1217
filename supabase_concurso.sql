@@ -304,6 +304,79 @@ COMMENT ON FUNCTION public.concurso_clave_nombre_(text) IS
   'arregla ningun unaccent y por eso existe `nombre_reporte` mapeado a mano.';
 
 
+-- ── 5b · Y cuando el exacto no puede acertar ────────────────
+--
+-- 19-sep-2026. Un asesor subio su ticket y el servidor contesto «no reconozco
+-- a X en el equipo» dos veces seguidas, con dos grafias distintas de la misma
+-- persona. No era el OCR: el papel imprime UN apellido y una inicial
+-- (`APELLIDO, NOMBRE A`) y `nombre_reporte` lleva los DOS apellidos, porque su
+-- trabajo es casar letra por letra con el Excel regional de comisiones. Dos
+-- formatos distintos para el mismo nombre; la igualdad no puede salvarlos.
+--
+-- Medido sobre el mapeo real de la 1217 (5 personas) antes de escribir esto:
+-- el exacto falla con las tres lecturas del dia, y comparando POR PALABRAS
+-- acierta en las tres y en las cinco personas, sin un solo empate.
+--
+-- Es el mismo criterio que `accCasarVendedor` en captura_series.html, y eso
+-- era justo el problema: la app tenia dos maneras de casar un nombre y el
+-- concurso usaba la fragil. Aqui se escribe igual a proposito — minimo DOS
+-- palabras de tres letras o mas, y con empate NO se elige.
+--
+-- Las dos condiciones son la misma: no equivocarse de persona. Un apellido
+-- suelto lo comparten dos del equipo (medido: pasa en la 1217), y las
+-- particulas y las iniciales que inventa el OCR casan con cualquiera. Poner el
+-- ticket a nombre de otro no da error en ningun sitio: se veria, si acaso, al
+-- repartir el premio. Si no se puede saber, se dice y el asesor lo elige.
+CREATE OR REPLACE FUNCTION public.concurso_casar_empleado_(p_store text, p_leido text)
+RETURNS TABLE (empno text, nombre text)
+LANGUAGE plpgsql STABLE SET search_path = public AS $fn$
+DECLARE
+  v_pal text[];
+BEGIN
+  -- 1) El exacto manda cuando acierta: es el que no se puede equivocar.
+  RETURN QUERY
+    SELECT e.empno::text, e.nombre::text
+      FROM public.empleados e
+     WHERE e.store_id = p_store
+       AND public.concurso_clave_nombre_(e.nombre_reporte)
+           = public.concurso_clave_nombre_(p_leido)
+     LIMIT 1;
+  IF FOUND THEN RETURN; END IF;
+
+  -- 2) Y si no, por palabras. Las de menos de tres letras se tiran: son las
+  --    iniciales del ticket y las particulas («de», «la»), que casan con todos.
+  SELECT array_agg(DISTINCT p) INTO v_pal
+    FROM unnest(string_to_array(public.concurso_clave_nombre_(p_leido), ' ')) AS p
+   WHERE length(p) >= 3;
+  IF v_pal IS NULL OR array_length(v_pal, 1) < 2 THEN RETURN; END IF;
+
+  RETURN QUERY
+  WITH puntos AS (
+    /* Se mira contra `nombre_reporte` Y contra `nombre`, porque no todo el
+       mundo tiene mapeado el primero: quien entro despues del ultimo mapeo
+       casa igual por el segundo, en vez de quedarse fuera del concurso sin
+       que nadie se entere. */
+    SELECT e.empno::text AS empno, e.nombre::text AS nombre,
+           (SELECT count(*) FROM unnest(v_pal) AS w
+             WHERE w = ANY (string_to_array(public.concurso_clave_nombre_(
+                      coalesce(e.nombre_reporte, '') || ' ' ||
+                      coalesce(e.nombre, '')), ' '))) AS n
+      FROM public.empleados e
+     WHERE e.store_id = p_store
+  )
+  SELECT p.empno, p.nombre
+    FROM puntos p
+   WHERE p.n >= 2
+     AND p.n = (SELECT max(q.n) FROM puntos q)
+     AND (SELECT count(*) FROM puntos q WHERE q.n = p.n) = 1;
+END $fn$;
+
+COMMENT ON FUNCTION public.concurso_casar_empleado_(text,text) IS
+  'Quien atendio, del nombre impreso en el ticket. Exacto primero y por '
+  'palabras despues (minimo 2 de 3+ letras, sin empate). Devuelve 0 o 1 fila: '
+  'si no se puede saber de quien es, no se adivina.';
+
+
 -- ── 6 · Guardar el ticket con sus lineas ────────────────────
 --
 -- Las lineas llegan en un jsonb y se insertan en la MISMA transaccion que el
@@ -383,12 +456,8 @@ BEGIN
 
   -- Casar con el equipo. Ver la cabecera: sin esto el marcador parte a un
   -- asesor en dos personas.
-  SELECT e.empno, e.nombre INTO v_empno, v_nombre
-    FROM public.empleados e
-   WHERE e.store_id = p_store
-     AND public.concurso_clave_nombre_(e.nombre_reporte)
-         = public.concurso_clave_nombre_(p_atendido)
-   LIMIT 1;
+  SELECT c.empno, c.nombre INTO v_empno, v_nombre
+    FROM public.concurso_casar_empleado_(p_store, p_atendido) c;
 
   /* Fuera de fechas no se guarda, y se dice la fecha que se leyo.
 

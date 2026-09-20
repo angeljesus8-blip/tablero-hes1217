@@ -81,7 +81,8 @@ function aNumero(txt) {
   var ult = Math.max(s.lastIndexOf('.'), s.lastIndexOf(','));
   var v;
   if (ult < 0) {
-    v = parseFloat(s) || 0;
+    v = parseFloat(s);
+    if (isNaN(v)) return null;
   } else {
     var dec = s.length - ult - 1;
     var enteros = s.slice(0, ult).replace(/[.,]/g, '');
@@ -90,7 +91,12 @@ function aNumero(txt) {
     v = (dec >= 1 && dec <= 3)
       ? parseFloat(enteros + '.' + s.slice(ult + 1))
       : parseFloat(enteros + s.slice(ult + 1));
-    if (isNaN(v)) v = 0;
+    /* CERO NO, `null`. Un importe que no se pudo leer valía cero, y cero es un
+       número que miente: la pantalla enseñaba «$0.00» como si el ticket dijera
+       eso, la línea entraba en la suma restando su propio importe, y el asesor
+       no tenía forma de distinguir «no lo leí» de «no cuesta nada». Con `null`
+       la línea queda marcada como dudosa y se repara desde el precio. */
+    if (isNaN(v)) return null;
   }
   return neg ? -v : v;
 }
@@ -256,8 +262,20 @@ function leerTicket(texto) {
       continue;
     }
 
+    /* El nombre llega hasta el final del renglón, así que se lleva lo que el
+       margen haya dejado ahí: la pantalla del 19-sep decía «APELLIDO, NOMBRE
+       EA». Se recortan los pedazos sueltos del final —uno o dos caracteres, que
+       nunca son parte de un nombre— pero NO se toca lo demás: el segundo
+       apellido y las iniciales tienen que llegar enteros al servidor, que es
+       quien decide de quién es el ticket. */
     var mVend = n.match(/(?:^|\s)ATENDIDO POR\s*:?\s*(.+)$/);
-    if (mVend) { res.vendedor = mVend[1].replace(/\s*,\s*/, ', ').trim(); continue; }
+    if (mVend) {
+      res.vendedor = mVend[1].replace(/\s*,\s*/, ', ')
+        .replace(/[^A-ZÁÉÍÓÚÑ]+$/i, '')   // los símbolos que deja el margen
+        .replace(/\s+\S{1,2}$/, '')       // y un pedazo suelto de una o dos letras
+        .trim();
+      continue;
+    }
 
     var mRec = n.match(/^RECUENTO DE ARTICULOS VENDIDOS\s*=\s*(\d+)/);
     if (mRec) { res.recuento = parseInt(mRec[1], 10); continue; }
@@ -283,8 +301,11 @@ function leerTicket(texto) {
       /* La red que la verificación por subtotales nunca pudo dar: dice EN QUÉ
          LÍNEA falla, no que «algo no cuadra». Un peso de tolerancia por el
          redondeo del OCR. */
-      if (art.precio != null && art.importe != null &&
-          Math.abs(art.precio * art.cantidad - art.importe) > 1) {
+      // Un importe que no se leyó es tan dudoso como uno que no cuadra, y se
+      // arregla igual: desde el precio, si el Total lo confirma.
+      if (art.precio != null &&
+          (art.importe == null ||
+           Math.abs(art.precio * art.cantidad - art.importe) > 1)) {
         // El aviso no se da aquí: primero hay que ver si el Total lo resuelve.
         art.importe_dudoso = true;
         dudosas.push({ linea: art, etiqueta: desc || art.sku });
@@ -302,7 +323,12 @@ function leerTicket(texto) {
        lista: el MatePad de $29,990 se cobró en $14,995. */
     // Y el menos puede venir separado de la cifra («- 1,000.00»): `aNumero`
     // ya quita los espacios, pero la expresión tenía que dejarlo pasar.
-    var mDesc = n.match(/(?:^|\s)(?:DESCUENTO\s*\$?|PROMOCION\b.*?)\s+(-\s*[\d.,]+)\s*$/);
+    /* El `.*` es GOLOSO a propósito, y antes era perezoso. La promoción trae
+       números que no son el descuento —«Promoción 117935 - 2146243 - 1,000.00»—
+       y el que vale es el ÚLTIMO. Mientras la expresión terminaba en `$` daba
+       igual; al admitir basura detrás, con `.*?` se habría quedado con el
+       `- 2146243` y el ticket habría salido con un descuento de dos millones. */
+    var mDesc = n.match(/(?:^|\s)(?:DESCUENTO\s*\$?|PROMOCION\b.*)\s+(-\s*[\d.,]+)(?:\s|$)/);
     if (mDesc && res.lineas.length) {
       res.lineas[res.lineas.length - 1].descuento += Math.abs(aNumero(mDesc[1]) || 0);
       continue;
@@ -311,7 +337,11 @@ function leerTicket(texto) {
     var mSerie = n.match(/^IMEI\s*\/\s*SERIE\s*\/\s*SERVICIO\s*:\s*(.+)$/);
     if (mSerie && res.lineas.length) {
       var ln = res.lineas[res.lineas.length - 1];
-      ln.serie = mSerie[1].trim();
+      /* Mismo margen, mismo destrozo: la pantalla del 19-sep llamó a la mica
+         «MICATRANSP =». Y el nombre de la línea SALE de aquí cuando el POS
+         imprime «PRODUCTOS VARIOS», así que un símbolo pegado no es cosmética:
+         es el nombre con el que hay que validar el ticket. */
+      ln.serie = mSerie[1].replace(/[^A-Z0-9]+$/i, '').trim();
       ln.nombre = nombreDe(ln);
       continue;
     }
@@ -362,10 +392,17 @@ function leerTicket(texto) {
         ld.importe_ocr = ld.importe;
         ld.importe = esperado;
         ld.importe_corregido = true;
-        res.avisos.push('Línea «' + etq + '»: el importe se leyó $' +
-          ld.importe_ocr.toFixed(2) + ', pero con el precio ($' + ld.precio +
-          ' × ' + ld.cantidad + ') el ticket cuadra exacto contra el Total. Se ' +
-          'tomó $' + esperado.toFixed(2) + '.');
+        res.avisos.push('Línea «' + etq + '»: el importe ' +
+          (ld.importe_ocr == null ? 'no se pudo leer'
+                                  : 'se leyó $' + ld.importe_ocr.toFixed(2)) +
+          ', pero con el precio ($' + ld.precio + ' × ' + ld.cantidad + ') el ' +
+          'ticket cuadra exacto contra el Total. Se tomó $' +
+          esperado.toFixed(2) + '.');
+      } else if (ld.importe == null) {
+        res.avisos.push('Línea «' + etq + '»: no se pudo leer el importe. Por ' +
+          'el precio debería ser $' + esperado.toFixed(2) + ', pero así el ' +
+          'ticket no cuadra contra el Total, así que puede faltar otra línea. ' +
+          'Revísala.');
       } else {
         res.avisos.push('Línea «' + etq + '»: ' + ld.cantidad + ' × ' +
           ld.precio + ' debería dar ' + esperado + ' y el ticket dice ' +

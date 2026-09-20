@@ -4289,6 +4289,23 @@ function cnMoneda(n){
    interpreta `concursoFechaISO` — la misma pieza que lee el ticket, y probada
    en `pruebas/concurso_oro_plata.js`. Aquí no se vuelve a escribir: el día que
    el POS cambie de formato, se cambia en un sitio. */
+/* El aviso del servidor SE SUSTITUYE, no se apila.
+
+   19-sep-2026: Ángel le dio a guardar dos veces y la pantalla acabó con dos
+   avisos, uno por intento, diciendo lo mismo de la misma persona con dos
+   grafías. Dos avisos parecen dos problemas: el segundo intento no se lee como
+   «volvió a fallar» sino como «ahora falla otra cosa más». */
+function cnAvisoGuardar(texto, btn){
+  const previo = document.getElementById('cnErrGuardar');
+  if(previo) previo.remove();
+  const caja = document.createElement('div');
+  caja.id = 'cnErrGuardar';
+  caja.className = 'cn-aviso';
+  caja.style.marginTop = '10px';
+  caja.textContent = texto;
+  if(btn) btn.parentNode.insertBefore(caja, btn.nextSibling);
+}
+
 window.cnGuardar = async function(){
   if(!_cnLeido || _cnGuardando) return;
   const L = _cnLeido;
@@ -4347,11 +4364,7 @@ window.cnGuardar = async function(){
      ningún ticket (una foto huérfana que nadie va a poder mirar) y se le diría
      al asesor que acaba de guardar algo que ya estaba. */
   if(d.duplicado){
-    const caja = document.createElement('div');
-    caja.className = 'cn-aviso';
-    caja.style.marginTop = '10px';
-    caja.textContent = d.error || 'Ese ticket ya estaba registrado';
-    if(btn) btn.parentNode.insertBefore(caja, btn.nextSibling);
+    cnAvisoGuardar(d.error || 'Ese ticket ya estaba registrado', btn);
     return;
   }
 
@@ -4360,11 +4373,7 @@ window.cnGuardar = async function(){
        va en segundo y medio: los tres que manda el servidor —fuera de fechas,
        no reconozco a quién, ya estaba— piden hacer algo distinto en cada caso,
        y no se puede hacer nada con un mensaje que ya desapareció. */
-    const caja = document.createElement('div');
-    caja.className = 'cn-aviso';
-    caja.style.marginTop = '10px';
-    caja.textContent = d.error || 'No se pudo guardar';
-    if(btn) btn.parentNode.insertBefore(caja, btn.nextSibling);
+    cnAvisoGuardar(d.error || 'No se pudo guardar', btn);
     return;
   }
 
