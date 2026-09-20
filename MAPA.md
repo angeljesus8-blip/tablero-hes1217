@@ -3161,6 +3161,86 @@ síntoma a dos listas distintas.
 Lo cubre `pruebas/horario_solo_mio.js`, comprobada rompiendo las **cinco**
 superficies una por una. Mira lo que se ESCRIBIÓ en cada sitio, no lo que se ve.
 
+### Las tareas de piso *(19-sep-2026, v252)*
+
+Lo que pasaba antes: barrer, limpiar mesas, lavar el sanitario y ordenar bodega
+se repartían de palabra —y de palabra también se perdían: nadie podía decir si
+el baño ya se había lavado esta semana—. El pedido de piso fue un checklist que
+**se reparta solo**, leyendo el horario, para que no le caiga el sanitario a
+quien descansa ni «limpiar pantallas» a quien entra a las 12:30.
+
+```
+generarSemana() → dias[día][persona]        (el horario que ya se pinta)
+        ↓
+repartirTareas(dias, semana) → _reparto     (determinista; NO se guarda)
+        ↓
+panel «Tareas de la semana» · tarjetas móviles · fila «Tareas» de la tabla
+        ↓  palomita
+tareas_hechas (Supabase)  ← lo ÚNICO que se guarda
+```
+
+**El reparto no se guarda, se deriva.** Misma semana + mismo horario = mismo
+reparto en todos los teléfonos. Guardarlo sería una segunda verdad que se
+desincroniza con el horario en cuanto alguien pida vacaciones y el planeador
+mueva los turnos: el tablero diría una cosa y el checklist otra, y ninguna de
+las dos avisaría.
+
+El catálogo (`CATALOGO_TAREAS`) y las reglas del motor:
+
+| Tarea | Cada | Quién |
+|---|---|---|
+| Barrer y trapear piso | diaria | la gerencia que **abre** ese día |
+| Limpiar mesas y pantallas | diaria | el asesor que **abre** + el apoyo |
+| Lavar sanitario | semanal | rueda: gerentes, asesores y el apoyo |
+| Orden y limpieza de bodega | semanal | rueda propia, el apoyo incluido |
+
+⚠️ **Cinco cosas que, si se deshacen, no dan error:**
+
+0. **Las dos semanales no pueden caer en la misma persona.** Sanitario y bodega
+   ruedan las dos (la bodega dejó de ser «todo el equipo junto» el 20-sep-2026),
+   y girando igual le tocarían LAS DOS a la misma persona cada semana mientras
+   el resto no hace ninguna: una rotación que no rota. Por eso la rueda da dos
+   pases —el primero salta a quien ya lleva una semanal; el segundo admite
+   repetir, porque con media plantilla de vacaciones dejar la bodega sin dueño
+   es peor—. Probado con cebo: sin el primer pase, las 20 semanas colisionan.
+
+1. **Lo de apertura va a quien abre, sin excepción.** Cuando nadie del grupo que
+   le toca abre ese día, la tarea pasa a **quien sí abra, del grupo que sea**; si
+   no abre nadie, se queda sin dueño a propósito. El respaldo anterior era «quien
+   esté presente», y eso puso «limpiar mesas» sobre un turno de cierre
+   12:30–21:00 —justo lo que se pidió evitar—. La prueba tampoco lo cazó, porque
+   se saltaba ese caso.
+2. **Al asesor no se le nombra a nadie.** El panel dice `te toca` / `un
+   compañero` / `todo el equipo`, nunca un nombre: decir «el jueves le toca a
+   DANI» es horario ajeno dicho de otra forma. Es la sexta superficie de la
+   política del 6-sep-2026, y `quienesTexto_()` es su portero.
+3. **El apoyo sí lleva nombre, y solo cuando la tarea es suya.** Quien limpia y
+   no está en el planeador no tiene tarjeta donde aparecer, así que va en una
+   nota al pie. Solo para lo que hace sola: en la bodega también participa, pero
+   ahí la nota («esta semana le toca a Fulana») haría entender a los demás que
+   esa semana no van.
+
+   **Su nombre se captura en Admin → Equipo y vive en `horarios_config`**, no en
+   el código: los dos repos donde se publica este archivo son públicos, y el
+   nombre lo cazó la regla `datos` de `verificar.py` el día que se escribió esto.
+   En el catálogo solo queda la bandera `conApoyo`. Si no hay nadie capturado,
+   el reparto sigue en pie: sin nota al pie y sin acompañante.
+4. **`TIENDA_TAREAS = '1217'`.** Este archivo se publica también en
+   `planeador-odemas`; allá el checklist no se pidió y encendido solo repartiría
+   tareas que ese equipo nunca acordó. La tabla sí lleva `store_id`, así que
+   abrirlo para otra tienda es tocar el HTML, no migrar nada.
+5. **El catálogo del HTML y el CHECK de `tareas_hechas` dicen lo mismo.** Agregar
+   una tarea aquí y olvidar el SQL no rompe el reparto —se ve perfecto— pero al
+   palomearla la base la rechaza y no se registra nada.
+
+La palomita vive en `supabase_tareas.sql`: `tareas_semana()` para leer (devuelve
+`mia`, no el número de quien marcó) y `tarea_marcar()` para escribir. La primera
+palomita manda (`ON CONFLICT DO NOTHING`) y **desmarcar solo puede quien marcó**:
+sin eso, cualquiera podría borrar el trabajo registrado de otro y la tabla
+dejaría de servir para lo único que sirve.
+
+Lo cubre `pruebas/tareas_rotacion.js` (9 bloques).
+
 ### Un solo login *(4-ago-2026)*
 
 El planeador tenía su PROPIO proyecto de Supabase (`lgnyqfstmcqpkbekspte`), con
