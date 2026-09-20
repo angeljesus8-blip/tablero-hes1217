@@ -808,6 +808,20 @@ GRANT EXECUTE ON FUNCTION public.concurso_participantes_lista(text)       TO ano
 GRANT EXECUTE ON FUNCTION public.concurso_participante(text,text,text,boolean) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.concurso_rol_guardar(text,text,text,text,text[],text,text) TO anon, authenticated;
 
+-- Los dos ayudantes con guion bajo NO se exponen. Nadie los llama desde fuera:
+-- los usa `concurso_guardar`, que es SECURITY DEFINER y por eso los ve.
+--
+-- Sin esto heredan el EXECUTE de PUBLIC y contestan a cualquiera con la llave
+-- publicable. Hoy no filtran nada —RLS esconde `empleados` del rol `anon`, asi
+-- que `concurso_casar_empleado_` devuelve [] siempre—, y ese es justo el
+-- problema: parece rota. El que la pruebe desde fuera la vera fallar hasta con
+-- el nombre exacto, y el arreglo que se le ocurrira es ponerle SECURITY
+-- DEFINER; entonces si, cualquiera con la llave publicable podria ir probando
+-- nombres hasta sacar numeros de empleado del equipo. Se cierra la puerta
+-- antes de que alguien la abra por el lado equivocado.
+REVOKE ALL ON FUNCTION public.concurso_casar_empleado_(text,text) FROM public;
+REVOKE ALL ON FUNCTION public.concurso_clave_nombre_(text)        FROM public;
+
 
 -- ============================================================
 --  COMPROBAR (pegar despues, con el token de la tienda)
