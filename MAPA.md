@@ -3226,16 +3226,25 @@ El catálogo (`CATALOGO_TAREAS`) y las reglas del motor:
    En el catálogo solo queda la bandera `conApoyo`. Si no hay nadie capturado,
    el reparto sigue en pie: sin nota al pie y sin acompañante.
 
-   **Y se capturan los DÍAS que viene, no uno solo** *(20-sep-2026)*. De eso
-   depende la limpieza de apertura: los días que viene es suya —con el asesor
-   que abra, y sola si ese día no abre ningún asesor, que para eso la gerencia
-   ya está barriendo—; el día que no viene, la hace el asesor solo. Sin los días
-   el fallo se ve al revés de como es: el panel enseñaría el nombre de alguien
-   que no está en la tienda, o dejaría las mesas esperándola. Un `dia` suelto
-   guardado antes de esa fecha se sigue leyendo como un único día marcado, para
-   que lo capturado no desaparezca del reparto sin avisar. Guardar con nombre y
-   sin ningún día marcado da error en pantalla: `leerExternosForm_` descarta esa
-   fila, y sin el aviso se borraría en silencio.
+   **Y se le captura el DÍA QUE DESCANSA, como a todo el equipo** *(20-sep-2026)*.
+   Viene todos los demás, y de esos días depende la limpieza de apertura: esos
+   días es suya —con el asesor que abra, y sola si ese día no abre ningún
+   asesor, que para eso la gerencia ya está barriendo—; el día que descansa la
+   hace el asesor solo. Si el reparto no supiera qué días viene, el fallo se
+   vería al revés de como es: el panel enseñaría el nombre de alguien que no
+   está en la tienda, o dejaría las mesas esperándola.
+
+   Se preguntó primero al revés —marcar los seis días que sí viene— y se
+   cambió el mismo día: era la misma persona capturada con dos lógicas
+   distintas (los del planeador llevan `descFijo`) y abría un hueco que no
+   existe en el resto del formulario, desmarcar todos. **`externosTareas_()`
+   lee los tres formatos** —`descanso` (el de ahora), `dias` y un `dia` suelto—
+   porque lo guardado vive en `horarios_config` y nadie lo migra: dejar de leer
+   uno sacaría a esa persona del reparto sin un solo error. Lo que no se puede
+   traducir a «toda la semana menos uno» deja el desplegable sin elegir y
+   guardar lo pide; convertirlo por nuestra cuenta la pondría a trabajar días
+   que nadie capturó. Con nombre y sin día elegido, error en pantalla:
+   `leerExternosForm_` descarta esa fila y sin el aviso se borraría en silencio.
 4. **`TIENDA_TAREAS = '1217'`.** Este archivo se publica también en
    `planeador-odemas`; allá el checklist no se pidió y encendido solo repartiría
    tareas que ese equipo nunca acordó. La tabla sí lleva `store_id`, así que
