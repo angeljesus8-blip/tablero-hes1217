@@ -3215,18 +3215,31 @@ El catálogo (`CATALOGO_TAREAS`) y las reglas del motor:
    ajeno dicho de otra forma. Es la sexta superficie de la política del
    6-sep-2026, y `quienesTexto_()` es su portero.
 
-2-bis. **Y desde el 20-sep-2026 el asesor ve SOLO lo suyo.** No nombrar a nadie
-   no bastaba: el panel listaba la semana entera y se leía «Lavar sanitario ·
-   jueves · un compañero» —el pendiente de otro puesto en la lista de este, y
-   desde el piso no se distingue cuál de las seis líneas es la de uno—. Ahora
-   `renderTareas()` filtra a las tareas donde él aparece (más sus semanales de
-   otros días, que enterarse el mismo día es enterarse tarde), y la nota al pie
-   del apoyo queda solo para gerencia. **El filtro va en lo que se pinta, no en
-   el motor**: el reparto sigue siendo idéntico para todos, que de eso vive que
-   no haya dos verdades. Gerencia sigue viéndolo completo —es quien lo revisa y
-   quien palomea lo que el apoyo no puede palomear—. Lo comprueban dos pruebas
-   que leen los `data-tarea`/`data-dia` de cada fila pintada, no el texto: con
-   el filtro quitado, el panel del asesor trae cuatro tareas que no son suyas.
+2-bis. **Y desde el 20-sep-2026 el asesor ve SOLO lo suyo, pero TODO lo suyo.**
+   No nombrar a nadie no bastaba: el panel listaba la semana entera y se leía
+   «Lavar sanitario · jueves · un compañero» —el pendiente de otro puesto en la
+   lista de este, y desde el piso no se distingue cuál de las seis líneas es la
+   de uno—. `renderTareas()` filtra a las tareas donde él aparece, y la nota al
+   pie del apoyo queda solo para gerencia.
+
+   Lo suyo se le pinta **día por día, la semana completa**, con hoy en rojo:
+   recortarlo a hoy fue un paso de más de mi parte y él lo corrigió —saber el
+   lunes que el jueves le toca el sanitario es poder organizarse—. Verla entera
+   no es poder palomearla entera: lo de más adelante sale con la casilla
+   apagada (`esFuturo_`, y el `title` dice «se marca el jueves»), porque una
+   tarea marcada tres días antes es una tarea que nadie hizo y el checklist se
+   leería al día con el piso sin barrer. Hacia atrás sí se puede: de algo hecho
+   a las 9 nadie se acuerda de la palomita hasta las 8. Gerencia no pasa por
+   ese freno —es quien valida— y sigue con «hoy + lo semanal», que su panel es
+   para revisar el día, no para leer 16 líneas.
+
+   **El filtro va en lo que se pinta, no en el motor**: el reparto sigue siendo
+   idéntico para todos, que de eso vive que no haya dos verdades. Lo comprueban
+   cuatro pruebas que leen los `data-tarea`/`data-dia` y el `disabled` de cada
+   casilla pintada, no el texto. Los cuatro cebos: sin el filtro, al asesor le
+   llegan cuatro tareas ajenas; recortado a hoy, le faltan dos suyas; sin
+   `esFuturo_`, puede marcar el viernes desde el domingo; y devolviendo la nota
+   del apoyo, reaparece el pendiente de alguien más.
 3. **El apoyo sí lleva nombre, y solo cuando la tarea es suya.** Quien limpia y
    no está en el planeador no tiene tarjeta donde aparecer, así que va en una
    nota al pie. Solo para lo que hace sola: en la bodega también participa, pero
