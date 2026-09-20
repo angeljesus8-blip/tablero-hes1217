@@ -337,6 +337,18 @@ if (!ger.error) {
   /* ── 6 · El gerente ve nombres; el panel se enciende ────────────────── */
   {
     ok('el gerente ve el panel', ger.panel.indexOf('Tareas de la semana') >= 0, ger.panel.slice(0,120));
+
+    /* Gerencia sí ve el reparto entero: es quien lo revisa y quien palomea lo
+       que el apoyo no puede palomear. Si esto se filtrara como al asesor, el
+       checklist dejaría de servir para lo que se pidió. */
+    const filasG = [...ger.panel.matchAll(/data-tarea="([a-z_]+)" data-dia="(\d)"/g)]
+                     .map(m => m[1] + '|' + m[2]);
+    const hoyG = new Date().getDay();
+    const debeG = ger.reparto.filter(t => t.dia === hoyG || t.frec === 'semanal')
+                             .map(t => t.id + '|' + t.dia);
+    ok('el panel del gerente trae el reparto de todos',
+       debeG.every(x => filasG.indexOf(x) >= 0),
+       'pinta: ' + filasG.join(',') + ' · debe: ' + debeG.join(','));
     /* Se pregunta a la función que lo decide y no al panel de hoy: qué tareas
        caen esta semana depende del día en que se corra la prueba —y el sábado
        después de las 17:00 la página ya enseña la semana siguiente—. */
@@ -351,7 +363,25 @@ if (!ger.error) {
   const v = repartirComo({ empno:'900003', puesto:'Asesor' });   // CARO
   ok('la página arranca para el asesor', !v.error, v.error);
   if (!v.error) {
-    ok('el asesor ve el panel', v.panel.indexOf('Tareas de la semana') >= 0);
+    ok('el asesor ve el panel', v.panel.indexOf('Tus tareas') >= 0, v.panel.slice(0,120));
+
+    /* Y ve SOLO lo suyo. Cada fila del panel lleva su tarea y su día en
+       `data-`, así que se puede comprobar una por una contra el reparto: no
+       basta con que no aparezcan nombres —antes no aparecían y aun así se leía
+       «Lavar sanitario · jueves · un compañero», el pendiente de otro puesto en
+       la lista de este—. */
+    const filas = [...v.panel.matchAll(/data-tarea="([a-z_]+)" data-dia="(\d)"/g)]
+                    .map(m => m[1] + '|' + m[2]);
+    const suyas = v.reparto.filter(t => t.quienes.indexOf('A1') >= 0)
+                           .map(t => t.id + '|' + t.dia);
+    ok('el panel del asesor solo trae tareas suyas',
+       filas.every(f => suyas.indexOf(f) >= 0),
+       'pinta: ' + filas.join(',') + ' · suyas: ' + suyas.join(','));
+    ok('y trae alguna, si le tocó alguna esta semana',
+       filas.length > 0 || suyas.length === 0, suyas.join(','));
+    ok('no se le lista el pendiente de un compañero',
+       v.panel.indexOf('un compañero') < 0, v.panel.slice(0,400));
+    ok('ni la nota al pie del apoyo', v.panel.indexOf('tar-nota') < 0);
     for (const n of ['NORA GERENTE','BENI SUBGER','DANI ASESOR','NORA','BENI','DANI']) {
       ok('no se nombra a ' + n + ' en el panel de tareas', v.panel.indexOf(n) < 0, v.panel.slice(0,400));
       ok('ni en sus tarjetas', v.movil.indexOf(n) < 0, v.movil.slice(0,300));
