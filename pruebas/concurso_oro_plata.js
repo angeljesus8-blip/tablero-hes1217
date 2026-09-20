@@ -539,6 +539,59 @@ const nivelDe = (...lineas) => calificar(lineas).nivel;
 }
 
 
+/* ── 13 · El margen derecho, en los otros tres renglones ────── */
+{
+  /* 19-sep-2026, 5:53 PM, tercera foto del 34273 ya con v250. El pie ya
+     aguantaba la basura de la cola, pero en v250 sólo se soltó EL PIE, y otras
+     tres expresiones seguían clavadas en `$`. Su pantalla las enseñó las tres
+     a la vez:
+
+       · el celular en «$0.00» y sin su promoción de −$1,000;
+       · la mica llamándose «MICATRANSP =»;
+       · el asesor como «APELLIDO, NOMBRE EA».
+
+     Y un cuarto, que era el que enseñaba el $0.00: un importe ilegible valía
+     CERO. Cero es un número que miente —se ve como un precio de verdad—, así
+     que ahora es `null` y la línea se repara desde el precio. */
+  const crudo = fs.readFileSync(path.join(__dirname, 'ocr_ticket_real10.txt'), 'utf8');
+  const tercera = crudo
+    .replace('- 1,000.00', '- 1,000.00 |')
+    .replace('$9,999,00 I', '$.. I')
+    .replace('SERVICIO: MICATRANSP', 'SERVICIO: MICATRANSP =')
+    .replace('LOPEZ, CARLOS', 'LOPEZ, CARLOS EA');
+  const x = leerTicket(tercera);
+
+  /* La promoción trae DOS números que no son el descuento
+     («Promoción 117935 - 2146243 - 1,000.00»). Mientras la expresión acababa en
+     `$` daba igual cuál se buscara; al admitir basura detrás hay que quedarse
+     con el ÚLTIMO, o el ticket sale con un descuento de dos millones. */
+  ok('la promoción con basura detrás sigue descontando $1,000',
+     x.lineas[0].descuento === 1000, x.lineas[0].descuento);
+
+  ok('la mica no se queda llamándose «MICATRANSP =»',
+     x.lineas.some(l => l.nombre === 'MICATRANSP'),
+     x.lineas.map(l => l.nombre).join(' | '));
+
+  ok('el asesor llega sin el pedazo del margen',
+     x.vendedor === 'LOPEZ, CARLOS', x.vendedor);
+
+  /* El importe destrozado: con la promoción bien leída, precio y Total vuelven
+     a coincidir y la línea se repara sola. */
+  ok('un importe ilegible se repara desde el precio',
+     x.lineas[0].importe === 9999, x.lineas[0].importe);
+  ok('y se dice que no se pudo leer, no que valía cero',
+     x.avisos.some(a => /no se pudo leer/.test(a)), x.avisos.join(' // '));
+  ok('la suma cierra y no quedan avisos de cuadre',
+     !x.avisos.some(a => /suman/.test(a)), x.avisos.join(' // '));
+  ok('y el ticket sigue siendo PLATA',
+     calificar(aplicarRoles(x.lineas, null)).nivel === 'plata');
+
+  /* Cero no es lo mismo que «no lo leí», y de ahí salió todo esto. */
+  ok('un importe ilegible ya no vale cero', leerTicket('K\n000043739 1 149.000 $..')
+       .lineas[0].importe === null);
+}
+
+
 if (fallos.length) {
   console.log('concurso oro/plata: ' + fallos.length + ' fallo(s)');
   fallos.forEach(f => console.log('   · ' + f));
