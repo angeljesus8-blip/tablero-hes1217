@@ -1072,10 +1072,11 @@ function renderFormEquipo() {
     <div class="eq-section"><h4>Apoyo sin horario <span style="font-weight:400;color:#888">(tareas de piso)</span></h4>
       <p style="font-size:11px;color:#888;margin-bottom:8px">
         Quien limpia y no lleva turno en el planeador. Entra al reparto de tareas
-        el día que se le marque aquí. No puede palomear: su tarea la confirma
+        los días que se le marquen aquí; el día que no viene, la limpieza de
+        apertura la hace el asesor solo. No puede palomear: su tarea la confirma
         quien sí tenga acceso.
       </p>
-      <table class="eq-table"><thead><tr><th>Nombre</th><th>Día que viene</th><th></th></tr></thead>
+      <table class="eq-table"><thead><tr><th>Nombre</th><th>Días que viene</th><th></th></tr></thead>
       <tbody id="tbody-ext">${(eq.externos || []).map(filaExterno_).join('')}</tbody></table>
       <button class="btn-agregar-as" onclick="agregarExterno()">+ Agregar</button></div>` : '';
   const hOpts = (sel, min, max) => Array.from({length: max-min+1}, (_,i) => i+min)
@@ -1128,11 +1129,19 @@ function renderFormEquipo() {
    este archivo son públicos. Solo se pinta en la tienda que tiene checklist;
    en las demás, `leerEquipoForm` conserva lo que hubiera sin tocarlo. */
 function filaExterno_(e) {
+  /* Los días que viene, no un día suelto: quien limpia suele venir casi toda la
+     semana y de eso depende que las mesas se repartan bien —el día que no
+     viene, las limpia el asesor solo—. Un `dia` guardado antes del 20-sep-2026
+     se lee como un único día marcado. */
+  const dias = e && Array.isArray(e.dias) ? e.dias
+             : e && Number.isInteger(e.dia) ? [e.dia]
+             : [1,2,3,4,5,6];
   return `<tr data-ext="1">
     <td><input class="eq-input" data-campo="nombre" value="${(e && e.nombre) || ''}" placeholder="Nombre"></td>
-    <td><select class="eq-input eq-short" data-campo="dia">${
-      DIAS_NOMBRES.map((n, i) => `<option value="${i}"${i === (e && e.dia !== undefined ? e.dia : 2) ? ' selected' : ''}>${n}</option>`).join('')
-    }</select></td>
+    <td style="white-space:nowrap">${DIAS_NOMBRES.map((n, i) =>
+      `<label style="font-size:11px;margin-right:8px;cursor:pointer">
+         <input type="checkbox" data-dia="${i}"${dias.indexOf(i) >= 0 ? ' checked' : ''}> ${n.slice(0,3)}
+       </label>`).join('')}</td>
     <td><button class="btn-quitar-as" onclick="this.closest('tr').remove()">✕</button></td></tr>`;
 }
 function agregarExterno() {
@@ -1150,11 +1159,12 @@ function leerExternosForm_() {
   if (!tb) return (_equipoData && _equipoData.externos) || [];
   return [...tb.querySelectorAll('tr')].map(tr => {
     const nombre = tr.querySelector('[data-campo="nombre"]').value.trim();
-    const dia    = parseInt(tr.querySelector('[data-campo="dia"]').value);
+    const dias   = [...tr.querySelectorAll('[data-dia]')]
+                     .filter(c => c.checked).map(c => parseInt(c.dataset.dia));
     return { key: '@' + nombre.toLowerCase().normalize('NFD')
                                 .replace(SIN_ACENTOS_H, '').replace(/[^a-z0-9]+/g, '_'),
-             nombre, dia };
-  }).filter(e => e.nombre);
+             nombre, dias };
+  }).filter(e => e.nombre && e.dias.length);
 }
 function agregarAsesor() {
   const tr = document.createElement('tr');
@@ -1360,6 +1370,16 @@ async function guardarAdmin() {
       if (eq.gerentes.length !== 2) { msg.textContent='⚠ Se requieren exactamente 2 gerentes.'; msg.style.color='#c62828'; return; }
       if (eq.asesores.length === 0) { msg.textContent='⚠ Agrega al menos 1 asesor.'; msg.style.color='#c62828'; return; }
       if (eq.horaCierre <= eq.horaApertura + 8) { msg.textContent='⚠ El cierre debe ser al menos 8 horas después de la apertura.'; msg.style.color='#c62828'; return; }
+      // Apoyo con nombre y sin días → error. `leerExternosForm_` descarta esas
+      // filas, así que sin este aviso guardar la borraría sin decir nada y las
+      // tareas de piso se repartirían como si nadie limpiara.
+      const extSinDias = [...document.querySelectorAll('#tbody-ext tr')].filter(tr =>
+        tr.querySelector('[data-campo="nombre"]').value.trim() &&
+        !tr.querySelector('[data-dia]:checked'));
+      if (extSinDias.length) {
+        msg.textContent = '⚠ Marcaste apoyo sin días. Elige los días que viene o quita la fila.';
+        msg.style.color = '#c62828'; return;
+      }
       await guardarConfig('equipo', eq); aplicarEquipo(eq);
       msg.textContent='✓ Equipo guardado.'; msg.style.color='#2e7d32';
     } else if (_tabAdmin === 'proxima') {
@@ -1741,9 +1761,9 @@ function generarSemana(semana, historial, excepciones) {
 const TIENDA_TAREAS = '1217';
 
 /* Quien limpia en la tienda pero NO lleva horario en el planeador. Entra a la
-   rotación igual que todos; como no sabemos qué días viene, sus tareas van a un
-   día fijo. No tiene ficha ni número, así que tampoco puede palomear: su tarea
-   la confirma quien sí tenga acceso.
+   rotación igual que todos, pero por los días que viene —no por un turno—, y
+   esos días se capturan en Admin. No tiene ficha ni número, así que tampoco
+   puede palomear: su tarea la confirma quien sí tenga acceso.
 
    ⚠️ Los nombres se capturan en Admin → Equipo y viven en `horarios_config`
    (Supabase). NO se escriben aquí: los dos repos donde se publica este archivo
@@ -1751,10 +1771,15 @@ const TIENDA_TAREAS = '1217';
    puede quedar en el código —lo caza la regla `datos` de `verificar.py`—. */
 function externosTareas_() {
   const lista = (_equipoData && _equipoData.externos) || [];
-  return lista.filter(e => e && e.nombre)
-              .map((e, i) => ({ key: e.key || '@ext' + (i + 1),
-                                nombre: e.nombre,
-                                dia: Number.isInteger(e.dia) ? e.dia : 2 }));
+  return lista.filter(e => e && e.nombre).map((e, i) => {
+    /* `dia` suelto es el formato del 19-sep-2026, cuando el apoyo venía un solo
+       día. Se sigue leyendo: lo guardado entonces no se puede quedar sin días y
+       desaparecer del reparto sin que nadie lo note. */
+    const dias = Array.isArray(e.dias) ? e.dias.filter(d => d >= 0 && d <= 6)
+               : Number.isInteger(e.dia) ? [e.dia] : [1,2,3,4,5,6];
+    return { key: e.key || '@ext' + (i + 1), nombre: e.nombre,
+             dias: dias.length ? dias : [1,2,3,4,5,6] };
+  });
 }
 const esExterno_   = k => String(k || '').charAt(0) === '@';
 const externoDe_   = k => externosTareas_().find(e => e.key === k) || null;
@@ -1838,11 +1863,20 @@ function repartirTareas(dias, semana) {
            evitar. Si un día no abriera nadie del grupo ni de fuera, la tarea se
            queda sin dueño a propósito: mejor un hueco visible que un nombre que
            no puede hacerla. */
+        /* El apoyo, solo los días que viene. Lo pidió así el 20-sep-2026:
+           «cuando hay un asesor a la apertura el asesor la ayuda, si no ella lo
+           hace sola; y el domingo que no viene, el asesor las limpia solo». */
+        const apoyo = t.conApoyo
+                    ? externosTareas_().filter(e => e.dias.indexOf(d) >= 0).map(e => e.key)
+                    : [];
+        /* Con apoyo presente NO se llama a nadie de fuera de su grupo: si no
+           abre ningún asesor, ella sola. Sacar al gerente de la apertura para
+           acompañarla es inventar un apoyo que nadie pidió. */
         const pool    = abren.length ? abren
+                      : apoyo.length ? []
                       : PERSONAS.filter(p => !EQUIPO[p].vacante && abre(p, d));
         const quienes = pool.length ? [pool[(semana + d) % pool.length]] : [];
-        const extras  = t.conApoyo ? externosTareas_().map(e => e.key) : [];
-        if (quienes.length || extras.length) push(t.id, d, quienes, extras);
+        if (quienes.length || apoyo.length) push(t.id, d, quienes, apoyo);
       }
       continue;
     }
@@ -1865,7 +1899,11 @@ function repartirTareas(dias, semana) {
         const cand = rueda[(semana + i) % rueda.length];
         if (pase === 0 && yaLeToco.has(cand)) continue;
         if (esExterno_(cand)) {
-          push(t.id, externoDe_(cand).dia, [], [cand]); puesta = true; break;
+          // Mismo criterio que con el equipo: entre semana si viene entre semana.
+          const suyosE = externoDe_(cand).dias;
+          const entreE = suyosE.filter(x => x >= 1 && x <= 4);
+          const dE     = (entreE.length ? entreE : suyosE);
+          push(t.id, dE[semana % dE.length], [], [cand]); puesta = true; break;
         }
         if (EQUIPO[cand].vacante) continue;
         const suyos = [0,1,2,3,4,5,6].filter(d => presente(cand, d));
