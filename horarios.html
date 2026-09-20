@@ -203,6 +203,44 @@ body.solo-mi-horario .leyenda { display: none; }
 #mv-volver { display: none; }
 @media (max-width: 700px) { body.ver-tabla #mv-volver { display: block; } }
 
+/* ── Tareas de la semana ──
+   Vive FUERA de #vista-movil a propósito: esa capa se apaga en escritorio y el
+   checklist tiene que verse igual en el celular del asesor, en la tablet de
+   piso y en la computadora de la trastienda. Es lo único de esta página que
+   mira todo el mundo por el mismo sitio. */
+#panel-tareas { display: none; }
+.tar-panel {
+  background: #FFF; border: 1px solid var(--borde); border-radius: 10px;
+  box-shadow: 0 1px 5px rgba(0,0,0,0.06); margin-bottom: 10px; overflow: hidden;
+}
+.tar-head {
+  background: var(--azul); color: #FFF; padding: 9px 12px;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.3px;
+}
+.tar-head small { display: block; font-weight: 500; opacity: 0.9; font-size: 10px; margin-top: 2px; }
+.tar-sec {
+  font-size: 10px; font-weight: 700; color: var(--gris-sub);
+  text-transform: uppercase; letter-spacing: 0.4px; padding: 9px 12px 3px;
+  background: var(--gris-fondo);
+}
+.tar-fila { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-top: 1px solid #F0F0F0; }
+.tar-ico  { font-size: 16px; flex-shrink: 0; }
+.tar-nom  { flex: 1; font-size: 12px; font-weight: 600; color: var(--gris-txt); line-height: 1.35; }
+.tar-quien { display: block; font-size: 11px; font-weight: 500; color: var(--gris-sub); margin-top: 2px; }
+.tar-yo   { color: var(--rojo); font-weight: 700; }
+.tar-chk  { width: 22px; height: 22px; flex-shrink: 0; cursor: pointer; accent-color: var(--rojo); }
+.tar-chk:disabled { cursor: default; opacity: 0.45; }
+.tar-ok   { font-size: 11px; font-weight: 700; color: #2E7D32; flex-shrink: 0; }
+.tar-hecha .tar-nom { color: #9E9E9E; }
+.tar-hecha .tar-ico { opacity: 0.45; }
+/* La nota de quien no lleva horario en el planeador (Laura). No es una fila con
+   casilla: nadie de la app puede marcar por ella. */
+.tar-nota { font-size: 11px; line-height: 1.5; color: var(--gris-txt);
+  padding: 9px 12px; border-top: 1px solid #F0F0F0; background: #FFF8E1; }
+.tar-nota strong { color: var(--naranja); }
+.tar-vacia { font-size: 11px; color: var(--gris-sub); padding: 10px 12px; }
+.tarea-td { background: #EEF4FB; color: #17457F; font-size: 9px; font-weight: 600; }
+
 /* ── Auth overlay ── */
 #overlay-login {
   display: none;
@@ -539,6 +577,11 @@ body.solo-mi-horario .leyenda { display: none; }
 
 <!-- Vista de celular: la llena renderMovil() con los MISMOS datos de la tabla -->
 <div id="vista-movil"></div>
+
+<!-- Checklist de piso. Lo llena renderTareas() con el reparto que sale del
+     MISMO horario que se acaba de pintar. Nace oculto: en las tiendas que no
+     son la 1217 no se enciende nunca. -->
+<div id="panel-tareas"></div>
 
 <div class="wrapper-tabla" id="wrapper-tabla">
 <table>
@@ -1025,6 +1068,16 @@ function renderFormEquipo() {
     <td><button class="btn-quitar-as" onclick="this.closest('tr').remove()">✕</button></td></tr>`;
   const hAp = eq.horaApertura ?? 10;
   const hCi = eq.horaCierre   ?? 21;
+  const secExternos = (_tienda && _tienda.store_id === TIENDA_TAREAS) ? `
+    <div class="eq-section"><h4>Apoyo sin horario <span style="font-weight:400;color:#888">(tareas de piso)</span></h4>
+      <p style="font-size:11px;color:#888;margin-bottom:8px">
+        Quien limpia y no lleva turno en el planeador. Entra al reparto de tareas
+        el día que se le marque aquí. No puede palomear: su tarea la confirma
+        quien sí tenga acceso.
+      </p>
+      <table class="eq-table"><thead><tr><th>Nombre</th><th>Día que viene</th><th></th></tr></thead>
+      <tbody id="tbody-ext">${(eq.externos || []).map(filaExterno_).join('')}</tbody></table>
+      <button class="btn-agregar-as" onclick="agregarExterno()">+ Agregar</button></div>` : '';
   const hOpts = (sel, min, max) => Array.from({length: max-min+1}, (_,i) => i+min)
     .map(h => `<option value="${h}"${h===sel?' selected':''}>${String(h).padStart(2,'0')}:00</option>`).join('');
   document.getElementById('admin-equipo-area').innerHTML = `
@@ -1064,8 +1117,44 @@ function renderFormEquipo() {
     <div class="eq-section"><h4>Asesores</h4>
       <table class="eq-table"><thead><tr><th>Nombre completo</th><th>Cargo</th><th>#Emp</th><th>Descanso fijo</th><th>ID</th><th></th></tr></thead>
       <tbody id="tbody-as">${eq.asesores.map(rowA).join('')}</tbody></table>
-      <button class="btn-agregar-as" onclick="agregarAsesor()">+ Agregar asesor</button></div>`;
+      <button class="btn-agregar-as" onclick="agregarAsesor()">+ Agregar asesor</button></div>`
+    + secExternos;
   actualizarPreviewTurnos();
+}
+
+/* ── Apoyo sin horario (tareas de piso) ──
+   Quien limpia la tienda y no lleva turno. Su nombre se captura AQUI y se
+   guarda en `horarios_config`, nunca en el código: los dos repos donde vive
+   este archivo son públicos. Solo se pinta en la tienda que tiene checklist;
+   en las demás, `leerEquipoForm` conserva lo que hubiera sin tocarlo. */
+function filaExterno_(e) {
+  return `<tr data-ext="1">
+    <td><input class="eq-input" data-campo="nombre" value="${(e && e.nombre) || ''}" placeholder="Nombre"></td>
+    <td><select class="eq-input eq-short" data-campo="dia">${
+      DIAS_NOMBRES.map((n, i) => `<option value="${i}"${i === (e && e.dia !== undefined ? e.dia : 2) ? ' selected' : ''}>${n}</option>`).join('')
+    }</select></td>
+    <td><button class="btn-quitar-as" onclick="this.closest('tr').remove()">✕</button></td></tr>`;
+}
+function agregarExterno() {
+  const tb = document.getElementById('tbody-ext');
+  if (!tb) return;
+  const tr = document.createElement('tr');
+  tr.innerHTML = filaExterno_(null);
+  tr.dataset.ext = '1';
+  tb.appendChild(tr);
+}
+function leerExternosForm_() {
+  const tb = document.getElementById('tbody-ext');
+  // Sin tabla en pantalla no hay nada que leer: se devuelve lo guardado. Leer
+  // "vacío" aquí borraría el dato cada vez que otra tienda guarde su equipo.
+  if (!tb) return (_equipoData && _equipoData.externos) || [];
+  return [...tb.querySelectorAll('tr')].map(tr => {
+    const nombre = tr.querySelector('[data-campo="nombre"]').value.trim();
+    const dia    = parseInt(tr.querySelector('[data-campo="dia"]').value);
+    return { key: '@' + nombre.toLowerCase().normalize('NFD')
+                                .replace(SIN_ACENTOS_H, '').replace(/[^a-z0-9]+/g, '_'),
+             nombre, dia };
+  }).filter(e => e.nombre);
 }
 function agregarAsesor() {
   const tr = document.createElement('tr');
@@ -1111,7 +1200,8 @@ function leerEquipoForm() {
   const rotacion = document.getElementById('inp-rotacion')?.value || 'diaria';
   // Sin `pin`: el equipo entra con su número de empleado (4-ago-2026). Si el
   // respaldo viejo lo traía, se pierde aquí a propósito.
-  return { horaApertura, horaCierre, rotacion, gerentes: leer('tbody-ger', true), asesores: leer('tbody-as', false) };
+  return { horaApertura, horaCierre, rotacion, gerentes: leer('tbody-ger', true),
+           asesores: leer('tbody-as', false), externos: leerExternosForm_() };
 }
 
 // ── Formulario Próxima semana ─────────────────────────────────
@@ -1627,6 +1717,394 @@ function generarSemana(semana, historial, excepciones) {
 }
 
 // ============================================================
+//  TAREAS DE LA SEMANA — el checklist de piso (19-sep-2026)
+// ============================================================
+/* El planeador ya sabía quién abre, quién cierra y quién descansa. Faltaba la
+   otra mitad del turno: barrer, limpiar mesas, lavar el sanitario, ordenar
+   bodega. Se repartía de palabra —y de palabra se perdía: nadie podía decir si
+   el baño ya se lavó esta semana—.
+
+   ⚠️ NADIE ASIGNA NADA A MANO, y es a propósito. El reparto SALE del horario
+   que esta misma página acaba de pintar (`dias`), así que no puede contradecirlo:
+   no hay forma de mandar a lavar el baño a quien descansa, ni de dejarle la
+   limpieza de pantallas —que es de apertura— a quien cierra. Si el gerente
+   mueve un descanso, el reparto se mueve con él sin que nadie lo toque.
+
+   Y por lo mismo NO se guarda: misma semana + mismo horario = mismo reparto en
+   todos los teléfonos. Lo único que se guarda es la palomita (`tareas_hechas`,
+   ver supabase_tareas.sql), porque «ya se hizo» es un hecho del mundo y no se
+   puede calcular.
+
+   Solo la 1217 (`TIENDA_TAREAS`): este archivo se publica también en
+   `planeador-odemas`, para las tiendas que aún no tienen tablero, y allá el
+   checklist no se pidió ni hay quién lo sostenga. */
+const TIENDA_TAREAS = '1217';
+
+/* Quien limpia en la tienda pero NO lleva horario en el planeador. Entra a la
+   rotación igual que todos; como no sabemos qué días viene, sus tareas van a un
+   día fijo. No tiene ficha ni número, así que tampoco puede palomear: su tarea
+   la confirma quien sí tenga acceso.
+
+   ⚠️ Los nombres se capturan en Admin → Equipo y viven en `horarios_config`
+   (Supabase). NO se escriben aquí: los dos repos donde se publica este archivo
+   son PÚBLICOS, y el nombre de una persona de la tienda es justo lo que no
+   puede quedar en el código —lo caza la regla `datos` de `verificar.py`—. */
+function externosTareas_() {
+  const lista = (_equipoData && _equipoData.externos) || [];
+  return lista.filter(e => e && e.nombre)
+              .map((e, i) => ({ key: e.key || '@ext' + (i + 1),
+                                nombre: e.nombre,
+                                dia: Number.isInteger(e.dia) ? e.dia : 2 }));
+}
+const esExterno_   = k => String(k || '').charAt(0) === '@';
+const externoDe_   = k => externosTareas_().find(e => e.key === k) || null;
+const nombreTarea_ = k => esExterno_(k) ? (externoDe_(k) || {}).nombre || k
+                                        : (EQUIPO[k] ? EQUIPO[k].nombre.split(' ')[0] : k);
+
+/* El catálogo es fijo: las tareas de una tienda son siempre las mismas y una
+   pantalla para editarlas sería una pantalla que nadie abre.
+     · momento 'apertura' → solo puede tocarle a quien ese día ABRE
+     · rota 'ger'         → gerencia   ·  'as' → asesores
+       'rueda'            → todos, uno por semana, externos incluidos
+
+   Hubo un 'juntos' —el equipo entero el mismo día, para la bodega— que duró un
+   día: el 20-sep-2026 la bodega pasó a rodar como el sanitario. Se quitó en vez
+   de dejarlo apagado: una rama que nadie usa se lee como algo que todavía pasa.
+   ⚠️ Si se agrega una tarea aquí, hay que agregar su id al CHECK
+      `tareas_id_valido` de supabase_tareas.sql, o la palomita se rechaza. */
+const CATALOGO_TAREAS = [
+  { id: 'piso',      nombre: 'Barrer y trapear piso de venta', icono: '🧹',
+    frec: 'diaria',  momento: 'apertura', rota: 'ger' },
+  { id: 'mesas',     nombre: 'Limpiar mesas y pantallas',      icono: '🧴',
+    frec: 'diaria',  momento: 'apertura', rota: 'as', conApoyo: true },
+  { id: 'sanitario', nombre: 'Lavar sanitario',                icono: '🚽',
+    frec: 'semanal', momento: 'indistinto', rota: 'rueda' },
+  { id: 'bodega',    nombre: 'Orden y limpieza de bodega',     icono: '📦',
+    frec: 'semanal', momento: 'indistinto', rota: 'rueda' },
+];
+
+/* `doble` y `comp_apertura` abren igual que `apertura`: quien abre la cortina
+   es quien puede limpiar antes de que entre el primer cliente. */
+const TURNOS_QUE_ABREN = ['apertura', 'apertura_10', 'doble', 'comp_apertura'];
+const turnoAbre_ = t => TURNOS_QUE_ABREN.indexOf(t) >= 0;
+/* `capacitacion` cuenta como ausente a propósito: esa persona está en el curso
+   justo a la hora de la apertura (09:00–14:00 por defecto). Y `permiso`,
+   obviamente. Ponerle una tarea a quien no está en la tienda es exactamente lo
+   que este módulo viene a evitar. */
+const NO_ESTA = ['descanso', 'vacante', 'ausente', 'permiso', 'capacitacion'];
+const turnoPresente_ = t => !!t && NO_ESTA.indexOf(t) < 0;
+
+/* El año de la semana ISO, no el del calendario: la semana 1 empieza en
+   diciembre algunos años, y sin esto el baño lavado en la semana 1 de 2027
+   taparía al de la semana 1 de 2026. El jueves siempre cae en el año ISO. */
+function anioISOde_(domingo) {
+  const j = new Date(domingo);
+  j.setDate(j.getDate() + 4);
+  return j.getFullYear();
+}
+
+/* El reparto de la semana. Devuelve una lista de
+     { id, nombre, icono, frec, dia, quienes:[clave], externos:[clave] }
+   con una entrada por día en las diarias y una sola en las semanales.
+
+   Todo el azar está en `semana`: el mismo número de semana da el mismo reparto
+   en cualquier teléfono y a cualquier hora. */
+function repartirTareas(dias, semana) {
+  if (!dias || !PERSONAS.length) return [];
+  const presente = (p, d) => turnoPresente_(dias[d] && dias[d][p]);
+  const abre     = (p, d) => turnoAbre_(dias[d] && dias[d][p]);
+  const out      = [];
+  const meta     = id => CATALOGO_TAREAS.find(t => t.id === id);
+  const push     = (id, dia, quienes, externos) =>
+    out.push(Object.assign({}, meta(id), { dia: dia, quienes: quienes || [], externos: externos || [] }));
+  // Quién lleva ya una tarea semanal: ver la rueda, más abajo.
+  const yaLeToco = new Set();
+
+  for (const t of CATALOGO_TAREAS) {
+
+    // ── Diaria de apertura, de gerencia o de asesores ──
+    if (t.frec === 'diaria') {
+      const grupo = t.rota === 'ger' ? GERENTES : ASESORES;
+      for (let d = 0; d < 7; d++) {
+        const abren = grupo.filter(p => !EQUIPO[p].vacante && abre(p, d));
+        /* Si ese día nadie de su grupo abre, pasa a QUIEN SÍ ABRA, sea del
+           grupo que sea. Nunca a quien entra a media tarde.
+
+           ⚠️ Esto se escribió al revés la primera vez —caía en quien estuviera
+           presente— y se vio en pantalla: el lunes solo trabaja un asesor, con
+           turno de cierre 12:30, y le salía «Limpiar mesas y pantallas», que se
+           hace antes de abrir la cortina. El reparto se veía perfecto y era
+           imposible de cumplir; es el caso exacto que este módulo vino a
+           evitar. Si un día no abriera nadie del grupo ni de fuera, la tarea se
+           queda sin dueño a propósito: mejor un hueco visible que un nombre que
+           no puede hacerla. */
+        const pool    = abren.length ? abren
+                      : PERSONAS.filter(p => !EQUIPO[p].vacante && abre(p, d));
+        const quienes = pool.length ? [pool[(semana + d) % pool.length]] : [];
+        const extras  = t.conApoyo ? externosTareas_().map(e => e.key) : [];
+        if (quienes.length || extras.length) push(t.id, d, quienes, extras);
+      }
+      continue;
+    }
+
+    // ── Semanal, uno por semana: la rueda ──
+    /* Orden fijo —gerencia, asesores, externos— para que la rueda sea la misma
+       cada semana. Quien está de vacaciones toda la semana no pierde su turno:
+       lo cede, y la rueda sigue girando desde donde iba.
+
+       Se da DOS pases. En el primero se salta a quien ya lleva otra tarea
+       semanal: son dos las que ruedan —sanitario y bodega— y girando igual le
+       caerían las dos a la misma persona la misma semana, mientras los demás
+       no hacen ninguna. En el segundo pase se admite repetir, porque en una
+       tienda de dos personas —o con media plantilla de vacaciones— no hay a
+       quién más dárselo, y dejar la bodega sin dueño es peor. */
+    const rueda = GERENTES.concat(ASESORES).concat(externosTareas_().map(e => e.key));
+    for (let pase = 0; pase < 2; pase++) {
+      let puesta = false;
+      for (let i = 0; i < rueda.length && !puesta; i++) {
+        const cand = rueda[(semana + i) % rueda.length];
+        if (pase === 0 && yaLeToco.has(cand)) continue;
+        if (esExterno_(cand)) {
+          push(t.id, externoDe_(cand).dia, [], [cand]); puesta = true; break;
+        }
+        if (EQUIPO[cand].vacante) continue;
+        const suyos = [0,1,2,3,4,5,6].filter(d => presente(cand, d));
+        if (!suyos.length) continue;                     // semana entera fuera
+        /* Entre sus días, de lunes a jueves si los tiene: lavar el sanitario o
+           acomodar bodega en sábado o domingo es robarle piso a los dos días
+           que más venden. Quien solo trabaja fin de semana lo hace ahí, claro:
+           el día malo es mejor que ningún día. */
+        const entre = suyos.filter(d => d >= 1 && d <= 4);
+        const dias  = entre.length ? entre : suyos;
+        push(t.id, dias[semana % dias.length], [cand], []);
+        puesta = true;
+      }
+      if (puesta) { yaLeToco.add(out[out.length-1].quienes[0] || out[out.length-1].externos[0]); break; }
+    }
+  }
+  return out;
+}
+
+/* Lo repartido esta semana y lo ya palomeado, para poder repintar el panel solo
+   —la palomita llega de la red después de que la página ya se dibujó—. */
+let _reparto    = [];
+let _tareasCtx  = null;    // { semana, anio, domingo }
+let _hechas     = {};      // 'tarea|dia' -> { mia, por }
+
+const claveHecha_ = (id, dia) => id + '|' + dia;
+const tareaHecha_ = (id, dia) => !!_hechas[claveHecha_(id, dia)];
+
+// Lo que le toca a una persona un día: lo consultan la tarjeta del celular y la
+// tabla del gerente, para que las dos digan lo mismo que el panel.
+function tareasDe_(persona, dia) {
+  return _reparto.filter(t => t.dia === dia && t.quienes.indexOf(persona) >= 0);
+}
+
+/* ¿Puede esta persona palomear esta tarea?
+     · gerencia, siempre —es quien valida que se hizo—
+     · a quien le tocó
+     · cualquiera del equipo, si la tarea es de un externo: Laura no tiene
+       número con que entrar, y una palomita que nadie puede poner es una tarea
+       que siempre se ve pendiente. */
+function puedeMarcar_(t) {
+  if (veElEquipo_()) return true;
+  const yo = quienSoy();
+  if (yo && t.quienes.indexOf(yo) >= 0) return true;
+  return !t.quienes.length && t.externos.length > 0;
+}
+
+/* Quién hizo la tarea, dicho para el gerente. El asesor no llega aquí: ver
+   `tareas_semana` en supabase_tareas.sql — el servidor no le manda el número. */
+function marcadaPor_(id, dia) {
+  const h = _hechas[claveHecha_(id, dia)];
+  if (!h) return '';
+  if (h.mia) return 'por ti';
+  if (!h.por) return 'por gerencia';
+  const quien = PERSONAS.find(p => String(EQUIPO[p].emp || '').trim() === String(h.por).trim());
+  return quien ? 'por ' + nombreTarea_(quien) : 'ya hecha';
+}
+
+/* Cómo se nombra a quien le tocó.
+
+   ⚠️ Al asesor NO se le escribe el nombre de un compañero. Desde el 6-sep-2026
+   ve su horario y no el de los demás, y «a Dani le toca el baño el jueves» dice
+   que Dani trabaja el jueves: es horario ajeno por la puerta de atrás, y esta
+   pantalla es justo la que no parece una tabla de horarios. Lo cubre
+   `pruebas/tareas_rotacion.js`.
+
+   Los externos SÍ van con nombre para todos: Laura no está en el planeador, así
+   que nombrarla no cuenta la semana de nadie — y ese era el pedido. */
+function quienesTexto_(t) {
+  const yo    = quienSoy();
+  const mios  = t.quienes.indexOf(yo) >= 0;
+  const gente = [];
+  /* Desde el 20-sep-2026 ninguna tarea es del equipo entero —la bodega también
+     rueda—, así que aquí ya no hay un caso «todos»: o es de una persona, o es
+     de una persona y el apoyo. */
+  if (veElEquipo_()) {
+    t.quienes.forEach(p => gente.push(nombreTarea_(p)));
+  } else if (mios) {
+    gente.push('te toca');
+  } else if (t.quienes.length) {
+    gente.push('un compañero');
+  }
+  t.externos.forEach(k => gente.push(nombreTarea_(k)));
+  return gente.join(' + ');
+}
+
+function renderTareas() {
+  const cont = document.getElementById('panel-tareas');
+  if (!cont) return;
+  // La tienda manda: en `planeador-odemas` esto no existe.
+  if (!_tareasCtx || !_tienda || _tienda.store_id !== TIENDA_TAREAS || !_reparto.length) {
+    cont.innerHTML = ''; cont.style.display = 'none'; return;
+  }
+  cont.style.display = 'block';
+
+  const hoy    = new Date();
+  const finSem = new Date(_tareasCtx.domingo); finSem.setDate(finSem.getDate() + 6); finSem.setHours(23,59,59,999);
+  const esEstaSemana = hoy >= _tareasCtx.domingo && hoy <= finSem;
+  const diaHoy = esEstaSemana ? hoy.getDay() : -1;
+
+  const fila = t => {
+    const hecha  = tareaHecha_(t.id, t.dia);
+    const puede  = puedeMarcar_(t);
+    const quien  = quienesTexto_(t);
+    const cuando = t.frec === 'semanal' ? DIAS_NOMBRES[t.dia] : '';
+    const detalle = [cuando, quien].filter(Boolean).join(' · ');
+    /* La casilla lleva `data-` y no un onclick con los valores dentro: el id de
+       la tarea y el día viajan como dato, no como texto de código. */
+    return `<div class="tar-fila${hecha ? ' tar-hecha' : ''}">
+      <span class="tar-ico">${t.icono}</span>
+      <span class="tar-nom">${t.nombre}
+        <span class="tar-quien${quien === 'te toca' ? ' tar-yo' : ''}">${detalle || '—'}</span></span>
+      ${hecha && !puede ? `<span class="tar-ok">✓ ${marcadaPor_(t.id, t.dia)}</span>` : ''}
+      <input type="checkbox" class="tar-chk" data-tarea="${t.id}" data-dia="${t.dia}"
+             ${hecha ? 'checked' : ''} ${puede ? '' : 'disabled'}
+             title="${puede ? 'Marcar como hecha' : 'Solo la marca quien la hace, o gerencia'}">
+    </div>`;
+  };
+
+  let html = `<div class="tar-panel">
+    <div class="tar-head">🧽 Tareas de la semana
+      <small>Se reparten solas con el horario · nadie las asigna a mano</small></div>`;
+
+  const hoyTareas = _reparto.filter(t => t.dia === diaHoy);
+  if (hoyTareas.length) {
+    const f = new Date(_tareasCtx.domingo); f.setDate(f.getDate() + diaHoy);
+    html += `<div class="tar-sec">Hoy · ${DIAS_NOMBRES[diaHoy]} ${f.getDate()}</div>`;
+    hoyTareas.forEach(t => { html += fila(t); });
+  }
+
+  const resto = _reparto.filter(t => t.dia !== diaHoy && t.frec === 'semanal');
+  if (resto.length) {
+    html += `<div class="tar-sec">${hoyTareas.length ? 'Lo demás de la semana' : 'Esta semana'}</div>`;
+    resto.forEach(t => { html += fila(t); });
+  }
+
+  /* La nota al pie: quien no sale en el planeador no tiene tarjeta donde
+     aparecer, así que su turno se diría en ningún sitio. Es el pedido que
+     arrancó todo esto. */
+  /* Solo cuando la tarea es SUYA y de nadie más. En la bodega también participa,
+     pero ahí la hace el equipo entero: decir «le toca a Laura» dejaría a los
+     demás pensando que esa semana no van. */
+  const suyas = _reparto.filter(t =>
+    t.externos.length && t.frec === 'semanal' && !t.quienes.length);
+  externosTareas_().forEach(e => {
+    const mias = suyas.filter(t => t.externos.indexOf(e.key) >= 0);
+    mias.forEach(t => {
+      html += `<div class="tar-nota">${t.icono} Esta semana le toca a <strong>${e.nombre}</strong>
+        ${t.nombre.toLowerCase()} — ${DIAS_NOMBRES[t.dia].toLowerCase()}.</div>`;
+    });
+  });
+
+  if (!hoyTareas.length && !resto.length)
+    html += `<div class="tar-vacia">Sin tareas esta semana.</div>`;
+
+  cont.innerHTML = html + '</div>';
+  cont.querySelectorAll('.tar-chk').forEach(chk => {
+    chk.addEventListener('change', () => marcarTarea(chk));
+  });
+}
+
+/* ── La palomita ──
+   Dos caminos, el mismo de siempre en esta app: quien tiene cuenta escribe
+   directo y la RLS decide; quien entró con su número pasa por el RPC, que
+   valida que siga activo. El subgerente que entra por el tablero NO trae sesión
+   de Supabase aunque vea el equipo entero, así que se mira `_empno` y no
+   `veElEquipo_()`. */
+async function marcarTarea(chk) {
+  const id   = chk.dataset.tarea;
+  const dia  = parseInt(chk.dataset.dia, 10);
+  const val  = chk.checked;
+  const prev = _hechas[claveHecha_(id, dia)];
+  chk.disabled = true;
+  try {
+    if (_empno) {
+      const { data, error } = await _sb.rpc('tarea_marcar', {
+        p_store_id: _tienda.store_id, p_empno: _empno, p_anio: _tareasCtx.anio,
+        p_semana: _tareasCtx.semana, p_tarea: id, p_dia: dia, p_hecha: val });
+      if (error) throw error;
+      if (!data || data.ok !== true) throw new Error(
+        data && data.error === 'no_es_tuya'
+          ? 'Esa tarea la marcó alguien más; solo quien la marcó puede quitarla.'
+          : 'No se pudo registrar (' + ((data && data.error) || 'sin respuesta') + ').');
+    } else if (val) {
+      const { error } = await _sb.from('tareas_hechas').upsert({
+        store_id: _tienda.store_id, anio: _tareasCtx.anio, semana: _tareasCtx.semana,
+        tarea: id, dia: dia }, { onConflict: 'store_id,anio,semana,tarea,dia', ignoreDuplicates: true });
+      if (error) throw error;
+    } else {
+      const { error } = await _sb.from('tareas_hechas').delete()
+        .eq('store_id', _tienda.store_id).eq('anio', _tareasCtx.anio)
+        .eq('semana', _tareasCtx.semana).eq('tarea', id).eq('dia', dia);
+      if (error) throw error;
+    }
+    if (val) _hechas[claveHecha_(id, dia)] = { mia: !!_empno, por: _empno || null };
+    else     delete _hechas[claveHecha_(id, dia)];
+  } catch (e) {
+    /* Sin esto la palomita se quedaría puesta en la pantalla y en ningún lado
+       más: exactamente el fallo que `guardarConfig` ya arregló una vez —guardar
+       "bien" y no haber guardado nada—. */
+    if (prev) _hechas[claveHecha_(id, dia)] = prev; else delete _hechas[claveHecha_(id, dia)];
+    alert('No se pudo registrar la tarea: ' + ((e && e.message) || e));
+  } finally {
+    renderTareas();
+  }
+}
+
+/* Lo ya palomeado de esta semana. Llega tarde —la página ya se pintó— y por eso
+   repinta el panel al volver. Si falla, se queda todo como pendiente: es mejor
+   que una palomita inventada. */
+async function cargarTareasHechas() {
+  if (!_tareasCtx || !_tienda || _tienda.store_id !== TIENDA_TAREAS) return;
+  const ctx = _tareasCtx;
+  try {
+    let filas = [];
+    if (_empno) {
+      const { data, error } = await _sb.rpc('tareas_semana', {
+        p_store_id: _tienda.store_id, p_empno: _empno,
+        p_anio: ctx.anio, p_semana: ctx.semana });
+      if (error) throw error;
+      filas = (data || []).map(f => ({ tarea: f.tarea, dia: f.dia, mia: f.mia, por: null }));
+    } else {
+      const { data, error } = await _sb.from('tareas_hechas')
+        .select('tarea,dia,hecha_por')
+        .eq('store_id', _tienda.store_id).eq('anio', ctx.anio).eq('semana', ctx.semana);
+      if (error) throw error;
+      filas = (data || []).map(f => ({ tarea: f.tarea, dia: f.dia, mia: false, por: f.hecha_por }));
+    }
+    // Si mientras tanto cambió de semana, este resultado ya no es de lo que se ve.
+    if (_tareasCtx !== ctx) return;
+    _hechas = {};
+    filas.forEach(f => { _hechas[claveHecha_(f.tarea, f.dia)] = { mia: f.mia, por: f.por }; });
+    renderTareas();
+  } catch (e) {
+    console.warn('No se pudieron leer las tareas hechas:', (e && e.message) || e);
+  }
+}
+
+// ============================================================
 //  RENDER
 // ============================================================
 function infoTurno(persona, turno, dia) {
@@ -1645,6 +2123,14 @@ function infoTurno(persona, turno, dia) {
 
 function td(v, cls) {
   return `<td class="${cls || ''}">${v || '—'}</td>`;
+}
+
+// La fila de tareas solo existe donde el checklist existe (la 1217).
+function hayTareas_() { return _reparto.length > 0; }
+function tdTareas_(persona, dia) {
+  const t = tareasDe_(persona, dia);
+  if (!t.length) return td('', 'vacio');
+  return td(t.map(x => `${x.icono} ${x.nombre}${tareaHecha_(x.id, x.dia) ? ' ✓' : ''}`).join('<br>'), 'tarea-td');
 }
 
 /* ── Vista de celular ──
@@ -1670,6 +2156,11 @@ function mvDias(persona, dias, comidas, domingo, hoyISO) {
     if (com)     extras.push(`<span>🍽 ${com}</span>`);
     if (inf.ls1) extras.push(`<span>🪑 ${inf.ls1}</span>`);
     if (inf.ls2) extras.push(`<span>🪑 ${inf.ls2}</span>`);
+    /* La tarea va en la tarjeta de quien le toca, además del panel: el asesor
+       mira su día, no una lista aparte. Sale del mismo reparto, así que las dos
+       no se pueden contradecir. */
+    tareasDe_(persona, d).forEach(t =>
+      extras.push(`<span>${t.icono} ${t.nombre}${tareaHecha_(t.id, t.dia) ? ' ✓' : ''}</span>`));
     out += `<div class="mv-dia${esHoy ? ' mv-hoy' : ''}">
       <div class="mv-fecha">${DIAS_CORTOS[d]}<b>${String(f.getDate()).padStart(2,'0')}</b></div>
       <div>
@@ -1770,6 +2261,12 @@ function verTablaCompleta(si) {
 function renderTabla(semana, domingo, dias, comidas) {
   const fmt = d => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
 
+  /* El reparto de tareas ANTES de pintar nada: las tarjetas del celular y la
+     tabla lo consultan mientras se dibujan, igual que hacen con `comidas`. Sale
+     de estos mismos `dias`, así que no hay dos versiones de quién barre. */
+  _reparto   = repartirTareas(dias, semana);
+  _tareasCtx = { semana: semana, anio: anioISOde_(domingo), domingo: domingo };
+
   for (let i = 0; i < 7; i++) {
     const f = new Date(domingo);
     f.setDate(f.getDate() + i);
@@ -1783,14 +2280,17 @@ function renderTabla(semana, domingo, dias, comidas) {
     html += `<tr class="fila-persona"><td colspan="8">▌ ${eq.vacante ? '⚠ PUESTO VACANTE' : `${eq.nombre} — ${eq.cargo} &nbsp;·&nbsp; #${eq.emp}`}</td></tr>`;
     let rowH = `<tr><td class="lbl">Horario</td>`;
     let rowC = `<tr><td class="lbl">Comida</td>`;
+    let rowT = `<tr><td class="lbl">Tareas</td>`;
     for (let d = 0; d < 7; d++) {
       const inf = infoTurno(persona, dias[d][persona], d);
       const com = comidas[d][persona] || '';
       rowH += td(inf.label, inf.cls);
       rowC += td(com, com ? 'comida' : 'vacio');
+      rowT += tdTareas_(persona, d);
     }
     html += rowH + '</tr>';
     html += rowC + '</tr>';
+    if (hayTareas_()) html += rowT + '</tr>';
   }
 
   function bloquePersAs(persona) {
@@ -1800,6 +2300,7 @@ function renderTabla(semana, domingo, dias, comidas) {
     let rowC  = `<tr><td class="lbl">Comida</td>`;
     let rowL1 = `<tr><td class="lbl">Ley Silla — Desc.1</td>`;
     let rowL2 = `<tr><td class="lbl">Ley Silla — Desc.2</td>`;
+    let rowT  = `<tr><td class="lbl">Tareas</td>`;
     for (let d = 0; d < 7; d++) {
       const inf = infoTurno(persona, dias[d][persona], d);
       const com = comidas[d][persona] || '';
@@ -1807,11 +2308,13 @@ function renderTabla(semana, domingo, dias, comidas) {
       rowC  += td(com,      com      ? 'comida'    : 'vacio');
       rowL1 += td(inf.ls1,  inf.ls1  ? 'ley-silla' : 'vacio');
       rowL2 += td(inf.ls2,  inf.ls2  ? 'ley-silla' : 'vacio');
+      rowT  += tdTareas_(persona, d);
     }
     html += rowH  + '</tr>';
     html += rowC  + '</tr>';
     html += rowL1 + '</tr>';
     html += rowL2 + '</tr>';
+    if (hayTareas_()) html += rowT + '</tr>';
   }
 
   /* La tabla se pinta con TODO el equipo o con nadie más que uno mismo: el CSS
@@ -1831,6 +2334,12 @@ function renderTabla(semana, domingo, dias, comidas) {
 
   document.getElementById('cuerpo').innerHTML = html;
   renderMovil(dias, comidas, domingo);
+  /* Se pinta con lo que se sepa —al arrancar, todo pendiente— y la palomita que
+     ya esté guardada llega detrás y lo repinta. Esperar a la red dejaría el
+     checklist en blanco los primeros segundos, justo cuando el asesor lo abre
+     al llegar a la tienda. */
+  renderTareas();
+  cargarTareasHechas();
 
   const fi = domingo;
   const ff = new Date(fi); ff.setDate(ff.getDate() + 6);
@@ -1904,6 +2413,10 @@ function renderSemana() {
   if (btnE) btnE.style.display = sinAsignar ? 'none' : '';
   if (sinAsignar) {
     _diasActuales = null;
+    /* Sin horario no hay reparto: dejar el panel puesto enseñaría las tareas de
+       la semana anterior bajo el rótulo de esta. Es el mismo motivo por el que
+       aquí se esconden la tabla y el pie. */
+    _reparto = []; _tareasCtx = null; renderTareas();
     const fi = new Date(_domingo); fi.setDate(fi.getDate() + 1);
     const ff = new Date(_domingo); ff.setDate(ff.getDate() + 6);
     document.getElementById('badge-semana').textContent =
