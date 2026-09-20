@@ -45,7 +45,7 @@ const EQUIPO = {
   /* Quien limpia y no lleva turno. Viene de la CONFIGURACIÓN, no del código:
      su nombre real vive en `horarios_config` (Supabase) porque estos dos repos
      son públicos. Aquí va uno de los de `NOMBRES_EJEMPLO`. */
-  externos: [ { key:'@elena', nombre:'ELENA', dias:[1,2,3,4,5,6] } ]   // todos menos el domingo
+  externos: [ { key:'@elena', nombre:'ELENA', descanso:0 } ]   // descansa el domingo
 };
 
 const SUPABASE_FALSO = {
@@ -90,8 +90,9 @@ function repartirComo(opciones, tienda, equipo) {
 
 const NO_ESTA = ['descanso','vacante','ausente','permiso','capacitacion'];
 const ABREN   = ['apertura','apertura_10','doble','comp_apertura'];
-// Los días que viene el apoyo del equipo de prueba: todos menos el domingo.
-const DIAS_APOYO = EQUIPO.externos[0].dias;
+// Los días que viene el apoyo: los que no descansa. Se deriva igual que en la
+// página, para que cambiar su descanso aquí no deje las pruebas mintiendo.
+const DIAS_APOYO = [0,1,2,3,4,5,6].filter(d => d !== EQUIPO.externos[0].descanso);
 
 const ger = repartirComo({ puedeEditar:true });
 ok('la página arranca para el gerente', !ger.error, ger.error);
@@ -228,6 +229,38 @@ if (!ger.error) {
         ok('y las hace el apoyo', mar.externos.indexOf('@elena') >= 0, mar.externos.join(','));
         ok('sola, sin llamar a gerencia', mar.quienes.length === 0, mar.quienes.join(','));
       }
+    }
+  }
+
+  /* ── 3-sexies · Lo capturado con los formatos viejos se sigue leyendo ── */
+  {
+    /* El apoyo se ha guardado de tres formas en tres días: `dia` suelto
+       (19-sep), `dias` (20-sep) y `descanso` (el de ahora). Lo guardado vive en
+       `horarios_config` y nadie lo migra: si un formato dejara de leerse, esa
+       persona saldría del reparto sin un solo error —el checklist se vería
+       perfecto y las mesas serían de quien no toca—. */
+    const casos = [
+      /* Miércoles a propósito, y no domingo: un descanso en domingo da los
+         mismos días que el valor por omisión, y entonces la prueba pasaría
+         igual aunque la página dejara de leer `descanso`. Se comprobó con
+         cebo: escrita con domingo, no mordía. */
+      { que:'descanso', ext:{ key:'@elena', nombre:'ELENA', descanso:3 }, espera:[0,1,2,4,5,6] },
+      { que:'dias',     ext:{ key:'@elena', nombre:'ELENA', dias:[1,2,3] }, espera:[1,2,3] },
+      { que:'dia',      ext:{ key:'@elena', nombre:'ELENA', dia:2 },      espera:[2] },
+      { que:'sin días', ext:{ key:'@elena', nombre:'ELENA' },             espera:[1,2,3,4,5,6] }
+    ];
+    for (const c of casos) {
+      const v = repartirComo({ puedeEditar:true }, '1217',
+                             Object.assign({}, EQUIPO, { externos:[c.ext] }));
+      ok('arranca con el formato «' + c.que + '»', !v.error, v.error);
+      if (v.error) continue;
+      const leidos = JSON.parse(v.ent.correr('JSON.stringify(externosTareas_()[0].dias)'));
+      ok('el formato «' + c.que + '» da los días esperados',
+         leidos.join(',') === c.espera.join(','), leidos.join(','));
+      const conEllaMesas = v.reparto.filter(t => t.id === 'mesas' && t.externos.length)
+                                    .map(t => t.dia).sort();
+      ok('y las mesas la llaman solo esos días con «' + c.que + '»',
+         conEllaMesas.every(d => c.espera.indexOf(d) >= 0), conEllaMesas.join(','));
     }
   }
 
