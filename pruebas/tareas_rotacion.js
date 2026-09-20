@@ -370,15 +370,36 @@ if (!ger.error) {
        basta con que no aparezcan nombres —antes no aparecían y aun así se leía
        «Lavar sanitario · jueves · un compañero», el pendiente de otro puesto en
        la lista de este—. */
-    const filas = [...v.panel.matchAll(/data-tarea="([a-z_]+)" data-dia="(\d)"/g)]
-                    .map(m => m[1] + '|' + m[2]);
+    const chks  = [...v.panel.matchAll(/data-tarea="([a-z_]+)" data-dia="(\d)"([\s\S]*?)>/g)]
+                    .map(m => ({ k: m[1] + '|' + m[2], dia: +m[2],
+                                 off: m[3].indexOf('disabled') >= 0 }));
+    const filas = chks.map(c => c.k);
     const suyas = v.reparto.filter(t => t.quienes.indexOf('A1') >= 0)
                            .map(t => t.id + '|' + t.dia);
     ok('el panel del asesor solo trae tareas suyas',
        filas.every(f => suyas.indexOf(f) >= 0),
        'pinta: ' + filas.join(',') + ' · suyas: ' + suyas.join(','));
+    /* Y las trae TODAS, no solo las de hoy: saber el lunes que el jueves le
+       toca el sanitario es poder organizarse —se pidió así—. Con el panel
+       recortado a hoy, esta línea es la que avisa. */
+    ok('y trae su semana entera',
+       suyas.every(x => filas.indexOf(x) >= 0),
+       'pinta: ' + filas.join(',') + ' · suyas: ' + suyas.join(','));
     ok('y trae alguna, si le tocó alguna esta semana',
        filas.length > 0 || suyas.length === 0, suyas.join(','));
+
+    /* Ver toda la semana no es poder palomearla toda: una tarea del jueves
+       marcada el lunes es una tarea que nadie hizo, y el checklist se leería al
+       día con el piso sin barrer. El día se saca del domingo que pintó la
+       página, no de repetir aquí la cuenta que hace ella. */
+    const dom = new Date(JSON.parse(v.ent.correr('JSON.stringify(_tareasCtx.domingo)')));
+    const hoy0 = new Date(); hoy0.setHours(0,0,0,0);
+    for (const c of chks) {
+      const f = new Date(dom); f.setDate(f.getDate() + c.dia); f.setHours(0,0,0,0);
+      ok('la casilla del día ' + c.dia + ' está ' + (f > hoy0 ? 'apagada' : 'viva') + ' para el asesor',
+         c.off === (f > hoy0), c.k + ' · apagada=' + c.off);
+    }
+    ok('y hay alguna casilla que comprobar', chks.length > 0);
     ok('no se le lista el pendiente de un compañero',
        v.panel.indexOf('un compañero') < 0, v.panel.slice(0,400));
     ok('ni la nota al pie del apoyo', v.panel.indexOf('tar-nota') < 0);
