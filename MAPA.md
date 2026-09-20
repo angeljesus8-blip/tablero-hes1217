@@ -3190,11 +3190,11 @@ El catálogo (`CATALOGO_TAREAS`) y las reglas del motor:
 | Tarea | Cada | Quién |
 |---|---|---|
 | Barrer y trapear piso | diaria | la gerencia que **abre** ese día |
-| Limpiar mesas y pantallas | diaria | el asesor que **abre** + el apoyo |
+| Limpiar mesas y pantallas | diaria | el apoyo + el asesor que **abre**; el día que el apoyo no viene, el asesor solo |
 | Lavar sanitario | semanal | rueda: gerentes, asesores y el apoyo |
 | Orden y limpieza de bodega | semanal | rueda propia, el apoyo incluido |
 
-⚠️ **Cinco cosas que, si se deshacen, no dan error:**
+⚠️ **Seis cosas que, si se deshacen, no dan error:**
 
 0. **Las dos semanales no pueden caer en la misma persona.** Sanitario y bodega
    ruedan las dos (la bodega dejó de ser «todo el equipo junto» el 20-sep-2026),
@@ -3225,6 +3225,17 @@ El catálogo (`CATALOGO_TAREAS`) y las reglas del motor:
    nombre lo cazó la regla `datos` de `verificar.py` el día que se escribió esto.
    En el catálogo solo queda la bandera `conApoyo`. Si no hay nadie capturado,
    el reparto sigue en pie: sin nota al pie y sin acompañante.
+
+   **Y se capturan los DÍAS que viene, no uno solo** *(20-sep-2026)*. De eso
+   depende la limpieza de apertura: los días que viene es suya —con el asesor
+   que abra, y sola si ese día no abre ningún asesor, que para eso la gerencia
+   ya está barriendo—; el día que no viene, la hace el asesor solo. Sin los días
+   el fallo se ve al revés de como es: el panel enseñaría el nombre de alguien
+   que no está en la tienda, o dejaría las mesas esperándola. Un `dia` suelto
+   guardado antes de esa fecha se sigue leyendo como un único día marcado, para
+   que lo capturado no desaparezca del reparto sin avisar. Guardar con nombre y
+   sin ningún día marcado da error en pantalla: `leerExternosForm_` descarta esa
+   fila, y sin el aviso se borraría en silencio.
 4. **`TIENDA_TAREAS = '1217'`.** Este archivo se publica también en
    `planeador-odemas`; allá el checklist no se pidió y encendido solo repartiría
    tareas que ese equipo nunca acordó. La tabla sí lleva `store_id`, así que
