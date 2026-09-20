@@ -3211,9 +3211,22 @@ El catálogo (`CATALOGO_TAREAS`) y las reglas del motor:
    12:30–21:00 —justo lo que se pidió evitar—. La prueba tampoco lo cazó, porque
    se saltaba ese caso.
 2. **Al asesor no se le nombra a nadie.** El panel dice `te toca` / `un
-   compañero` / `todo el equipo`, nunca un nombre: decir «el jueves le toca a
-   DANI» es horario ajeno dicho de otra forma. Es la sexta superficie de la
-   política del 6-sep-2026, y `quienesTexto_()` es su portero.
+   compañero`, nunca un nombre: decir «el jueves le toca a DANI» es horario
+   ajeno dicho de otra forma. Es la sexta superficie de la política del
+   6-sep-2026, y `quienesTexto_()` es su portero.
+
+2-bis. **Y desde el 20-sep-2026 el asesor ve SOLO lo suyo.** No nombrar a nadie
+   no bastaba: el panel listaba la semana entera y se leía «Lavar sanitario ·
+   jueves · un compañero» —el pendiente de otro puesto en la lista de este, y
+   desde el piso no se distingue cuál de las seis líneas es la de uno—. Ahora
+   `renderTareas()` filtra a las tareas donde él aparece (más sus semanales de
+   otros días, que enterarse el mismo día es enterarse tarde), y la nota al pie
+   del apoyo queda solo para gerencia. **El filtro va en lo que se pinta, no en
+   el motor**: el reparto sigue siendo idéntico para todos, que de eso vive que
+   no haya dos verdades. Gerencia sigue viéndolo completo —es quien lo revisa y
+   quien palomea lo que el apoyo no puede palomear—. Lo comprueban dos pruebas
+   que leen los `data-tarea`/`data-dia` de cada fila pintada, no el texto: con
+   el filtro quitado, el panel del asesor trae cuatro tareas que no son suyas.
 3. **El apoyo sí lleva nombre, y solo cuando la tarea es suya.** Quien limpia y
    no está en el planeador no tiene tarjeta donde aparecer, así que va en una
    nota al pie. Solo para lo que hace sola: en la bodega también participa, pero
