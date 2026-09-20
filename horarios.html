@@ -223,6 +223,9 @@ body.solo-mi-horario .leyenda { display: none; }
   text-transform: uppercase; letter-spacing: 0.4px; padding: 9px 12px 3px;
   background: var(--gris-fondo);
 }
+/* El día de hoy se distingue de un vistazo: con la semana entera en pantalla,
+   la línea que importa al entrar al turno es la de hoy. */
+.tar-sec-hoy { color: var(--rojo); background: #FDECEC; }
 .tar-fila { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-top: 1px solid #F0F0F0; }
 .tar-ico  { font-size: 16px; flex-shrink: 0; }
 .tar-nom  { flex: 1; font-size: 12px; font-weight: 600; color: var(--gris-txt); line-height: 1.35; }
@@ -1954,14 +1957,27 @@ function tareasDe_(persona, dia) {
   return _reparto.filter(t => t.dia === dia && t.quienes.indexOf(persona) >= 0);
 }
 
+/* ¿Ese día ya llegó? Cada quien ve su semana entera, y una tarea del jueves
+   palomeada el lunes es una tarea que nadie hizo: el checklist se leería al día
+   y el piso estaría sin barrer. Gerencia no pasa por aquí —es quien valida—. */
+function esFuturo_(dia) {
+  if (!_tareasCtx) return false;
+  const f = new Date(_tareasCtx.domingo); f.setDate(f.getDate() + dia); f.setHours(0,0,0,0);
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  return f > hoy;
+}
+
 /* ¿Puede esta persona palomear esta tarea?
      · gerencia, siempre —es quien valida que se hizo—
-     · a quien le tocó
+     · a quien le tocó, desde el día que le toca (antes no; después sí, que de
+       una tarea hecha a las 9 nadie se acuerda de la palomita hasta las 8)
      · cualquiera del equipo, si la tarea es de un externo: Laura no tiene
        número con que entrar, y una palomita que nadie puede poner es una tarea
-       que siempre se ve pendiente. */
+       que siempre se ve pendiente. En el panel esas filas solo salen en el de
+       gerencia, así que en la práctica la pone gerencia. */
 function puedeMarcar_(t) {
   if (veElEquipo_()) return true;
+  if (esFuturo_(t.dia)) return false;
   const yo = quienSoy();
   if (yo && t.quienes.indexOf(yo) >= 0) return true;
   return !t.quienes.length && t.externos.length > 0;
@@ -2035,7 +2051,9 @@ function renderTareas() {
       ${hecha && !puede ? `<span class="tar-ok">✓ ${marcadaPor_(t.id, t.dia)}</span>` : ''}
       <input type="checkbox" class="tar-chk" data-tarea="${t.id}" data-dia="${t.dia}"
              ${hecha ? 'checked' : ''} ${puede ? '' : 'disabled'}
-             title="${puede ? 'Marcar como hecha' : 'Solo la marca quien la hace, o gerencia'}">
+             title="${puede ? 'Marcar como hecha'
+                      : esFuturo_(t.dia) ? 'Se marca el ' + DIAS_NOMBRES[t.dia].toLowerCase()
+                      : 'Solo la marca quien la hace, o gerencia'}">
     </div>`;
   };
 
@@ -2056,20 +2074,36 @@ function renderTareas() {
     <div class="tar-head">🧽 ${veTodo ? 'Tareas de la semana' : 'Tus tareas'}
       <small>Se reparten solas con el horario · nadie las asigna a mano</small></div>`;
 
-  const hoyTareas = mias.filter(t => t.dia === diaHoy);
-  if (hoyTareas.length) {
-    const f = new Date(_tareasCtx.domingo); f.setDate(f.getDate() + diaHoy);
-    html += `<div class="tar-sec">Hoy · ${DIAS_NOMBRES[diaHoy]} ${f.getDate()}</div>`;
-    hoyTareas.forEach(t => { html += fila(t); });
-  }
+  const fechaDe = d => { const f = new Date(_tareasCtx.domingo); f.setDate(f.getDate() + d); return f; };
 
-  /* Las semanales de otros días sí se siguen viendo: son suyas y caen un día
-     concreto, así que enterarse el mismo día es enterarse tarde. Las diarias de
-     otros días no, que ya están en su tarjeta. */
-  const resto = mias.filter(t => t.dia !== diaHoy && t.frec === 'semanal');
-  if (resto.length) {
-    html += `<div class="tar-sec">${hoyTareas.length ? 'Lo demás de la semana' : 'Esta semana'}</div>`;
-    resto.forEach(t => { html += fila(t); });
+  /* Al asesor se le pinta su semana completa, día por día: saber el lunes que
+     el jueves le toca el sanitario es poder organizarse, y era lo que se pedía
+     con «que vean lo de toda la semana». Marcar sí es diario —lo de más
+     adelante sale con la casilla apagada, ver `puedeMarcar_`—.
+
+     Gerencia sigue con «hoy + lo semanal»: su panel es para revisar el día y
+     ver quién lleva las dos semanales, no para leer 16 líneas. */
+  const hoyTareas = mias.filter(t => t.dia === diaHoy);
+  if (!veTodo) {
+    for (let d = 0; d < 7; d++) {
+      const delDia = mias.filter(t => t.dia === d);
+      if (!delDia.length) continue;
+      const f = fechaDe(d);
+      html += `<div class="tar-sec${d === diaHoy ? ' tar-sec-hoy' : ''}">${
+        d === diaHoy ? 'Hoy · ' : ''}${DIAS_NOMBRES[d]} ${f.getDate()}</div>`;
+      delDia.forEach(t => { html += fila(t); });
+    }
+  } else {
+    if (hoyTareas.length) {
+      const f = fechaDe(diaHoy);
+      html += `<div class="tar-sec tar-sec-hoy">Hoy · ${DIAS_NOMBRES[diaHoy]} ${f.getDate()}</div>`;
+      hoyTareas.forEach(t => { html += fila(t); });
+    }
+    const resto = mias.filter(t => t.dia !== diaHoy && t.frec === 'semanal');
+    if (resto.length) {
+      html += `<div class="tar-sec">${hoyTareas.length ? 'Lo demás de la semana' : 'Esta semana'}</div>`;
+      resto.forEach(t => { html += fila(t); });
+    }
   }
 
   /* La nota al pie: quien no sale en el planeador no tiene tarjeta donde
@@ -2091,9 +2125,9 @@ function renderTareas() {
     });
   });
 
-  if (!hoyTareas.length && !resto.length)
+  if (!mias.length)
     html += `<div class="tar-vacia">${veTodo ? 'Sin tareas esta semana.'
-                                             : 'Hoy no te toca ninguna tarea.'}</div>`;
+                                             : 'Esta semana no te toca ninguna tarea.'}</div>`;
 
   cont.innerHTML = html + '</div>';
   cont.querySelectorAll('.tar-chk').forEach(chk => {
