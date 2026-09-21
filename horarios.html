@@ -1851,6 +1851,7 @@ const tareaEsDe_ = (t, k) =>
 /* El catálogo es fijo: las tareas de una tienda son siempre las mismas y una
    pantalla para editarlas sería una pantalla que nadie abre.
      · momento 'apertura' → solo puede tocarle a quien ese día ABRE
+       'presente'         → a cualquiera que ESTÉ ese día, abra o no
      · rota 'ger'         → gerencia   ·  'as' → asesores
        'rueda'            → todos, uno por semana, externos incluidos
 
@@ -1867,9 +1868,17 @@ const CATALOGO_TAREAS = [
   /* Las sillas van con las mesas y no en la rueda semanal: el cliente se sienta
      en ellas todos los días. Icono 💺 y no 🪑 a propósito — 🪑 ya es la Ley
      Silla en la tarjeta del celular, y dos cosas distintas con el mismo dibujo
-     en la misma tarjeta se leen como una sola. */
+     en la misma tarjeta se leen como una sola.
+
+     ⚠️ `momento: 'presente'` y no `'apertura'` (21-sep-2026, el mismo día). Una
+     silla se limpia a cualquier hora; una pantalla, antes de que entre el primer
+     cliente. Nacieron iguales y el error se vio con el horario de verdad: los
+     días en que solo queda un asesor y entra a las 12:30, las dos caían en el
+     apoyo SOLA —el asesor estaba en la tienda toda la tarde y el panel no le
+     daba ninguna—. Las mesas se quedan en la apertura a propósito; lo que no
+     tiene por qué estarlo son las sillas. */
   { id: 'sillas',    nombre: 'Limpiar sillas',                 icono: '💺',
-    frec: 'diaria',  momento: 'apertura', rota: 'as', conApoyo: true },
+    frec: 'diaria',  momento: 'presente', rota: 'as', conApoyo: true },
   { id: 'sanitario', nombre: 'Lavar sanitario',                icono: '🚽',
     frec: 'semanal', momento: 'indistinto', rota: 'rueda' },
   { id: 'bodega',    nombre: 'Orden y limpieza de bodega',     icono: '📦',
@@ -1912,14 +1921,21 @@ function repartirTareas(dias, semana) {
     out.push(Object.assign({}, meta(id), { dia: dia, quienes: quienes || [], externos: externos || [] }));
   // Quién lleva ya una tarea semanal: ver la rueda, más abajo.
   const yaLeToco = new Set();
+  // Y quién lleva ya una DIARIA, día por día: ver el reparto de las diarias.
+  const yaEseDia = [0,1,2,3,4,5,6].map(() => new Set());
 
   for (const t of CATALOGO_TAREAS) {
 
-    // ── Diaria de apertura, de gerencia o de asesores ──
+    // ── Diaria de gerencia o de asesores ──
     if (t.frec === 'diaria') {
       const grupo = t.rota === 'ger' ? GERENTES : ASESORES;
+      /* Quién puede hacerla ese día. Las de apertura, solo quien abre; las de
+         `momento: 'presente'` —las sillas—, cualquiera que esté. Una silla se
+         limpia a cualquier hora y una pantalla no; tratarlas igual dejaba al
+         asesor de las 12:30 sin ninguna de las dos y al apoyo con todo. */
+      const puede = (p, d) => t.momento === 'presente' ? presente(p, d) : abre(p, d);
       for (let d = 0; d < 7; d++) {
-        const abren = grupo.filter(p => !EQUIPO[p].vacante && abre(p, d));
+        const abren = grupo.filter(p => !EQUIPO[p].vacante && puede(p, d));
         /* Si ese día nadie de su grupo abre, pasa a QUIEN SÍ ABRA, sea del
            grupo que sea. Nunca a quien entra a media tarde.
 
@@ -1942,9 +1958,24 @@ function repartirTareas(dias, semana) {
            acompañarla es inventar un apoyo que nadie pidió. */
         const pool    = abren.length ? abren
                       : apoyo.length ? []
-                      : PERSONAS.filter(p => !EQUIPO[p].vacante && abre(p, d));
-        const quienes = pool.length ? [pool[(semana + d) % pool.length]] : [];
-        if (quienes.length || apoyo.length) push(t.id, d, quienes, apoyo);
+                      : PERSONAS.filter(p => !EQUIPO[p].vacante && puede(p, d));
+        /* Entre los que pueden, el que todavía no lleva otra diaria ESE día.
+           Sin esto las mesas y las sillas caen siempre en la misma persona
+           —el índice sale de `semana + d`, que es el mismo para las dos— y el
+           otro asesor pasa el día sin ninguna. Si no queda nadie libre se
+           repite, que es mejor que dejar las sillas sin dueño.
+
+           Depende del ORDEN del catálogo: lo de apertura va antes, así que
+           cuando llegan las sillas las mesas ya tienen dueño y ellas eligen a
+           otro. Al revés se repartirían igual de bien, pero las mesas dejarían
+           de caer siempre en quien abre. */
+        const libres  = pool.filter(p => !yaEseDia[d].has(p));
+        const urna    = libres.length ? libres : pool;
+        const quienes = urna.length ? [urna[(semana + d) % urna.length]] : [];
+        if (quienes.length || apoyo.length) {
+          push(t.id, d, quienes, apoyo);
+          if (quienes.length) yaEseDia[d].add(quienes[0]);
+        }
       }
       continue;
     }
