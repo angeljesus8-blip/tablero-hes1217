@@ -4285,6 +4285,48 @@ se guardó, o vuelve a subirlo pensando que falló.
 un 9-oct, el ticket se sale de la ventana y el rechazo es indiscutible con el
 papel en la mano. `concursoFechaISO` está aparte y probada por eso.
 
+## Escaneo continuo: MEDIDO Y DESCARTADO *(21-sep-2026)*
+
+**No entra. El paso 1 de Captura de Series se queda con la foto.** Lo decidió
+Ángel con los números delante, que es para lo que se construyó el banco.
+
+Las dos razones, y la segunda explica la primera:
+
+1. **Falla más que la foto.** Primera y única tanda real, en un Huawei Pura 70
+   Ultra: 9 intentos en vivo, **22 % de fallos**, y los dos fallos fueron el
+   mismo — UPC leído, serie nunca.
+2. **Desde la página, la cámara no enfoca.** `getUserMedia` entrega el flujo
+   tal cual: el enfoque lo decide el sistema y desde la web no hay control
+   fiable del enfoque ni del macro (en Safari, ninguno). La app de cámara del
+   teléfono, la que abre `capture="environment"`, **sí enfoca y hace macro
+   antes de disparar**.
+
+Y eso es exactamente lo que necesita el **Code 128 de la serie**, que es más
+fino y más largo que el EAN del producto. De ahí el patrón de los nueve
+intentos: el UPC entraba solo en 1.4–2.9 s y la serie llegaba tarde o no
+llegaba. No era la regla de la doble lectura: era óptica. Lo confirma la
+prueba con la foto real de una caja de FreeBuds Pro 4 —la misma serie que no
+decodificó en la foto de WhatsApp (900 px) sí decodificó cuando la etiqueta
+ocupaba el fotograma entero—: lo que decide no es el modo, son los píxeles
+enfocados que ocupa el código.
+
+⚠️ **Lo que esto deja dicho para la próxima vez que se proponga.** Ya van dos:
+el «visor» decorativo de la mañana del 21-sep y esto. La respuesta no es «no
+se puede», es **«mídelo primero, y mide la serie, no el UPC»**. El banco sigue
+en el repo para eso: si algún día hay control de enfoque en la web, o
+teléfonos nuevos en el equipo, son veinte minutos de medición, no una semana
+de desarrollo.
+
+**Descartado también, y por escrito para que no vuelva como idea nueva:**
+producto en vivo y serie por foto. El UPC sí llega solo en 1.5 s, así que
+técnicamente se podría — pero serían **dos caminos que mantener en el paso 1**
+y dos modos que explicarle al asesor con el cliente enfrente, a cambio de
+ahorrar un segundo y medio en el dato fácil. No compensa, y no se midió porque
+no llegó a plantearse en serio.
+
+Lo que sigue debajo es el banco y cómo se llegó aquí. Se conserva entero: la
+decisión vale por los números, y los números se pueden volver a tomar.
+
 ## Escaneo continuo: primero el banco, después la decisión *(21-sep-2026)*
 
 La pregunta lleva abierta desde que se quitó el visor decorativo: ¿conviene
