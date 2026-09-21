@@ -236,7 +236,7 @@ body.solo-mi-horario .leyenda { display: none; }
 .tar-ok   { font-size: 11px; font-weight: 700; color: #2E7D32; flex-shrink: 0; }
 .tar-hecha .tar-nom { color: #9E9E9E; }
 .tar-hecha .tar-ico { opacity: 0.45; }
-/* La nota de quien no lleva horario en el planeador (Laura). No es una fila con
+/* La nota de quien no lleva horario en el planeador. No es una fila con
    casilla: nadie de la app puede marcar por ella. */
 .tar-nota { font-size: 11px; line-height: 1.5; color: var(--gris-txt);
   padding: 9px 12px; border-top: 1px solid #F0F0F0; background: #FFF8E1; }
@@ -1076,10 +1076,14 @@ function renderFormEquipo() {
       <p style="font-size:11px;color:#888;margin-bottom:8px">
         Quien limpia y no lleva turno en el planeador. Viene todos los días menos
         el que se elija aquí, y entra al reparto de tareas esos días; el día que
-        descansa, la limpieza de apertura la hace el asesor solo. No puede
-        palomear: su tarea la confirma quien sí tenga acceso.
+        descansa, la limpieza de apertura la hace el asesor solo.
       </p>
-      <table class="eq-table"><thead><tr><th>Nombre</th><th>Descansa</th><th></th></tr></thead>
+      <p style="font-size:11px;color:#888;margin-bottom:8px">
+        <strong>#Emp</strong> es opcional: si tiene número de empleado, escríbelo
+        aquí y al entrar verá sus tareas y podrá palomearlas, como el resto del
+        equipo. Sin número las ve solo gerencia, y gerencia las palomea.
+      </p>
+      <table class="eq-table"><thead><tr><th>Nombre</th><th>#Emp</th><th>Descansa</th><th></th></tr></thead>
       <tbody id="tbody-ext">${(eq.externos || []).map(filaExterno_).join('')}</tbody></table>
       <button class="btn-agregar-as" onclick="agregarExterno()">+ Agregar</button></div>` : '';
   const hOpts = (sel, min, max) => Array.from({length: max-min+1}, (_,i) => i+min)
@@ -1150,6 +1154,7 @@ function filaExterno_(e) {
   const op = (v, txt) => `<option value="${v}"${v === desc ? ' selected' : ''}>${txt}</option>`;
   return `<tr data-ext="1">
     <td><input class="eq-input" data-campo="nombre" value="${(e && e.nombre) || ''}" placeholder="Nombre"></td>
+    <td><input class="eq-input eq-short" data-campo="emp" value="${(e && e.emp) || ''}" placeholder="#Emp"></td>
     <td><select class="eq-input eq-short" data-campo="descanso">${
       (desc === null ? '<option value="" selected>— elige —</option>' : '')
       + op(-1, 'Ninguno') + DIAS_NOMBRES.map((n, i) => op(i, n)).join('')
@@ -1172,9 +1177,13 @@ function leerExternosForm_() {
   return [...tb.querySelectorAll('tr')].map(tr => {
     const nombre = tr.querySelector('[data-campo="nombre"]').value.trim();
     const bruto  = tr.querySelector('[data-campo="descanso"]').value;
+    /* El número es opcional y va tal cual —no `parseInt`—: se compara letra por
+       letra contra el `empno` de la ficha, que es texto y puede traer ceros a
+       la izquierda. */
+    const emp    = (tr.querySelector('[data-campo="emp"]') || {}).value || '';
     return { key: '@' + nombre.toLowerCase().normalize('NFD')
                                 .replace(SIN_ACENTOS_H, '').replace(/[^a-z0-9]+/g, '_'),
-             nombre, descanso: bruto === '' ? null : parseInt(bruto) };
+             nombre, emp: emp.trim(), descanso: bruto === '' ? null : parseInt(bruto) };
   }).filter(e => e.nombre && e.descanso !== null);
 }
 function agregarAsesor() {
@@ -1773,13 +1782,23 @@ const TIENDA_TAREAS = '1217';
 
 /* Quien limpia en la tienda pero NO lleva horario en el planeador. Entra a la
    rotación igual que todos, pero por los días que viene —no por un turno—, y
-   esos días se capturan en Admin. No tiene ficha ni número, así que tampoco
-   puede palomear: su tarea la confirma quien sí tenga acceso.
+   esos días se capturan en Admin.
 
-   ⚠️ Los nombres se capturan en Admin → Equipo y viven en `horarios_config`
-   (Supabase). NO se escriben aquí: los dos repos donde se publica este archivo
-   son PÚBLICOS, y el nombre de una persona de la tienda es justo lo que no
-   puede quedar en el código —lo caza la regla `datos` de `verificar.py`—. */
+   ⚠️ **Sí puede tener número de empleado** *(21-sep-2026)*. Esto se escribió
+   dando por hecho que no —«su tarea la confirma quien sí tenga acceso»— y era
+   falso: el apoyo de la 1217 tiene ficha activa y entra al planeador con su
+   número como cualquiera. Entraba, y el panel le decía «esta semana no te toca
+   ninguna tarea» mientras el reparto le daba las mesas todos los días: sus
+   tareas viven en `externos`, y el filtro de `renderTareas` solo miraba
+   `quienes`. Sin un solo error a la vista, otra vez. Si el `emp` se captura,
+   `miClaveTareas_()` la reconoce, ve lo suyo y lo palomea; si no se captura,
+   todo sigue como antes y la palomita la pone gerencia.
+
+   ⚠️ El nombre Y el número se capturan en Admin → Equipo y viven en
+   `horarios_config` (Supabase). NO se escriben aquí: los dos repos donde se
+   publica este archivo son PÚBLICOS, y el nombre —o el número— de una persona
+   de la tienda es justo lo que no puede quedar en el código; lo caza la regla
+   `datos` de `verificar.py`. */
 function externosTareas_() {
   const lista = (_equipoData && _equipoData.externos) || [];
   return lista.filter(e => e && e.nombre).map((e, i) => {
@@ -1797,6 +1816,7 @@ function externosTareas_() {
                : Array.isArray(e.dias) ? e.dias.filter(d => d >= 0 && d <= 6)
                : Number.isInteger(e.dia) ? [e.dia] : [1,2,3,4,5,6];
     return { key: e.key || '@ext' + (i + 1), nombre: e.nombre,
+             emp: String(e.emp || '').trim(),
              dias: dias.length ? dias : [1,2,3,4,5,6] };
   });
 }
@@ -1804,6 +1824,29 @@ const esExterno_   = k => String(k || '').charAt(0) === '@';
 const externoDe_   = k => externosTareas_().find(e => e.key === k) || null;
 const nombreTarea_ = k => esExterno_(k) ? (externoDe_(k) || {}).nombre || k
                                         : (EQUIPO[k] ? EQUIPO[k].nombre.split(' ')[0] : k);
+
+/* Quién soy PARA EL REPARTO. No es `quienSoy()`, y la diferencia importa:
+   `quienSoy()` responde «qué tarjeta del planeador es la mía» y tiene que
+   seguir devolviendo `null` para el apoyo, porque quien la llama hace
+   `EQUIPO[yo]` y una clave `@laura` no existe ahí. Esta responde «qué clave
+   del reparto soy», que para el apoyo con número es su `@clave`.
+
+   El planeador manda: si el mismo número está en una ficha del horario y en el
+   apoyo, gana la ficha. Es quien tiene turno, y de ahí cuelgan sus tareas de
+   apertura. */
+function miClaveTareas_() {
+  const yo = quienSoy();
+  if (yo) return yo;
+  if (!_empno) return null;
+  const mio = String(_empno).trim();
+  const e = externosTareas_().find(x => x.emp && x.emp === mio);
+  return e ? e.key : null;
+}
+
+// ¿Esta tarea es de esta persona? Las suyas están en `quienes` si lleva turno y
+// en `externos` si es apoyo: preguntar solo por una deja fuera a la otra mitad.
+const tareaEsDe_ = (t, k) =>
+  !!k && (t.quienes.indexOf(k) >= 0 || t.externos.indexOf(k) >= 0);
 
 /* El catálogo es fijo: las tareas de una tienda son siempre las mismas y una
    pantalla para editarlas sería una pantalla que nadie abre.
@@ -1820,6 +1863,12 @@ const CATALOGO_TAREAS = [
   { id: 'piso',      nombre: 'Barrer y trapear piso de venta', icono: '🧹',
     frec: 'diaria',  momento: 'apertura', rota: 'ger' },
   { id: 'mesas',     nombre: 'Limpiar mesas y pantallas',      icono: '🧴',
+    frec: 'diaria',  momento: 'apertura', rota: 'as', conApoyo: true },
+  /* Las sillas van con las mesas y no en la rueda semanal: el cliente se sienta
+     en ellas todos los días. Icono 💺 y no 🪑 a propósito — 🪑 ya es la Ley
+     Silla en la tarjeta del celular, y dos cosas distintas con el mismo dibujo
+     en la misma tarjeta se leen como una sola. */
+  { id: 'sillas',    nombre: 'Limpiar sillas',                 icono: '💺',
     frec: 'diaria',  momento: 'apertura', rota: 'as', conApoyo: true },
   { id: 'sanitario', nombre: 'Lavar sanitario',                icono: '🚽',
     frec: 'semanal', momento: 'indistinto', rota: 'rueda' },
@@ -1954,7 +2003,7 @@ const tareaHecha_ = (id, dia) => !!_hechas[claveHecha_(id, dia)];
 // Lo que le toca a una persona un día: lo consultan la tarjeta del celular y la
 // tabla del gerente, para que las dos digan lo mismo que el panel.
 function tareasDe_(persona, dia) {
-  return _reparto.filter(t => t.dia === dia && t.quienes.indexOf(persona) >= 0);
+  return _reparto.filter(t => t.dia === dia && tareaEsDe_(t, persona));
 }
 
 /* ¿Ese día ya llegó? Cada quien ve su semana entera, y una tarea del jueves
@@ -1970,17 +2019,20 @@ function esFuturo_(dia) {
 /* ¿Puede esta persona palomear esta tarea?
      · gerencia, siempre —es quien valida que se hizo—
      · a quien le tocó, desde el día que le toca (antes no; después sí, que de
-       una tarea hecha a las 9 nadie se acuerda de la palomita hasta las 8)
-     · cualquiera del equipo, si la tarea es de un externo: Laura no tiene
-       número con que entrar, y una palomita que nadie puede poner es una tarea
-       que siempre se ve pendiente. En el panel esas filas solo salen en el de
-       gerencia, así que en la práctica la pone gerencia. */
+       una tarea hecha a las 9 nadie se acuerda de la palomita hasta las 8).
+       El apoyo CON número entra por aquí igual que el asesor (21-sep-2026): el
+       servidor no pone pegas —`tarea_marcar` solo pide que el número esté
+       activo en `empleados`— y quien hizo la limpieza es quien sabe a qué hora
+       la hizo.
+     · cualquiera del equipo, si la tarea es de un externo SIN número: sin ficha
+       con que entrar, una palomita que nadie puede poner es una tarea que
+       siempre se ve pendiente. Esas filas solo salen en el panel de gerencia,
+       así que en la práctica la pone gerencia. */
 function puedeMarcar_(t) {
   if (veElEquipo_()) return true;
   if (esFuturo_(t.dia)) return false;
-  const yo = quienSoy();
-  if (yo && t.quienes.indexOf(yo) >= 0) return true;
-  return !t.quienes.length && t.externos.length > 0;
+  if (tareaEsDe_(t, miClaveTareas_())) return true;
+  return !t.quienes.length && t.externos.some(k => !(externoDe_(k) || {}).emp);
 }
 
 /* Quién hizo la tarea, dicho para el gerente. El asesor no llega aquí: ver
@@ -1990,8 +2042,13 @@ function marcadaPor_(id, dia) {
   if (!h) return '';
   if (h.mia) return 'por ti';
   if (!h.por) return 'por gerencia';
-  const quien = PERSONAS.find(p => String(EQUIPO[p].emp || '').trim() === String(h.por).trim());
-  return quien ? 'por ' + nombreTarea_(quien) : 'ya hecha';
+  const num   = String(h.por).trim();
+  const quien = PERSONAS.find(p => String(EQUIPO[p].emp || '').trim() === num);
+  if (quien) return 'por ' + nombreTarea_(quien);
+  // El apoyo con número también firma sus palomitas: sin esto, todo lo que
+  // registrara se leería «ya hecha», como si no se supiera quién la hizo.
+  const ext = externosTareas_().find(e => e.emp && e.emp === num);
+  return ext ? 'por ' + ext.nombre : 'ya hecha';
 }
 
 /* Cómo se nombra a quien le tocó.
@@ -2002,11 +2059,11 @@ function marcadaPor_(id, dia) {
    pantalla es justo la que no parece una tabla de horarios. Lo cubre
    `pruebas/tareas_rotacion.js`.
 
-   Los externos SÍ van con nombre para todos: Laura no está en el planeador, así
-   que nombrarla no cuenta la semana de nadie — y ese era el pedido. */
+   Los externos SÍ van con nombre para todos: el apoyo no está en el planeador,
+   así que nombrarlo no cuenta la semana de nadie — y ese era el pedido. */
 function quienesTexto_(t) {
-  const yo    = quienSoy();
-  const mios  = t.quienes.indexOf(yo) >= 0;
+  const yo    = miClaveTareas_();
+  const mios  = !!yo && t.quienes.indexOf(yo) >= 0;
   const gente = [];
   /* Desde el 20-sep-2026 ninguna tarea es del equipo entero —la bodega también
      rueda—, así que aquí ya no hay un caso «todos»: o es de una persona, o es
@@ -2018,7 +2075,11 @@ function quienesTexto_(t) {
   } else if (t.quienes.length) {
     gente.push('un compañero');
   }
-  t.externos.forEach(k => gente.push(nombreTarea_(k)));
+  /* A sí misma tampoco se le dice su nombre: el apoyo que entra con su número
+     lee «te toca», igual que el asesor. Para los demás sigue yendo con nombre
+     —no está en el planeador, así que nombrarla no cuenta la semana de nadie—,
+     y ése era el pedido del 19-sep-2026. */
+  t.externos.forEach(k => gente.push(k === yo ? 'te toca' : nombreTarea_(k)));
   return gente.join(' + ');
 }
 
@@ -2047,7 +2108,7 @@ function renderTareas() {
     return `<div class="tar-fila${hecha ? ' tar-hecha' : ''}">
       <span class="tar-ico">${t.icono}</span>
       <span class="tar-nom">${t.nombre}
-        <span class="tar-quien${quien === 'te toca' ? ' tar-yo' : ''}">${detalle || '—'}</span></span>
+        <span class="tar-quien${tareaEsDe_(t, miClaveTareas_()) ? ' tar-yo' : ''}">${detalle || '—'}</span></span>
       ${hecha && !puede ? `<span class="tar-ok">✓ ${marcadaPor_(t.id, t.dia)}</span>` : ''}
       <input type="checkbox" class="tar-chk" data-tarea="${t.id}" data-dia="${t.dia}"
              ${hecha ? 'checked' : ''} ${puede ? '' : 'disabled'}
@@ -2065,10 +2126,14 @@ function renderTareas() {
 
      Va aquí y no en el motor: el reparto sigue siendo el mismo para todos —de
      eso vive que no haya dos verdades—, lo que cambia es lo que se enseña. */
-  const yo   = quienSoy();
+  /* `miClaveTareas_()` y no `quienSoy()`: el apoyo con número tiene sus tareas
+     en `externos`, y con el filtro viejo —solo `quienes`— entraba al planeador
+     y leía «esta semana no te toca ninguna tarea» mientras el reparto le daba
+     las mesas todos los días. Nadie veía un error: el reparto estaba bien, lo
+     que estaba mal era a quién se le enseñaba. */
+  const yo   = miClaveTareas_();
   const veTodo = veElEquipo_();
-  const mias = veTodo ? _reparto
-             : _reparto.filter(t => yo && t.quienes.indexOf(yo) >= 0);
+  const mias = veTodo ? _reparto : _reparto.filter(t => tareaEsDe_(t, yo));
 
   let html = `<div class="tar-panel">
     <div class="tar-head">🧽 ${veTodo ? 'Tareas de la semana' : 'Tus tareas'}
@@ -2110,7 +2175,7 @@ function renderTareas() {
      aparecer, así que su turno se diría en ningún sitio. Es el pedido que
      arrancó todo esto. */
   /* Solo cuando la tarea es SUYA y de nadie más. En la bodega también participa,
-     pero ahí la hace el equipo entero: decir «le toca a Laura» dejaría a los
+     pero ahí la hace el equipo entero: decir «le toca a Fulana» dejaría a los
      demás pensando que esa semana no van. */
   /* Y solo para gerencia: al asesor esta nota le diría el pendiente de alguien
      más, que es justo lo que se quitó de este panel. Palomearla es de gerencia
@@ -2280,6 +2345,35 @@ function mvDias(persona, dias, comidas, domingo, hoyISO) {
   return out;
 }
 
+/* La semana del apoyo. Es la misma tarjeta del equipo con una sola diferencia:
+   donde el asesor lleva su turno, aquí va «En tienda» o «Descanso», porque lo
+   que se capturó de esta persona son días, no horas —inventarle un horario
+   sería decirle a qué hora entrar, que es justo lo que nadie capturó—.
+
+   Las tareas salen de `tareasDe_`, el mismo reparto que lee el panel y la tabla
+   del gerente: no hay una segunda lista que se pueda desincronizar. */
+function mvCardExterno_(ext, domingo, hoyISO) {
+  let out = '';
+  for (let d = 0; d < 7; d++) {
+    const f = new Date(domingo); f.setDate(f.getDate() + d);
+    const viene = ext.dias.indexOf(d) >= 0;
+    const esHoy = f.toISOString().slice(0,10) === hoyISO;
+    const extras = tareasDe_(ext.key, d).map(t =>
+      `<span>${t.icono} ${t.nombre}${tareaHecha_(t.id, t.dia) ? ' ✓' : ''}</span>`);
+    out += `<div class="mv-dia${esHoy ? ' mv-hoy' : ''}">
+      <div class="mv-fecha">${DIAS_CORTOS[d]}<b>${String(f.getDate()).padStart(2,'0')}</b></div>
+      <div>
+        <div class="mv-turno ${viene ? 'apertura' : ''}">${viene ? 'EN TIENDA' : 'DESCANSO'}</div>
+        ${extras.length ? `<div class="mv-extra">${extras.join('')}</div>` : ''}
+      </div>
+    </div>`;
+  }
+  return `<div class="mv-card mv-yo">
+    <div class="mv-head">TU SEMANA<small>${ext.nombre} — Apoyo</small></div>
+    ${out}
+  </div>`;
+}
+
 function renderMovil(dias, comidas, domingo) {
   const cont = document.getElementById('vista-movil');
   if (!cont) return;
@@ -2294,6 +2388,13 @@ function renderMovil(dias, comidas, domingo) {
       ${mvDias(yo, dias, comidas, domingo, hoyISO)}
     </div>`;
   }
+
+  /* El apoyo con número entra aquí: tiene ficha y entra al planeador, pero no
+     tiene turno que pintar. Sin esta tarjeta veía el cartel de «no encontramos
+     tu horario» —que en su caso es falso: su alta está bien, solo que en otra
+     tabla— y ninguna de sus tareas. */
+  const ext = !yo ? externoDe_(miClaveTareas_()) : null;
+  if (ext) html += mvCardExterno_(ext, domingo, hoyISO);
 
   /* Sin `yo` —el gerente que entró por correo— no hay a quién destacar, así que
      el equipo entero va desplegado en vez de plegado: si no, abriría a una
@@ -2325,7 +2426,7 @@ function renderMovil(dias, comidas, domingo) {
 
      Una pantalla vacía se lee como «la app no sirve» y no como «falta un dato»,
      así que se dice cuál es el dato y quién lo arregla. */
-  if (!yo && !resto.length) {
+  if (!yo && !ext && !resto.length) {
     html += `<div class="mv-card">
       <div class="mv-head">No encontramos tu horario</div>
       <div style="padding:12px 14px;font-size:13px;line-height:1.5;color:#555">
