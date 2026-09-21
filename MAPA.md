@@ -4312,10 +4312,7 @@ enfocados que ocupa el código.
 
 ⚠️ **Lo que esto deja dicho para la próxima vez que se proponga.** Ya van dos:
 el «visor» decorativo de la mañana del 21-sep y esto. La respuesta no es «no
-se puede», es **«mídelo primero, y mide la serie, no el UPC»**. El banco sigue
-en el repo para eso: si algún día hay control de enfoque en la web, o
-teléfonos nuevos en el equipo, son veinte minutos de medición, no una semana
-de desarrollo.
+se puede», es **«mídelo primero, y mide la serie, no el UPC»**.
 
 **Descartado también, y por escrito para que no vuelva como idea nueva:**
 producto en vivo y serie por foto. El UPC sí llega solo en 1.5 s, así que
@@ -4324,24 +4321,39 @@ y dos modos que explicarle al asesor con el cliente enfrente, a cambio de
 ahorrar un segundo y medio en el dato fácil. No compensa, y no se midió porque
 no llegó a plantearse en serio.
 
-Lo que sigue debajo es el banco y cómo se llegó aquí. Se conserva entero: la
-decisión vale por los números, y los números se pueden volver a tomar.
+**El banco se borró el mismo día, a petición de Ángel: no quería una página de
+pruebas publicada.** `banco_escaneo.html`, `banco_escaneo.js` y
+`pruebas/banco_medicion.js` ya no están en el repo ni los sirve GitHub Pages;
+salieron también de `SUELTOS` y de la lista de pruebas de `verificar.py`.
+Siguen en el historial de git —commit `9f6d911`, el último que los tuvo— así
+que recuperarlos es `git show 9f6d911:banco_escaneo.html`, no volver a
+escribirlos.
 
-## Escaneo continuo: primero el banco, después la decisión *(21-sep-2026)*
+Lo que sigue debajo es CÓMO se llegó aquí, y eso sí se conserva: la decisión
+vale por los números, y quien quiera volver a tomarlos necesita saber qué se
+midió y con qué trampas. Lo de abajo está en pasado a propósito — describe una
+herramienta que ya no está.
 
-La pregunta lleva abierta desde que se quitó el visor decorativo: ¿conviene
-cambiar el paso 1 —«Tomar foto» y analizarla— por la cámara en vivo leyendo
-fotogramas hasta que el código aparezca? **Todavía no se sabe, y por eso
-`captura_series.html` NO se tocó.** Lo que se construyó es el instrumento:
-`banco_escaneo.html`, la lógica que decide en `banco_escaneo.js` y sus pruebas
-en `pruebas/banco_medicion.js`.
+## Cómo se midió: el banco *(21-sep-2026 — borrado, ver arriba)*
 
-Es una **página suelta de medición**, como `prueba_ticket.html`: entra en
-`SUELTOS` de `verificar.py` —para que la revisen sintaxis, secretos y datos
-personales, que se publica igual de expuesta— y **no** entra en `HTML` ni en el
-precache. Por eso **no se subió VERSION**: un `v268` sin un solo cambio en la
-app empuja una actualización vacía a todos los teléfonos, y la regla de
-`r_version` ya dice exactamente eso.
+La pregunta venía de quitar el visor decorativo: ¿convenía cambiar el paso 1
+—«Tomar foto» y analizarla— por la cámara en vivo leyendo fotogramas hasta que
+el código apareciera? **Para contestarla no se tocó `captura_series.html`: se
+construyó el instrumento aparte** —`banco_escaneo.html`, la lógica que decidía
+en `banco_escaneo.js` y sus pruebas en `pruebas/banco_medicion.js`— y se midió.
+
+Era una **página suelta de medición**, como `prueba_ticket.html`: entraba en
+`SUELTOS` de `verificar.py` —para que la revisaran sintaxis, secretos y datos
+personales, porque se publicaba igual de expuesta— y **no** en `HTML` ni en el
+precache. Por eso **no se subió VERSION** en ningún momento: un `v268` sin un
+solo cambio en la app empuja una actualización vacía a todos los teléfonos, y
+la regla de `r_version` ya dice exactamente eso.
+
+⚠️ **Y por eso mismo se borró al terminar.** Una página de pruebas publicada
+no se cae nunca sola: no la enlaza nadie, así que nadie la ve vieja, y se
+queda ahí con una URL viva. `prueba_ticket.html` lleva desde el 17-ago
+esperando que alguien decida que ya cumplió. El banco duró lo que duró la
+pregunta.
 
 ### Qué mide, y por qué así
 
@@ -4493,7 +4505,7 @@ veredicto. Los intentos de varios Android **se suman**, y de las corridas
 térmicas se toma **la peor, no el promedio**: el asesor que se queda con el
 teléfono que se arrastra es el que deja de usar la app.
 
-### Lo que este banco NO va a contestar
+### Lo que este banco NO contestó, y a propósito
 
 Mr Fix y Concurso no entran: ahí se fotografía **un ticket entero**, no un
 código, y el continuo no tiene nada que ofrecerles. Y la foto se queda pase lo
