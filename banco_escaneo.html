@@ -147,8 +147,9 @@
      una lectura que el escaneo continuo habría perdido. -->
 <div class="caja">
   <h2>A · Flujo de foto (el de hoy)</h2>
-  <div class="qué">Toca «Intento con foto», toma la foto del código como
-    siempre. El cronómetro corre desde que tocas hasta que aparece la lectura.</div>
+  <div class="qué">Toca «Intento con foto» y encuadra <b>los dos códigos</b>
+    —el del producto y el de la serie—, que es lo que hace falta para capturar
+    la venta. El cronómetro corre desde que tocas hasta que aparece la lectura.</div>
   <input type="file" id="fileCam" accept="image/*" capture="environment" hidden>
   <button class="btn" id="btnFoto">▶ Intento con foto</button>
   <div class="dosCol" id="fotoAbierto" style="display:none">
@@ -168,8 +169,9 @@
        · la cámara se apaga al salir, al cambiar de pestaña y al minimizar. -->
 <div class="caja">
   <h2>B · Escaneo continuo (el candidato)</h2>
-  <div class="qué">Toca «Intento en vivo» y acerca el código. La app vibra y
-    congela el fotograma sola en cuanto lo lee dos veces seguidas.</div>
+  <div class="qué">Toca «Intento en vivo» y acerca la etiqueta. Da un toque
+    corto por cada código que entra —producto y serie— y congela el fotograma
+    sola cuando tiene <b>los dos</b>, cada uno leído dos veces seguidas.</div>
   <video id="vid" playsinline muted></video>
   <img id="congelado" alt="fotograma congelado">
   <button class="btn verde" id="btnVivo">▶ Intento en vivo</button>
@@ -289,18 +291,25 @@ async function unDetector(Detector, fuente){
   }catch(_){ det = new Detector(); }
   return (await det.detect(fuente)) || [];
 }
-/* Devuelve {valor, fmt} del primer código útil, o null. */
-async function decodificar(fuente){
+/* TODOS los códigos útiles del fotograma, no el primero.
+   La etiqueta de una caja lleva el EAN del producto y el Code 128 de la serie
+   pegados uno encima del otro, y con el lente de un teléfono moderno los dos
+   caben en la misma imagen. Quedarse con el primero es leer la mitad.
+   Igual que `processImage` en la app: se para en el primer detector que
+   encuentre ALGO, y de ése se toman todos sus códigos. */
+async function decodificarTodos(fuente){
   for(const Dt of detectoresDisponibles()){
     try{
       const codes = await unDetector(Dt, fuente);
+      const utiles = [];
       for(const c of codes){
         const v = (c.rawValue || '').trim();
-        if(v && bancoAcepta(c.format)) return { valor:v, fmt:c.format };
+        if(v && bancoAcepta(c.format)) utiles.push({ valor:v, fmt:c.format });
       }
+      if(utiles.length) return utiles;
     }catch(e){ /* detector que no puede con esta fuente: se prueba el siguiente */ }
   }
-  return null;
+  return [];
 }
 
 /* ---------- Bloque 0 · velocidad sin cámara ---------- */
@@ -440,7 +449,7 @@ $('btnFoto').onclick = () => {
 };
 $('btnFotoNo').onclick = () => {
   if(tFoto == null) return;
-  anotar({ modo:'foto', ok:false, ms:Math.round(performance.now() - tFoto), via:null });
+  anotar(intentoDe('foto', bancoDosInicio(), Math.round(performance.now() - tFoto), null, {}));
   tFoto = null; abrirFoto(false); $('pasoFoto').textContent = 'Anotado como fallo.';
 };
 $('btnFotoDesc').onclick = () => { tFoto = null; abrirFoto(false); $('pasoFoto').textContent = 'Descartado.'; };
@@ -450,14 +459,17 @@ $('fileCam').onchange = async e => {
   e.target.value = '';
   if(!f || tFoto == null){ abrirFoto(false); return; }
   $('pasoFoto').textContent = 'Leyendo…';
-  let via = null, valor = null;
+  /* Los dos casilleros, igual que en vivo. Una foto de esa etiqueta trae los
+     dos códigos; el asesor necesita los dos, así que leer uno es medio
+     intento. */
+  let casilla = bancoDosInicio(), via = null;
   try{
     const bmp = await createImageBitmap(f);
-    const hit = await decodificar(bmp);
+    casilla = bancoDosPoner(casilla, await decodificarTodos(bmp), 0);
     if(bmp.close) bmp.close();
-    if(hit){ via = 'codigo'; valor = hit.valor; }
+    if(casilla.producto.valor || casilla.serie.valor) via = 'codigo';
   }catch(err){ /* sin código de barras legible: quedan el respaldo y el OCR */ }
-  if(!valor){
+  if(!casilla.producto.valor && !casilla.serie.valor){
     try{
       const tmp = new Html5Qrcode('reader-file', { formatsToSupport:[
         Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39,
@@ -465,22 +477,49 @@ $('fileCam').onchange = async e => {
         Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E ] });
       const t = await tmp.scanFile(f, false);
       try{ tmp.clear(); }catch(e2){ /* limpiar el temporal es cortesía, no requisito */ }
-      if(t){ via = 'codigo'; valor = t.trim(); }
+      if(t){ casilla = bancoDosPoner(casilla, [{ valor:t.trim(), fmt:'' }], 0); via = 'codigo'; }
     }catch(err){ /* el respaldo tampoco: queda el OCR */ }
   }
-  if(!valor){
-    $('pasoFoto').textContent = 'Sin código de barras · leyendo el texto S/N…';
-    const s = await ocrSerial(f);
-    if(s){ via = 'ocr'; valor = s; }
+  /* El OCR sólo rellena la SERIE, que es lo que sabe leer del texto «S/N». Es
+     la pieza que el continuo no puede tener, y por eso se anota aparte. */
+  if(!casilla.serie.valor){
+    $('pasoFoto').textContent = 'Falta la serie · leyendo el texto S/N…';
+    const sn = await ocrSerial(f);
+    if(sn){ casilla.serie.valor = sn; via = 'ocr'; }
   }
   const ms = Math.round(performance.now() - tFoto);
   tFoto = null; abrirFoto(false);
-  anotar({ modo:'foto', ok:!!valor, ms:ms, via:via });
-  $('pasoFoto').innerHTML = valor
-    ? '<span class="ok">' + (ms/1000).toFixed(1) + ' s · ' +
-      (via === 'ocr' ? 'por OCR del texto S/N' : 'por código de barras') + ' · ' + esc(valor) + '</span>'
-    : '<span class="malo">' + (ms/1000).toFixed(1) + ' s · no leyó nada</span>';
+  anotar(intentoDe('foto', casilla, ms, via, { }));
+  $('pasoFoto').innerHTML = comoQuedo(casilla, ms, via);
 };
+
+/* Un intento, con lo que se llenó y lo que faltó. `ok` significa LOS DOS
+   datos: con uno solo la venta no se puede capturar, así que media lectura no
+   es una lectura. `parcial` dice cuál salió, que es lo que explica por qué
+   falló: si casi todos los fallos son parciales, lo que cuesta es encuadrar
+   los dos códigos, no leer. */
+function intentoDe(modo, casilla, ms, via, extra){
+  const prod = !!casilla.producto.valor, ser = !!casilla.serie.valor;
+  return Object.assign({
+    v: BANCO_V, modo:modo, ok: prod && ser, ms:ms, via: (prod||ser) ? via : null,
+    parcial: (prod && ser) ? null : (prod ? 'producto' : (ser ? 'serie' : null)),
+    msProducto: casilla.producto.ms, msSerie: casilla.serie.ms
+  }, extra || {});
+}
+function comoQuedo(casilla, ms, via){
+  const t = (ms/1000).toFixed(1) + ' s · ';
+  const prod = casilla.producto.valor, ser = casilla.serie.valor;
+  if(prod && ser){
+    return '<span class="ok">' + t + 'los dos ✓</span><br><span class="sub">producto ' +
+      esc(prod) + ' · serie ' + esc(ser) + (via === 'ocr' ? ' (serie por OCR)' : '') + '</span>';
+  }
+  if(prod || ser){
+    return '<span class="flojo">' + t + 'a medias: sólo ' + (prod ? 'el producto ' : 'la serie ') +
+      esc(prod || ser) + '</span><br><span class="sub">falta ' + (prod ? 'la serie' : 'el producto') +
+      ' — para la venta hacen falta los dos</span>';
+  }
+  return '<span class="malo">' + t + 'no leyó nada</span>';
+}
 
 /* ---------- Bloque B · el escaneo continuo ---------- */
 let camara = null, corriendo = false, cortar = false, vivoInterrumpido = false;
@@ -568,7 +607,11 @@ $('btnVivo').onclick = async () => {
   $('pasoVivo').textContent = 'Cámara lista en ' + (tCam/1000).toFixed(1) + ' s · acerca el código…';
 
   const cv = document.createElement('canvas');
-  let estado = bancoConfirmarInicio(), frames = 0, tiempos = [];
+  /* Los dos casilleros se llenan ENTRE FOTOGRAMAS, y eso es lo único que el
+     continuo puede hacer y la foto no: con una sola foto los dos códigos
+     tienen que salir enfocados a la vez; aquí el UPC puede caer en el
+     fotograma 3 y la serie en el 20. */
+  let casilla = bancoDosInicio(), frames = 0, tiempos = [];
   corriendo = true;
   while(corriendo && !cortar){
     const transcurrido = performance.now() - t0;
@@ -576,10 +619,19 @@ $('btnVivo').onclick = async () => {
     if(!fotogramaA(cv, v)){ await new Promise(r => setTimeout(r, 50)); continue; }
     frames++;
     const t1 = performance.now();
-    const hit = await decodificar(cv);
+    const codigos = await decodificarTodos(cv);
     tiempos.push(performance.now() - t1);
-    estado = bancoConfirmar(estado, hit && hit.valor, hit && hit.fmt);
-    if(estado.confirmado){
+    const antes = casilla;
+    casilla = bancoDosLeer(casilla, codigos, Math.round(performance.now() - t0));
+    if(casilla.nuevos.length){
+      // Un toque corto por cada dato que entra: el asesor sabe que ya lleva
+      // uno y que sigue faltando el otro, sin mirar la pantalla.
+      if('vibrate' in navigator) navigator.vibrate(30);
+      $('pasoVivo').innerHTML = '<span class="flojo">' +
+        (casilla.producto.valor ? '✓ producto' : '· producto') + '  ' +
+        (casilla.serie.valor ? '✓ serie' : '· serie') + '</span>';
+    }
+    if(casilla.completo){
       const ms = Math.round(performance.now() - t0);
       /* La evidencia. Hoy se sube la foto que tomó el asesor; en continuo no
          hay archivo, así que sale de aquí: el fotograma del momento en que
@@ -588,10 +640,10 @@ $('btnVivo').onclick = async () => {
       $('congelado').src = ev.url; $('congelado').style.display = 'block';
       if('vibrate' in navigator) navigator.vibrate(60);
       apagarCamara();
-      anotar({ modo:'continuo', ok:true, ms:ms, via:'codigo', frames:frames,
-               decodMs:Math.round(bancoMediana(tiempos)), camaraMs:tCam, evidenciaKb:ev.kb });
-      $('pasoVivo').innerHTML = '<span class="ok">' + (ms/1000).toFixed(1) + ' s · ' + frames +
-        ' fotogramas · ' + esc(estado.valor) + ' · evidencia ' + ev.kb + ' KB</span>';
+      anotar(intentoDe('continuo', casilla, ms, 'codigo', { frames:frames,
+               decodMs:Math.round(bancoMediana(tiempos)), camaraMs:tCam, evidenciaKb:ev.kb }));
+      $('pasoVivo').innerHTML = comoQuedo(casilla, ms, 'codigo') +
+        '<span class="sub"> · ' + frames + ' fotogramas · evidencia ' + ev.kb + ' KB</span>';
       $('btnVivo').disabled = false; $('btnVivoCortar').style.display = 'none';
       return;
     }
@@ -606,10 +658,10 @@ $('btnVivo').onclick = async () => {
      fallos del continuo justo en la cuenta que decide si entra. Lo que sí
      cuenta es el botón «No leyó», que lo toca el asesor. */
   if(vivoInterrumpido){ vivoInterrumpido = false; return; }
-  anotar({ modo:'continuo', ok:false, ms:ms, via:null, frames:frames,
-           decodMs: tiempos.length ? Math.round(bancoMediana(tiempos)) : null, camaraMs:tCam });
-  $('pasoVivo').innerHTML = '<span class="malo">' + (ms/1000).toFixed(1) + ' s · no leyó (' +
-    frames + ' fotogramas)</span>';
+  anotar(intentoDe('continuo', casilla, ms, 'codigo', { frames:frames,
+           decodMs: tiempos.length ? Math.round(bancoMediana(tiempos)) : null, camaraMs:tCam }));
+  $('pasoVivo').innerHTML = comoQuedo(casilla, ms, 'codigo') +
+    '<span class="sub"> · ' + frames + ' fotogramas</span>';
 };
 $('btnVivoCortar').onclick = () => { cortar = true; };
 
@@ -653,7 +705,7 @@ $('btnTerm').onclick = async () => {
     if(fotogramaA(cv, v)){
       frames++;
       const t1 = performance.now();
-      try{ await decodificar(cv); }catch(e){ /* leer o no leer da igual: se mide el trabajo */ }
+      try{ await decodificarTodos(cv); }catch(e){ /* leer o no leer da igual: se mide el trabajo */ }
       tiempos.push(performance.now() - t1);
     }
     if(performance.now() - ultimoCorte >= 10000){
@@ -716,8 +768,15 @@ function pintarModo(destino, modo){
   h += fila('El peor de cada 5 (p80)', r.p80 == null ? '<span class="sub">—</span>'
                                                      : (r.p80/1000).toFixed(1) + ' s');
   h += fila('Fallos', r.fallosPct == null ? '<span class="sub">sin datos</span>' : r.fallosPct + ' %');
+  h += fila('A medias (un código sí y otro no)',
+            r.parciales + (r.parciales ? ' <span class="flojo">cuentan como fallo: la venta lleva los dos</span>' : ''));
   if(modo === 'foto'){
-    h += fila('Salieron por OCR', r.porOcr + (r.porOcr ? ' <span class="flojo">(ésas las pierde el continuo)</span>' : ''));
+    h += fila('Serie por OCR', r.porOcr + (r.porOcr ? ' <span class="flojo">(ésas las pierde el continuo)</span>' : ''));
+  }
+  if(r.viejos){
+    h += '<div class="nota flojo">' + r.viejos + ' intento(s) medidos antes de que el banco ' +
+         'exigiera LOS DOS códigos. No se mezclan: medían media lectura y saldrían más rápidos ' +
+         'de lo que son. Hay que repetirlos.</div>';
   }
   $(destino).innerHTML = h;
 }

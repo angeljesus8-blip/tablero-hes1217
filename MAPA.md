@@ -4335,6 +4335,49 @@ Cuatro decisiones de medición que no son detalle:
    terminar. En iPhone la batería **no existe como API**: se devuelve `null`,
    nunca 0, y el veredicto lo trata como no medido.
 
+### La etiqueta lleva DOS códigos, y hacen falta los dos *(21-sep-2026, tarde)*
+
+Lo encontró Ángel con la primera caja que midió —unos FreeBuds Pro 4—: la
+etiqueta lleva el EAN del producto y el Code 128 de la serie **uno encima del
+otro**, y el lente del teléfono es tan ancho que los dos caben en el mismo
+fotograma. El bucle en vivo se quedaba con **el primero** que encontraba y
+confirmaba: leía el UPC y perdía la serie, o al revés.
+
+Y no era sólo el continuo. **El modo foto del banco tenía el mismo fallo**,
+mientras que `processImage` en la app recorre TODOS los códigos de la foto
+(`codes.forEach`) y enruta cada uno. O sea que el banco comparaba una foto
+capada contra un continuo capado: el número que hubiera salido no habría dicho
+nada. Los tres intentos medidos hasta entonces **se descartan**, y el banco lo
+dice en pantalla en vez de promediarlos (`v:2` en cada intento, `viejos` en el
+resumen).
+
+Ahora hay **dos casilleros** —producto y serie— con la misma regla de enrutado
+que `routeCode`, y el intento sólo cuenta como bueno cuando los dos están
+llenos. Con uno solo se anota `parcial`, que cuenta como fallo —la venta
+necesita los dos— pero se enseña aparte, porque dice *por qué* falla: si casi
+todos los fallos son parciales, lo que cuesta es encuadrar, no leer.
+
+⚠️ **Que los dos casilleros se llenen en fotogramas DISTINTOS es correcto, y es
+lo único que el continuo puede hacer y la foto no**: con una sola foto los dos
+códigos tienen que salir enfocados a la vez; en vivo el UPC puede caer en el
+fotograma 3 y la serie en el 20. Si el continuo acaba ganando, va a ser por
+aquí.
+
+Tres cosas medidas ese día con la foto real de esa caja (900×1600, la que
+manda WhatsApp):
+
+- **En la foto completa, el Code 128 de la serie NO decodificó.** Salió el UPC
+  por código de barras y la serie **por OCR** del texto «S/N», correcta
+  (`3RRXC25316084077`). Es el recordatorio de por qué la foto se queda: sin
+  OCR, esa caja no se captura.
+- **Encuadrando la etiqueta en 1280×720, ZXing saca los dos códigos del mismo
+  fotograma**, incluida la serie que falló en la foto entera. Lo que cambia no
+  es el modo: son los píxeles que ocupa el código.
+- **El mismo valor repetido dentro de un fotograma no son dos lecturas.** Se
+  descartan los duplicados de cada fotograma antes de confirmar; sin eso, una
+  imagen que trae el código dos veces se confirmaría sola y la regla de las
+  dos lecturas seguidas no vigilaría nada. Está probado con cebo.
+
 ### El veredicto se escribió ANTES de tener los datos
 
 Está en `BANCO_UMBRAL` y es lo único que decide: ≤70 % del tiempo de la foto
