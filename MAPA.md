@@ -4342,18 +4342,29 @@ el código apareciera? **Para contestarla no se tocó `captura_series.html`: se
 construyó el instrumento aparte** —`banco_escaneo.html`, la lógica que decidía
 en `banco_escaneo.js` y sus pruebas en `pruebas/banco_medicion.js`— y se midió.
 
-Era una **página suelta de medición**, como `prueba_ticket.html`: entraba en
-`SUELTOS` de `verificar.py` —para que la revisaran sintaxis, secretos y datos
-personales, porque se publicaba igual de expuesta— y **no** en `HTML` ni en el
-precache. Por eso **no se subió VERSION** en ningún momento: un `v268` sin un
+Era una **página suelta de medición**, de la misma clase que
+`prueba_ticket.html` (la del OCR, de agosto): entraba en `SUELTOS` de
+`verificar.py` —para que la revisaran sintaxis, secretos y datos personales,
+porque se publicaba igual de expuesta— y **no** en `HTML` ni en el precache. Por eso **no se subió VERSION** en ningún momento: un `v268` sin un
 solo cambio en la app empuja una actualización vacía a todos los teléfonos, y
 la regla de `r_version` ya dice exactamente eso.
 
-⚠️ **Y por eso mismo se borró al terminar.** Una página de pruebas publicada
-no se cae nunca sola: no la enlaza nadie, así que nadie la ve vieja, y se
-queda ahí con una URL viva. `prueba_ticket.html` lleva desde el 17-ago
-esperando que alguien decida que ya cumplió. El banco duró lo que duró la
+⚠️ **Y por eso mismo se borró al terminar, el mismo día.** Una página de
+pruebas publicada no se cae nunca sola: no la enlaza nadie, así que nadie la
+ve vieja, y se queda ahí con una URL viva. El banco duró lo que duró la
 pregunta.
+
+En el mismo movimiento se borró **`prueba_ticket.html`**, que era la de agosto
+—«¿cuánto tarda Tesseract en un celular de piso?»— y llevaba desde el 17-ago
+publicada con la pregunta contestada hacía un mes: el OCR lleva desde
+entonces en producción en accesorios, Mr Fix y el concurso. Está en el
+historial, commit `59ac794`. Con eso **no queda ninguna página de medición
+publicada**; `SUELTOS` en `verificar.py` conserva sólo
+`accesorios_tecnico.html`, que no es una prueba sino la pantalla del técnico.
+
+**La regla que queda:** una página de medición nace con fecha de caducidad. Se
+borra el día que contesta su pregunta, no «cuando alguien se acuerde» — porque
+nadie se acuerda de lo que nadie enlaza.
 
 ### Qué mide, y por qué así
 

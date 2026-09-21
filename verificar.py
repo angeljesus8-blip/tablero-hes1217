@@ -22,7 +22,7 @@ COPIAS = {'horarios.html': os.path.join('..', 'horario-semanal', 'horario_semana
 # VERSION —no llegan a ningún celular por esa vía— pero sí tienen que pasar por
 # sintaxis, secretos y datos personales: se publican igual de expuestas.
 # (20-ago-2026: `accesorios_tecnico.html` se subió sin que nada la revisara.)
-SUELTOS = ['prueba_ticket.html', 'accesorios_tecnico.html']
+SUELTOS = ['accesorios_tecnico.html']
 # Copias del Apps Script. No se ejecutan aquí, pero se publican igual que lo
 # demás: si traen una llave, queda expuesta lo mismo que en un .html.
 GS = ['GAS_Codigo.gs', 'GAS_ventas_detalle.gs', 'GAS_arreglo_apartados.gs',
@@ -291,7 +291,9 @@ def r_version(staged):
     # `HTML` ni en el precache no llega a ningún celular por esa vía, así que
     # exigir que suba VERSION es hacer saltar la regla por algo correcto — y una
     # regla que avisa de lo correcto se acaba ignorando. (17-ago-2026, con
-    # `prueba_ticket.html`, que es una página suelta de medición.)
+    # `prueba_ticket.html`, una página suelta de medición; se borró el
+    # 21-sep-2026 junto con el banco de escaneo, pero la regla se queda: la
+    # siguiente página de medición tampoco debe obligar a subir VERSION.)
     precache = set(re.findall(r"'\./([^']+)'", sw))
     tocaron_app = [c for c in cambiados
                    if (c.endswith('.html') or c.endswith('datos.js'))
@@ -1783,9 +1785,9 @@ def r_galeria():
     # deja hueco en ningún sitio. Las series y los accesorios ya tenían sus dos
     # inputs desde el 24-ago; el concurso, de septiembre, nació sin el segundo.
     #
-    # Sólo sobre HTML —las pantallas de verdad—: `prueba_ticket.html` es una
-    # página de diagnóstico que se abre en el escritorio, no algo que un asesor
-    # use con el cliente delante.
+    # Sólo sobre HTML —las pantallas de verdad—: una página de diagnóstico se
+    # abre en el escritorio y no es algo que un asesor use con el cliente
+    # delante. (El ejemplo era `prueba_ticket.html`, borrada el 21-sep-2026.)
     for p in HTML:
         s = leer(p)
         if s is None: continue
