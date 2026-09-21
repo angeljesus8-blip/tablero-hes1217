@@ -51,12 +51,64 @@
 
   main{ max-width:560px; margin:0 auto; padding:14px 16px 0; }
 
-  /* El consejo de la luz va pegado a los botones de foto, que es a lo que se
-     refiere, y separado por una línea de los campos que la foto rellena. */
-  .scan-hint{ text-align:center; font-size:11px; color:var(--gris);
-    margin:9px 0 13px; padding-bottom:13px; border-bottom:1px solid var(--linea); }
+  .scan-hint{ text-align:center; font-size:11px; color:var(--gris); margin:11px 0 0; }
   .card-captura{ padding-top:13px; }
-  .cap-foto{ display:flex; gap:8px; }
+  .cap-foto{ display:flex; gap:8px; margin-top:9px; }
+
+  /* ── Las cuatro pestañas ──────────────────────────────────────────
+     Con nombre y no con iconos: un icono sin etiqueta se aprende probando, y
+     con el cliente enfrente nadie prueba. El concurso enseña además los días
+     que le quedan, porque un concurso escondido no compite. */
+  .tabs{ background:#fff; border-bottom:1px solid var(--linea); padding:0 12px;
+    display:flex; gap:18px; position:sticky; top:64px; z-index:22; overflow-x:auto;
+    -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+  .tabs::-webkit-scrollbar{ display:none; }
+  .tab{ background:none; border:none; font-family:inherit; font-size:13.5px; font-weight:700;
+    color:#7a7a7a; padding:13px 2px 11px; border-bottom:3px solid transparent; cursor:pointer;
+    white-space:nowrap; min-height:46px; display:flex; align-items:center; gap:6px; }
+  .tab.on{ color:var(--rojo); font-weight:800; border-bottom-color:var(--rojo); }
+  .tab-dias{ background:#fdf4e0; color:#8a6608; border-radius:7px; padding:2px 6px;
+    font-size:9.5px; font-weight:800; }
+  /* El candado ocupa el sitio de «Ventas» cuando no hay permiso: sin esto la
+     fila de pestañas cambia de ancho según quién entre, y la pestaña de al
+     lado se mueve de sitio entre una sesión y otra. */
+  .tab-lock{ display:none; align-items:center; font-size:13px; font-weight:700;
+    color:#bdbdbd; padding:13px 2px 11px; white-space:nowrap; }
+
+  /* ── Los tres pasos ── */
+  .pasos{ margin-bottom:14px; }
+  .pasos-barra{ display:flex; gap:7px; }
+  .pb{ flex:1; height:5px; border-radius:3px; background:var(--linea); transition:.2s; }
+  .pb.on{ background:var(--rojo); }
+  .pb.hecho{ background:#178046; }
+  .pasos-lbl{ display:flex; justify-content:space-between; margin-top:6px; }
+  .pasos-lbl span{ font-size:10.5px; font-weight:700; color:#9a9a9a; letter-spacing:.4px; }
+  .pasos-lbl span.on{ color:var(--rojo); font-weight:800; }
+  .pasos-lbl span.hecho{ color:#178046; }
+
+  .paso-t{ font-size:22px; font-weight:800; letter-spacing:-.6px; line-height:1.2; margin:0; }
+  .paso-s{ font-size:13px; color:#5f5f5f; line-height:1.5; margin:8px 0 0; }
+  .paso2-cab{ display:flex; align-items:center; gap:8px; margin-bottom:14px; }
+  .volver{ background:#f2f2f4; border:none; border-radius:11px; width:38px; height:38px;
+    font-size:22px; font-weight:700; color:#555; cursor:pointer; line-height:1; flex-shrink:0; }
+
+  /* El visor: sitio para la foto que todavía no se ha tomado. Sin él, el paso 1
+     era un botón en medio de la nada y no se entendía a qué hay que apuntar. */
+  .visor{ margin:16px 0 0; height:230px; background:#faf9f9; border:2px dashed #e3d7d7;
+    border-radius:22px; position:relative; display:flex; align-items:center; justify-content:center; }
+  .visor .esq{ position:absolute; width:30px; height:30px; }
+  .visor .tl{ top:18px; left:18px; border-top:4px solid var(--rojo); border-left:4px solid var(--rojo);
+    border-top-left-radius:10px; }
+  .visor .tr{ top:18px; right:18px; border-top:4px solid var(--rojo); border-right:4px solid var(--rojo);
+    border-top-right-radius:10px; }
+  .visor .bl{ bottom:18px; left:18px; border-bottom:4px solid var(--rojo); border-left:4px solid var(--rojo);
+    border-bottom-left-radius:10px; }
+  .visor .br{ bottom:18px; right:18px; border-bottom:4px solid var(--rojo); border-right:4px solid var(--rojo);
+    border-bottom-right-radius:10px; }
+  /* La foto es la acción del paso 1 y aquí SÍ es sólida: es lo único que se
+     puede hacer en esta pantalla. En el paso 2 el sólido es «Agregar». */
+  .btn-foto{ background:var(--rojo); color:#fff; margin-top:16px; font-size:16.5px; padding:18px; }
+  .vend-seguros{ margin-left:10px; font-size:11.5px; font-weight:700; color:#178046; }
 
   .btn{ width:100%; border:none; font-family:inherit; font-weight:700; font-size:15px;
     padding:14px; border-radius:12px; cursor:pointer; transition:.12s; display:flex;
@@ -479,8 +531,27 @@
   <div class="count"><div class="n" id="count">0</div><div class="l">capturadas</div></div>
 </header>
 
+<!-- ── LAS CUATRO PESTAÑAS (21-sep-2026) ─────────────────────────
+     Sustituyen a la barra de abajo. Los identificadores son los MISMOS
+     (`btnAcc`, `btnCn`, `btnCsv`, `lockMsg`), así que todo lo que ya sabía
+     abrir cada panel —y el permiso que esconde «Ventas»— sigue funcionando
+     sin tocarse. Lo que cambia es dónde se toca, no qué pasa al tocar.
+
+     Con NOMBRE y no con iconos: dos iconos sin etiqueta arriba se aprenden a
+     base de probar, y el concurso no puede estar escondido justo el mes que
+     se juega — por eso además enseña los días que le quedan. -->
+<nav class="tabs" aria-label="Qué vas a capturar">
+  <button class="tab on" id="tabSerie" aria-current="page">Serie</button>
+  <button class="tab" id="btnAcc" title="Accesorios y reparaciones de Mr Fix">Mr Fix</button>
+  <button class="tab" id="btnCn" onclick="abrirConcurso()" title="Concurso de tickets Oro y Plata">
+    Concurso<span class="tab-dias" id="tabCnDias" style="display:none"></span></button>
+  <button class="tab" id="btnCsv">Ventas</button>
+  <span class="tab-lock" id="lockMsg" title="Solo quien tiene el permiso abre la hoja de ventas">🔒 Ventas</span>
+</nav>
+
 <div class="vendbar">
   <span>👤 <b id="vendLabel">—</b></span>
+  <span class="vend-seguros" id="vendSeguros"></span>
   <button id="btnChange">Cambiar</button>
 </div>
 
@@ -489,22 +560,53 @@
   <input type="file" id="fileGal" accept="image/*" hidden>
   <div id="reader-file" style="position:absolute;width:0;height:0;overflow:hidden;"></div>
 
-  <!-- ── UNA SOLA TARJETA PARA CAPTURAR (21-sep-2026) ──────────────
-       La foto y los campos eran dos bloques sueltos con el consejo de la luz
-       flotando en medio, y la foto es el PRIMER PASO de rellenar esos campos
-       —de ahí salen la serie, el SKU y el precio—. Separados se leían como dos
-       cosas que se pueden hacer por su cuenta.
+  <!-- ── UNA COSA A LA VEZ: ESCANEA → REVISA → GUARDA (21-sep-2026) ──
+       Antes era un formulario de arriba abajo donde todo pesaba igual. Ahora
+       la pantalla enseña SOLO el paso en el que vas, porque esto se usa de
+       pie, con el cliente enfrente y una mano ocupada.
 
-       Ahora es una tarjeta con los tres pasos en orden: la foto arriba, lo que
-       la foto rellena en medio, y abajo el botón que cierra. Nada cambió de
-       nombre ni de identificador: los mismos `btnPhoto`, `btnGal`, `serie`,
-       `sku` y `btnAdd` que ya conocía el resto del archivo. -->
-  <div class="card card-captura">
-    <div class="cap-foto">
-      <button class="btn btn-cam" id="btnPhoto" style="flex:1;">📸 Tomar foto</button>
-      <button class="btn btn-ghost" id="btnGal" style="flex:1;">🖼️ Galería</button>
+       El paso 3 no se inventó: es el modal del seguro, que ya existía y ya
+       estaba probado. Por eso `btnAdd` y `finalizarVenta` no se tocaron — lo
+       único nuevo es qué se ve en cada momento. -->
+  <div class="pasos" id="pasos">
+    <div class="pasos-barra">
+      <span class="pb on" id="pb1"></span><span class="pb" id="pb2"></span><span class="pb" id="pb3"></span>
     </div>
-    <p class="scan-hint" id="hint">Acerca el teléfono al código de barras (que llene la foto) · con buena luz</p>
+    <div class="pasos-lbl">
+      <span class="on" id="pl1">1 · ESCANEA</span><span id="pl2">2 · REVISA</span><span id="pl3">3 · GUARDA</span>
+    </div>
+  </div>
+
+  <!-- ── Paso 1 ── -->
+  <div id="paso1">
+    <h2 class="paso-t">Escanea el código de barras</h2>
+    <p class="paso-s">De ahí salen la serie, el SKU y el precio.</p>
+
+    <div class="visor" aria-hidden="true">
+      <span class="esq tl"></span><span class="esq tr"></span>
+      <span class="esq bl"></span><span class="esq br"></span>
+      <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#D12026" stroke-width="1.5"
+           stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path>
+        <path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path>
+        <path d="M7 8v8M10.5 8v8M14 8v8M17 8v8"></path>
+      </svg>
+    </div>
+
+    <button class="btn btn-foto" id="btnPhoto">📸 Tomar foto</button>
+    <div class="cap-foto">
+      <button class="btn btn-ghost" id="btnGal" style="flex:1;">🖼️ Galería</button>
+      <button class="btn btn-ghost" id="btnMano" style="flex:1;">✏️ Escribir a mano</button>
+    </div>
+    <p class="scan-hint" id="hint">Que el código llene la foto · con buena luz</p>
+  </div>
+
+  <!-- ── Paso 2 ── -->
+  <div class="card card-captura" id="paso2" style="display:none">
+    <div class="paso2-cab">
+      <button class="volver" id="btnVolver1" aria-label="Volver a tomar la foto">‹</button>
+      <h2 class="paso-t" style="margin:0">¿Es esto lo que vendiste?</h2>
+    </div>
 
     <div class="field serie">
       <label>Número de serie</label>
@@ -562,13 +664,9 @@
   <footer>Odemás · Grupo Gigante · HES Angelópolis 1217</footer>
 </main>
 
-<div class="footbar">
-  <button class="btn btn-acc" id="btnAcc" title="Accesorios y reparaciones de Mr Fix">🔧 Mr Fix</button>
-  <button class="btn btn-cn" id="btnCn" onclick="abrirConcurso()"
-          title="Concurso de tickets Oro y Plata">🏆 Concurso</button>
-  <button class="btn btn-csv" id="btnCsv">📋 Ventas del día</button>
-  <div class="lock-msg" id="lockMsg">🔒 Solo quien tiene el permiso abre la hoja de ventas</div>
-</div>
+<!-- La barra de abajo se fue a las pestañas de arriba (21-sep-2026). Sus tres
+     botones conservan sus identificadores allí, así que nada de lo que los
+     usaba tuvo que cambiar. -->
 
 <div class="toast" id="toast"></div>
 
@@ -1058,6 +1156,18 @@ function render(){
   const hoy = hoyStr();
   const today = items.filter(i => i.fecha === hoy);   // la pantalla solo muestra HOY
   $('count').textContent = today.length;
+
+  /* Cuántas de las de hoy llevan seguro, junto al nombre del asesor.
+     Es un RECUENTO de lo capturado en este teléfono, no el Assurant de la
+     tienda: por eso dice «2 de 3 con seguro» y nunca un porcentaje. El % con
+     meta del 25 % es el del tablero, sale de Supabase y es de toda la tienda;
+     enseñar aquí otro número con la misma pinta daría dos KPI distintos para
+     la misma pregunta, y el de piso ganaría por estar más a mano. */
+  const vs = $('vendSeguros');
+  if(vs){
+    const con = today.filter(function(i){ return i.seguro === true; }).length;
+    vs.textContent = today.length ? (con + ' de ' + today.length + ' con seguro') : '';
+  }
   // Nota del histórico (todo lo que va en el Excel)
   const dias = new Set(items.map(i => i.fecha)).size;
   $('histNote').innerHTML = items.length
@@ -1244,8 +1354,11 @@ window.finalizarVenta = function(conSeguro){
      cobraría la mitad en la venta siguiente, y eso no lo caza nadie hasta el
      corte — para entonces ya se fue el cliente. */
   refrescarExhibicion('');
+  /* De vuelta al paso 1: la venta se cerró y lo siguiente es otra foto. Sin
+     esto el asesor se quedaba mirando una ficha en blanco, sin señal de que
+     lo suyo ya se guardó. */
+  irPaso(1);
   toast(conSeguro ? '🛡️ Con Assurant · Agregada ✓' : 'Agregada ✓ · sin seguro', 'ok');
-  $('serie').focus();
 };
 
 /* ==========================================================
@@ -1602,19 +1715,80 @@ async function processImage(file){
   toast('No se detectó nada · acerca más, enfoca el S/N con buena luz', 'warn');
 }
 
+/* ==========================================================
+   LOS TRES PASOS  (21-sep-2026)
+   ==========================================================
+   Esto NO es lógica de venta: es sólo qué se ve en cada momento. La captura,
+   la validación y el guardado siguen donde estaban —`processImage`, `btnAdd`,
+   `finalizarVenta`— y no se tocaron. Por eso el paso 3 es el modal del seguro:
+   ya existía, ya estaba probado en piso, y hacer otro habría sido un segundo
+   sitio donde decidir si una venta lleva Assurant.
+
+   Al paso 2 se pasa EN CUANTO se dispara la foto, sin esperar al OCR. Suena
+   al revés y no lo es: el asesor ve la ficha llenándose sola, que es lo que
+   le dice que la lectura va bien. Esperando, la pantalla se quedaba quieta
+   unos segundos y no había forma de saber si se había colgado.
+
+   Si el OCR no saca nada, el paso 2 aparece vacío y el aviso lo explica: desde
+   ahí se escribe a mano o se vuelve con «‹», que es lo mismo que se podía
+   hacer antes, pero dicho. */
+let _paso = 1;
+function irPaso(n){
+  _paso = n;
+  $('paso1').style.display = (n === 1) ? '' : 'none';
+  /* `n >= 2` y no `n === 2`: el paso 3 es el modal del seguro, que se abre
+     ENCIMA de la ficha. Con `=== 2` los dos pasos se ocultaban a la vez y
+     detrás del modal quedaba la pantalla en blanco — al cancelar el seguro, el
+     asesor se encontraba la nada. Lo cazó la prueba, no la vista. */
+  $('paso2').style.display = (n >= 2) ? '' : 'none';
+  /* La lista del día estorba mientras se revisa una captura: son datos de
+     otras ventas justo cuando hay que mirar ésta. */
+  const lh = document.querySelector('.lista-head');
+  if(lh) lh.style.display = (n === 1) ? '' : 'none';
+  $('lista').style.display = (n === 1) ? '' : 'none';
+  const hn = $('histNote'); if(hn) hn.style.display = (n === 1) ? '' : 'none';
+
+  $('pb1').className = 'pb' + (n === 1 ? ' on' : ' hecho');
+  $('pb2').className = 'pb' + (n === 2 ? ' on' : (n > 2 ? ' hecho' : ''));
+  $('pb3').className = 'pb';
+  $('pl1').className = (n === 1 ? 'on' : 'hecho');
+  $('pl1').textContent = (n === 1 ? '1 · ESCANEA' : '1 · LISTO');
+  $('pl2').className = (n === 2 ? 'on' : '');
+  /* Arriba del todo al cambiar de paso. Sin esto, quien venía mirando la lista
+     del día disparaba la foto y el paso 2 aparecía fuera de la pantalla: la
+     ficha que hay que revisar quedaba por encima del scroll y parecía que no
+     había pasado nada. */
+  try{ window.scrollTo(0, 0); }catch(e){ /* sin ventana (pruebas): da igual */ }
+
+  // El foco es una comodidad, no un dato: si el navegador lo rechaza (campo
+  // aún oculto, teclado a medio abrir), el asesor toca el campo y sigue.
+  if(n === 2) setTimeout(function(){ try{ $('serie').focus(); }catch(e){} }, 60);
+}
+
 /* ---------- Botón "Tomar foto y procesar" ---------- */
 $('btnPhoto').onclick = () => $('fileCam').click();
 $('fileCam').onchange = e => {
   const f = e.target.files && e.target.files[0];
-  if(f) processImage(f);
+  if(f){ irPaso(2); processImage(f); }
   e.target.value = '';
 };
 $('btnGal').onclick = () => $('fileGal').click();
 $('fileGal').onchange = e => {
   const f = e.target.files && e.target.files[0];
-  if(f) processImage(f);
+  if(f){ irPaso(2); processImage(f); }
   e.target.value = '';
 };
+/* Escribir a mano no es el camino raro: es el que queda cuando el código está
+   rayado, y antes había que adivinar que se podía tocar el campo directamente. */
+$('btnMano').onclick = () => irPaso(2);
+$('btnVolver1').onclick = () => irPaso(1);
+
+/* El estado de arranque se fija AQUÍ y no con un `style="display:none"` en el
+   marcado. Parece lo mismo y no lo es: el atributo se borra sin querer al
+   editar el HTML —y entonces la pantalla abre con los dos pasos encima, sin
+   dar error—, mientras que esta línea deja el arranque dicho en un solo sitio,
+   el mismo que gobierna los demás cambios de paso. */
+irPaso(1);
 
 /* ---------- Ventas del día ----------
    Antes esto abría Google Sheets, donde había que buscar el día, seleccionar
@@ -3776,7 +3950,10 @@ function puedeVerVentas_(){
 function updateDownloadAccess(){
   const ok = puedeVerVentas_();
   $('btnCsv').style.display = ok ? '' : 'none';
-  $('lockMsg').style.display = ok ? 'none' : '';
+  /* 'flex' y no '': la pestaña-candado nace en `display:none` en el CSS, así
+     que con '' volvería a esconderse y donde debería estar la explicación
+     quedaría un hueco — el asesor vería tres pestañas y ninguna razón. */
+  $('lockMsg').style.display = ok ? 'none' : 'flex';
 }
 function setVend(n){
   currentVend = n || '';
@@ -4181,6 +4358,35 @@ async function cnCargarConfig(){
     fuera.style.display = 'none';
   }
 }
+
+/* ── Los días que le quedan al concurso, EN LA PESTAÑA ──────────
+   21-sep-2026. Es la razón de que el concurso tenga pestaña propia con
+   nombre: escondido tras un icono no compite, y con los días a la vista el
+   asesor sabe que la cuenta corre sin abrir nada.
+
+   Pide `concurso_config` por su cuenta y NO toca `_cnPeriodo`. Parece un
+   desperdicio —el panel la vuelve a pedir al abrirse— y es a propósito:
+   `cnCargarConfig` carga ADEMÁS la tabla de roles, y `abrirConcurso` sólo la
+   llama cuando `_cnPeriodo` está vacío. Rellenarla desde aquí saltaría esa
+   carga, `_cnTabla` se quedaría en null y cada línea del ticket saldría «sin
+   rol»: el ticket bajaría de nivel sin un solo error en pantalla.
+
+   Sin concurso vigente la pestaña se va entera. El 15 de octubre esto se
+   apaga solo. */
+(async function cnPestana(){
+  try{
+    const filas = await sbCallCS('concurso_config', {}, 8000);
+    const per = (filas && filas[0]) || null;
+    if(!per || per.vigente !== true){ $('btnCn').style.display = 'none'; return; }
+    const d = Number(per.dias_restantes);
+    const t = $('tabCnDias');
+    t.textContent = (!isFinite(d) || d > 0) ? (d + 'd') : 'hoy';
+    t.style.display = '';
+  }catch(e){
+    /* Sin red la pestaña se queda sin la insignia y sigue abriendo el panel:
+       no saber cuántos días quedan no es motivo para esconder el concurso. */
+  }
+})();
 
 function cnFecha(iso){
   if(!iso) return '—';
