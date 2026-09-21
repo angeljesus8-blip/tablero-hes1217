@@ -51,15 +51,39 @@
 
   main{ max-width:560px; margin:0 auto; padding:14px 16px 0; }
 
-  .scan-hint{ text-align:center; font-size:11px; color:var(--gris); margin:10px 0 2px; }
+  /* El consejo de la luz va pegado a los botones de foto, que es a lo que se
+     refiere, y separado por una línea de los campos que la foto rellena. */
+  .scan-hint{ text-align:center; font-size:11px; color:var(--gris);
+    margin:9px 0 13px; padding-bottom:13px; border-bottom:1px solid var(--linea); }
+  .card-captura{ padding-top:13px; }
+  .cap-foto{ display:flex; gap:8px; }
 
   .btn{ width:100%; border:none; font-family:inherit; font-weight:700; font-size:15px;
     padding:14px; border-radius:12px; cursor:pointer; transition:.12s; display:flex;
     align-items:center; justify-content:center; gap:8px; }
   .btn:active{ transform:scale(.985); }
-  .btn-cam{ background:var(--rojo); color:#fff; }
-  .btn-cam.on{ background:#333; }
-  .btn-add{ background:var(--verde); color:#fff; }
+  /* ── UN SOLO BOTÓN SÓLIDO POR PANTALLA (21-sep-2026) ──────────────
+     Medido antes de tocar nada: seis botones a la vista y seis colores de
+     fondo distintos —rojo, gris, verde, naranja, dorado, azul—. Todos
+     gritaban igual de fuerte, así que lo que el asesor hace veinte veces al
+     día pesaba lo mismo que lo que hace dos, y la pantalla no se parecía al
+     menú nuevo (blanco, gris claro e iconos 3D).
+
+     Ahora el único sólido es «Agregar al reporte», que es el que CIERRA la
+     tarea. Todo lo demás pasa a tinte: el mismo color, en fondo claro con la
+     letra del color. Se conserva a propósito qué color es cada cosa —naranja
+     Mr Fix, dorado concurso, azul la hoja de ventas— porque eso no es adorno:
+     dice a qué flujo y a qué tabla va cada botón (ver `.btn-acc` y `.btn-cn`).
+
+     Y `Agregar` sigue VERDE, no rojo de marca: lleva meses en piso siendo
+     verde, y en un botón el rojo también se lee como «cuidado». Cambiárselo
+     al asesor no arreglaba nada que estuviera roto. */
+  .btn-cam{ background:#fdeaea; color:var(--rojo); }
+  /* Un punto más oscuro que `--verde` y sólo aquí: el blanco sobre el verde de
+     la variable daba 4.28:1 y ahora da 4.99:1. La variable no se toca porque
+     la usan los textos y las insignias de toda la pantalla, donde el verde va
+     sobre blanco y ahí el problema no existe. */
+  .btn-add{ background:#178046; color:#fff; }
   .btn-ghost{ background:#fff; color:#555; border:1.5px solid var(--linea); }
 
   .card{ background:#fff; border:1px solid var(--linea); border-radius:14px; padding:15px; margin-top:12px; }
@@ -181,14 +205,23 @@
     max-width:560px; margin:0 auto; box-shadow:0 -4px 18px rgba(0,0,0,.06); }
   .footbar .btn{ font-size:14px; padding:13px; }
   .footbar .btn, .footbar .lock-msg{ min-width:132px; }
-  .btn-csv{ background:var(--azul); color:#fff; flex:1; }
+  .btn-csv{ background:#eef3fa; color:var(--azul); flex:1; }
   /* Accesorios (18-ago-2026). Naranja para que no se confunda con capturar una
-     venta con serie: es otro flujo y otra tabla. */
-  .btn-acc{ background:var(--naranja); color:#fff; flex:1; }
+     venta con serie: es otro flujo y otra tabla. En tinte desde el 21-sep-2026:
+     el color sigue diciendo a qué tabla va, sin competir con el de agregar. */
+  /* El naranja de marca (#F37021) sobre su propio tinte da 2.66:1 de
+     contraste, medido — muy por debajo del 4.5:1 que necesita una letra de
+     14px en una pantalla que se mira con la luz de la tienda y el sol del
+     pasillo. Se oscurece SOLO la letra (4.85:1); el fondo sigue siendo
+     naranja, que es lo que dice de qué botón se trata. Los otros tres tintes
+     se midieron igual y pasaban: rojo 4.60, dorado 4.82, azul 4.83. */
+  .btn-acc{ background:#fff1e8; color:#b8460f; flex:1; }
   /* Concurso ORO/PLATA (15-sep-2026). Dorado, que es de lo que va, y nunca de
      los tres colores de marca: los de marca ya significan «con serie» y «Mr
      Fix», y repetirlos aqui haria pensar que va a la misma tabla. No va. */
-  .btn-cn{ background:#b8860b; color:#fff; flex:1; }
+  .btn-cn{ background:#fdf4e0; color:#8a6608; flex:1; }
+  /* La barra de abajo son TRES HERRAMIENTAS, no tres acciones de esta
+     pantalla: se va a ellas, no se hace algo aquí. De ahí el tinte. */
   /* ── Concurso ── */
   .cn-tabs{ display:flex; gap:6px; margin-bottom:14px; }
   .cn-tabs button{ flex:1; border:1px solid var(--linea); background:#fff;
@@ -454,14 +487,25 @@
 <main>
   <input type="file" id="fileCam" accept="image/*" capture="environment" hidden>
   <input type="file" id="fileGal" accept="image/*" hidden>
-  <div style="display:flex;gap:8px;">
-    <button class="btn btn-cam" id="btnPhoto" style="flex:1;">📸 Tomar foto</button>
-    <button class="btn btn-cam" id="btnGal" style="flex:1;background:#555;">🖼️ Galería</button>
-  </div>
-  <p class="scan-hint" id="hint">Acerca el teléfono al código de barras (que llene la foto) · con buena luz</p>
   <div id="reader-file" style="position:absolute;width:0;height:0;overflow:hidden;"></div>
 
-  <div class="card">
+  <!-- ── UNA SOLA TARJETA PARA CAPTURAR (21-sep-2026) ──────────────
+       La foto y los campos eran dos bloques sueltos con el consejo de la luz
+       flotando en medio, y la foto es el PRIMER PASO de rellenar esos campos
+       —de ahí salen la serie, el SKU y el precio—. Separados se leían como dos
+       cosas que se pueden hacer por su cuenta.
+
+       Ahora es una tarjeta con los tres pasos en orden: la foto arriba, lo que
+       la foto rellena en medio, y abajo el botón que cierra. Nada cambió de
+       nombre ni de identificador: los mismos `btnPhoto`, `btnGal`, `serie`,
+       `sku` y `btnAdd` que ya conocía el resto del archivo. -->
+  <div class="card card-captura">
+    <div class="cap-foto">
+      <button class="btn btn-cam" id="btnPhoto" style="flex:1;">📸 Tomar foto</button>
+      <button class="btn btn-ghost" id="btnGal" style="flex:1;">🖼️ Galería</button>
+    </div>
+    <p class="scan-hint" id="hint">Acerca el teléfono al código de barras (que llene la foto) · con buena luz</p>
+
     <div class="field serie">
       <label>Número de serie</label>
       <input type="text" id="serie" placeholder="Escanea o escribe aquí…" autocomplete="off">
