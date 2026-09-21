@@ -367,6 +367,27 @@
   .lead-name { flex:1; font-size:13px; font-weight:700; }
   .lead-ventas { font-size:11px; color:#aaa; font-weight:700; white-space:nowrap; min-width:52px; text-align:center; }
   .lead-att { font-size:12px; font-weight:800; white-space:nowrap; min-width:80px; text-align:right; }
+  /* ── Concurso Oro/Plata, tarjeta hermana de la del Assurant (21-sep-2026) ──
+     Misma familia visual —cabecera, filas y cierre— porque son lo mismo para
+     quien las mira: cómo va la tienda hoy. Lo que cambia es el dorado, que es
+     el color con el que el concurso ya se pinta en Captura.
+
+     Vive y muere con el periodo: si no hay concurso vigente, `concursoHtml`
+     devuelve cadena vacía y aquí no queda nada. Un marcador congelado del mes
+     pasado es peor que ninguno — nadie sabría que terminó. */
+  .cn-card { padding:16px 18px 14px; }
+  .cn-header { display:flex; justify-content:space-between; align-items:baseline; gap:10px;
+    margin-bottom:10px; font-size:13px; font-weight:700; color:#555; }
+  .cn-quedan { font-size:10px; font-weight:700; color:#b8860b; text-align:right; white-space:nowrap; }
+  .cn-row { display:flex; align-items:center; gap:8px; padding:7px 0; border-bottom:1px solid var(--linea); }
+  .cn-row:last-of-type { border-bottom:none; }
+  .cn-name { flex:1; font-size:13px; font-weight:700; }
+  .cn-medallas { font-size:12.5px; font-weight:800; white-space:nowrap; letter-spacing:.3px; }
+  .cn-medallas .nada { color:#c8c4c2; font-weight:700; }
+  .cn-pie { border-top:1px solid var(--linea); margin-top:4px; padding-top:9px;
+    font-size:11.5px; font-weight:700; color:#9b9490; display:flex;
+    justify-content:space-between; gap:10px; }
+  .cn-vacio { text-align:center; color:#bbb; font-size:12.5px; padding:14px 6px 10px; line-height:1.5; }
   .lw-btn { background:#fff; border:1.5px solid var(--naranja); color:var(--naranja); border-radius:8px;
     padding:5px 11px; font-family:'Montserrat',sans-serif; font-size:11px; font-weight:800; cursor:pointer; margin-top:7px; }
   #liveWarning.err .lw-btn { border-color:var(--rojo); color:var(--rojo); }
@@ -1453,6 +1474,105 @@ function toggleEquipo(){
   try{ localStorage.setItem('hes_equipo_abierto', EQUIPO_ABIERTO ? '1' : '0'); }catch(e){}
   render();
 }
+/* ---- Concurso Oro/Plata ----
+   21-sep-2026. El marcador ya vivía dentro de Captura de Series, que es donde
+   se sube el ticket; aquí se enseña al lado del Assurant porque el tablero es
+   la pantalla que el equipo abre sin ir a buscar nada. Un concurso que hay que
+   ir a consultar deja de competir a la semana.
+
+   Los NOMBRES no están en este archivo —es público— sino que llegan de
+   `concurso_marcador` con la tienda de la sesión, igual que el leaderboard del
+   Assurant. Ver el comentario de VENDEDORES_TB.
+
+   `null` significa las tres cosas que no son «hay concurso»: no hay periodo
+   abierto, el periodo ya cerró, o no hubo respuesta. Las tres se pintan igual
+   —sin tarjeta— y es a propósito: lo único peor que no enseñar el marcador es
+   enseñar uno viejo, que nadie sabría leer como terminado. */
+let CONCURSO = null;   // {hasta, dias, filas:[{vendedor, oro, plata, tickets}]}
+
+/* Las dos decisiones van APARTE de la llamada, y puras, porque son lo único
+   que puede fallar callado — y con red de por medio no habría cómo probarlas.
+   La plomería (pedir, esperar, repintar) no se equivoca sola; decidir que un
+   concurso terminado deja de enseñarse, sí. */
+function concursoVigente(cfg){
+  const per = (Array.isArray(cfg) && cfg[0]) ? cfg[0] : null;
+  return (per && per.vigente === true) ? per : null;
+}
+
+/* Devuelve el marcador a pintar, o:
+     null       — no hay concurso que enseñar: quita la tarjeta.
+     undefined  — no hubo respuesta: deja lo que hubiera. */
+function concursoArmar(per, filas){
+  /* Sin periodo vigente la tarjeta se va, aunque ya estuviera pintada: la PWA
+     se queda abierta días y el concurso termina un 15 de octubre con el
+     teléfono encendido. */
+  if(!per) return null;
+  // Sin respuesta NO se borra lo que ya se tenía: un corte de red no es el fin
+  // del concurso. Es el mismo criterio que la preventa.
+  if(!Array.isArray(filas)) return undefined;
+  return {
+    hasta: per.hasta || '',
+    dias:  Number(per.dias_restantes),
+    filas: filas.map(function(f){
+      return { vendedor: String(f.vendedor || ''), oro: Number(f.oro) || 0,
+               plata: Number(f.plata) || 0, tickets: Number(f.tickets) || 0 };
+    })
+  };
+}
+
+async function cargarConcursoNube(){
+  const per = concursoVigente(await sbRpc('concurso_config'));
+  const nuevo = concursoArmar(per, per ? await sbRpc('concurso_marcador') : null);
+  if(nuevo === undefined) return;
+  if(nuevo === null){
+    if(CONCURSO){ CONCURSO = null; render(); }
+    return;
+  }
+  CONCURSO = nuevo;
+  render();
+}
+
+function concursoHtml(){
+  if(!CONCURSO) return '';
+  const f = CONCURSO.filas;
+  const oroT   = f.reduce(function(s,x){ return s + x.oro;   }, 0);
+  const plataT = f.reduce(function(s,x){ return s + x.plata; }, 0);
+  const d = CONCURSO.dias;
+  /* El último día se dice como último día. «Quedan 0 días» se lee como que ya
+     pasó, y todavía se puede subir un ticket. */
+  const quedan = !isFinite(d) ? ''
+    : d <= 0 ? 'ÚLTIMO DÍA'
+    : d === 1 ? 'queda 1 día'
+    : 'quedan ' + d + ' días';
+
+  const rows = f.map(function(x){
+    /* Ceros no: un «🥇 0 🥈 0» pinta como resultado y es la ausencia de uno.
+       Quien no ha llevado ningún ticket lo ve en un guion, como en el equipo
+       del Assurant. */
+    const m = (x.oro || x.plata)
+      ? (x.oro   ? '🥇 ' + x.oro   + (x.plata ? '&nbsp;&nbsp;' : '') : '') +
+        (x.plata ? '🥈 ' + x.plata : '')
+      : '<span class="nada">—</span>';
+    return '<div class="cn-row">' +
+      '<span class="cn-name">' + esc(nombreCorto(x.vendedor)) + '</span>' +
+      '<span class="cn-medallas">' + m + '</span></div>';
+  }).join('');
+
+  const cuerpo = f.length
+    ? rows
+    : '<div class="cn-vacio">Aún no hay tickets de este concurso.<br>' +
+      'Se suben con la foto, en Captura de Series 🏆</div>';
+
+  return '<div class="card cn-card">' +
+    '<div class="cn-header"><span>🏆 Concurso Oro y Plata</span>' +
+    '<span class="cn-quedan">' + quedan + '</span></div>' +
+    cuerpo +
+    (f.length ? '<div class="cn-pie"><span>Tienda</span><span>' +
+        oroT + ' oro' + (oroT !== 1 ? 's' : '') + ' · ' +
+        plataT + ' plata' + (plataT !== 1 ? 's' : '') + '</span></div>' : '') +
+    '</div>';
+}
+
 function equipoHtml(){
   const filas = filasLeaderboard();
   const conVenta = filas.filter(f => f.total > 0).length;
@@ -2679,6 +2799,11 @@ function render(){
       <button class="btn-wa" onclick="resumenWA()">📲 Compartir resumen por WhatsApp</button>
     </div>`;
 
+    /* El concurso, justo debajo del Assurant: las dos dicen cómo va la tienda
+       hoy y se miran de un vistazo. Sin concurso vigente no devuelve nada y
+       aquí no queda ni el hueco. */
+    html += concursoHtml();
+
     /* Los avisos van en una FRANJA arriba, no en una tarjeta más (8-ago-2026).
        Un aviso se lee al entrar; nadie navega a "Avisos" a ver si hay alguno —
        por eso llevaba tanto sin mirarse. Solo aparece cuando hay. */
@@ -3497,6 +3622,11 @@ async function refrescarNube(){
      desaparecer si el camino de abajo se va por el respaldo del Apps Script —
      que no sabe nada de preventa. Se pinta sola cuando conteste. */
   cargarPreventaNube();
+  /* El concurso, por el mismo camino que la preventa: en paralelo y sin
+     `await`. No entra en CARGAS ni en el banner de «faltan datos» a propósito
+     — ese banner avisa de lo que hace falta para vender (stock, EOL,
+     apartados), y una tienda sin concurso abierto no tiene nada que fallar. */
+  cargarConcursoNube();
   try{
     /* Supabase primero: un viaje y sin cola (~0,25 s contra ~7 s).
        El Apps Script queda de respaldo mientras dure la migración.
