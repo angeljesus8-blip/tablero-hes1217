@@ -22,7 +22,7 @@ COPIAS = {'horarios.html': os.path.join('..', 'horario-semanal', 'horario_semana
 # VERSION —no llegan a ningún celular por esa vía— pero sí tienen que pasar por
 # sintaxis, secretos y datos personales: se publican igual de expuestas.
 # (20-ago-2026: `accesorios_tecnico.html` se subió sin que nada la revisara.)
-SUELTOS = ['prueba_ticket.html', 'accesorios_tecnico.html']
+SUELTOS = ['prueba_ticket.html', 'accesorios_tecnico.html', 'banco_escaneo.html']
 # Copias del Apps Script. No se ejecutan aquí, pero se publican igual que lo
 # demás: si traen una llave, queda expuesta lo mismo que en un .html.
 GS = ['GAS_Codigo.gs', 'GAS_ventas_detalle.gs', 'GAS_arreglo_apartados.gs',
@@ -1640,7 +1640,8 @@ def r_pruebas():
                'comisiones_solo_mia.js',
                'login_por_correo.js', 'admin_sesion_ajena.js',
                'mrfix_corregir.js', 'cea_precio_nuevo.js', 'cea_vigencia.js',
-               'concurso_oro_plata.js', 'admin_preventa.js')
+               'concurso_oro_plata.js', 'admin_preventa.js',
+               'banco_medicion.js')
 
     # La lista de arriba es explícita a propósito —así falta un archivo y se
     # nota—, pero eso deja el hueco contrario: una prueba escrita y no añadida

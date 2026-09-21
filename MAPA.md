@@ -4285,6 +4285,104 @@ se guardó, o vuelve a subirlo pensando que falló.
 un 9-oct, el ticket se sale de la ventana y el rechazo es indiscutible con el
 papel en la mano. `concursoFechaISO` está aparte y probada por eso.
 
+## Escaneo continuo: primero el banco, después la decisión *(21-sep-2026)*
+
+La pregunta lleva abierta desde que se quitó el visor decorativo: ¿conviene
+cambiar el paso 1 —«Tomar foto» y analizarla— por la cámara en vivo leyendo
+fotogramas hasta que el código aparezca? **Todavía no se sabe, y por eso
+`captura_series.html` NO se tocó.** Lo que se construyó es el instrumento:
+`banco_escaneo.html`, la lógica que decide en `banco_escaneo.js` y sus pruebas
+en `pruebas/banco_medicion.js`.
+
+Es una **página suelta de medición**, como `prueba_ticket.html`: entra en
+`SUELTOS` de `verificar.py` —para que la revisen sintaxis, secretos y datos
+personales, que se publica igual de expuesta— y **no** entra en `HTML` ni en el
+precache. Por eso **no se subió VERSION**: un `v268` sin un solo cambio en la
+app empuja una actualización vacía a todos los teléfonos, y la regla de
+`r_version` ya dice exactamente eso.
+
+### Qué mide, y por qué así
+
+| Bloque | Qué contesta |
+|---|---|
+| 0 · sin cámara | cuántos fotogramas por segundo decodifica ESE teléfono |
+| A · foto | el flujo de hoy, cronometrado desde que se toca el botón |
+| B · continuo | el candidato, con doble lectura y congelado de evidencia |
+| C · 5 minutos | cuánto se frena el teléfono con la cámara abierta |
+
+Cuatro decisiones de medición que no son detalle:
+
+1. **El cronómetro arranca al TOCAR el botón, no al empezar a decodificar.**
+   El asesor espera a que el teléfono abra su cámara, encuadra, dispara y
+   confirma; medir sólo la decodificación sería medir la mitad cómoda, y
+   justamente la mitad en la que el continuo no compite.
+2. **El bloque A anota POR DÓNDE salió la lectura.** Cada serie que sólo se
+   sacó con el OCR del texto «S/N» es una que el continuo habría perdido: ahí
+   no cabe un OCR que tarda segundos. Ese conteo sale en el veredicto como
+   aviso, gane o pierda.
+3. **El bloque 0 dibuja el código en un lienzo de 1280×720**, el mismo tamaño
+   que el fotograma que pide la cámara. Medido ese día en Chrome de
+   escritorio: el mismo código en un lienzo de 1000×156 se lee en **20 ms** y
+   en uno de 1280×720, en **81 ms** —cuatro veces, porque ZXing recorre
+   píxeles—. Con el lienzo chico el banco habría anunciado 50 fps y el vivo
+   habría dado 12, sin nada que explicara la diferencia. Y esos 81 ms son de
+   una PC: el iPhone, donde no hay `BarcodeDetector` nativo y todo cae en
+   ZXing-WASM, es el caso a vigilar.
+4. **«Cuánto calienta» no se puede leer del navegador.** Ningún teléfono
+   publica su temperatura, así que se mide lo que la temperatura provoca
+   —caída de fotogramas por segundo entre el primer minuto y el quinto, deriva
+   del tiempo de decodificación— más la batería, y una pregunta al asesor al
+   terminar. En iPhone la batería **no existe como API**: se devuelve `null`,
+   nunca 0, y el veredicto lo trata como no medido.
+
+### El veredicto se escribió ANTES de tener los datos
+
+Está en `BANCO_UMBRAL` y es lo único que decide: ≤70 % del tiempo de la foto
+**y** al menos 1.5 s menos; no más de 10 puntos de fallos por encima; menos de
+40 % de caída de fps y menos de 8 % de batería en cinco minutos. Los dos
+criterios de velocidad juntos porque cada uno solo se engaña —un 44 % de mejora
+sobre 1.8 s son 0.8 s que nadie nota de pie y con el cliente enfrente—.
+
+Y la regla que de verdad manda: **hacen falta Android e iPhone**. Ganar en uno
+no es «entra en Android», es `parcial`, y eso significa mantener dos caminos en
+el paso 1. Lo decide Ángel, no el umbral.
+
+⚠️ **Tres agujeros que sólo aparecieron al probarlo en Chrome**, no en Node — la
+misma lección que dejó el OCR del ticket 34330:
+
+- **El permiso pendiente deja al asesor atascado.** Si nadie contesta el
+  diálogo, `getUserMedia` no se resuelve *ni se rechaza*: se queda pendiente
+  para siempre, y la pantalla en «Pidiendo la cámara…» con el botón apagado.
+  Ahora hay tope de 8 s y vuelta a la foto — y el rechazo **apaga el flujo que
+  pueda llegar tarde**, o el permiso concedido al minuto deja la cámara
+  encendida sin que nadie la mire.
+- **Un intento cortado al minimizar se anotaba como fallo** (18 s que nadie
+  hizo). Sube el porcentaje de fallos del continuo justo en la cuenta que
+  decide si entra: ahora se descarta y se dice. Lo que sí cuenta como fallo es
+  el botón «No leyó», que lo toca el asesor.
+- **Con sólo el Android cargado, el veredicto decía «ENTRA».** La regla «sin
+  los dos no se decide» estaba escrita para un iPhone vacío, y el caso real es
+  un iPhone **ausente** del objeto. `BANCO_PLATAFORMAS` lo convierte en una
+  ausencia que se cuenta.
+
+### Cómo se corre en piso
+
+Teléfono **desconectado del cargador**, brillo a la mitad, las mismas 4 cajas
+para los dos modos y **8 intentos de cada modo alternando uno y uno** (los 8
+seguidos de un modo regalan práctica al segundo). Cada teléfono copia su
+resultado con el botón y lo manda por WhatsApp; ese texto lleva una línea
+`#DATOS` que se pega en cualquier otro teléfono para juntarlo todo y ver el
+veredicto. Los intentos de varios Android **se suman**, y de las corridas
+térmicas se toma **la peor, no el promedio**: el asesor que se queda con el
+teléfono que se arrastra es el que deja de usar la app.
+
+### Lo que este banco NO va a contestar
+
+Mr Fix y Concurso no entran: ahí se fotografía **un ticket entero**, no un
+código, y el continuo no tiene nada que ofrecerles. Y la foto se queda pase lo
+que pase — es el camino cuando el código está rayado, con el OCR del S/N
+detrás. La pregunta es si el continuo se **suma** al paso 1, no si lo sustituye.
+
 ## Captura de Series: una cosa a la vez *(21-sep-2026, v266)*
 
 Rediseño de FORMA, elegido por Ángel sobre maquetas (propuesta A con la
