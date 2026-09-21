@@ -4285,6 +4285,63 @@ se guardó, o vuelve a subirlo pensando que falló.
 un 9-oct, el ticket se sale de la ventana y el rechazo es indiscutible con el
 papel en la mano. `concursoFechaISO` está aparte y probada por eso.
 
+## Captura de Series: una cosa a la vez *(21-sep-2026, v266)*
+
+Rediseño de FORMA, elegido por Ángel sobre maquetas (propuesta A con la
+entrada 3B). La pantalla pasa de un formulario de arriba abajo a **tres pasos**
+y de una barra de botones abajo a **cuatro pestañas con nombre** arriba.
+
+**Los pasos: escanea → revisa → guarda.**
+
+- **Paso 1** — el visor con las esquinas rojas, «Tomar foto» sólido y, debajo,
+  «Galería» y «Escribir a mano». Escribir a mano dejó de ser un secreto: antes
+  había que adivinar que se podía tocar el campo.
+- **Paso 2** — la ficha, con «¿Es esto lo que vendiste?» y el botón de volver.
+- **Paso 3 — NO SE INVENTÓ: es el modal del seguro**, que ya existía y ya
+  estaba probado en piso. Por eso `btnAdd` y `finalizarVenta` **no se
+  tocaron**: hacer otro habría sido un segundo sitio donde decidir si una
+  venta lleva Assurant.
+
+⚠️ **`irPaso` es sólo qué se ve; la venta no pasa por ahí.** Tres detalles que
+parecen cosmética y no lo son:
+
+1. `paso2` se muestra con `n >= 2`, no con `n === 2`. El modal del seguro se
+   abre ENCIMA de la ficha: con `=== 2` los dos pasos se ocultaban y, al
+   cancelar el seguro, el asesor se encontraba **la pantalla en blanco**. Lo
+   cazó la prueba, no la vista.
+2. Al paso 2 se pasa **en cuanto se dispara la foto**, sin esperar al OCR: el
+   asesor ve la ficha llenándose sola, que es lo que le dice que la lectura va
+   bien. Esperando, la pantalla se quedaba quieta y parecía colgada.
+3. El arranque lo fija `irPaso(1)` en el JS, no un `style="display:none"` en el
+   marcado: el atributo se borra sin querer al editar y la pantalla abriría con
+   los dos pasos encima, sin dar error.
+
+**Las pestañas heredaron los identificadores de la barra de abajo** —`btnAcc`,
+`btnCn`, `btnCsv`, `lockMsg`—, así que todo lo que ya sabía abrir cada panel
+siguió funcionando sin tocarse. Cambió dónde se toca, no qué pasa al tocar. El
+bloque de `pruebas/humo_captura.js` comprueba que esos ids **siguen existiendo
+en el HTML**, y lo hace sobre el texto del archivo: el DOM de pruebas inventa
+un elemento para cualquier id que se le pida, así que preguntarle habría dicho
+que sí (probado con cebo).
+
+**La pestaña del Concurso enseña los días que le quedan** (`24d`) y desaparece
+sola cuando el periodo cierra. Pide `concurso_config` por su cuenta y **no
+toca `_cnPeriodo`**: `abrirConcurso` sólo llama a `cnCargarConfig` cuando esa
+variable está vacía, y rellenarla desde aquí saltaría la carga de la tabla de
+roles — cada línea del ticket saldría «sin rol» y el ticket bajaría de nivel
+sin un solo error.
+
+**«2 de 3 con seguro»**, junto al nombre del asesor, es un RECUENTO de lo
+capturado en este teléfono y por eso nunca es un porcentaje: el % con meta del
+25 % es el del tablero, sale de Supabase y es de toda la tienda. Dos números
+con la misma pinta para la misma pregunta y gana el de piso, que está más a
+mano y es el que no vale.
+
+Lo que **no** cambió: Mr Fix conserva su panel y su flujo (captura varias
+líneas de un ticket, así que su «paso 2» sería una lista editable — otra
+sesión), y el modo `?apartado=` sigue igual, con su tarjeta visible en los dos
+pasos porque hay que ver a qué apartado se está ligando.
+
 ## Captura de Series: un solo botón sólido *(21-sep-2026, v265)*
 
 Medido antes de tocar nada, con la pantalla abierta: **seis botones a la vista
