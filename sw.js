@@ -2,7 +2,7 @@ importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
 // ÚNICO lugar donde vive la versión de la app. Las páginas ya no la repiten:
 // registran './sw.js' con updateViaCache:'none' y el navegador detecta el
 // cambio al ver que este archivo es distinto. Subir el número aquí y ya.
-const VERSION = 'v262';
+const VERSION = 'v263';
 const CACHE = 'hes1217-' + VERSION;
 const ARCHIVOS = [
   './index.html',
@@ -38,6 +38,18 @@ const ARCHIVOS = [
   './logo_huawei.jpg',
   './icon-192.png',
   './icon-512.png',
+  // Los iconos 3D del menú (Fluent Emoji de Microsoft, licencia MIT, bajados al
+  // repo el 21-sep-2026). Van al precache porque son la única etiqueta visible
+  // de cada herramienta: sin red, la cuadrícula se quedaría en seis cuadros
+  // blancos. El emoji de respaldo de index.html cubre el hueco si aun así
+  // fallan, pero eso es el paracaídas, no el plan.
+  './iconos/inventario.png',
+  './iconos/comisiones.png',
+  './iconos/captura.png',
+  './iconos/arena.png',
+  './iconos/horarios.png',
+  './iconos/promos.png',
+  './iconos/admin.png',
 ];
 
 self.addEventListener('install', e => {
