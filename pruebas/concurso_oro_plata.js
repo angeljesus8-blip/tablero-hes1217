@@ -592,6 +592,114 @@ const nivelDe = (...lineas) => calificar(lineas).nivel;
 }
 
 
+/* ── 14 · El ticket 34330: la cantidad y el SKU del genérico ── */
+{
+  /* 21-sep-2026. Ángel subió una foto buena —enfocada, plana, con luz— y la
+     pantalla no enseñó NADA: tres artículos impresos, cero leídos. Dos causas
+     encadenadas, y ninguna daba error.
+
+     1) El realce de contraste, que rescata las fotos apagadas, BORRA la letra
+        de las bien iluminadas: la impresión térmica es gris claro y el
+        contraste la manda a blanco. Eso se arregló en `captura_series.html`,
+        que ahora prueba la foto cruda primero y sólo realza si la cuenta no
+        cierra. El volcado de abajo es el de la foto cruda.
+
+     2) Los tratamientos que SÍ leen el renglón pierden la cantidad: un `1`
+        suelto entre dos columnas de espacios no tiene con qué sostenerse.
+        Y sin cantidad, la línea entera desaparecía del ticket. */
+  const t = fs.readFileSync(path.join(__dirname, 'ocr_ticket_real11.txt'), 'utf8');
+  const y = leerTicket(t);
+
+  ok('el 34330 da su número de ticket', y.ticket === '34330', y.ticket);
+  ok('y su fecha', fechaISO(y.fecha) === '2026-09-21', y.fecha);
+  ok('y su vendedor', y.vendedor === 'LOPEZ, CARLOS', y.vendedor);
+  ok('las tres líneas del papel llegan a la pantalla', y.lineas.length === 3,
+     y.lineas.length);
+  ok('la suma cierra contra el Total', !y.avisos.some(a => /suman/.test(a)),
+     y.avisos.join(' // '));
+  ok('y el ticket es PLATA: core, garantía y TechSmart',
+     calificar(aplicarRoles(y.lineas, null)).nivel === 'plata');
+
+  /* El SKU del genérico con un dígito cambiado (`43733`). Sin repararlo la
+     línea no es TechSmart, se queda `sin_rol`, y el ticket pasa de PLATA a
+     «no califica» por un dígito. */
+  const gen = y.lineas.filter(l => l.sku === '43739')[0];
+  ok('el genérico mal leído se reconoce', !!gen,
+     y.lineas.map(l => l.sku).join(' | '));
+  ok('y el número que salió de la foto no se pierde', gen && gen.sku_ocr === '43733',
+     gen && gen.sku_ocr);
+  ok('la corrección del SKU se dice, no se hace callando',
+     y.avisos.some(a => /43733/.test(a) && /43739/.test(a)), y.avisos.join(' // '));
+
+  /* Las dos condiciones van juntas: parecido Y nombre. Sólo por parecido se
+     machacaría cualquier SKU de caja; sólo por el nombre, el de un producto
+     nuevo que el POS imprimiera igual. */
+  const otro = leerTicket('HUAWEI WATCH FIT 4\n100043733 1 169.000 $169.00 I\nTotal 169.00');
+  ok('sin «VARIOS» en el nombre, el SKU no se toca',
+     otro.lineas[0].sku === '100043733', otro.lineas[0].sku);
+  const lejos = leerTicket('PRODUCTOS VARIOS\n000043311 1 169.000 $169.00 I\nTotal 169.00');
+  ok('y a dos dígitos de distancia tampoco',
+     lejos.lineas[0].sku === '43311', lejos.lineas[0].sku);
+
+  /* La cantidad que el OCR no leyó. Los dos destrozos son reales, medidos
+     sobre las mismas fotos con otros tratamientos: el `1` se evapora o sale
+     como una barra. */
+  const sinCant = leerTicket('PRODUCTOS VARIOS\n000043739 169.000 $169.00 I\nTotal 169.00');
+  ok('una línea sin cantidad ya no desaparece', sinCant.lineas.length === 1,
+     sinCant.lineas.length);
+  ok('y la cantidad se deduce del precio y el importe',
+     sinCant.lineas[0].cantidad === 1 && sinCant.lineas[0].cantidad_deducida === true,
+     sinCant.lineas[0].cantidad);
+  const barra = leerTicket('PRODUCTOS VARIOS\n000043739 | 149.000 $149.00 I\nTotal 149.00');
+  ok('la cantidad leída como barra tampoco tira la línea',
+     barra.lineas.length === 1 && barra.lineas[0].cantidad === 1,
+     barra.lineas.length);
+
+  /* Deducir no es suponer: dos piezas al mismo precio dan cantidad 2. */
+  const dos = leerTicket('PRODUCTOS VARIOS\n000043739 149.000 $298.00 I\nTotal 298.00');
+  ok('dos piezas se deducen como dos', dos.lineas[0].cantidad === 2,
+     dos.lineas[0].cantidad);
+
+  /* Y cuando la división no cierra, no se inventa: se toma 1 y se avisa. */
+  const raro = leerTicket('PRODUCTOS VARIOS\n000043739 149.000 $370.00 I\nTotal 370.00');
+  ok('una cantidad que no se puede deducir se dice',
+     raro.lineas[0].cantidad === 1 &&
+     raro.avisos.some(a => /no se leyó la cantidad/.test(a)),
+     raro.avisos.join(' // '));
+
+  /* ── La letra pegada a la descripción ──
+     El mismo 34330, probado en el navegador con la foto real: el margen dejó
+     «UU CMATEPAD 12X 12/256GB BN + TECLD». Con la frontera `\b` a la
+     izquierda, esa `C` tiraba el core —y sin core no hay nivel—, aunque el
+     ticket se hubiera leído entero y la cuenta cerrara. */
+  ok('una letra pegada no le quita el core al MatePad',
+     rolesDe({ desc: 'UU CMATEPAD 12X 12/256GB BN + TECLD' }, null).clase === 'core',
+     rolesDe({ desc: 'UU CMATEPAD 12X 12/256GB BN + TECLD' }, null).clase);
+  ok('y tampoco al teléfono',
+     rolesDe({ desc: 'E HUAWEI NOVA 15 MAX 8GB' }, null).clase === 'core',
+     rolesDe({ desc: 'E HUAWEI NOVA 15 MAX 8GB' }, null).clase);
+
+  /* Lo que NO se afloja: la frontera derecha, que es la que separa dos cosas
+     distintas. Quitar las dos sería cambiar un fallo callado por otro. */
+  ok('«BANDA» no se cuela como una Band',
+     rolesDe({ desc: 'BANDA ELASTICA GENERICA' }, null).clase === 'sin_rol',
+     rolesDe({ desc: 'BANDA ELASTICA GENERICA' }, null).clase);
+  ok('«OUTFIT 4» no se cuela como un Fit 4',
+     rolesDe({ desc: 'OUTFIT 4 ROPA' }, null).clase === 'sin_rol',
+     rolesDe({ desc: 'OUTFIT 4 ROPA' }, null).clase);
+
+  /* EL GUARDARRAÍL. Admitir renglones sin cantidad abre la puerta a leer
+     «SKU precio importe» donde hay «SKU cantidad precio»: el MatePad
+     costaría UN PESO y el ticket cuadraría solo con el Total equivocado.
+     Por eso los dos números que quedan tienen que traer su decimal. */
+  const trampa = leerTicket('MATEPAD 12X\n100276717 1 14999.000\nTotal 14999.00');
+  ok('«SKU cantidad precio» sin importe no se lee como precio de un peso',
+     trampa.lineas.length === 0 ||
+     (trampa.lineas[0].precio !== 1 && trampa.lineas[0].importe !== 14999),
+     trampa.lineas.map(l => l.precio + '/' + l.importe).join(' | '));
+}
+
+
 if (fallos.length) {
   console.log('concurso oro/plata: ' + fallos.length + ' fallo(s)');
   fallos.forEach(f => console.log('   · ' + f));

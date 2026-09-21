@@ -1186,6 +1186,7 @@ NO_SON_NOMBRES = (
     'tipo importe impuesto', 'tino importe impuesto', 'cantidad precio importe',
     'informe articulos totales', 'par por mao',
     'articulo cantidad precio',      # encabezado del ticket
+    'master card nacional',          # forma de pago del ticket, no una persona
     'prueba uno', 'prueba dos', 'equipo', 'asesor', 'gerente', 'subgerente',
     'alguien que no vende', 'string', 'bundle', 'respuesta', 'otro', 'otra',
     # renglones con SKU: producto, no personas (patrón 3)

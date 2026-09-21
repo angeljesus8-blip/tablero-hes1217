@@ -142,6 +142,72 @@ function esRuido(linea) {
    El SKU lleva de 5 a 10 dígitos (el genérico va con ceros a la izquierda). */
 var RE_CIFRAS = /(?:^|\s)(\d{5,10})\s+(\d{1,3})\s+([\d.,]+)\s+\$?\s*(-?[\d.,]+)/;
 
+/* ── El «1» de la cantidad es el carácter más frágil del ticket ──
+   21-sep-2026, ticket 34330. Medido sobre ocho tratamientos de imagen y dos
+   fotos reales: los tratamientos que MEJOR leen el renglón —los que sacan el
+   SKU de nueve dígitos y el importe al centavo— son justamente los que pierden
+   la cantidad, porque un `1` solo, entre dos columnas de espacios, no tiene
+   con qué sostenerse:
+
+     000043739   169.000  $169.00  1     ← la cantidad se evaporó
+     000043739 | 149.000  $149.00  1     ← salió como una barra
+
+   Con la cantidad exigida, esas dos líneas no casaban y el artículo
+   desaparecía ENTERO del ticket. Y desaparecer es el peor de los fallos aquí:
+   el ticket baja de nivel con toda naturalidad, sin un solo error en pantalla.
+
+   Por eso la cantidad deja de ser obligatoria, pero NO se inventa: se deduce
+   de los otros dos números del propio renglón (`importe ÷ precio`), que es
+   cómo se lee bien cada dato —el mismo criterio de los accesorios (MAPA,
+   18-ago-2026)—. Si la división no da un entero limpio, no se deduce nada: se
+   toma 1 y se avisa.
+
+   Lo que esta expresión NO relaja es la forma de los dos números que quedan:
+   ambos tienen que traer su separador decimal (`149.000`, `$149.00`). Sin esa
+   exigencia, «100276717 1 14999.000» se leería como SKU + precio 1 + importe
+   14999, y el MatePad costaría un peso. Por eso se prueba SIEMPRE después de
+   `RE_CIFRAS`, nunca antes. */
+var RE_CIFRAS_SIN_CANT =
+  /(?:^|\s)(\d{5,10})\s+(?:[|lI!ij¡tí\[\]]{1,2}\s+)?(\d[\d.,]*[.,]\d{2,3})\s+\$?\s*(-?\d[\d.,]*[.,]\d{2})(?:\s|$)/;
+
+/* La cantidad que el OCR no leyó, deducida de los dos números que sí leyó.
+   Devuelve `null` cuando la división no cierra: entonces no se sabe, y eso se
+   dice en vez de suponer. */
+function cantidadDeducida(precio, importe) {
+  if (!precio || importe == null) return null;
+  var n = importe / precio;
+  var r = Math.round(n);
+  return (r >= 1 && r <= 99 && Math.abs(n - r) < 0.02) ? r : null;
+}
+
+/* ── El SKU del genérico con un dígito cambiado ──────────────
+   21-sep-2026, 34330: `000043739` se leyó `000043733`. Un dígito, y el efecto
+   es entero: sin el 43739 la línea no es TechSmart, se queda `sin_rol`, y el
+   ticket pasa de PLATA a «no califica».
+
+   Se repara porque el propio renglón trae un segundo testigo que el OCR lee
+   mucho mejor que nueve dígitos seguidos: el POS imprime «PRODUCTOS VARIOS»
+   SÓLO para el genérico (`concurso_roles.js`, 15-sep-2026). Así que un SKU a
+   un dígito del 43739 en una línea que se llama VARIOS no es otro producto:
+   es el 43739 mal leído.
+
+   Las dos condiciones van juntas a propósito. Sólo por parecido se corregiría
+   cualquier SKU de caja que acabe pareciéndose; sólo por el nombre se
+   machacaría el SKU de un producto nuevo que el POS imprimiera igual. Y como
+   toca un dato que se guarda, se dice: queda el leído en `sku_ocr` y un aviso
+   con los dos números. */
+var SKU_GENERICO = '43739';
+
+function pareceGenerico(art) {
+  var s = String(art.sku || '');
+  if (s === SKU_GENERICO) return false;
+  if (s.length !== SKU_GENERICO.length) return false;
+  if (!/VARIOS/.test(norm(art.desc))) return false;
+  var d = 0;
+  for (var i = 0; i < s.length; i++) if (s.charAt(i) !== SKU_GENERICO.charAt(i)) d++;
+  return d === 1;
+}
+
 /* El pie:  1217 2 14/9/26 6:03 PM 34140 900001
    El TICKET es el penúltimo número. El último es el cajero que cobró, y ese es
    justamente el que NO sirve: el vendedor es «Atendido por». Confundirlos le da
@@ -284,18 +350,45 @@ function leerTicket(texto) {
     if (mTot && res.total == null) { res.total = aNumero(mTot[1]); continue; }
 
     var mCif = cruda.match(RE_CIFRAS);
+    var cantLeida = true;
+    if (!mCif) {
+      // La cantidad no se leyó. Ver RE_CIFRAS_SIN_CANT: se deduce, no se supone.
+      var mSin = cruda.match(RE_CIFRAS_SIN_CANT);
+      if (mSin) { mCif = [mSin[0], mSin[1], '', mSin[2], mSin[3]]; cantLeida = false; }
+    }
     if (mCif) {
+      var precio  = aNumero(mCif[3]);
+      var importe = aNumero(mCif[4]);
+      var cant    = cantLeida ? parseInt(mCif[2], 10)
+                              : cantidadDeducida(precio, importe);
       var art = {
         sku:       mCif[1].replace(/^0+(?=\d)/, ''),   // 000043739 → 43739
         sku_pos:   mCif[1],                            // tal como lo imprimió
         desc:      desc,
-        cantidad:  parseInt(mCif[2], 10),
-        precio:    aNumero(mCif[3]),
-        importe:   aNumero(mCif[4]),
+        cantidad:  (cant == null ? 1 : cant),
+        precio:    precio,
+        importe:   importe,
         serie:     '',
         descuento: 0,
         es_garantia: esGarantia(desc)
       };
+      if (!cantLeida) {
+        art.cantidad_deducida = true;
+        if (cant == null) {
+          res.avisos.push('Línea «' + (desc || art.sku) + '»: no se leyó la ' +
+            'cantidad y el importe entre el precio no da un número entero. Se ' +
+            'tomó 1: compruébala contra el papel.');
+        }
+      }
+      if (pareceGenerico(art)) {
+        art.sku_ocr = art.sku;
+        art.sku = SKU_GENERICO;
+        art.sku_pos = SKU_GENERICO;
+        res.avisos.push('Línea «' + (desc || 'PRODUCTOS VARIOS') + '»: el SKU se ' +
+          'leyó ' + art.sku_ocr + ' y el genérico es ' + SKU_GENERICO + ' — un ' +
+          'dígito. Se tomó ' + SKU_GENERICO + ', que es el único que el POS ' +
+          'imprime como PRODUCTOS VARIOS.');
+      }
       art.nombre = nombreDe(art);
 
       /* La red que la verificación por subtotales nunca pudo dar: dice EN QUÉ
