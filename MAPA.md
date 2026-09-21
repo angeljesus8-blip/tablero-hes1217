@@ -4378,6 +4378,38 @@ manda WhatsApp):
   imagen que trae el código dos veces se confirmaría sola y la regla de las
   dos lecturas seguidas no vigilaría nada. Está probado con cebo.
 
+### Los primeros 9 intentos reales, y lo que hicieron falta *(21-sep-2026, noche)*
+
+Primera tanda de verdad, en un **Huawei Pura 70 Ultra**: 9 intentos en vivo,
+7 completos, mediana **3.9 s**, 22 % de fallos. Decodificar no estorba —31 a
+70 ms por fotograma, 461 fotogramas en 25 s— y el teléfono lee a ~40 fps
+(ZXing 24 ms, y el `BarcodeDetector` nativo **más lento**, 32 ms: la cascada de
+la app, que prueba ZXing primero, está en el orden bueno para este teléfono).
+
+Lo que enseñan los nueve, y es un patrón, no una anécdota:
+
+- **El UPC llega siempre primero** (1.4 a 2.9 s) y **la serie siempre después**
+  (+0.5 a +2.7 s). El Code 128 de la serie es más fino y más largo.
+- **Los dos fallos fueron el mismo fallo**: UPC leído, serie nunca.
+
+Y ahí el banco se quedaba corto: «la serie nunca llegó» no dice si su código
+**no se lee** (óptica: el continuo no lo va a arreglar por mucho que se afine)
+o si **se lee suelto y no cae dos veces seguidas** (la regla de confirmación,
+que sí tiene arreglo barato). Dos problemas distintos, un solo síntoma. Ahora
+cada casillero cuenta `vistas` y los valores distintos que vio, y cada fallo
+dice cuál de los dos es (`bancoPorQue`).
+
+⚠️ **`undefined` no es cero.** Los intentos medidos antes de que existiera esa
+cuenta no traen el dato, y meterlos en un cubo o en otro sería un diagnóstico
+inventado. Se cuentan aparte —«de ésos no se sabe, hay que repetirlos»— en vez
+de engordar el cubo que toque.
+
+**Y el aviso que faltaba: 9 intentos en vivo y 0 con foto no son media
+medición, son ninguna.** El banco existe para comparar; sin las dos columnas no
+hay contra qué. Desde ahora, en cuanto los dos modos se separan por dos
+intentos, la pantalla lo dice —y recuerda alternar uno y uno, porque hacerlos
+en bloques le regala la práctica al segundo modo.
+
 ### El veredicto se escribió ANTES de tener los datos
 
 Está en `BANCO_UMBRAL` y es lo único que decide: ≤70 % del tiempo de la foto
