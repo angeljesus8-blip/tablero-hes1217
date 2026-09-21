@@ -519,12 +519,17 @@ if (!ger.error) {
   }
 }
 
-/* ── 7-ter · Las sillas van con las mesas ─────────────────────────────── */
+/* ── 7-ter · Las sillas: diarias, de quien ESTÉ, y no encima de las mesas ── */
 {
-  /* Pedida el 21-sep-2026. Es diaria y de apertura, como las mesas: el cliente
-     se sienta en ellas todos los días, así que en la rueda semanal llegaría
-     tarde. Lo que se comprueba es que no se coló como semanal ni se quedó sin
-     el apoyo —los dos errores que no darían ningún aviso—. */
+  /* Pedida el 21-sep-2026, y corregida el mismo día con el horario de verdad
+     delante. Nacieron como las mesas —diarias y de apertura— y eso dejaba un
+     hueco que solo se ve con el horario puesto: los días en que queda un solo
+     asesor y entra a las 12:30, mesas Y sillas caían en el apoyo SOLA, con el
+     asesor en la tienda toda la tarde sin ninguna de las dos.
+
+     Una silla se limpia a cualquier hora; una pantalla, antes de que entre el
+     primer cliente. Por eso las sillas son `momento: 'presente'` y las mesas
+     siguen en la apertura. */
   const sillas = ger.error ? [] : ger.reparto.filter(t => t.id === 'sillas');
   ok('las sillas están en el reparto', sillas.length > 0);
   ok('y son diarias, no semanales', sillas.every(t => t.frec === 'diaria'),
@@ -532,8 +537,11 @@ if (!ger.error) {
   ok('con un día cada una, sin repetirse',
      new Set(sillas.map(t => t.dia)).size === sillas.length);
   for (const t of sillas) {
-    ok('las sillas del día ' + t.dia + ' las hace quien abre',
-       t.quienes.every(p => ABREN.indexOf(ger.dias[t.dia][p]) >= 0),
+    /* Quien las hace ESTÁ ese día. Es lo único que se les exige: exigir además
+       que abra es el error que se acaba de quitar, y no exigir nada devuelve el
+       fallo original del módulo —una tarea a quien descansa—. */
+    ok('las sillas del día ' + t.dia + ' las hace alguien que está ese día',
+       t.quienes.every(p => NO_ESTA.indexOf(ger.dias[t.dia][p]) < 0),
        t.quienes.join(',') + ' -> ' + t.quienes.map(p => ger.dias[t.dia][p]).join(','));
     ok('y no llaman al apoyo el día que descansa',
        t.externos.indexOf('@elena') < 0 || DIAS_APOYO.indexOf(t.dia) >= 0, 'día ' + t.dia);
@@ -542,6 +550,56 @@ if (!ger.error) {
     ok('el día ' + d + ' las sillas son también del apoyo',
        sillas.some(t => t.dia === d && t.externos.indexOf('@elena') >= 0),
        JSON.stringify(sillas.find(t => t.dia === d) || null));
+
+  /* Y no se amontonan con las mesas. El índice de las dos sale de `semana + d`,
+     así que sin repartir a propósito caen SIEMPRE en la misma persona y el otro
+     asesor pasa el día sin ninguna: se ve un reparto impecable que carga a uno
+     solo. Repetir se admite únicamente cuando no queda nadie más disponible. */
+  if (!ger.error) {
+    for (let s = 1; s <= 12; s++) {
+      const rep = JSON.parse(ger.ent.correr('JSON.stringify(repartirTareas(_d, ' + s + '))'));
+      for (let d = 0; d < 7; d++) {
+        const me = rep.find(t => t.id === 'mesas'  && t.dia === d);
+        const si = rep.find(t => t.id === 'sillas' && t.dia === d);
+        if (!me || !si || !me.quienes.length || !si.quienes.length) continue;
+        if (me.quienes[0] !== si.quienes[0]) continue;
+        // Se repitieron: solo vale si ese día no había nadie más que pudiera.
+        const otros = ['A1','A2'].filter(p => p !== me.quienes[0] &&
+                        NO_ESTA.indexOf(ger.dias[d][p]) < 0);
+        ok('semana ' + s + ' día ' + d + ': mesas y sillas se repiten solo si no hay a quién más',
+           otros.length === 0, me.quienes[0] + ' lleva las dos, y podía ' + otros.join(','));
+      }
+    }
+  }
+
+  /* El caso exacto que lo destapó: un solo asesor, con turno de CIERRE. Las
+     mesas se quedan en el apoyo —son de apertura— pero las sillas son suyas.
+     Sin montarlo a propósito no se prueba: el equipo base de este archivo
+     siempre tiene a alguien abriendo. */
+  {
+    const unoTarde = Object.assign({}, EQUIPO, {
+      asesores: [ { key:'A1', nombre:'CARO ASESORA', cargo:'Asesor', emp:'900003', descFijo:3 } ]
+    });
+    const v = repartirComo({ puedeEditar:true }, '1217', unoTarde);
+    ok('arranca con un solo asesor', !v.error, v.error);
+    if (!v.error) {
+      let visto = 0;
+      for (let d = 0; d < 7; d++) {
+        if (ABREN.indexOf(v.dias[d]['A1']) >= 0) continue;      // ese día sí abre
+        if (NO_ESTA.indexOf(v.dias[d]['A1']) >= 0) continue;    // ese día no está
+        visto++;
+        const si = v.reparto.find(t => t.id === 'sillas' && t.dia === d);
+        ok('el día ' + d + ' el asesor de cierre sí limpia las sillas',
+           !!si && si.quienes.indexOf('A1') >= 0,
+           JSON.stringify(si || null) + ' · turno ' + v.dias[d]['A1']);
+        const me = v.reparto.find(t => t.id === 'mesas' && t.dia === d);
+        ok('pero las mesas siguen sin caerle: son de apertura',
+           !me || me.quienes.indexOf('A1') < 0,
+           JSON.stringify(me || null));
+      }
+      ok('y hubo algún día de cierre que comprobar', visto > 0);
+    }
+  }
 }
 
 /* ── 8 · Fuera de la 1217 esto no existe ──────────────────────────────── */

@@ -3191,7 +3191,7 @@ El catálogo (`CATALOGO_TAREAS`) y las reglas del motor:
 |---|---|---|
 | Barrer y trapear piso | diaria | la gerencia que **abre** ese día |
 | Limpiar mesas y pantallas | diaria | el apoyo + el asesor que **abre**; el día que el apoyo no viene, el asesor solo |
-| Limpiar sillas | diaria | igual que las mesas *(21-sep-2026)* |
+| Limpiar sillas | diaria | el apoyo + el asesor que **esté** ese día, abra o no *(21-sep-2026)* |
 | Lavar sanitario | semanal | rueda: gerentes, asesores y el apoyo |
 | Orden y limpieza de bodega | semanal | rueda propia, el apoyo incluido |
 
@@ -3199,6 +3199,22 @@ Las sillas van **con las mesas y no en la rueda semanal**: el cliente se sienta
 en ellas todos los días. Su icono es 💺 y no 🪑 a propósito — 🪑 ya es la Ley
 Silla en la tarjeta del celular, y dos cosas distintas con el mismo dibujo en la
 misma tarjeta se leen como una sola.
+
+⚠️ **Pero no son de apertura, y las mesas sí.** Nacieron iguales, y el hueco solo
+se vio con el horario de verdad puesto: los días en que queda un solo asesor y
+entra a las 12:30, mesas Y sillas caían **en el apoyo sola**, con el asesor en la
+tienda toda la tarde y su panel sin ninguna de las dos. Una silla se limpia a
+cualquier hora; una pantalla, antes de que entre el primer cliente. De ahí sale
+`momento: 'presente'`, que es lo contrario de `'apertura'`: no *quien abre*, sino
+*quien está*.
+
+**Y por eso hay `yaEseDia`.** El índice de las dos diarias sale de `semana + d`,
+el mismo para ambas: sin repartir a propósito caen SIEMPRE en la misma persona y
+el otro asesor pasa el día sin ninguna — un reparto que se ve impecable y carga a
+uno solo. Cada diaria prefiere a quien no lleve otra ese día, y solo repite
+cuando no queda nadie más. **Depende del orden del catálogo**: lo de apertura va
+antes, así que cuando llegan las sillas las mesas ya tienen dueño. Al revés se
+repartirían igual de bien, pero las mesas dejarían de caer siempre en quien abre.
 
 ⚠️ **Seis cosas que, si se deshacen, no dan error:**
 
@@ -3216,6 +3232,12 @@ misma tarjeta se leen como una sola.
    esté presente», y eso puso «limpiar mesas» sobre un turno de cierre
    12:30–21:00 —justo lo que se pidió evitar—. La prueba tampoco lo cazó, porque
    se saltaba ese caso.
+
+   **Y `momento` es por tarea, no del módulo** *(21-sep-2026)*. «Presente» no
+   volvió como respaldo de las de apertura —eso sigue prohibido, y es lo de
+   arriba—: volvió como el momento propio de las sillas, que no se hacen antes de
+   abrir la cortina. Las dos reglas conviven porque dicen cosas distintas de
+   tareas distintas; juntarlas otra vez en una sola es el fallo original.
 2. **Al asesor no se le nombra a nadie.** El panel dice `te toca` / `un
    compañero`, nunca un nombre: decir «el jueves le toca a DANI» es horario
    ajeno dicho de otra forma. Es la sexta superficie de la política del
@@ -3335,13 +3357,16 @@ palomita manda (`ON CONFLICT DO NOTHING`) y **desmarcar solo puede quien marcó*
 sin eso, cualquiera podría borrar el trabajo registrado de otro y la tabla
 dejaría de servir para lo único que sirve.
 
-Lo cubre `pruebas/tareas_rotacion.js` (12 bloques). Los ocho cebos del
-21-sep-2026 muerden todos: filtro viejo por `quienes`, el cartel de «no
-encontramos tu horario» de vuelta, el apoyo leyendo su propio nombre en vez de
-«te toca», las sillas coladas como semanales, las sillas sin apoyo,
-`miClaveTareas_()` perdiendo la ficha del planeador, la palomita del apoyo
-numerado abierta a cualquiera, y el SQL actualizado en una sola de sus dos
-listas.
+Lo cubre `pruebas/tareas_rotacion.js` (12 bloques). Los trece cebos del
+21-sep-2026 muerden todos. Del apoyo con numero y la tarea nueva: filtro viejo
+por `quienes`, el cartel de «no encontramos tu horario» de vuelta, el apoyo
+leyendo su propio nombre en vez de «te toca», las sillas coladas como semanales,
+las sillas sin apoyo, `miClaveTareas_()` perdiendo la ficha del planeador, la
+palomita del apoyo numerado abierta a cualquiera, y el SQL actualizado en una
+sola de sus dos listas. Y del reparto diario: las sillas vueltas de apertura,
+las mesas dejando de serlo, `presente` sin mirar el turno —tarea a quien
+descansa—, y las dos formas de perder el reparto del dia (sin `libres` y sin
+apuntar en `yaEseDia`), que dejan mesas y sillas sobre la misma persona.
 
 ### Un solo login *(4-ago-2026)*
 
