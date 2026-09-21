@@ -4742,10 +4742,25 @@ refreshEolVenta(); // trae los EOL con 50% activo (solo exhibición)
           si salió Oro, Plata o no califica.
         </p>
 
-        <label class="btn" for="cnFile"
-               style="display:block;text-align:center;background:#b8860b;color:#fff">
-          📷 Tomar foto del ticket</label>
+        <!-- Cámara Y galería, igual que en las series (fileCam/fileGal) y en
+             accesorios (accFile/accFileGal). `capture="environment"` no es una
+             preferencia: en el celular ABRE LA CÁMARA y deja fuera el carrete,
+             así que el ticket que ya está en el teléfono —el que se fotografió
+             al cerrar el día, o el que un compañero mandó por WhatsApp— no
+             había forma de subirlo. Y son dos inputs en vez de uno sin
+             `capture` porque quitarlo cambia el caso normal: el asesor con el
+             cliente delante pasaría a elegir en un menú en vez de disparar. -->
+        <div style="display:flex;gap:8px">
+          <label class="btn" for="cnFile"
+                 style="flex:1;text-align:center;background:#b8860b;color:#fff">
+            📷 Tomar foto</label>
+          <label class="btn" for="cnFileGal"
+                 style="flex:1;text-align:center;background:#555;color:#fff">
+            🖼️ Galería</label>
+        </div>
         <input id="cnFile" type="file" accept="image/*" capture="environment"
+               style="display:none" onchange="cnFoto(this)">
+        <input id="cnFileGal" type="file" accept="image/*"
                style="display:none" onchange="cnFoto(this)">
 
         <div id="cnLeyendo" style="display:none;text-align:center;padding:22px 0;

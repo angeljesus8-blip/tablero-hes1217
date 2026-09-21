@@ -1773,6 +1773,44 @@ def r_galeria():
                       'que abre la cámara. El botón estaría ahí sin hacer lo suyo, '
                       'y eso no da error en ningún sitio.' % (p, idm.group(1)))
 
+    # Y el caso simétrico, que es el que se coló: una pantalla de fotos que
+    # nace SÓLO con cámara.
+    #
+    # 21-sep-2026. El concurso salió con `cnFile` y nada más, así que el ticket
+    # que ya estaba en el teléfono —el de cerrar el día, el que un compañero
+    # mandó por WhatsApp— no se podía subir. No es un fallo que se vea: la
+    # pantalla funciona, el botón dispara la cámara, y la función que falta no
+    # deja hueco en ningún sitio. Las series y los accesorios ya tenían sus dos
+    # inputs desde el 24-ago; el concurso, de septiembre, nació sin el segundo.
+    #
+    # Sólo sobre HTML —las pantallas de verdad—: `prueba_ticket.html` es una
+    # página de diagnóstico que se abre en el escritorio, no algo que un asesor
+    # use con el cliente delante.
+    for p in HTML:
+        s = leer(p)
+        if s is None: continue
+        conCaptura, deGaleria = [], []
+        for m in re.finditer(r'<input[^>]*type="file"[^>]*>', s, re.I):
+            tag = m.group(0)
+            if 'image/' not in tag: continue
+            idm = re.search(r'id="([^"]+)"', tag)
+            ident = idm.group(1) if idm else tag[:40]
+            if 'capture' in tag.lower(): conCaptura.append(ident)
+            else: deGaleria.append(ident)
+        for ident in conCaptura:
+            # El hermano se reconoce por el nombre: `accFile` → `accFileGal`,
+            # `fileCam` → `fileGal`. Si mañana se nombran de otra forma, esta
+            # regla lo dice y se decide entonces; callarse es lo que no puede.
+            raiz = re.sub(r'(cam|file)$', '', ident, flags=re.I).lower()
+            if not any(raiz in g.lower() or g.lower().startswith(ident.lower())
+                       or 'gal' in g.lower() and raiz[:2] in g.lower()
+                       for g in deGaleria):
+                falla('galeria',
+                      '%s: el input `%s` abre la cámara (`capture`) y no tiene '
+                      'al lado uno de galería. El ticket que ya está en el '
+                      'teléfono no se puede subir, y la pantalla no lo dice.'
+                      % (p, ident))
+
 
 # ── 18 · Las reparaciones NO entran en el Excel regional ────
 def r_reparaciones_fuera():
