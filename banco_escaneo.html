@@ -503,7 +503,12 @@ function intentoDe(modo, casilla, ms, via, extra){
   return Object.assign({
     v: BANCO_V, modo:modo, ok: prod && ser, ms:ms, via: (prod||ser) ? via : null,
     parcial: (prod && ser) ? null : (prod ? 'producto' : (ser ? 'serie' : null)),
-    msProducto: casilla.producto.ms, msSerie: casilla.serie.ms
+    msProducto: casilla.producto.ms, msSerie: casilla.serie.ms,
+    // Cuántas veces se vio cada código, se confirmara o no: es lo que separa
+    // «no se lee» (óptica) de «se lee a ratos» (la regla de confirmación).
+    vistasProducto: casilla.producto.vistas, vistasSerie: casilla.serie.vistas,
+    porQueProducto: prod ? null : bancoPorQue(casilla.producto),
+    porQueSerie: ser ? null : bancoPorQue(casilla.serie)
   }, extra || {});
 }
 function comoQuedo(casilla, ms, via){
@@ -514,11 +519,13 @@ function comoQuedo(casilla, ms, via){
       esc(prod) + ' · serie ' + esc(ser) + (via === 'ocr' ? ' (serie por OCR)' : '') + '</span>';
   }
   if(prod || ser){
+    const falta = prod ? casilla.serie : casilla.producto;
     return '<span class="flojo">' + t + 'a medias: sólo ' + (prod ? 'el producto ' : 'la serie ') +
       esc(prod || ser) + '</span><br><span class="sub">falta ' + (prod ? 'la serie' : 'el producto') +
-      ' — para la venta hacen falta los dos</span>';
+      ': ' + esc(bancoPorQue(falta)) + '</span>';
   }
-  return '<span class="malo">' + t + 'no leyó nada</span>';
+  return '<span class="malo">' + t + 'no leyó nada</span><br><span class="sub">producto: ' +
+    esc(bancoPorQue(casilla.producto)) + ' · serie: ' + esc(bancoPorQue(casilla.serie)) + '</span>';
 }
 
 /* ---------- Bloque B · el escaneo continuo ---------- */
@@ -770,6 +777,25 @@ function pintarModo(destino, modo){
   h += fila('Fallos', r.fallosPct == null ? '<span class="sub">sin datos</span>' : r.fallosPct + ' %');
   h += fila('A medias (un código sí y otro no)',
             r.parciales + (r.parciales ? ' <span class="flojo">cuentan como fallo: la venta lleva los dos</span>' : ''));
+  if(r.parciales){
+    /* El diagnóstico, no el síntoma: si lo que falta no se ve NUNCA, es
+       óptica y el continuo no lo va a sacar por mucho que se afine. Si se ve
+       suelto, lo que cuesta es confirmar dos veces seguidas. */
+    const fall = (D.intentos||[]).filter(x => x.v === BANCO_V && x.modo === modo && x.parcial);
+    const vistasDe = x => (x.parcial === 'producto' ? x.vistasSerie : x.vistasProducto);
+    /* ⚠ `undefined` NO es cero. Los intentos medidos antes de que el banco
+       contara las vistas no traen el dato, y meterlos en un cubo u otro sería
+       un diagnóstico inventado — justo el error que este bloque existe para
+       evitar. Se dicen aparte y se repiten. */
+    const ciegos = fall.filter(x => vistasDe(x) === 0).length;
+    const aRatos = fall.filter(x => typeof vistasDe(x) === 'number' && vistasDe(x) > 0).length;
+    const sinDiag = fall.filter(x => typeof vistasDe(x) !== 'number').length;
+    h += '<div class="nota">De esos ' + fall.length + ': <b>' + ciegos + '</b> donde el código que ' +
+         'faltó no se leyó ni una vez (es óptica, y eso el continuo no lo arregla) y <b>' + aRatos +
+         '</b> donde se leyó suelto y no llegó a confirmarse (es la doble lectura).' +
+         (sinDiag ? ' <span class="flojo">Otros ' + sinDiag + ' se midieron antes de que el banco ' +
+          'contara las vistas: de ésos no se sabe, hay que repetirlos.</span>' : '') + '</div>';
+  }
   if(modo === 'foto'){
     h += fila('Serie por OCR', r.porOcr + (r.porOcr ? ' <span class="flojo">(ésas las pierde el continuo)</span>' : ''));
   }
@@ -836,6 +862,16 @@ function pintarResumen(){
   let h = fila('Teléfono', esc(D.telefono || '(sin nombre)') + ' · ' + esc(D.plataforma));
   h += fila('Foto', f.mediana == null ? '—' : (f.mediana/1000).toFixed(1) + ' s (' + f.n + ')');
   h += fila('Continuo', c.mediana == null ? '—' : (c.mediana/1000).toFixed(1) + ' s (' + c.n + ')');
+  /* ⚠ El banco existe para COMPARAR. Nueve intentos en vivo y cero con foto
+     no son media medición: no son ninguna, porque no hay contra qué. Y si se
+     hacen todos de un modo y luego los del otro, el segundo sale mejor por la
+     práctica. Por eso el aviso aparece en cuanto se separan dos. */
+  const dif = Math.abs(f.n - c.n);
+  if(dif >= 2){
+    h += '<div class="nota malo">Llevas <b>' + f.n + '</b> con foto y <b>' + c.n + '</b> en vivo. ' +
+         'Alterna uno y uno: sin las dos columnas no hay comparación, y hacerlos en bloques le ' +
+         'regala la práctica al segundo modo.</div>';
+  }
   $('resumen').innerHTML = h;
 }
 function pintarTodo(){

@@ -198,6 +198,45 @@ function plataformaQueGana(cambios) {
   const soloUno = B.bancoDosPoner(B.bancoDosInicio(), [UPC], 0);
   if (soloUno.completo) mal('foto: con un solo código se dio por completa');
 
+  /* ── Por qué NO llegó el código que falta ──
+     Los dos fallos del primer teléfono real fueron «UPC sí, serie nunca», y
+     con eso no se sabe si la serie no se lee o si se lee y no se confirma.
+     Son dos problemas distintos y sólo uno tiene arreglo. */
+  c = B.bancoDosInicio();
+  c = B.bancoDosLeer(c, [UPC], 100); c = B.bancoDosLeer(c, [UPC], 200);
+  if (!/no se leyó ni una vez/.test(B.bancoPorQue(c.serie))) {
+    mal('porqué: una serie que no se vio nunca no se reporta como óptica');
+  }
+  if (B.bancoPorQue(c.producto) !== 'leído') mal('porqué: un casillero lleno no se reporta como leído');
+
+  // CEBO · vista suelta que nunca se repite: eso NO es óptica, es la regla.
+  // Confundirlos manda a cambiar el lente cuando lo que sobra es un umbral.
+  c = B.bancoDosInicio();
+  c = B.bancoDosLeer(c, [UPC], 100);
+  c = B.bancoDosLeer(c, [], 200);
+  c = B.bancoDosLeer(c, [], 300);
+  if (!/una sola vez/.test(B.bancoPorQue(c.producto))) {
+    mal('porqué: una lectura suelta se reportó como que no se lee: ' + B.bancoPorQue(c.producto));
+  }
+  // Las vistas se cuentan aunque no confirmen, y aunque el casillero ya esté lleno.
+  if (c.producto.vistas !== 1) mal('vistas: contó ' + c.producto.vistas + ' en vez de 1');
+  c = B.bancoDosLeer(c, [UPC], 400); c = B.bancoDosLeer(c, [UPC], 500);
+  const trasLlenar = c.producto.vistas;
+  c = B.bancoDosLeer(c, [UPC], 600);
+  if (c.producto.vistas !== trasLlenar + 1) {
+    mal('vistas: dejó de contar al llenarse el casillero, y entonces no se puede diagnosticar nada');
+  }
+
+  // CEBO · leyendo MAL: valores distintos en el mismo casillero. Ahí la doble
+  // lectura hizo su trabajo y hay que decirlo, no llamarlo «no se lee».
+  c = B.bancoDosInicio();
+  c = B.bancoDosLeer(c, [{ valor: '3RRXC25316084077', fmt: 'code_128' }], 100);
+  c = B.bancoDosLeer(c, [{ valor: '3RRXC25316084O77', fmt: 'code_128' }], 200);
+  if (!/valores distintos/.test(B.bancoPorQue(c.serie))) {
+    mal('porqué: dos lecturas distintas de la serie no se reportan como mala lectura');
+  }
+  if (c.serie.valor) mal('dos: confirmó una serie con dos lecturas DISTINTAS');
+
   // CEBO · lo medido con el criterio viejo (sin `v`) no se promedia con lo
   // nuevo: medía media lectura y saldría más rápido de lo que es.
   const mezcla = B.bancoResumen(

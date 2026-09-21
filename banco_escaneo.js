@@ -98,22 +98,38 @@
     return esProducto ? 'producto' : 'serie';
   }
 
+  /* `vistas` y `vals` no son adorno: son el diagnóstico.
+     21-sep-2026, con los 9 primeros intentos reales de un Pura 70 Ultra: los
+     dos fallos fueron «UPC sí, serie nunca», y con eso no se sabe si la serie
+     no se lee (óptica: el Code 128 es más fino y más largo) o si se lee
+     suelta y nunca cae dos veces seguidas (la regla de confirmación). Son dos
+     problemas distintos y sólo uno tiene arreglo barato, así que hay que
+     poder distinguirlos:
+
+       · `vistas` = fotogramas en los que ESE casillero recibió algo.
+       · `vals`   = los valores distintos que se vieron, con su cuenta.
+
+     vistas 0        → no se lee: es óptica, y el continuo no la va a sacar.
+     vistas ≥2 sin confirmar → se lee a ratos: la cuesta la confirmación.
+     vals con más de uno     → está leyendo mal, y confirmar salvó de meter
+                               una serie inventada. */
   function bancoDosInicio() {
     return {
-      producto: { e: bancoConfirmarInicio(), valor: null, ms: null },
-      serie: { e: bancoConfirmarInicio(), valor: null, ms: null }
+      producto: { e: bancoConfirmarInicio(), valor: null, ms: null, vistas: 0, vals: {} },
+      serie: { e: bancoConfirmarInicio(), valor: null, ms: null, vistas: 0, vals: {} }
     };
+  }
+
+  function _copiaSlot(s) {
+    return { e: s.e, valor: s.valor, ms: s.ms, vistas: s.vistas || 0,
+             vals: Object.assign({}, s.vals || {}) };
   }
 
   /* Un fotograma entero: TODOS los códigos que trajo, de una vez. `ms` es el
      tiempo transcurrido, para anotar cuándo se llenó cada casillero. */
   function bancoDosLeer(estado, codigos, ms) {
     var s = estado && estado.producto && estado.serie ? estado : bancoDosInicio();
-    var out = {
-      producto: { e: s.producto.e, valor: s.producto.valor, ms: s.producto.ms },
-      serie: { e: s.serie.e, valor: s.serie.valor, ms: s.serie.ms },
-      nuevos: []
-    };
+    var out = { producto: _copiaSlot(s.producto), serie: _copiaSlot(s.serie), nuevos: [] };
     /* Un mismo valor repetido DENTRO del mismo fotograma no son dos lecturas:
        es una imagen que trajo el código dos veces. Sin esta línea, un solo
        fotograma confirmaría por su cuenta y la regla de las dos lecturas
@@ -125,6 +141,10 @@
       if (!ruta) return;
       if (yaEnEsteFotograma[v]) return;
       yaEnEsteFotograma[v] = true;
+      /* Se apunta ANTES de mirar si el casillero ya está lleno: lo que se
+         quiere saber es cuántas veces se vio, no cuántas sirvieron. */
+      out[ruta].vistas++;
+      out[ruta].vals[v] = (out[ruta].vals[v] || 0) + 1;
       /* Casillero lleno: ni se toca. El código sigue delante de la cámara y
          volver a confirmarlo sólo serviría para pisar la hora en que se leyó
          —o peor, para cambiarlo por el de la caja de al lado. */
@@ -149,21 +169,36 @@
      habría dado el mismo resultado escondiendo el motivo. */
   function bancoDosPoner(estado, codigos, ms) {
     var s = estado && estado.producto && estado.serie ? estado : bancoDosInicio();
-    var out = {
-      producto: { e: s.producto.e, valor: s.producto.valor, ms: s.producto.ms },
-      serie: { e: s.serie.e, valor: s.serie.valor, ms: s.serie.ms },
-      nuevos: []
-    };
+    var out = { producto: _copiaSlot(s.producto), serie: _copiaSlot(s.serie), nuevos: [] };
     (codigos || []).forEach(function (c) {
       var v = (c && c.valor != null ? String(c.valor) : '').trim();
       var ruta = bancoRuta(v, c && c.fmt);
-      if (!ruta || out[ruta].valor) return;
+      if (!ruta) return;
+      out[ruta].vistas++;
+      out[ruta].vals[v] = (out[ruta].vals[v] || 0) + 1;
+      if (out[ruta].valor) return;
       out[ruta].valor = v;
       out[ruta].ms = (typeof ms === 'number' && isFinite(ms)) ? ms : null;
       out.nuevos.push(ruta);
     });
     out.completo = !!(out.producto.valor && out.serie.valor);
     return out;
+  }
+
+  /* Por qué se quedó a medias, dicho en una frase. Es lo que decide si el
+     escaneo continuo tiene arreglo: «no se ve» no se arregla con código. */
+  function bancoPorQue(slot) {
+    if (!slot) return 'sin datos';
+    if (slot.valor) return 'leído';
+    var distintos = Object.keys(slot.vals || {});
+    if (!slot.vistas) return 'no se leyó ni una vez — es óptica, no la regla';
+    var n = slot.vistas === 1 ? 'una vez' : (slot.vistas + ' veces');
+    if (distintos.length > 1) {
+      return 'se leyó ' + n + ' pero con ' + distintos.length +
+        ' valores distintos: estaba leyendo mal, y confirmar evitó guardar un dato inventado';
+    }
+    if (slot.vistas === 1) return 'se leyó una sola vez y nunca se repitió — aquí cuesta la confirmación';
+    return 'se leyó ' + n + ' sueltas y nunca dos seguidas — aquí cuesta la confirmación';
   }
 
   /* ── 2 · Resumen de intentos ────────────────────────────
@@ -561,6 +596,7 @@
     bancoDosInicio: bancoDosInicio,
     bancoDosLeer: bancoDosLeer,
     bancoDosPoner: bancoDosPoner,
+    bancoPorQue: bancoPorQue,
     bancoMediana: bancoMediana,
     bancoPercentil: bancoPercentil,
     bancoResumen: bancoResumen,
