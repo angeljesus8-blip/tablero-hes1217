@@ -64,6 +64,108 @@
     return { ultimo: v, veces: veces, hecho: true, confirmado: true, valor: v };
   }
 
+  /* ── 1-bis · LOS DOS CÓDIGOS, no el primero ─────────────
+     21-sep-2026, con la caja de unos FreeBuds Pro 4 en la mano. La etiqueta
+     lleva DOS códigos, uno encima del otro: el EAN del producto y el Code 128
+     de la serie. Y el lente del teléfono es tan ancho que los dos caben en el
+     mismo fotograma.
+
+     El bucle en vivo se quedaba con el PRIMERO que encontraba y confirmaba:
+     leía el UPC y perdía la serie, o al revés. Los dos datos hacen falta —de
+     ahí salen el SKU, el precio y el número que se reporta—, así que eso no
+     es una lectura, es media.
+
+     Y no era sólo el continuo: el modo foto del banco también se quedaba con
+     el primero, mientras que `processImage` en la app recorre TODOS los
+     códigos de la foto (`codes.forEach`) y enruta cada uno. O sea que el
+     banco comparaba una foto capada contra un continuo capado, y el número
+     que sacara no habría dicho nada.
+
+     Ahora hay dos casilleros —producto y serie—, cada uno con su doble
+     lectura, y el intento sólo está completo cuando los dos están llenos.
+     Que se llenen en fotogramas distintos es correcto y es, de hecho, lo
+     único que el continuo puede hacer y la foto no: con una sola foto los dos
+     códigos tienen que salir enfocados A LA VEZ. */
+
+  /* A qué casillero va un código. Es la misma regla que `routeCode` en
+     captura_series.html, y tiene que seguir siéndolo: si aquí se enrutara
+     distinto, el banco mediría una app que no existe. */
+  function bancoRuta(valor, fmt) {
+    var v = (valor == null ? '' : String(valor)).trim();
+    if (!v) return null;
+    if (!bancoAcepta(fmt)) return null;
+    var esProducto = /ean|upc/i.test(fmt || '') || /^[0-9]{8}$|^[0-9]{12,13}$/.test(v);
+    return esProducto ? 'producto' : 'serie';
+  }
+
+  function bancoDosInicio() {
+    return {
+      producto: { e: bancoConfirmarInicio(), valor: null, ms: null },
+      serie: { e: bancoConfirmarInicio(), valor: null, ms: null }
+    };
+  }
+
+  /* Un fotograma entero: TODOS los códigos que trajo, de una vez. `ms` es el
+     tiempo transcurrido, para anotar cuándo se llenó cada casillero. */
+  function bancoDosLeer(estado, codigos, ms) {
+    var s = estado && estado.producto && estado.serie ? estado : bancoDosInicio();
+    var out = {
+      producto: { e: s.producto.e, valor: s.producto.valor, ms: s.producto.ms },
+      serie: { e: s.serie.e, valor: s.serie.valor, ms: s.serie.ms },
+      nuevos: []
+    };
+    /* Un mismo valor repetido DENTRO del mismo fotograma no son dos lecturas:
+       es una imagen que trajo el código dos veces. Sin esta línea, un solo
+       fotograma confirmaría por su cuenta y la regla de las dos lecturas
+       seguidas se cumpliría sola. */
+    var yaEnEsteFotograma = {};
+    (codigos || []).forEach(function (c) {
+      var v = (c && c.valor != null ? String(c.valor) : '').trim();
+      var ruta = bancoRuta(v, c && c.fmt);
+      if (!ruta) return;
+      if (yaEnEsteFotograma[v]) return;
+      yaEnEsteFotograma[v] = true;
+      /* Casillero lleno: ni se toca. El código sigue delante de la cámara y
+         volver a confirmarlo sólo serviría para pisar la hora en que se leyó
+         —o peor, para cambiarlo por el de la caja de al lado. */
+      if (out[ruta].valor) return;
+      var e2 = bancoConfirmar(out[ruta].e, v, c && c.fmt);
+      out[ruta].e = e2;
+      if (e2.confirmado) {
+        out[ruta].valor = e2.valor;
+        out[ruta].ms = (typeof ms === 'number' && isFinite(ms)) ? ms : null;
+        out.nuevos.push(ruta);
+      }
+    });
+    out.completo = !!(out.producto.valor && out.serie.valor);
+    return out;
+  }
+
+  /* La FOTO no lleva doble lectura, y es correcto: es una imagen quieta. La
+     regla de las dos lecturas seguidas existe porque en vivo la cámara puede
+     pescar la caja de al lado entre dos fotogramas, y en una foto no hay
+     «entre». La app hace lo mismo: `routeCode` acepta lo que trae la foto sin
+     pedirle una segunda opinión. Simular dos fotogramas con la misma imagen
+     habría dado el mismo resultado escondiendo el motivo. */
+  function bancoDosPoner(estado, codigos, ms) {
+    var s = estado && estado.producto && estado.serie ? estado : bancoDosInicio();
+    var out = {
+      producto: { e: s.producto.e, valor: s.producto.valor, ms: s.producto.ms },
+      serie: { e: s.serie.e, valor: s.serie.valor, ms: s.serie.ms },
+      nuevos: []
+    };
+    (codigos || []).forEach(function (c) {
+      var v = (c && c.valor != null ? String(c.valor) : '').trim();
+      var ruta = bancoRuta(v, c && c.fmt);
+      if (!ruta || out[ruta].valor) return;
+      out[ruta].valor = v;
+      out[ruta].ms = (typeof ms === 'number' && isFinite(ms)) ? ms : null;
+      out.nuevos.push(ruta);
+    });
+    out.completo = !!(out.producto.valor && out.serie.valor);
+    return out;
+  }
+
   /* ── 2 · Resumen de intentos ────────────────────────────
      Un intento es {modo, ok, ms, via}. `via` sólo la llena el modo foto:
      'codigo' si lo leyó el código de barras, 'ocr' si hubo que leer el texto
@@ -91,8 +193,17 @@
     return a[i];
   }
 
+  /* Los intentos medidos ANTES del 21-sep-2026 por la tarde llevaban otro
+     criterio de éxito: bastaba UN código. Ésos no se pueden promediar con
+     éstos —dirían que todo va más rápido, porque medían media lectura— así
+     que se marcan con `v:2` y los de antes se cuentan aparte para poder
+     decirlo en pantalla en vez de tirarlos en silencio. */
+  var BANCO_V = 2;
+
   function bancoResumen(intentos, modo) {
-    var todos = (intentos || []).filter(function (x) { return x && x.modo === modo; });
+    var delModo = (intentos || []).filter(function (x) { return x && x.modo === modo; });
+    var todos = delModo.filter(function (x) { return x.v === BANCO_V; });
+    var viejos = delModo.length - todos.length;
     var buenos = todos.filter(function (x) {
       return x.ok && typeof x.ms === 'number' && isFinite(x.ms) && x.ms > 0;
     });
@@ -109,6 +220,12 @@
       mediana: bancoMediana(tiempos),
       p80: bancoPercentil(tiempos, 80),
       porOcr: todos.filter(function (x) { return x.ok && x.via === 'ocr'; }).length,
+      /* Los que sacaron un código y no el otro. No son un fallo distinto —la
+         venta necesita los dos— pero sí dicen POR QUÉ falla: si casi todos
+         los fallos son parciales, el problema es encuadrar los dos códigos, no
+         leer. */
+      parciales: todos.filter(function (x) { return !x.ok && x.parcial; }).length,
+      viejos: viejos,
       suficiente: todos.length >= BANCO_MIN_INTENTOS && buenos.length >= BANCO_MIN_OK
     };
   }
@@ -433,12 +550,17 @@
   var api = {
     BANCO_CONFIRMA: BANCO_CONFIRMA,
     BANCO_MIN_INTENTOS: BANCO_MIN_INTENTOS,
+    BANCO_V: BANCO_V,
     BANCO_UMBRAL: BANCO_UMBRAL,
     BANCO_C39: BANCO_C39,
     BANCO_PLATAFORMAS: BANCO_PLATAFORMAS,
     bancoAcepta: bancoAcepta,
     bancoConfirmarInicio: bancoConfirmarInicio,
     bancoConfirmar: bancoConfirmar,
+    bancoRuta: bancoRuta,
+    bancoDosInicio: bancoDosInicio,
+    bancoDosLeer: bancoDosLeer,
+    bancoDosPoner: bancoDosPoner,
     bancoMediana: bancoMediana,
     bancoPercentil: bancoPercentil,
     bancoResumen: bancoResumen,

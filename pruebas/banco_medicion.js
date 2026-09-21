@@ -25,9 +25,10 @@ const B = require('../banco_escaneo.js');
 const fallos = [];
 const mal = m => fallos.push(m);
 
-/* Un intento tal como lo anota la pantalla. */
-const foto = (ms, ok, via) => ({ modo: 'foto', ok: ok !== false, ms: ms, via: via || 'codigo' });
-const cont = (ms, ok) => ({ modo: 'continuo', ok: ok !== false, ms: ms, via: null });
+/* Un intento tal como lo anota la pantalla. `v` es el criterio de éxito con
+   el que se midió: sin él, es de cuando bastaba UN código. */
+const foto = (ms, ok, via) => ({ v: B.BANCO_V, modo: 'foto', ok: ok !== false, ms: ms, via: via || 'codigo' });
+const cont = (ms, ok) => ({ v: B.BANCO_V, modo: 'continuo', ok: ok !== false, ms: ms, via: null });
 
 /* Lista de N intentos de un modo, todos del mismo tiempo salvo los fallos. */
 function lote(modo, n, ms, nFallos, via) {
@@ -35,8 +36,8 @@ function lote(modo, n, ms, nFallos, via) {
   for (let i = 0; i < n; i++) {
     const esFallo = i < (nFallos || 0);
     out.push(modo === 'foto'
-      ? { modo: 'foto', ok: !esFallo, ms: esFallo ? null : ms, via: esFallo ? null : (via || 'codigo') }
-      : { modo: 'continuo', ok: !esFallo, ms: esFallo ? null : ms, via: null });
+      ? { v: B.BANCO_V, modo: 'foto', ok: !esFallo, ms: esFallo ? null : ms, via: esFallo ? null : (via || 'codigo') }
+      : { v: B.BANCO_V, modo: 'continuo', ok: !esFallo, ms: esFallo ? null : ms, via: null });
   }
   return out;
 }
@@ -129,18 +130,87 @@ function plataformaQueGana(cambios) {
   // CEBO · un fallo no tiene tiempo, y meterlo como 0 ms bajaría la mediana:
   // el modo que MENOS lee saldría como el más rápido.
   const conFallos = B.bancoResumen(
-    [foto(5000), foto(5000), foto(5000), foto(5000), { modo: 'foto', ok: false, ms: 0 }, { modo: 'foto', ok: false, ms: null }],
+    [foto(5000), foto(5000), foto(5000), foto(5000), { v: B.BANCO_V, modo: 'foto', ok: false, ms: 0 }, { v: B.BANCO_V, modo: 'foto', ok: false, ms: null }],
     'foto');
   if (conFallos.mediana !== 5000) mal('resumen: los fallos arrastraron la mediana a ' + conFallos.mediana);
   if (conFallos.fallos !== 2) mal('resumen: contó ' + conFallos.fallos + ' fallos en vez de 2');
   if (conFallos.fallosPct !== 33.3) mal('resumen: el % de fallos salió ' + conFallos.fallosPct);
 
   const ocr = B.bancoResumen([foto(9000, true, 'ocr'), foto(3000, true, 'codigo'),
-    { modo: 'foto', ok: false, ms: null, via: 'ocr' }], 'foto');
+    { v: B.BANCO_V, modo: 'foto', ok: false, ms: null, via: 'ocr' }], 'foto');
   if (ocr.porOcr !== 1) mal('resumen: contó ' + ocr.porOcr + ' lecturas por OCR en vez de 1');
 
   if (B.bancoMediana([1, 2, 3, 4]) !== 3) mal('mediana: con par de datos no promedia los centrales');
   if (B.bancoMediana([]) !== null) mal('mediana: una lista vacía devolvió un número');
+})();
+
+/* ── 2-bis · Los DOS códigos, no el primero ──────────────── */
+(function () {
+  const UPC = { valor: '6942103138782', fmt: 'ean_13' };
+  const SER = { valor: '3RRXC25316084077', fmt: 'code_128' };
+
+  if (B.bancoRuta(UPC.valor, UPC.fmt) !== 'producto') mal('ruta: un EAN no fue al producto');
+  if (B.bancoRuta(SER.valor, SER.fmt) !== 'serie') mal('ruta: un Code 128 alfanumérico no fue a la serie');
+  if (B.bancoRuta('69421031', '') !== 'producto') mal('ruta: 8 dígitos sin formato no fueron al producto');
+  if (B.bancoRuta('123456789012345', '') !== 'serie') mal('ruta: 15 dígitos se tomaron por producto');
+  if (B.bancoRuta('https://x', 'qr_code') !== null) mal('ruta: un QR entró a algún casillero');
+  if (B.bancoRuta('', 'code_128') !== null) mal('ruta: un valor vacío entró a algún casillero');
+
+  // Los dos códigos en el mismo fotograma, dos fotogramas seguidos: completo.
+  let c = B.bancoDosInicio();
+  c = B.bancoDosLeer(c, [UPC, SER], 100);
+  if (c.completo) mal('dos: se dio por completo con UN solo fotograma');
+  c = B.bancoDosLeer(c, [UPC, SER], 200);
+  if (!c.completo) mal('dos: con los dos códigos en dos fotogramas no quedó completo');
+  if (c.producto.valor !== UPC.valor || c.serie.valor !== SER.valor) mal('dos: los códigos se cruzaron de casillero');
+  if (c.producto.ms !== 200) mal('dos: no anotó cuándo se llenó el casillero');
+
+  // CEBO · el caso de la caja de FreeBuds: el UPC entra pronto y la serie
+  // tarda. Que se llenen en fotogramas distintos es correcto — es lo único
+  // que el continuo puede hacer y la foto no.
+  c = B.bancoDosInicio();
+  c = B.bancoDosLeer(c, [UPC], 100);
+  c = B.bancoDosLeer(c, [UPC], 200);
+  if (!c.producto.valor) mal('dos: el producto no se confirmó solo');
+  if (c.completo) mal('dos: dio por completo teniendo sólo el producto');
+  c = B.bancoDosLeer(c, [SER], 900);
+  c = B.bancoDosLeer(c, [SER], 1000);
+  if (!c.completo) mal('dos: la serie que llegó tarde no completó el intento');
+  if (c.producto.ms !== 200) mal('dos: la serie tardía pisó la hora del producto');
+
+  // CEBO · el mismo código DOS VECES en un solo fotograma no son dos
+  // lecturas: es una imagen que lo trajo repetido. Si contara, la regla de
+  // las dos lecturas seguidas se cumpliría sola y no vigilaría nada.
+  c = B.bancoDosLeer(B.bancoDosInicio(), [UPC, UPC, SER, SER], 100);
+  if (c.producto.valor || c.serie.valor) mal('dos: un fotograma se confirmó a sí mismo por traer el código repetido');
+
+  // CEBO · casillero lleno, casillero que no se toca: la caja de al lado no
+  // puede cambiar un dato ya confirmado.
+  c = B.bancoDosInicio();
+  c = B.bancoDosLeer(c, [UPC], 100); c = B.bancoDosLeer(c, [UPC], 200);
+  const OTRO = { valor: '6942103100000', fmt: 'ean_13' };
+  c = B.bancoDosLeer(c, [OTRO], 300); c = B.bancoDosLeer(c, [OTRO], 400);
+  if (c.producto.valor !== UPC.valor) mal('dos: otro UPC pisó el que ya estaba confirmado');
+
+  // La FOTO no lleva doble lectura: es una imagen quieta, no hay «entre».
+  const f = B.bancoDosPoner(B.bancoDosInicio(), [UPC, SER], 0);
+  if (!f.completo) mal('foto: una sola imagen con los dos códigos no quedó completa');
+  const soloUno = B.bancoDosPoner(B.bancoDosInicio(), [UPC], 0);
+  if (soloUno.completo) mal('foto: con un solo código se dio por completa');
+
+  // CEBO · lo medido con el criterio viejo (sin `v`) no se promedia con lo
+  // nuevo: medía media lectura y saldría más rápido de lo que es.
+  const mezcla = B.bancoResumen(
+    lote('foto', 6, 6000, 0).concat([{ modo: 'foto', ok: true, ms: 1000, via: 'codigo' }]), 'foto');
+  if (mezcla.n !== 6) mal('resumen: un intento del criterio viejo entró en la cuenta');
+  if (mezcla.viejos !== 1) mal('resumen: no avisó de los intentos del criterio viejo');
+  if (mezcla.mediana !== 6000) mal('resumen: el intento viejo movió la mediana a ' + mezcla.mediana);
+
+  // Los parciales se cuentan aparte: dicen POR QUÉ falla.
+  const conParcial = B.bancoResumen(lote('continuo', 6, 3000, 0).concat(
+    [{ v: B.BANCO_V, modo: 'continuo', ok: false, ms: 9000, parcial: 'producto' }]), 'continuo');
+  if (conParcial.parciales !== 1) mal('resumen: no contó el intento a medias');
+  if (conParcial.ok !== 6) mal('resumen: un intento a medias contó como lectura buena');
 })();
 
 /* ── 3 · La prueba térmica ───────────────────────────────── */
