@@ -561,3 +561,92 @@ aplicarTodo(Object.assign(_deSupabase(JSON.parse(JSON.stringify(TIENDA))), { __s
   PREVENTA = guardada;
   filtroActivo = 'inicio'; busqueda = ''; render();
 }
+
+
+/* ── 14 · El concurso Oro/Plata, al lado del Assurant (21-sep-2026) ──────
+   ============================================================
+   El marcador vivía solo dentro de Captura de Series, que es donde se sube el
+   ticket. Ángel lo pidió también en el tablero, junto al Assurant: es la
+   pantalla que el equipo abre sin ir a buscar nada.
+
+   Lo que se comprueba aquí es lo que, roto, NO da ningún error:
+
+     · un marcador congelado después de que el concurso termine — nadie lo
+       leería como terminado, lo leería como el marcador de hoy;
+     · un «🥇 0 🥈 0» para quien no ha llevado ningún ticket, que pinta como
+       resultado y es la ausencia de uno;
+     · «quedan 0 días» el último día, cuando todavía se puede subir un ticket.
+   ============================================================ */
+{
+  const guardado = CONCURSO;
+
+  CONCURSO = { hasta:'2026-10-15', dias:24, filas:[
+    { vendedor:'ANA QUIROGA',   oro:3, plata:5, tickets:9 },
+    { vendedor:'LUIS BERMUDEZ', oro:0, plata:0, tickets:0 }
+  ]};
+  filtroActivo = 'inicio'; busqueda = ''; render();
+  let h = app.innerHTML;
+
+  ok('con concurso vigente, el Inicio lo enseña', h.indexOf('Concurso Oro y Plata') >= 0);
+  ok('y va junto al Assurant, no en otra pestaña',
+     h.indexOf('Assurant del día') >= 0 &&
+     h.indexOf('Assurant del día') < h.indexOf('Concurso Oro y Plata'));
+  ok('con los oros y platas de cada quien',
+     h.indexOf('🥇 3') >= 0 && h.indexOf('🥈 5') >= 0);
+  ok('el total de la tienda se suma solo', h.indexOf('3 oros · 5 platas') >= 0);
+  ok('y se dice cuánto queda', h.indexOf('quedan 24 días') >= 0);
+
+  /* Quien no ha llevado ninguno sale en un guion. Un cero con medalla se lee
+     como que compitió y perdió. */
+  ok('quien no lleva tickets sale con guion, no con ceros',
+     h.indexOf('🥇 0') < 0 && h.indexOf('🥈 0') < 0);
+
+  /* El último día todavía cuenta: se puede subir el ticket de hoy. */
+  CONCURSO = Object.assign({}, CONCURSO, { dias:0 }); render();
+  ok('el último día se dice como último día',
+     app.innerHTML.indexOf('ÚLTIMO DÍA') >= 0 && app.innerHTML.indexOf('quedan 0') < 0);
+
+  /* Y con el periodo abierto pero sin un solo ticket, se dice dónde se suben —
+     una tarjeta vacía no explica qué hacer. */
+  CONCURSO = { hasta:'2026-10-15', dias:5, filas:[] }; render();
+  h = app.innerHTML;
+  ok('sin tickets, la tarjeta dice dónde se suben',
+     h.indexOf('Aún no hay tickets') >= 0 && h.indexOf('Captura de Series') >= 0);
+  ok('y no inventa un total de tienda', h.indexOf('0 oros') < 0);
+
+  /* LO QUE DE VERDAD PROTEGE ESTE BLOQUE: que el concurso terminado deje de
+     enseñarse. La decisión es de `concursoVigente` + `concursoArmar`, que
+     están aparte de la llamada justo para poder probarlas sin red. */
+  const abierto  = [{ id:1, desde:'2026-09-15', hasta:'2026-10-15', vigente:true,  dias_restantes:24 }];
+  const cerrado  = [{ id:1, desde:'2026-08-01', hasta:'2026-08-31', vigente:false, dias_restantes:-21 }];
+  const marcador = [{ empno:'900001', vendedor:'ANA QUIROGA', oro:'3', plata:'5', ninguno:'1', tickets:'9' }];
+
+  ok('un periodo vigente se reconoce', !!concursoVigente(abierto));
+  ok('y uno terminado NO', concursoVigente(cerrado) === null);
+  ok('sin periodo en la base tampoco hay concurso',
+     concursoVigente([]) === null && concursoVigente(null) === null);
+
+  /* El caso de la PWA abierta el 16 de octubre: la base dice que el periodo
+     cerró y el marcador tiene que irse, no quedarse congelado. */
+  ok('terminado el concurso, el marcador se retira',
+     concursoArmar(concursoVigente(cerrado), marcador) === null);
+
+  /* Y un corte de red NO es el fin del concurso: se deja lo que hubiera. */
+  ok('sin respuesta del marcador no se borra lo que ya estaba',
+     concursoArmar(concursoVigente(abierto), null) === undefined);
+
+  /* Los números llegan como texto desde PostgREST; si no se convierten, el
+     total de la tienda saldría concatenado ("35" en vez de 8). */
+  const armado = concursoArmar(concursoVigente(abierto), marcador);
+  ok('los conteos llegan como número, no como texto',
+     armado.filas[0].oro === 3 && armado.filas[0].plata === 5);
+
+  CONCURSO = null; render();
+  ok('sin concurso, la tarjeta desaparece entera',
+     app.innerHTML.indexOf('Concurso Oro y Plata') < 0 &&
+     app.innerHTML.indexOf('cn-card') < 0);
+  ok('y el Assurant sigue en su sitio', app.innerHTML.indexOf('Assurant del día') >= 0);
+
+  CONCURSO = guardado;
+  filtroActivo = 'inicio'; busqueda = ''; render();
+}

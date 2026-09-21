@@ -4336,6 +4336,44 @@ apareció al pasar la foto por el **canvas del navegador**, que escala distinto.
 La prueba buena es la página real con la foto real; el fixture del volcado
 (`pruebas/ocr_ticket_real11.txt`, anonimizado) es la red, no la medida.
 
+### El marcador, también en el tablero *(21-sep-2026, v264)*
+
+Tarjeta propia justo debajo de la del Assurant, en el Inicio de `tablero.html`:
+los oros y platas de cada asesor, los días que quedan y el total de la tienda.
+Pedido por Ángel — el marcador vivía sólo dentro de Captura de Series, que es
+donde se sube el ticket, y **un concurso que hay que ir a consultar deja de
+competir a la semana**. El tablero es la pantalla que el equipo abre sin ir a
+buscar nada.
+
+Sin SQL nuevo: `concurso_config` y `concurso_marcador` ya existían y el tablero
+ya sabe llamarlas (`sbRpc`). La carga va en paralelo y **no entra en `CARGAS`**
+ni en el banner de «faltan datos»: ese banner avisa de lo que hace falta para
+vender, y una tienda sin concurso abierto no tiene nada que fallar.
+
+⚠️ **Lo que hay que no romper: la tarjeta muere con el periodo.** La decisión
+vive en dos funciones PURAS —`concursoVigente` y `concursoArmar`— separadas de
+la llamada a propósito, porque con la red de por medio no habría cómo probarlas:
+
+- periodo terminado → `null` → la tarjeta se retira **aunque ya estuviera
+  pintada**. La PWA se queda abierta días y el concurso acaba un 15 de octubre
+  con el teléfono encendido; un marcador congelado no se lee como terminado, se
+  lee como el de hoy.
+- sin respuesta → `undefined` → se deja lo que hubiera. Un corte de red no es
+  el fin del concurso (mismo criterio que la preventa).
+
+Los conteos llegan como TEXTO desde PostgREST y se convierten al armar: sin eso
+el total de la tienda sale concatenado («35» en vez de 8). Y quien no ha llevado
+ningún ticket sale con un guion, no con «🥇 0 🥈 0», que pinta como resultado y
+es la ausencia de uno.
+
+Los nombres **no están en `tablero.html`** —es público—: llegan de
+`concurso_marcador` con la tienda de la sesión, igual que el leaderboard del
+Assurant (ver `VENDEDORES_TB`). Todo el equipo lo ve, que es lo que decidió
+Ángel: es la misma exposición que el attach por asesor, que ya estaba a la vista.
+
+Las cinco cosas están en el bloque 14 de `pruebas/casos_tablero.js`, probadas
+con cebos.
+
 ### Admin → 🏆 Concurso *(17-sep-2026, v246)*
 
 Las dos cosas que se hacían pegando SQL en el panel de Supabase —dar de alta a
