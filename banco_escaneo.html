@@ -5,6 +5,20 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Banco · escaneo continuo vs foto</title>
 <!--
+  ⚠ PREGUNTA CONTESTADA — 21-sep-2026, la misma noche. EL ESCANEO CONTINUO NO
+  ENTRÓ: falla más que la foto (22 % de fallos en la primera tanda real) y,
+  sobre todo, desde la página la cámara NO ENFOCA — `getUserMedia` entrega el
+  flujo tal cual y desde la web no hay control fiable del enfoque ni del
+  macro, mientras que la app de cámara del teléfono sí enfoca antes de
+  disparar. Eso es justo lo que necesita el Code 128 de la serie, que es fino
+  y largo: el UPC entraba solo en 1.5 s y la serie no llegaba.
+
+  El banco se queda AQUÍ, y no se borra, por una razón: la respuesta no es «no
+  se puede», es «mídelo primero, y mide la serie, no el UPC». Con teléfonos
+  nuevos, o el día que la web tenga control de enfoque, esto son veinte
+  minutos de medición en vez de una semana de desarrollo. El detalle está en
+  MAPA.md, «Escaneo continuo: MEDIDO Y DESCARTADO».
+
   BANCO DE MEDICIÓN — 21-sep-2026. NO forma parte de la app.
 
   Contesta UNA pregunta antes de construir nada: ¿el escaneo con la cámara en
@@ -98,6 +112,21 @@
     <div class="sub">Captura de Series · HES 1217 — medir antes de implementar</div>
   </div>
 </header>
+
+<!-- El resultado, arriba del todo: quien abra esto dentro de seis meses tiene
+     que ver la respuesta antes que los botones, o volverá a medir lo mismo. -->
+<div class="vered no" style="margin-bottom:12px">
+  ⛔ Ya se midió: el escaneo continuo NO entró <span style="font-weight:500">(21-sep-2026)</span>
+  <ul>
+    <li>Falla más que la foto: 22 % de fallos, y siempre por lo mismo — el UPC
+      entra en 1.5 s y la serie no llega.</li>
+    <li>Desde la página la cámara <b>no enfoca</b>: la web no controla el enfoque
+      ni el macro, y la app de cámara del teléfono sí. El Code 128 de la serie
+      es fino y largo, y eso es lo que necesita.</li>
+    <li>El banco sigue aquí por si cambian los teléfonos o la web gana control
+      de enfoque. Si vuelves a medir: <b>mide la serie, no el UPC</b>.</li>
+  </ul>
+</div>
 
 <div class="caja">
   <h2>Antes de empezar</h2>
