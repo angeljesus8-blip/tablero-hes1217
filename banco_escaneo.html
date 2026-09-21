@@ -1,0 +1,832 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Banco · escaneo continuo vs foto</title>
+<!--
+  BANCO DE MEDICIÓN — 21-sep-2026. NO forma parte de la app.
+
+  Contesta UNA pregunta antes de construir nada: ¿el escaneo con la cámara en
+  vivo le gana al flujo de foto de `captura_series.html`, en los teléfonos que
+  de verdad usa el equipo? Si no gana, no se implementa.
+
+  Mide tres cosas y nada más:
+    · segundos hasta leer, contra el flujo de foto de hoy;
+    · cuántos intentos fallan (y cuántos de los buenos salieron sólo por OCR,
+      que son los que el continuo perdería);
+    · cuánto se frena el teléfono con la cámara abierta cinco minutos.
+
+  No guarda nada en Supabase, no sube fotos y no toca la app. Como
+  `prueba_ticket.html`, es una página suelta: no está enlazada desde ningún
+  menú, no va en el precache del service worker y se borra cuando la pregunta
+  esté contestada.
+
+  Lo que DECIDE con lo medido vive en `banco_escaneo.js`, aparte, porque eso sí
+  se puede probar sin cámara (`pruebas/banco_medicion.js`).
+-->
+<style>
+  @font-face{ font-family:'Montserrat'; src:url('./fuentes/Montserrat.woff2') format('woff2');
+              font-weight:400 800; font-display:swap; }
+  :root{ --rojo:#D12026; --naranja:#F37021; --azul:#336BB4; --verde:#178046; --gris:#777; }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body{ margin:0; background:#fff; color:#1a1a1a; padding:14px 14px 60px;
+        font-family:'Montserrat',-apple-system,"Segoe UI",Roboto,sans-serif; }
+  header{ display:flex; align-items:center; gap:10px; border-bottom:3px solid var(--rojo);
+          padding-bottom:10px; margin-bottom:14px; }
+  header img{ height:26px; }
+  h1{ font-size:16px; font-weight:800; margin:0; }
+  .sub{ font-size:11.5px; color:var(--gris); line-height:1.45; }
+  .caja{ border:1.5px solid #ececec; border-radius:12px; padding:12px 14px; margin-bottom:12px; }
+  .caja h2{ font-size:11px; font-weight:800; color:var(--gris); margin:0 0 4px;
+            text-transform:uppercase; letter-spacing:.05em; }
+  .caja .qué{ font-size:12px; color:#444; line-height:1.45; margin-bottom:10px; }
+  .btn{ display:block; width:100%; padding:14px; border:none; border-radius:12px;
+        background:var(--rojo); color:#fff; font-size:15px; font-weight:800;
+        font-family:inherit; cursor:pointer; margin-bottom:8px; }
+  .btn.sec{ background:#f2f2f3; color:#444; font-size:13px; padding:11px; }
+  .btn.azul{ background:var(--azul); } .btn.verde{ background:var(--verde); }
+  .btn.naranja{ background:var(--naranja); }
+  .btn:disabled{ opacity:.45; }
+  .fila{ display:flex; justify-content:space-between; gap:10px; padding:5px 0;
+         border-bottom:1px solid #f4f4f4; font-size:13px; align-items:baseline; }
+  .fila:last-child{ border:none; }
+  .fila b{ font-family:ui-monospace,monospace; font-size:13px; text-align:right; }
+  .ok{ color:var(--verde); } .malo{ color:var(--rojo); } .flojo{ color:var(--naranja); }
+  input[type=text]{ width:100%; padding:11px; border:1.5px solid #e3e3e3; border-radius:10px;
+                    font-family:inherit; font-size:14px; margin-bottom:8px; }
+  label{ font-size:11px; font-weight:700; color:var(--gris); display:block; margin-bottom:3px; }
+  .chips{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px; }
+  .chip{ flex:1; min-width:72px; padding:9px 6px; border:1.5px solid #e3e3e3; border-radius:10px;
+         background:#fff; font-family:inherit; font-size:12px; font-weight:700; color:#555; }
+  .chip.on{ border-color:var(--rojo); color:var(--rojo); background:#fdf3f3; }
+  video,#lienzo,#congelado{ width:100%; border-radius:10px; display:none; background:#000; }
+  #congelado{ background:#fff; }
+  .dosCol{ display:flex; gap:8px; } .dosCol .btn{ flex:1; }
+  pre{ background:#fafafa; border:1px solid #eee; border-radius:8px; padding:9px;
+       font-size:10px; line-height:1.4; overflow:auto; max-height:230px;
+       white-space:pre-wrap; word-break:break-word; margin:0; }
+  textarea{ width:100%; height:70px; border:1.5px solid #e3e3e3; border-radius:10px;
+            font-family:ui-monospace,monospace; font-size:10px; padding:8px; }
+  .paso{ font-size:12.5px; font-weight:700; color:var(--azul); min-height:18px; margin:6px 0; }
+  .barra{ height:8px; background:#f0f0f0; border-radius:5px; overflow:hidden; margin:8px 0; }
+  .barra i{ display:block; height:100%; width:0; background:var(--azul); transition:width .3s; }
+  .ver{ display:block !important; }
+  .nota{ font-size:11px; color:var(--gris); line-height:1.45; margin-top:8px; }
+  .vered{ border-radius:12px; padding:12px 14px; font-size:13px; line-height:1.5; font-weight:700; }
+  .vered.entra{ background:#eaf7f0; color:#0f5c34; } .vered.no{ background:#fdeeee; color:#9c1b20; }
+  .vered.gris{ background:#f4f4f5; color:#555; } .vered.parcial{ background:#fff4ea; color:#94430d; }
+  .vered ul{ margin:8px 0 0 16px; padding:0; font-weight:500; font-size:12px; }
+</style>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script type="module">
+  /* El mismo decodificador que usa la app, cargado igual. Si no llega, el
+     banco lo dice en vez de medir otra cosa sin avisar. */
+  try {
+    const mod = await import('https://esm.sh/barcode-detector@2/pure');
+    window.ZXingBD = mod.BarcodeDetector;
+  } catch (e) { window.ZXING_FALLO = true; }
+</script>
+<script src="./banco_escaneo.js"></script>
+</head>
+<body>
+
+<header>
+  <img src="./logo_odemas.png" alt="Odemás">
+  <div>
+    <h1>Banco · escaneo continuo vs foto</h1>
+    <div class="sub">Captura de Series · HES 1217 — medir antes de implementar</div>
+  </div>
+</header>
+
+<div class="caja">
+  <h2>Antes de empezar</h2>
+  <div class="qué">
+    <b>Desconecta el cargador</b> (mide batería y calor), pon el brillo a la
+    mitad y ten a mano <b>las mismas 4 cajas</b> para los dos modos. Haz
+    <b>8 intentos de cada modo, alternando</b> uno y uno: si haces los 8 de un
+    modo seguidos, el segundo modo sale mejor sólo porque ya agarraste práctica.
+  </div>
+  <label>¿Qué teléfono es? (marca y modelo)</label>
+  <input type="text" id="tel" placeholder="Ej. Huawei nova 12 / iPhone 13">
+  <label>Sistema</label>
+  <div class="chips" id="plataformas">
+    <button class="chip" data-p="android">Android</button>
+    <button class="chip" data-p="iphone">iPhone</button>
+    <button class="chip" data-p="otro">Otro</button>
+  </div>
+  <div class="sub" id="ua"></div>
+</div>
+
+<!-- ── BLOQUE 0 · sin cámara ─────────────────────────────────
+     El único número que se puede sacar sin permisos y sin cajas: cuánto tarda
+     ESTE teléfono en decodificar un fotograma. Es el que decide si el continuo
+     es viable en iPhone, donde Safari no trae BarcodeDetector nativo y todo
+     cae sobre ZXing-WASM.
+
+     El código de prueba se dibuja aquí mismo (Code 39, `bancoCode39`) y se
+     comprueba que lo leído sea lo escrito: si no, lo medido no sería una
+     lectura. -->
+<div class="caja">
+  <h2>0 · Velocidad de lectura (sin cámara)</h2>
+  <div class="qué">30 lecturas sobre un código dibujado en un fotograma del
+    mismo tamaño que el de la cámara (1280×720). No pide permiso ni hace falta
+    tener cajas: dice cuántos fotogramas por segundo aguanta este teléfono.</div>
+  <canvas id="lienzo"></canvas>
+  <button class="btn azul" id="btnCpu">▶ Medir velocidad</button>
+  <div class="paso" id="pasoCpu"></div>
+  <div id="resCpu"></div>
+</div>
+
+<!-- ── BLOQUE A · el flujo de hoy ───────────────────────────
+     Cronometrado desde que se toca el botón, igual que lo vive el asesor: el
+     teléfono abre su cámara, él encuadra, dispara, confirma, y recién entonces
+     la app decodifica. Esperar sólo la decodificación mediría la mitad cómoda.
+
+     Y se anota POR DÓNDE salió: si hizo falta el OCR del texto "S/N", ésa es
+     una lectura que el escaneo continuo habría perdido. -->
+<div class="caja">
+  <h2>A · Flujo de foto (el de hoy)</h2>
+  <div class="qué">Toca «Intento con foto», toma la foto del código como
+    siempre. El cronómetro corre desde que tocas hasta que aparece la lectura.</div>
+  <input type="file" id="fileCam" accept="image/*" capture="environment" hidden>
+  <button class="btn" id="btnFoto">▶ Intento con foto</button>
+  <div class="dosCol" id="fotoAbierto" style="display:none">
+    <button class="btn sec" id="btnFotoNo">✖ No leyó</button>
+    <button class="btn sec" id="btnFotoDesc">↩ Descartar</button>
+  </div>
+  <div class="paso" id="pasoFoto"></div>
+  <div id="resFoto"></div>
+</div>
+
+<!-- ── BLOQUE B · el candidato ──────────────────────────────
+     getUserMedia dentro de la página, fotograma a fotograma, con las tres
+     reglas que no se negocian:
+       · dos lecturas iguales seguidas antes de dar el código por bueno;
+       · al confirmar se CONGELA el fotograma — la evidencia que hoy se sube
+         sale de ahí, porque en continuo no hay archivo de foto;
+       · la cámara se apaga al salir, al cambiar de pestaña y al minimizar. -->
+<div class="caja">
+  <h2>B · Escaneo continuo (el candidato)</h2>
+  <div class="qué">Toca «Intento en vivo» y acerca el código. La app vibra y
+    congela el fotograma sola en cuanto lo lee dos veces seguidas.</div>
+  <video id="vid" playsinline muted></video>
+  <img id="congelado" alt="fotograma congelado">
+  <button class="btn verde" id="btnVivo">▶ Intento en vivo</button>
+  <button class="btn sec" id="btnVivoCortar" style="display:none">✖ No leyó · cortar</button>
+  <div class="paso" id="pasoVivo"></div>
+  <div id="resVivo"></div>
+</div>
+
+<!-- ── BLOQUE C · el coste de tener la cámara abierta ───────
+     Ningún teléfono publica su temperatura. Lo que sí se ve es lo que la
+     temperatura provoca: el sistema baja el reloj y entrega menos fotogramas.
+     Se mide la caída entre el primer minuto y el quinto, más la batería (en
+     iPhone no existe la API: ahí se anota a mano) y lo que el asesor siente
+     al tocarlo. -->
+<div class="caja">
+  <h2>C · Cinco minutos con la cámara abierta</h2>
+  <div class="qué">Deja el teléfono decodificando 5 minutos SIN apagar la
+    pantalla y sin cambiar de app (si te sales, la cámara se apaga y la corrida
+    no cuenta). Al final di cómo se siente.</div>
+  <button class="btn naranja" id="btnTerm">▶ Correr 5 minutos</button>
+  <div class="barra"><i id="barraTerm"></i></div>
+  <div class="paso" id="pasoTerm"></div>
+  <div class="chips" id="calor" style="display:none">
+    <button class="chip" data-c="templado">Templado</button>
+    <button class="chip" data-c="tibio">Tibio</button>
+    <button class="chip" data-c="caliente">Caliente</button>
+    <button class="chip" data-c="quema">Quema</button>
+  </div>
+  <div id="resTerm"></div>
+</div>
+
+<div class="caja">
+  <h2>Resultado de este teléfono</h2>
+  <div id="resumen"></div>
+  <button class="btn azul" id="btnCopiar">📋 Copiar para mandarlo</button>
+  <button class="btn sec" id="btnBorrar">🗑 Borrar lo de este teléfono</button>
+  <div class="nota">Pega aquí lo que copiaron los OTROS teléfonos para juntar
+    todo y ver el veredicto.</div>
+  <textarea id="pegar" placeholder="Pega aquí el texto que te mandaron…"></textarea>
+  <button class="btn sec" id="btnPegar">➕ Sumar ese teléfono</button>
+  <div id="otros"></div>
+</div>
+
+<div class="caja">
+  <h2>Veredicto</h2>
+  <div class="qué">Los umbrales se escribieron ANTES de medir, en
+    <code>banco_escaneo.js</code>, para que la meta no se mueva cuando lleguen
+    los datos.</div>
+  <div id="veredicto"></div>
+</div>
+
+<div id="reader-file" style="position:absolute;width:0;height:0;overflow:hidden;"></div>
+
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const K = 'hes1217_banco';          // prefijo propio: en GitHub Pages todas las apps comparten origen
+const K_OTROS = 'hes1217_banco_otros';
+const FORMATOS = ['code_128','code_39','ean_13','ean_8','upc_a','upc_e'];
+const TOPE_VIVO = 25000;            // un intento que pasa de 25 s es un fallo, no una lectura lenta
+/* Los cinco minutos, escritos como 5 × 60 × 1000 y no como el entero de seis
+   cifras: `verificar.py` lo lee como un posible número de empleado y falla. Es
+   un falso positivo, pero la regla que cuida el repo público no se afloja por
+   una constante que se puede escribir de otra manera. */
+const TERMICA_MS = 5 * 60 * 1000;
+const CODIGO_PRUEBA = 'HES1217BANCO';
+
+/* ---------- Estado ---------- */
+function vacio(){
+  return { id: 't' + Date.now().toString(36), telefono:'', plataforma:'',
+           cpu:null, intentos:[], termico:null, calor:null };
+}
+let D;
+try{ D = JSON.parse(localStorage.getItem(K)) || vacio(); }
+catch(e){ D = vacio(); }            // localStorage con basura: se empieza limpio
+function guardar(){
+  try{ localStorage.setItem(K, JSON.stringify(D)); }
+  catch(e){ /* sin almacenamiento (incógnito): la medición sigue en pantalla */ }
+}
+let OTROS;
+try{ OTROS = JSON.parse(localStorage.getItem(K_OTROS)) || {}; }
+catch(e){ OTROS = {}; }
+function guardarOtros(){
+  try{ localStorage.setItem(K_OTROS, JSON.stringify(OTROS)); }
+  catch(e){ /* igual que arriba: no medir peor por no poder guardar */ }
+}
+
+$('ua').textContent = navigator.userAgent;
+$('tel').value = D.telefono || '';
+$('tel').oninput = e => { D.telefono = e.target.value; guardar(); };
+if(!D.plataforma){
+  // Sugerencia, no decisión: el asesor la confirma tocando el chip.
+  const ua = navigator.userAgent;
+  D.plataforma = /iPhone|iPad|iPod/i.test(ua) ? 'iphone' : (/Android/i.test(ua) ? 'android' : 'otro');
+}
+function pintarChips(){
+  [].forEach.call($('plataformas').children, b =>
+    b.className = 'chip' + (b.dataset.p === D.plataforma ? ' on' : ''));
+}
+[].forEach.call($('plataformas').children, b =>
+  b.onclick = () => { D.plataforma = b.dataset.p; guardar(); pintarChips(); pintarTodo(); });
+pintarChips();
+
+/* ---------- Los detectores, la misma cascada que la app ----------
+   ZXing-WASM primero (es el que localiza el código en fotos reales, también en
+   iPhone), el nativo después. Para el continuo se detiene ahí: el respaldo de
+   html5-qrcode y el OCR sólo tienen sentido sobre una foto. */
+function detectoresDisponibles(){
+  return [ window.ZXingBD, (('BarcodeDetector' in window) ? window.BarcodeDetector : null) ].filter(Boolean);
+}
+async function unDetector(Detector, fuente){
+  let det;
+  try{
+    const sop = Detector.getSupportedFormats ? await Detector.getSupportedFormats() : null;
+    const fmts = sop ? FORMATOS.filter(f => sop.includes(f)) : FORMATOS;
+    det = new Detector({ formats: fmts });
+  }catch(_){ det = new Detector(); }
+  return (await det.detect(fuente)) || [];
+}
+/* Devuelve {valor, fmt} del primer código útil, o null. */
+async function decodificar(fuente){
+  for(const Dt of detectoresDisponibles()){
+    try{
+      const codes = await unDetector(Dt, fuente);
+      for(const c of codes){
+        const v = (c.rawValue || '').trim();
+        if(v && bancoAcepta(c.format)) return { valor:v, fmt:c.format };
+      }
+    }catch(e){ /* detector que no puede con esta fuente: se prueba el siguiente */ }
+  }
+  return null;
+}
+
+/* ---------- Bloque 0 · velocidad sin cámara ---------- */
+/* El lienzo mide 1280×720 A PROPÓSITO, que es el tamaño del fotograma que
+   pide la cámara en el bloque B. Medido el 21-sep-2026 en Chrome de
+   escritorio: el mismo código dibujado en un lienzo de 1000×156 se lee en
+   20 ms y en uno de 1280×720, en 81 ms. Cuatro veces más, porque ZXing recorre
+   píxeles — y eso en una PC, no en un teléfono de piso.
+
+   O sea que un banco que midiera sobre el lienzo chico anunciaría 50 fps y el
+   escaneo en vivo daría 12, sin que nada explicara la diferencia. El número
+   tiene que salir del mismo tamaño de imagen que va a ver la cámara, o no es
+   el número. El código se dibuja al 70 % del ancho, que es como cae la
+   etiqueta de una caja cuando el asesor la acerca. */
+const BANCO_ANCHO = 1280, BANCO_ALTO = 720;
+function dibujarCodigo(cv, texto){
+  const barras = bancoCode39(texto);
+  if(!barras) return false;
+  cv.width = BANCO_ANCHO; cv.height = BANCO_ALTO;
+  const g = cv.getContext('2d');
+  g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height);
+  const modulos = barras.reduce((s,b) => s + b.modulos, 0);
+  const mod = Math.max(1, Math.floor(BANCO_ANCHO * 0.70 / modulos));
+  const total = modulos * mod, alto = 220;
+  let x = Math.round((BANCO_ANCHO - total) / 2);
+  const y = Math.round((BANCO_ALTO - alto) / 2);
+  barras.forEach(b => {
+    const w = b.modulos * mod;
+    if(b.barra){ g.fillStyle = '#000'; g.fillRect(x, y, w, alto); }
+    x += w;
+  });
+  g.fillStyle = '#000'; g.font = '28px monospace'; g.textAlign = 'center';
+  g.fillText(texto, BANCO_ANCHO / 2, y + alto + 40);
+  return true;
+}
+
+$('btnCpu').onclick = async () => {
+  const cv = $('lienzo');
+  $('btnCpu').disabled = true;
+  if(!dibujarCodigo(cv, CODIGO_PRUEBA)){
+    $('pasoCpu').textContent = 'No se pudo dibujar el código de prueba.';
+    $('btnCpu').disabled = false; return;
+  }
+  cv.classList.add('ver');
+  if(window.ZXING_FALLO){
+    $('pasoCpu').innerHTML = '<span class="malo">ZXing no cargó (sin red o CDN caído). ' +
+      'Esta medida no vale: vuelve a abrir con señal.</span>';
+    $('btnCpu').disabled = false; return;
+  }
+  $('pasoCpu').textContent = 'Midiendo…';
+  await new Promise(r => setTimeout(r, 50));
+
+  const res = {};
+  const pares = [['ZXing-WASM', window.ZXingBD],
+                 ['BarcodeDetector nativo', ('BarcodeDetector' in window) ? window.BarcodeDetector : null]];
+  for(const [nombre, Dt] of pares){
+    if(!Dt){ res[nombre] = null; continue; }
+    let leidos = 0; const tiempos = [];
+    for(let i = 0; i < 30; i++){
+      const t0 = performance.now();
+      let codes = [];
+      try{ codes = await unDetector(Dt, cv); }catch(e){ /* cuenta como no leído */ }
+      tiempos.push(performance.now() - t0);
+      if(codes.some(c => (c.rawValue || '').trim() === CODIGO_PRUEBA)) leidos++;
+      if(i % 5 === 0) await new Promise(r => setTimeout(r, 0));
+    }
+    res[nombre] = { ms: Math.round(bancoMediana(tiempos)), leidos: leidos, de: 30 };
+  }
+  D.cpu = res; guardar();
+  $('pasoCpu').textContent = '';
+  $('btnCpu').disabled = false;
+  pintarTodo();
+};
+
+function pintarCpu(){
+  const c = D.cpu;
+  if(!c){ $('resCpu').innerHTML = ''; return; }
+  let h = '';
+  Object.keys(c).forEach(k => {
+    const v = c[k];
+    if(!v){ h += fila(k, '<span class="sub">no existe en este teléfono</span>'); return; }
+    const fps = v.ms > 0 ? Math.round(1000 / v.ms) : 0;
+    const cls = v.leidos < v.de ? 'malo' : (v.ms > 200 ? 'flojo' : 'ok');
+    h += fila(k, '<span class="' + cls + '">' + v.ms + ' ms · ~' + fps + ' fps</span>');
+    if(v.leidos < v.de){
+      h += fila('&nbsp;&nbsp;↳ leyó bien', '<span class="malo">' + v.leidos + ' de ' + v.de + '</span>');
+    }
+  });
+  h += '<div class="nota">Por debajo de ~5 fps el escaneo continuo se siente como una foto ' +
+       'que no termina de salir: el asesor mueve el teléfono y la lectura nunca coincide dos veces.</div>';
+  $('resCpu').innerHTML = h;
+}
+const fila = (k, v) => '<div class="fila"><span>' + k + '</span><b>' + v + '</b></div>';
+
+/* ---------- Bloque A · el flujo de foto ----------
+   Igual que `processImage` en la app: ZXing → nativo → html5-qrcode sobre el
+   archivo → OCR del texto "S/N". El OCR se mide aparte porque es la pieza que
+   el continuo NO puede tener. */
+let tFoto = null;
+let tesseractCargando = null;
+function cargarTesseract(){
+  if(window.Tesseract) return Promise.resolve();
+  if(tesseractCargando) return tesseractCargando;
+  tesseractCargando = new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    s.onload = res; s.onerror = rej; document.head.appendChild(s);
+  });
+  return tesseractCargando;
+}
+async function ocrSerial(file){
+  try{
+    await cargarTesseract();
+    const worker = await Tesseract.createWorker('eng');
+    await worker.setParameters({ tessedit_char_whitelist:'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:/-SN' });
+    const { data } = await worker.recognize(file);
+    await worker.terminate();
+    const T = (data.text || '').toUpperCase().replace(/[ \t]+/g, ' ');
+    const re = /S\s*\/?\s*N\s*[:#.\-]?\s*([A-Z0-9][A-Z0-9\-]{7,23})/g;
+    let m, best = null;
+    while((m = re.exec(T))){
+      const cand = m[1].replace(/-/g, '');
+      if(cand.length >= 8 && cand.length <= 22) best = cand;
+    }
+    return best;
+  }catch(e){ return null; }
+}
+function abrirFoto(abierto){
+  $('btnFoto').style.display = abierto ? 'none' : '';
+  $('fotoAbierto').style.display = abierto ? 'flex' : 'none';
+}
+$('btnFoto').onclick = () => {
+  tFoto = performance.now();
+  abrirFoto(true);
+  $('pasoFoto').textContent = 'Cronómetro corriendo… toma la foto.';
+  $('fileCam').click();
+};
+$('btnFotoNo').onclick = () => {
+  if(tFoto == null) return;
+  anotar({ modo:'foto', ok:false, ms:Math.round(performance.now() - tFoto), via:null });
+  tFoto = null; abrirFoto(false); $('pasoFoto').textContent = 'Anotado como fallo.';
+};
+$('btnFotoDesc').onclick = () => { tFoto = null; abrirFoto(false); $('pasoFoto').textContent = 'Descartado.'; };
+
+$('fileCam').onchange = async e => {
+  const f = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if(!f || tFoto == null){ abrirFoto(false); return; }
+  $('pasoFoto').textContent = 'Leyendo…';
+  let via = null, valor = null;
+  try{
+    const bmp = await createImageBitmap(f);
+    const hit = await decodificar(bmp);
+    if(bmp.close) bmp.close();
+    if(hit){ via = 'codigo'; valor = hit.valor; }
+  }catch(err){ /* sin código de barras legible: quedan el respaldo y el OCR */ }
+  if(!valor){
+    try{
+      const tmp = new Html5Qrcode('reader-file', { formatsToSupport:[
+        Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E ] });
+      const t = await tmp.scanFile(f, false);
+      try{ tmp.clear(); }catch(e2){ /* limpiar el temporal es cortesía, no requisito */ }
+      if(t){ via = 'codigo'; valor = t.trim(); }
+    }catch(err){ /* el respaldo tampoco: queda el OCR */ }
+  }
+  if(!valor){
+    $('pasoFoto').textContent = 'Sin código de barras · leyendo el texto S/N…';
+    const s = await ocrSerial(f);
+    if(s){ via = 'ocr'; valor = s; }
+  }
+  const ms = Math.round(performance.now() - tFoto);
+  tFoto = null; abrirFoto(false);
+  anotar({ modo:'foto', ok:!!valor, ms:ms, via:via });
+  $('pasoFoto').innerHTML = valor
+    ? '<span class="ok">' + (ms/1000).toFixed(1) + ' s · ' +
+      (via === 'ocr' ? 'por OCR del texto S/N' : 'por código de barras') + ' · ' + esc(valor) + '</span>'
+    : '<span class="malo">' + (ms/1000).toFixed(1) + ' s · no leyó nada</span>';
+};
+
+/* ---------- Bloque B · el escaneo continuo ---------- */
+let camara = null, corriendo = false, cortar = false, vivoInterrumpido = false;
+function apagarCamara(){
+  corriendo = false;
+  if(camara){ camara.getTracks().forEach(t => t.stop()); camara = null; }
+  $('vid').style.display = 'none';
+}
+/* La cámara se apaga al cambiar de pestaña y al minimizar. Sin esto se queda
+   encendida en el bolsillo: es la regla que más cuesta ver que falta, porque
+   no rompe nada — sólo gasta batería y calienta. */
+document.addEventListener('visibilitychange', () => {
+  if(document.hidden && camara){
+    interrumpido = true; vivoInterrumpido = true;
+    apagarCamara();
+    $('pasoVivo').innerHTML = '<span class="flojo">Cámara apagada al salir de la app. ' +
+      'Ese intento no cuenta: vuelve a empezarlo.</span>';
+    if(termCorriendo) terminarTermica(true);
+  }
+});
+window.addEventListener('pagehide', () => apagarCamara());
+
+/* ⚠ CON LÍMITE DE ESPERA. Medido el 21-sep-2026 en Chrome: si el diálogo del
+   permiso se queda ahí sin que nadie lo toque, `getUserMedia` NO se resuelve
+   ni se rechaza — se queda pendiente para siempre. La pantalla se quedaba en
+   «Pidiendo la cámara…» con el botón apagado, que es exactamente lo que la
+   restricción prohíbe: el asesor atascado, con el cliente enfrente y sin
+   forma de volver a la foto.
+
+   Y el detalle que se ve al arreglarlo: si el permiso llega TARDE, la cámara
+   se abre igual y nadie la apaga. Por eso el rechazo también cierra el flujo
+   que pueda llegar después. */
+const TOPE_PERMISO = 8000;
+async function abrirCamara(){
+  const restr = { video:{ facingMode:{ ideal:'environment' },
+                          width:{ ideal:1280 }, height:{ ideal:720 } }, audio:false };
+  const pedido = navigator.mediaDevices.getUserMedia(restr);
+  const tarde = new Promise((_, rej) => setTimeout(function(){
+    const e = new Error('sin respuesta'); e.name = 'SinRespuesta'; rej(e);
+  }, TOPE_PERMISO));
+  try{
+    camara = await Promise.race([pedido, tarde]);
+  }catch(err){
+    pedido.then(st => st.getTracks().forEach(t => t.stop()))
+          .catch(function(){ /* no llegó nunca: no hay nada que apagar */ });
+    throw err;
+  }
+  const v = $('vid');
+  v.srcObject = camara; v.style.display = 'block';
+  await v.play();
+  return v;
+}
+function fotogramaA(cv, v){
+  const an = v.videoWidth, al = v.videoHeight;
+  if(!an || !al) return false;
+  cv.width = an; cv.height = al;
+  cv.getContext('2d').drawImage(v, 0, 0, an, al);
+  return true;
+}
+
+$('btnVivo').onclick = async () => {
+  if(corriendo) return;
+  $('congelado').style.display = 'none';
+  const t0 = performance.now();
+  cortar = false; vivoInterrumpido = false;
+  $('btnVivo').disabled = true; $('btnVivoCortar').style.display = 'block';
+  $('pasoVivo').textContent = 'Pidiendo la cámara…';
+  let v;
+  try{ v = await abrirCamara(); }
+  catch(err){
+    /* Permiso negado o cámara ocupada: el asesor NO se queda atascado. Es la
+       restricción que decide si esto puede existir siquiera — `capture` no
+       pide permiso web y `getUserMedia` sí. */
+    $('btnVivo').disabled = false; $('btnVivoCortar').style.display = 'none';
+    const sinRespuesta = err && err.name === 'SinRespuesta';
+    $('pasoVivo').innerHTML = '<span class="malo">' + (sinRespuesta
+      ? 'El permiso de cámara se quedó sin contestar (8 s).'
+      : 'No se pudo abrir la cámara (' + esc(err && err.name || 'error') + ').') +
+      ' Aquí es donde la app tiene que volver al flujo de foto sola: usa el bloque A.</span>';
+    D.permisoCamara = sinRespuesta ? 'sin_respuesta' : 'negado'; guardar();
+    return;
+  }
+  D.permisoCamara = 'ok'; guardar();
+  const tCam = Math.round(performance.now() - t0);
+  $('pasoVivo').textContent = 'Cámara lista en ' + (tCam/1000).toFixed(1) + ' s · acerca el código…';
+
+  const cv = document.createElement('canvas');
+  let estado = bancoConfirmarInicio(), frames = 0, tiempos = [];
+  corriendo = true;
+  while(corriendo && !cortar){
+    const transcurrido = performance.now() - t0;
+    if(transcurrido > TOPE_VIVO) break;
+    if(!fotogramaA(cv, v)){ await new Promise(r => setTimeout(r, 50)); continue; }
+    frames++;
+    const t1 = performance.now();
+    const hit = await decodificar(cv);
+    tiempos.push(performance.now() - t1);
+    estado = bancoConfirmar(estado, hit && hit.valor, hit && hit.fmt);
+    if(estado.confirmado){
+      const ms = Math.round(performance.now() - t0);
+      /* La evidencia. Hoy se sube la foto que tomó el asesor; en continuo no
+         hay archivo, así que sale de aquí: el fotograma del momento en que
+         leyó, comprimido igual que en la app (1280 px, JPEG 0.6). */
+      const ev = congelar(cv);
+      $('congelado').src = ev.url; $('congelado').style.display = 'block';
+      if('vibrate' in navigator) navigator.vibrate(60);
+      apagarCamara();
+      anotar({ modo:'continuo', ok:true, ms:ms, via:'codigo', frames:frames,
+               decodMs:Math.round(bancoMediana(tiempos)), camaraMs:tCam, evidenciaKb:ev.kb });
+      $('pasoVivo').innerHTML = '<span class="ok">' + (ms/1000).toFixed(1) + ' s · ' + frames +
+        ' fotogramas · ' + esc(estado.valor) + ' · evidencia ' + ev.kb + ' KB</span>';
+      $('btnVivo').disabled = false; $('btnVivoCortar').style.display = 'none';
+      return;
+    }
+    await new Promise(r => setTimeout(r, 0));   // deja respirar a la pantalla
+  }
+  const ms = Math.round(performance.now() - t0);
+  apagarCamara();
+  $('btnVivo').disabled = false; $('btnVivoCortar').style.display = 'none';
+  /* ⚠ Un intento que se cortó al minimizar la app NO es un fallo: el asesor no
+     dejó de leer, se salió. Medido el 21-sep-2026 probándolo en Chrome — se
+     anotaba un fallo de 18 s que nadie hizo, y eso sube el porcentaje de
+     fallos del continuo justo en la cuenta que decide si entra. Lo que sí
+     cuenta es el botón «No leyó», que lo toca el asesor. */
+  if(vivoInterrumpido){ vivoInterrumpido = false; return; }
+  anotar({ modo:'continuo', ok:false, ms:ms, via:null, frames:frames,
+           decodMs: tiempos.length ? Math.round(bancoMediana(tiempos)) : null, camaraMs:tCam });
+  $('pasoVivo').innerHTML = '<span class="malo">' + (ms/1000).toFixed(1) + ' s · no leyó (' +
+    frames + ' fotogramas)</span>';
+};
+$('btnVivoCortar').onclick = () => { cortar = true; };
+
+function congelar(cv){
+  const max = 1280;
+  const esc2 = Math.min(1, max / Math.max(cv.width, cv.height));
+  let fuente = cv;
+  if(esc2 < 1){
+    const c2 = document.createElement('canvas');
+    c2.width = Math.round(cv.width * esc2); c2.height = Math.round(cv.height * esc2);
+    c2.getContext('2d').drawImage(cv, 0, 0, c2.width, c2.height);
+    fuente = c2;
+  }
+  const url = fuente.toDataURL('image/jpeg', 0.6);
+  return { url:url, kb: Math.round(url.length * 3 / 4 / 1024) };
+}
+
+/* ---------- Bloque C · cinco minutos ---------- */
+let termCorriendo = false, interrumpido = false, termMuestras = [];
+$('btnTerm').onclick = async () => {
+  if(corriendo || termCorriendo) return;
+  interrumpido = false; termMuestras = [];
+  $('btnTerm').disabled = true;
+  $('pasoTerm').textContent = 'Pidiendo la cámara…';
+  let v;
+  try{ v = await abrirCamara(); }
+  catch(err){
+    $('btnTerm').disabled = false;
+    $('pasoTerm').innerHTML = '<span class="malo">No se pudo abrir la cámara (' +
+      esc(err && err.name || 'error') + ').</span>';
+    return;
+  }
+  const bateria = await (navigator.getBattery ? navigator.getBattery().catch(() => null) : Promise.resolve(null));
+  const cv = document.createElement('canvas');
+  const t0 = performance.now();
+  let frames = 0, tiempos = [], ultimoCorte = t0;
+  termCorriendo = true; corriendo = true;
+  while(corriendo && termCorriendo){
+    const ahora = performance.now();
+    if(ahora - t0 >= TERMICA_MS) break;
+    if(fotogramaA(cv, v)){
+      frames++;
+      const t1 = performance.now();
+      try{ await decodificar(cv); }catch(e){ /* leer o no leer da igual: se mide el trabajo */ }
+      tiempos.push(performance.now() - t1);
+    }
+    if(performance.now() - ultimoCorte >= 10000){
+      const lapso = (performance.now() - ultimoCorte) / 1000;
+      termMuestras.push({
+        t: Math.round(performance.now() - t0),
+        fps: Math.round(frames / lapso * 10) / 10,
+        decodMs: Math.round(bancoMediana(tiempos) || 0),
+        bateria: bateria ? Math.round(bateria.level * 1000) / 10 : null
+      });
+      frames = 0; tiempos = []; ultimoCorte = performance.now();
+      const pc = Math.min(100, Math.round((performance.now() - t0) / 3000));
+      $('barraTerm').style.width = pc + '%';
+      const queda = Math.max(0, Math.ceil((TERMICA_MS - (performance.now() - t0)) / 1000));
+      const m = termMuestras[termMuestras.length - 1];
+      $('pasoTerm').textContent = 'Quedan ' + queda + ' s · ' + m.fps + ' fps · ' + m.decodMs + ' ms';
+    }
+    await new Promise(r => setTimeout(r, 0));
+  }
+  terminarTermica(interrumpido);
+};
+
+function terminarTermica(cortada){
+  if(!termCorriendo) return;
+  termCorriendo = false;
+  apagarCamara();
+  $('btnTerm').disabled = false;
+  D.termico = bancoTermico(termMuestras, cortada);
+  D.termico.calor = null;
+  D.calor = null; guardar();
+  if(cortada){
+    $('pasoTerm').innerHTML = '<span class="malo">La corrida se interrumpió: no cuenta. ' +
+      'Vuelve a empezar sin salirte de la app.</span>';
+  }else{
+    $('pasoTerm').innerHTML = '<span class="ok">Listo.</span> ¿Cómo se siente el teléfono?';
+    $('calor').style.display = 'flex';
+  }
+  pintarTodo();
+}
+[].forEach.call($('calor').children, b => b.onclick = () => {
+  D.calor = b.dataset.c;
+  if(D.termico) D.termico.calor = b.dataset.c;
+  guardar();
+  [].forEach.call($('calor').children, x => x.className = 'chip' + (x.dataset.c === D.calor ? ' on' : ''));
+  pintarTodo();
+});
+
+/* ---------- Anotar y pintar ---------- */
+function anotar(intento){ D.intentos.push(intento); guardar(); pintarTodo(); }
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, c =>
+  ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' })[c]); }
+
+function pintarModo(destino, modo){
+  const r = bancoResumen(D.intentos, modo);
+  let h = fila('Intentos', r.n + (r.suficiente ? '' : ' <span class="flojo">(faltan para ' +
+              BANCO_MIN_INTENTOS + ')</span>'));
+  h += fila('Leyó', r.ok + ' de ' + r.n);
+  h += fila('Mediana', r.mediana == null ? '<span class="sub">sin datos</span>'
+                                         : (r.mediana/1000).toFixed(1) + ' s');
+  h += fila('El peor de cada 5 (p80)', r.p80 == null ? '<span class="sub">—</span>'
+                                                     : (r.p80/1000).toFixed(1) + ' s');
+  h += fila('Fallos', r.fallosPct == null ? '<span class="sub">sin datos</span>' : r.fallosPct + ' %');
+  if(modo === 'foto'){
+    h += fila('Salieron por OCR', r.porOcr + (r.porOcr ? ' <span class="flojo">(ésas las pierde el continuo)</span>' : ''));
+  }
+  $(destino).innerHTML = h;
+}
+function pintarTermico(){
+  const t = D.termico;
+  if(!t){ $('resTerm').innerHTML = ''; return; }
+  let h = fila('Duró', t.minutos + ' min' + (t.interrumpido ? ' <span class="malo">(interrumpida)</span>' : ''));
+  h += fila('Fotogramas/s', (t.fpsIni == null ? '—' : t.fpsIni) + ' → ' + (t.fpsFin == null ? '—' : t.fpsFin) +
+       (t.caidaFpsPct == null ? '' : ' <span class="' + (t.caidaFpsPct > 40 ? 'malo' : 'ok') + '">(' +
+        t.caidaFpsPct + ' %)</span>'));
+  h += fila('Decodificar', (t.msIni == null ? '—' : t.msIni + ' ms') + ' → ' +
+       (t.msFin == null ? '—' : t.msFin + ' ms'));
+  /* «en 5 min» sólo si duró cinco minutos. Una corrida cortada enseñaba
+     «0 % en 5 min», que es un dato bueno inventado a partir de uno que no
+     existe. */
+  h += fila('Batería', t.bateriaPct == null
+    ? '<span class="flojo">no la publica este teléfono · anótala a mano</span>'
+    : t.bateriaPct + ' % en ' + t.minutos + ' min');
+  h += fila('Al tocarlo', D.calor ? esc(D.calor) : '<span class="sub">falta decirlo</span>');
+  $('resTerm').innerHTML = h;
+}
+
+/* Junta este teléfono con los pegados, por sistema. Vive en banco_escaneo.js
+   —con su prueba— porque escoger QUÉ corrida térmica representa a una
+   plataforma es una decisión, no un formato. */
+function fichas(){
+  const todas = [Object.assign({}, D)];
+  Object.keys(OTROS).forEach(k => todas.push(OTROS[k]));
+  return todas.filter(f => f && f.plataforma && f.plataforma !== 'otro');
+}
+function pintarVeredicto(){
+  const v = bancoVeredicto(bancoAgrupar(fichas()));
+  const clase = { entra:'entra', no_entra:'no', parcial:'parcial', sin_datos:'gris' }[v.estado];
+  const titulo = { entra:'✅ ENTRA', no_entra:'⛔ NO ENTRA', parcial:'⚠️ GANA A MEDIAS',
+                   sin_datos:'⏳ SIN DATOS' }[v.estado];
+  let h = '<div class="vered ' + clase + '">' + titulo + ' · ' + esc(v.resumen);
+  Object.keys(v.plataformas).forEach(k => {
+    h += '<ul><b>' + esc(k) + ':</b>';
+    v.plataformas[k].motivos.forEach(m => { h += '<li>' + esc(m) + '</li>'; });
+    h += '</ul>';
+  });
+  $('veredicto').innerHTML = h + '</div>';
+}
+function pintarOtros(){
+  const ks = Object.keys(OTROS);
+  if(!ks.length){ $('otros').innerHTML = ''; return; }
+  let h = '';
+  ks.forEach(k => {
+    const o = OTROS[k];
+    h += fila(esc(o.telefono || k) + ' <span class="sub">' + esc(o.plataforma) + '</span>',
+              (o.intentos || []).length + ' intentos');
+  });
+  $('otros').innerHTML = h;
+}
+function pintarResumen(){
+  const f = bancoResumen(D.intentos, 'foto'), c = bancoResumen(D.intentos, 'continuo');
+  let h = fila('Teléfono', esc(D.telefono || '(sin nombre)') + ' · ' + esc(D.plataforma));
+  h += fila('Foto', f.mediana == null ? '—' : (f.mediana/1000).toFixed(1) + ' s (' + f.n + ')');
+  h += fila('Continuo', c.mediana == null ? '—' : (c.mediana/1000).toFixed(1) + ' s (' + c.n + ')');
+  $('resumen').innerHTML = h;
+}
+function pintarTodo(){
+  pintarCpu(); pintarModo('resFoto', 'foto'); pintarModo('resVivo', 'continuo');
+  pintarTermico(); pintarResumen(); pintarOtros(); pintarVeredicto();
+}
+
+/* ---------- Copiar y pegar entre teléfonos ---------- */
+function textoParaMandar(){
+  const f = bancoResumen(D.intentos, 'foto'), c = bancoResumen(D.intentos, 'continuo');
+  const l = [];
+  l.push('Banco de escaneo · ' + (D.telefono || 'sin nombre') + ' (' + D.plataforma + ')');
+  l.push('Foto:     ' + (f.mediana == null ? 'sin datos' : (f.mediana/1000).toFixed(1) + ' s') +
+         ' · ' + f.ok + '/' + f.n + ' leídas · ' + f.porOcr + ' por OCR');
+  l.push('Continuo: ' + (c.mediana == null ? 'sin datos' : (c.mediana/1000).toFixed(1) + ' s') +
+         ' · ' + c.ok + '/' + c.n + ' leídas');
+  if(D.termico){
+    l.push('5 min:    ' + D.termico.fpsIni + ' → ' + D.termico.fpsFin + ' fps · batería ' +
+           (D.termico.bateriaPct == null ? 'no medida' : D.termico.bateriaPct + ' %') +
+           ' · ' + (D.calor || 'sin decir'));
+  }
+  l.push('#DATOS ' + JSON.stringify(D));
+  return l.join('\n');
+}
+$('btnCopiar').onclick = async () => {
+  const t = textoParaMandar();
+  try{ await navigator.clipboard.writeText(t); $('resumen').insertAdjacentHTML('beforeend',
+        '<div class="nota ok">Copiado ✓</div>'); }
+  catch(e){
+    // Sin permiso de portapapeles (pasa en iOS fuera de un gesto): se enseña
+    // el texto para copiarlo a mano, que es peor pero no deja al asesor sin él.
+    $('resumen').insertAdjacentHTML('beforeend', '<pre>' + esc(t) + '</pre>');
+  }
+};
+$('btnPegar').onclick = () => {
+  const t = $('pegar').value || '';
+  const encontrados = t.match(/#DATOS\s+(\{[\s\S]*?\})\s*$/m) || t.match(/#DATOS\s+(\{[\s\S]*\})/);
+  if(!encontrados){ $('otros').innerHTML = '<div class="nota malo">No encontré la línea #DATOS.</div>'; return; }
+  let o = null;
+  try{ o = JSON.parse(encontrados[1]); }catch(e){ o = null; }
+  if(!o || !o.id){ $('otros').innerHTML = '<div class="nota malo">Ese texto vino cortado.</div>'; return; }
+  if(o.id === D.id){ $('otros').innerHTML = '<div class="nota flojo">Ése es este mismo teléfono.</div>'; return; }
+  OTROS[o.id] = o; guardarOtros(); $('pegar').value = ''; pintarTodo();
+};
+$('btnBorrar').onclick = () => {
+  D = vacio(); guardar(); $('tel').value = ''; pintarChips(); pintarTodo();
+  $('pasoFoto').textContent = ''; $('pasoVivo').textContent = ''; $('pasoTerm').textContent = '';
+};
+
+pintarTodo();
+</script>
+</body>
+</html>
