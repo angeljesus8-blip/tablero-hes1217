@@ -92,22 +92,14 @@
   .volver{ background:#f2f2f4; border:none; border-radius:11px; width:38px; height:38px;
     font-size:22px; font-weight:700; color:#555; cursor:pointer; line-height:1; flex-shrink:0; }
 
-  /* El visor: sitio para la foto que todavía no se ha tomado. Sin él, el paso 1
-     era un botón en medio de la nada y no se entendía a qué hay que apuntar. */
-  .visor{ margin:16px 0 0; height:230px; background:#faf9f9; border:2px dashed #e3d7d7;
-    border-radius:22px; position:relative; display:flex; align-items:center; justify-content:center; }
-  .visor .esq{ position:absolute; width:30px; height:30px; }
-  .visor .tl{ top:18px; left:18px; border-top:4px solid var(--rojo); border-left:4px solid var(--rojo);
-    border-top-left-radius:10px; }
-  .visor .tr{ top:18px; right:18px; border-top:4px solid var(--rojo); border-right:4px solid var(--rojo);
-    border-top-right-radius:10px; }
-  .visor .bl{ bottom:18px; left:18px; border-bottom:4px solid var(--rojo); border-left:4px solid var(--rojo);
-    border-bottom-left-radius:10px; }
-  .visor .br{ bottom:18px; right:18px; border-bottom:4px solid var(--rojo); border-right:4px solid var(--rojo);
-    border-bottom-right-radius:10px; }
   /* La foto es la acción del paso 1 y aquí SÍ es sólida: es lo único que se
-     puede hacer en esta pantalla. En el paso 2 el sólido es «Agregar». */
-  .btn-foto{ background:var(--rojo); color:#fff; margin-top:16px; font-size:16.5px; padding:18px; }
+     puede hacer en esta pantalla. En el paso 2 el sólido es «Agregar».
+
+     (Aquí vivía un «visor»: un marco con esquinas rojas que parecía la cámara
+     y no lo era —la cámara la abre el teléfono al pulsar—. Se quitó el mismo
+     día: 230 px enseñando algo que no pasa, y con ellos la lista del día
+     cabe sin desplazar la pantalla.) */
+  .btn-foto{ background:var(--rojo); color:#fff; margin-top:18px; font-size:16.5px; padding:18px; }
   .vend-seguros{ margin-left:10px; font-size:11.5px; font-weight:700; color:#178046; }
 
   .btn{ width:100%; border:none; font-family:inherit; font-weight:700; font-size:15px;
@@ -577,21 +569,19 @@
     </div>
   </div>
 
-  <!-- ── Paso 1 ── -->
+  <!-- ── Paso 1 ──
+       SIN VISOR (21-sep-2026, el mismo día que nació). Se dibujó un marco con
+       esquinas rojas y un icono de código de barras, y Ángel lo tumbó con la
+       razón correcta: no es la cámara. La cámara la abre el teléfono al pulsar
+       «Tomar foto» (`capture="environment"`), así que ese marco eran 230 px de
+       pantalla enseñando algo que no pasa. Y el precio no era el hueco: era
+       que la lista de lo capturado hoy quedaba debajo del pliegue.
+
+       El paso 1 es ahora lo que de verdad hace: decir qué escanear, el botón,
+       y lo que llevas hoy a la vista sin desplazar. -->
   <div id="paso1">
     <h2 class="paso-t">Escanea el código de barras</h2>
     <p class="paso-s">De ahí salen la serie, el SKU y el precio.</p>
-
-    <div class="visor" aria-hidden="true">
-      <span class="esq tl"></span><span class="esq tr"></span>
-      <span class="esq bl"></span><span class="esq br"></span>
-      <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#D12026" stroke-width="1.5"
-           stroke-linecap="round" stroke-linejoin="round">
-        <path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path>
-        <path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path>
-        <path d="M7 8v8M10.5 8v8M14 8v8M17 8v8"></path>
-      </svg>
-    </div>
 
     <button class="btn btn-foto" id="btnPhoto">📸 Tomar foto</button>
     <div class="cap-foto">

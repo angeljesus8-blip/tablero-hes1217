@@ -4293,9 +4293,18 @@ y de una barra de botones abajo a **cuatro pestañas con nombre** arriba.
 
 **Los pasos: escanea → revisa → guarda.**
 
-- **Paso 1** — el visor con las esquinas rojas, «Tomar foto» sólido y, debajo,
-  «Galería» y «Escribir a mano». Escribir a mano dejó de ser un secreto: antes
-  había que adivinar que se podía tocar el campo.
+- **Paso 1** — el título, «Tomar foto» sólido y, debajo, «Galería» y «Escribir
+  a mano». Escribir a mano dejó de ser un secreto: antes había que adivinar
+  que se podía tocar el campo.
+
+  ⚠️ **Aquí hubo un «visor» y duró unas horas**: un marco con esquinas rojas y
+  un icono de código de barras. Ángel lo tumbó el mismo día con la razón
+  correcta — **no es la cámara**. La cámara la abre el teléfono al pulsar
+  (`capture="environment"`), así que eran 230 px enseñando algo que no pasa.
+  Y el coste no era el hueco: con él, en una pantalla de 844 px, la lista de
+  lo capturado hoy caía entera bajo el pliegue; sin él caben las tres filas
+  sin desplazar. Si alguien vuelve a proponer un visor, que sea la cámara de
+  verdad o que no esté.
 - **Paso 2** — la ficha, con «¿Es esto lo que vendiste?» y el botón de volver.
 - **Paso 3 — NO SE INVENTÓ: es el modal del seguro**, que ya existía y ya
   estaba probado en piso. Por eso `btnAdd` y `finalizarVenta` **no se
