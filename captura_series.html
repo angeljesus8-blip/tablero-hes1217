@@ -1878,7 +1878,24 @@ function accNum(x){
   return isFinite(v) ? v : null;
 }
 
-function accPreparar(img, giro, escala){
+/* `trato` dice qué se le hace a los píxeles después de girar y escalar:
+
+     undefined / 'realce' → gris y contraste ×1.45, que es como nació.
+     'crudo'              → nada: la foto a color, tal como salió del teléfono.
+
+   El realce NO siempre ayuda, y eso está medido (21-sep-2026, dos fotos reales
+   y ocho tratamientos, ver `cnLeerFoto`). En una foto apagada rescata la
+   letra; en una bien iluminada la BORRA — la impresión térmica es gris claro,
+   el contraste la manda a blanco y se pierden los trazos finos: los dígitos
+   del SKU y el `1` de la cantidad. En el ticket 34330 dejó el papel entero
+   ilegible: tres artículos impresos, cero leídos.
+
+   Por eso el parámetro existe en vez de cambiarse la constante: lo que gana
+   una foto pierde la otra, así que quien lee el ticket prueba los dos y se
+   queda con el que cuadre. El flujo de accesorios no pasa `trato` y sigue
+   exactamente como estaba: cambiarlo sin medirlo sería mover una tubería que
+   hoy funciona. */
+function accPreparar(img, giro, escala, trato){
   const vert = (giro === 90 || giro === 270);
   const w = Math.round((vert ? img.height : img.width) * escala);
   const h = Math.round((vert ? img.width : img.height) * escala);
@@ -1888,6 +1905,7 @@ function accPreparar(img, giro, escala){
   cx.translate(w/2, h/2); cx.rotate(giro * Math.PI / 180);
   const dw = Math.round(img.width * escala), dh = Math.round(img.height * escala);
   cx.drawImage(img, -dw/2, -dh/2, dw, dh);
+  if(trato === 'crudo') return cv;
   const d = cx.getImageData(0,0,w,h), a = d.data;
   for(let i=0;i<a.length;i+=4){
     let g = (a[i]*0.299 + a[i+1]*0.587 + a[i+2]*0.114);
@@ -3984,13 +4002,65 @@ let _cnFilas    = [];     // la lista de validar, para no pedirla dos veces
 const CN_ANCLAS = [/atendido/i, /\bTOTAL\b/i, /articulo/i, /importe/i,
                    /1217/, /reimprimir/i, /precio/i];
 
-/* Lee el ticket entero y devuelve el TEXTO, no un extracto: quien lo
-   interpreta es `concursoLeerTicket`, que sabe de líneas, garantías y
-   descuentos. Aquí sólo se le da el papel lo mejor leído posible.
+/* ── Qué tan creíble es una lectura, sin tener el papel delante ──
+   Es la misma pregunta que se hace el asesor mirando la pantalla, sólo que
+   contestada con lo que el propio ticket dice de sí mismo. Lo que más pesa es
+   que la cuenta CIERRE: que las líneas leídas, menos sus descuentos, den el
+   Total impreso. Una lectura que cuadra no se saltó ninguna línea. */
+function cnPuntuar(res){
+  let suma = 0;
+  for(const l of res.lineas) suma += (l.importe || 0) - (l.descuento || 0);
+  const cuadra = res.total != null && res.lineas.length > 0 &&
+                 Math.abs(suma - res.total) < 0.5;
+  const arts = res.lineas.filter(l => !l.es_garantia).length;
+  let p = 0;
+  if(res.ticket)       p += 3;
+  if(res.total != null) p += 2;
+  if(res.vendedor)     p += 1;
+  p += Math.min(res.lineas.length, 12);
+  if(cuadra)           p += 10;
+  if(res.recuento != null && arts === res.recuento) p += 4;
+  p -= res.avisos.length;
+  return { puntos:p, cuadra };
+}
+
+/* Lee el ticket entero y devuelve el TEXTO y lo que se entendió de él. Quien
+   lo interpreta es `concursoLeerTicket`, que sabe de líneas, garantías y
+   descuentos; aquí sólo se le da el papel lo mejor leído posible.
 
    Va a 2600 px y no a los 2200 de accesorios porque este ticket tiene doce
    líneas y no una: con menos resolución, los SKU de nueve dígitos de la parte
-   baja del papel se leen con un dígito de más o de menos. */
+   baja del papel se leen con un dígito de más o de menos.
+
+   ------------------------------------------------------------
+   POR QUÉ SE LEE DOS VECES CUANDO LA CUENTA NO CIERRA
+   ------------------------------------------------------------
+   21-sep-2026, ticket 34330. La foto estaba bien: enfocada, plana, con luz.
+   Y no se leyó NADA — tres artículos impresos y cero en pantalla, porque el
+   realce de contraste que rescata las fotos apagadas borra la letra de las
+   que están bien iluminadas.
+
+   Medido sobre ocho tratamientos × dos fotos reales (34330 y 34273), con ocho
+   datos comprobados en cada una —ticket, fecha, vendedor, total, las tres
+   líneas y el nivel—:
+
+     tratamiento          34330      34273
+     foto cruda a color   8/8 ✓      8/8 ✓
+     gris + contraste     4/8        7/8      ← el de hoy
+     gris sin contraste   8/8 ✓      7/8
+     gris + sharpen       5/8        5/8
+
+   O sea que la foto cruda gana, pero NO se cambia la constante y ya: dos
+   fotos no son una muestra, y el realce está ahí porque alguna foto lo
+   necesitó. Lo que se hace es probar el crudo primero y, si la cuenta no
+   cierra, volver a leer con el realce y quedarse con la lectura mejor
+   puntuada.
+
+   Cuesta lo mismo que hoy cuando sale bien —una sola pasada grande, que es lo
+   que el asesor espera de pie con el cliente enfrente— y sólo paga la segunda
+   cuando la primera no se sostiene, que es justo cuando vale la pena. */
+const CN_TRATOS = ['crudo', 'realce'];
+
 async function cnLeerFoto(file){
   await loadTesseract();
   const img = await new Promise((res, rej) => {
@@ -3999,18 +4069,30 @@ async function cnLeerFoto(file){
   });
   const worker = await Tesseract.createWorker('spa');
   try{
-    let mejor = { giro:0, anclas:-1 };
+    /* El giro se busca UNA vez: no depende del tratamiento, y son cuatro
+       pasadas de miniatura que no hay por qué repetir. */
+    let mejorGiro = { giro:0, anclas:-1 };
     for(const giro of [0, 90, 180, 270]){
-      const cv = accPreparar(img, giro, 900 / Math.max(img.width, img.height));
+      const cv = accPreparar(img, giro, 900 / Math.max(img.width, img.height), 'crudo');
       const { data } = await worker.recognize(cv);
       const n = CN_ANCLAS.filter(re => re.test(data.text)).length;
-      if(n > mejor.anclas) mejor = { giro, anclas:n };
+      if(n > mejorGiro.anclas) mejorGiro = { giro, anclas:n };
       if(n >= 4) break;
     }
-    const cv = accPreparar(img, mejor.giro,
-                 Math.min(2.6, 2600 / Math.max(img.width, img.height)));
-    const { data } = await worker.recognize(cv);
-    return data.text;
+
+    const escala = Math.min(2.6, 2600 / Math.max(img.width, img.height));
+    let mejor = null;
+    for(const trato of CN_TRATOS){
+      const cv = accPreparar(img, mejorGiro.giro, escala, trato);
+      const { data } = await worker.recognize(cv);
+      const res = concursoLeerTicket(data.text);
+      const nota = cnPuntuar(res);
+      if(!mejor || nota.puntos > mejor.nota.puntos){
+        mejor = { texto:data.text, res, nota, trato };
+      }
+      if(nota.cuadra) break;      // la cuenta cierra: no hay nada mejor que buscar
+    }
+    return mejor;
   } finally { await worker.terminate(); }
 }
 
@@ -4090,10 +4172,10 @@ window.cnFoto = async function(inp){
        a un OCR malo: con el papel guardado, un ticket mal leído se arregla
        mirándolo; sin él, hay que pedirle al cliente el ticket que se llevó. */
     _cnFoto = await cnMiniatura(file);
-    const texto = await cnLeerFoto(file);
-    const res   = concursoLeerTicket(texto);
+    const leido = await cnLeerFoto(file);
+    const res   = leido.res;
     const lin   = concursoAplicarRoles(res.lineas, _cnTabla);
-    _cnLeido = { res: res, lineas: lin, texto: texto };
+    _cnLeido = { res: res, lineas: lin, texto: leido.texto, trato: leido.trato };
     cnPintarResultado();
   }catch(e){
     toast('No se pudo leer la foto', 'warn');

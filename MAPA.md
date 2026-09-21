@@ -4285,6 +4285,57 @@ se guardó, o vuelve a subirlo pensando que falló.
 un 9-oct, el ticket se sale de la ventana y el rechazo es indiscutible con el
 papel en la mano. `concursoFechaISO` está aparte y probada por eso.
 
+### Leer la foto: el realce no siempre ayuda *(21-sep-2026, v261)*
+
+Ángel subió el ticket **34330** —foto buena: enfocada, plana, con luz— y la
+pantalla no enseñó **nada**: tres artículos impresos, cero leídos. Tres fallos
+encadenados, y ninguno daba error. Los tres se midieron con las fotos reales
+del 34330 y del 34273, ocho tratamientos de imagen y ocho datos comprobados por
+foto (ticket, fecha, vendedor, total, las tres líneas y el nivel):
+
+| tratamiento | 34330 | 34273 |
+|---|---|---|
+| **foto cruda a color** | **8/8** | **8/8** |
+| gris + contraste ×1.45 *(el de antes)* | 4/8 | 7/8 |
+| gris sin contraste | 8/8 | 7/8 |
+| gris + sharpen | 5/8 | 5/8 |
+
+1. **El realce de contraste borra las fotos bien iluminadas.** La impresión
+   térmica es gris claro; el contraste la manda a blanco y se pierden los
+   trazos finos —los SKU de nueve dígitos y el `1` de la cantidad—. Existe
+   porque rescata las fotos apagadas, así que no se cambió la constante:
+   `accPreparar` acepta ahora un `trato` y `cnLeerFoto` **prueba la foto cruda
+   primero y sólo vuelve a leer con realce si la cuenta no cierra**
+   (`cnPuntuar`, que pesa sobre todo que las líneas menos sus descuentos den el
+   Total). Cuesta lo mismo que antes cuando sale bien: una sola pasada grande.
+   El flujo de accesorios **no** pasa `trato` y sigue igual — cambiarlo sin
+   medirlo sería mover una tubería que hoy funciona.
+2. **Los tratamientos que mejor leen el renglón pierden la cantidad.** Un `1`
+   suelto entre dos columnas de espacios se evapora o sale como `|`, y con la
+   cantidad exigida la línea **desaparecía entera**. Ahora se deduce de los
+   otros dos números del propio renglón (`importe ÷ precio`); si la división no
+   da un entero limpio se toma 1 y se avisa. El guardarraíl: los dos números
+   que quedan tienen que traer su decimal, o «100276717 1 14999.000» se leería
+   como precio 1 e importe 14999.
+3. **Una letra pegada al nombre tiraba el core.** El margen dejó
+   `UU CMATEPAD 12X`, y con `\bMATEPAD\b` esa `C` bastaba para dejar el MatePad
+   `sin_rol`: sin core no hay nivel, y el ticket pasaba de PLATA a «no
+   califica» con la cuenta cerrada y sin un solo aviso. Las fronteras
+   izquierdas se quitaron en `concurso_roles.js` donde la palabra es
+   inconfundible; **la derecha se conserva** donde separa dos cosas (`BAND\b`
+   contra BANDA, `FIT ?\d` contra OUTFIT).
+
+Y el SKU del genérico con un dígito cambiado (`43733` por `43739`) se repara,
+porque el POS imprime «PRODUCTOS VARIOS» sólo para el genérico: las dos
+condiciones —parecido a un dígito **y** ese nombre— van juntas, y el número
+leído queda en `sku_ocr` con su aviso.
+
+⚠️ **Lo que esto enseña para la próxima:** medir el OCR en Node **no basta**.
+Los tres fallos se midieron con `sharp`, pero el de la letra pegada sólo
+apareció al pasar la foto por el **canvas del navegador**, que escala distinto.
+La prueba buena es la página real con la foto real; el fixture del volcado
+(`pruebas/ocr_ticket_real11.txt`, anonimizado) es la red, no la medida.
+
 ### Admin → 🏆 Concurso *(17-sep-2026, v246)*
 
 Las dos cosas que se hacían pegando SQL en el panel de Supabase —dar de alta a

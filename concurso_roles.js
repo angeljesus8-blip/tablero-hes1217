@@ -85,6 +85,28 @@ function norm(s) {
 
    El origen de cada uno está anotado: ticket real, catálogo o suposición
    pendiente de confirmar. Lo que no se midió se dice que no se midió. */
+/* ── POR QUÉ FALTAN FRONTERAS A LA IZQUIERDA ────────────────
+   21-sep-2026, ticket 34330, probado en el navegador con la foto real. El
+   margen de la foto le pegó una letra a la descripción:
+
+     UU CMATEPAD 12X 12/256GB BN + TECLD
+
+   Con `\bMATEPAD\b`, esa `C` pegada basta: el patrón no empata, el MatePad se
+   queda `sin_rol` y el ticket pasa de PLATA a «no califica» — porque sin core
+   no hay nivel. Un ticket perfectamente leído (las tres líneas, los importes
+   al centavo, la cuenta cerrada contra el Total) tirado por una letra que no
+   está en el papel.
+
+   Es el mismo error que ya se corrigió en `concurso_ticket.js` con las anclas
+   `^` (19-sep-2026): comparar contra CÓMO está escrito en vez de contra lo que
+   dice. Y no se caza con la suma, porque la suma cierra: el fallo no está en
+   el dinero, está en el papel que juega el artículo.
+
+   Así que la frontera izquierda se quita donde la palabra es inconfundible
+   —MATEPAD, MATEBOOK, FREEBUDS, M-PENCIL, KEYBOARD— y la DERECHA se conserva
+   donde distingue dos cosas distintas: `BAND\b` no puede empatar con BANDA ni
+   `FIT ?\d` con OUTFIT. Quitar las dos fronteras a las palabras cortas sería
+   cambiar un fallo silencioso por otro. */
 var PATRONES = [
   // ── Servicio ──
   { re: /\bOFFICE\b|LICENCIA WINDOWS|\bLICENCIA\b/,
@@ -98,21 +120,21 @@ var PATRONES = [
 
      La lista es corta a propósito y no se amplía por parecido: todo lo demás
      que fabrica Huawei —watch, band, router, audífonos— es accesorio. */
-  { re: /\bMATEPAD\b|\bMATEBOOK\b|\bMATE ?BOOK\b/,
+  { re: /MATEPAD\b|MATEBOOK\b|MATE ?BOOK\b/,
     roles: ['core'], clase: 'core', nota: 'core' },
-  { re: /\bPURA ?\d|\bNOVA ?\d|\bMATE ?\d{2}|\bHUAWEI Y\d/,
+  { re: /PURA ?\d|NOVA ?\d|\bMATE ?\d{2}|HUAWEI Y\d/,
     roles: ['core'], clase: 'core', nota: 'core · teléfono' },
 
   /* ── Accesorio Huawei: todo lo demás de marca Huawei ──
      Watch y band entran AQUÍ, no en core. Es lo que decide que un ticket de
      band + seguro + mica no califique: sin core no hay nivel. */
-  { re: /\bWATCH\b|\bBAND\b|\bFIT ?\d/,
+  { re: /WATCH\b|\bBAND\b|\bFIT ?\d/,
     roles: ['acc_hw'], clase: 'acc_hw', nota: 'wearable · no es core' },
   { re: /M-?PENCIL/,        roles: ['acc_hw'], clase: 'acc_hw', nota: 'ticket 34140' },
   { re: /MOUSE HUAWEI|\bCD26\b/, roles: ['acc_hw'], clase: 'acc_hw', nota: 'ticket 34140' },
   { re: /FREEBUDS|FREEARC|FREELACE|AUDIF.*HWEI|AUDIF.*HUAWEI/,
     roles: ['acc_hw'], clase: 'acc_hw', nota: 'ticket 34140' },
-  { re: /\bROUTER\b|\bBE3\b|\bCPE\b/,
+  { re: /ROUTER\b|\bBE3\b|\bCPE\b/,
     roles: ['acc_hw'], clase: 'acc_hw', nota: 'no es de los tres core' },
   { re: /TECLADO HUAWEI|FUNDA|SMART ?CASE|KEYBOARD/,
     roles: ['acc_hw'], clase: 'acc_hw', nota: 'suposición · confirmar' }
