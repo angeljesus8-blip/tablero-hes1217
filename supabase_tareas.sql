@@ -42,8 +42,20 @@ CREATE TABLE IF NOT EXISTS public.tareas_hechas (
   -- tarea creaba una fila que nadie leía y nadie reportaba. Que falle de frente.
   -- Si se agrega una tarea al catálogo del HTML, se agrega TAMBIÉN aquí.
   CONSTRAINT tareas_id_valido
-    CHECK (tarea IN ('sanitario','piso','mesas','bodega'))
+    CHECK (tarea IN ('sanitario','piso','mesas','bodega','sillas'))
 );
+
+-- ⚠️ El CHECK de arriba solo se aplica cuando la tabla se CREA. En la 1217 ya
+-- existe desde el 19-sep-2026, así que agregar una tarea al catálogo del HTML y
+-- volver a correr este archivo NO bastaba: `CREATE TABLE IF NOT EXISTS` no toca
+-- una tabla que ya está, la restricción se quedaba con la lista vieja y la
+-- palomita de la tarea nueva se rechazaba sin que el reparto se viera mal.
+-- Por eso se rehace aquí siempre. Al agregar una tarea hay que tocar LAS DOS
+-- listas — son la misma lista escrita dos veces, y la de abajo es la que manda
+-- en una base que ya existe.
+ALTER TABLE public.tareas_hechas DROP CONSTRAINT IF EXISTS tareas_id_valido;
+ALTER TABLE public.tareas_hechas ADD  CONSTRAINT tareas_id_valido
+  CHECK (tarea IN ('sanitario','piso','mesas','bodega','sillas'));
 
 
 -- ── 2 · RLS ─────────────────────────────────────────────────
@@ -197,6 +209,12 @@ GRANT EXECUTE ON FUNCTION public.tarea_marcar(text, text, int, int, text, int, b
 --   f) Una tarea inventada no entra:
 --        SELECT tarea_marcar('1217','<empno-activo>', 2026, 38, 'lavar_coche', 1);
 --        -- espera {"ok": false, "error": "tarea_o_dia_invalido"}
+--
+--   f-bis) Y las sillas SÍ entran (21-sep-2026 — esto es lo que comprueba que
+--          el CHECK se rehízo sobre la tabla que ya existía):
+--        SELECT tarea_marcar('1217','<empno-activo>', 2026, 38, 'sillas', 1);
+--        -- espera {"ok": true, "hecha": true}
+--        -- si dice "tarea_o_dia_invalido", el ALTER del paso 1 no corrió
 --
 --   g) La tabla NO se lee sin cuenta. Desde fuera, con la clave publicable:
 --        curl "https://rjdrljtujbwooejrpyqv.supabase.co/rest/v1/tareas_hechas?select=*" -H "apikey: <clave publicable>"

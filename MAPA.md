@@ -3191,8 +3191,14 @@ El catálogo (`CATALOGO_TAREAS`) y las reglas del motor:
 |---|---|---|
 | Barrer y trapear piso | diaria | la gerencia que **abre** ese día |
 | Limpiar mesas y pantallas | diaria | el apoyo + el asesor que **abre**; el día que el apoyo no viene, el asesor solo |
+| Limpiar sillas | diaria | igual que las mesas *(21-sep-2026)* |
 | Lavar sanitario | semanal | rueda: gerentes, asesores y el apoyo |
 | Orden y limpieza de bodega | semanal | rueda propia, el apoyo incluido |
+
+Las sillas van **con las mesas y no en la rueda semanal**: el cliente se sienta
+en ellas todos los días. Su icono es 💺 y no 🪑 a propósito — 🪑 ya es la Ley
+Silla en la tarjeta del celular, y dos cosas distintas con el mismo dibujo en la
+misma tarjeta se leen como una sola.
 
 ⚠️ **Seis cosas que, si se deshacen, no dan error:**
 
@@ -3246,6 +3252,42 @@ El catálogo (`CATALOGO_TAREAS`) y las reglas del motor:
    ahí la nota («esta semana le toca a Fulana») haría entender a los demás que
    esa semana no van.
 
+   **Y el apoyo SÍ puede tener número de empleado** *(21-sep-2026)*. Todo esto
+   se escribió sobre «el apoyo no tiene con qué entrar», y era falso: el apoyo
+   de la 1217 tiene ficha activa y entra al planeador con su número como
+   cualquiera. Entraba y veía **dos cosas falsas a la vez**: el cartel *«no
+   encontramos tu horario — tu número no coincide con ninguna ficha»* —su alta
+   está bien, solo que en otra tabla— y un panel que decía *«esta semana no te
+   toca ninguna tarea»* mientras el reparto le daba las mesas los seis días que
+   viene. Sus tareas viven en `externos` y el filtro del panel solo miraba
+   `quienes`. **Ni un solo error a la vista: el reparto estaba bien, lo que
+   estaba mal era a quién se le enseñaba** — la misma forma que las dos puertas
+   de la cadena 1-ter, por cuarta vez.
+
+   Cómo quedó: el `#Emp` se captura junto al nombre y el descanso, y es
+   **opcional**. Con él, esa persona ve su semana y palomea lo suyo igual que el
+   asesor —el servidor nunca puso pegas: `tarea_marcar` solo pide que el número
+   esté activo en `empleados`—. Sin él, todo sigue como antes.
+
+   ⚠️ **`miClaveTareas_()` no es `quienSoy()`, y no pueden juntarse.**
+   `quienSoy()` responde «qué tarjeta del planeador es la mía» y tiene que
+   seguir devolviendo `null` para el apoyo, porque quien la llama hace
+   `EQUIPO[yo]` y una clave `@fulana` no existe ahí. La nueva responde «qué clave
+   del reparto soy». Si el mismo número estuviera en las dos partes, **gana la
+   ficha del planeador**: es quien tiene turno, y de ahí cuelgan sus tareas de
+   apertura.
+
+   ⚠️ **Y con número, su palomita deja de ser de cualquiera.** El permiso
+   «cualquiera del equipo marca lo del externo» existía porque, sin ficha, una
+   palomita que nadie puede poner es una tarea que siempre se ve pendiente. En
+   cuanto hay número, ese permiso se cierra: queda en ella y en gerencia. Sin
+   número sigue abierto, o volvería el problema que vino a resolver.
+
+   Su tarjeta del celular lleva **«EN TIENDA» / «DESCANSO»** y no un turno: de
+   esta persona se capturaron días, no horas, e inventarle un horario sería
+   decirle a qué hora entrar. Las tareas salen de `tareasDe_`, el mismo reparto
+   que leen el panel y la tabla del gerente.
+
    **Su nombre se captura en Admin → Equipo y vive en `horarios_config`**, no en
    el código: los dos repos donde se publica este archivo son públicos, y el
    nombre lo cazó la regla `datos` de `verificar.py` el día que se escribió esto.
@@ -3279,13 +3321,27 @@ El catálogo (`CATALOGO_TAREAS`) y las reglas del motor:
    una tarea aquí y olvidar el SQL no rompe el reparto —se ve perfecto— pero al
    palomearla la base la rechaza y no se registra nada.
 
+   **Y el id va en el SQL DOS veces** *(21-sep-2026)*: en el `CREATE TABLE`, que
+   solo corre en una base nueva, y en un `ALTER … ADD CONSTRAINT` que lo rehace
+   sobre la que ya existe. `CREATE TABLE IF NOT EXISTS` no toca una tabla que ya
+   está, así que actualizar solo la primera dejaba a la 1217 con la lista vieja:
+   el reparto pintando «Limpiar sillas» todos los días y la palomita rechazada.
+   La prueba compara ahora **las dos listas del SQL entre sí**, además de contra
+   el catálogo.
+
 La palomita vive en `supabase_tareas.sql`: `tareas_semana()` para leer (devuelve
 `mia`, no el número de quien marcó) y `tarea_marcar()` para escribir. La primera
 palomita manda (`ON CONFLICT DO NOTHING`) y **desmarcar solo puede quien marcó**:
 sin eso, cualquiera podría borrar el trabajo registrado de otro y la tabla
 dejaría de servir para lo único que sirve.
 
-Lo cubre `pruebas/tareas_rotacion.js` (9 bloques).
+Lo cubre `pruebas/tareas_rotacion.js` (12 bloques). Los ocho cebos del
+21-sep-2026 muerden todos: filtro viejo por `quienes`, el cartel de «no
+encontramos tu horario» de vuelta, el apoyo leyendo su propio nombre en vez de
+«te toca», las sillas coladas como semanales, las sillas sin apoyo,
+`miClaveTareas_()` perdiendo la ficha del planeador, la palomita del apoyo
+numerado abierta a cualquiera, y el SQL actualizado en una sola de sus dos
+listas.
 
 ### Un solo login *(4-ago-2026)*
 

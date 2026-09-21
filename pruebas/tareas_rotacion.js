@@ -420,6 +420,130 @@ if (!ger.error) {
   }
 }
 
+/* ── 7-bis · El apoyo CON número entra y ve lo suyo ───────────────────── */
+{
+  /* 21-sep-2026. Esto se escribió dando por hecho que quien limpia «no tiene
+     con qué entrar», y era falso: el apoyo de la 1217 tiene ficha activa y
+     entra al planeador con su número como cualquiera. Lo que veía era el cartel
+     de «no encontramos tu horario» —falso: su alta está bien, solo que en otra
+     tabla— y un panel que decía «esta semana no te toca ninguna tarea»,
+     mientras el reparto le daba las mesas todos los días.
+
+     Ningún error, otra vez: el reparto estaba bien y lo que estaba mal era a
+     quién se le enseñaba. Sus tareas viven en `externos` y el filtro del panel
+     solo miraba `quienes`.
+
+     El número es OPCIONAL y se captura en Admin, nunca aquí. Por eso el equipo
+     base de este archivo sigue sin él: el bloque 10 y los de más arriba cubren
+     la otra mitad —sin número, lo suyo lo palomea gerencia—. */
+  const EMP_APOYO = '900005';
+  const conEmp = Object.assign({}, EQUIPO, {
+    externos: [ { key:'@elena', nombre:'ELENA', emp: EMP_APOYO, descanso: 0 } ]
+  });
+  const v = repartirComo({ empno: EMP_APOYO, puesto: 'Auxiliar' }, '1217', conEmp);
+  ok('la página arranca para el apoyo con número', !v.error, v.error);
+  if (!v.error) {
+    /* Lo primero es que se la reconozca. `quienSoy()` tiene que seguir dando
+       `null` —quien lo llama hace `EQUIPO[yo]` y `@elena` no está ahí—, y la
+       clave del reparto la da `miClaveTareas_()`. */
+    ok('`quienSoy` no la confunde con una ficha del planeador',
+       v.ent.correr('String(quienSoy())') === 'null');
+    ok('pero el reparto sí la reconoce',
+       v.ent.correr('String(miClaveTareas_())') === '@elena',
+       v.ent.correr('String(miClaveTareas_())'));
+
+    /* Y NO ve el cartel de «no encontramos tu horario»: su alta está bien. Ese
+       cartel es para un número que no casa con nadie, y leerlo cuando sí casa
+       es que te digan que no estás dado de alta. */
+    ok('no se le dice que no está dada de alta',
+       v.movil.indexOf('No encontramos tu horario') < 0, v.movil.slice(0, 300));
+    ok('ve su propia semana', v.movil.indexOf('TU SEMANA') >= 0, v.movil.slice(0, 300));
+    ok('con sus días en tienda y su descanso',
+       v.movil.indexOf('EN TIENDA') >= 0 && v.movil.indexOf('DESCANSO') >= 0);
+
+    /* El panel: exactamente sus tareas, todas y solo ésas. Cebo: con el filtro
+       viejo —`t.quienes.indexOf(yo)`— esta lista sale VACÍA aunque el reparto
+       le dé las mesas los seis días que viene. */
+    const chks = [...v.panel.matchAll(/data-tarea="([a-z_]+)" data-dia="(\d)"([\s\S]*?)>/g)]
+                   .map(m => ({ k: m[1] + '|' + m[2], dia: +m[2],
+                                off: m[3].indexOf('disabled') >= 0 }));
+    const filas = chks.map(c => c.k);
+    const suyas = v.reparto.filter(t => t.externos.indexOf('@elena') >= 0)
+                           .map(t => t.id + '|' + t.dia);
+    ok('el apoyo tiene tareas repartidas esta semana', suyas.length > 0);
+    ok('y el panel se las pinta todas',
+       suyas.every(x => filas.indexOf(x) >= 0),
+       'pinta: ' + filas.join(',') + ' · suyas: ' + suyas.join(','));
+    ok('sin colarle ninguna ajena',
+       filas.every(f => suyas.indexOf(f) >= 0),
+       'pinta: ' + filas.join(',') + ' · suyas: ' + suyas.join(','));
+
+    /* Puede palomear lo suyo —el servidor no pone pegas, `tarea_marcar` solo
+       pide número activo— pero no el jueves desde el lunes, igual que el
+       asesor. */
+    const dom  = new Date(JSON.parse(v.ent.correr('JSON.stringify(_tareasCtx.domingo)')));
+    const hoy0 = new Date(); hoy0.setHours(0,0,0,0);
+    for (const c of chks) {
+      const f = new Date(dom); f.setDate(f.getDate() + c.dia); f.setHours(0,0,0,0);
+      ok('la casilla del día ' + c.dia + ' está ' + (f > hoy0 ? 'apagada' : 'viva') + ' para el apoyo',
+         c.off === (f > hoy0), c.k + ' · apagada=' + c.off);
+    }
+    ok('y hay alguna casilla que comprobar', chks.length > 0);
+
+    /* A ella tampoco se le nombra a nadie —es la misma política del 6-sep— y a
+       sí misma se le dice «te toca», no su nombre: leer «ELENA» en la lista de
+       una es leer la lista de otra. */
+    for (const n of ['NORA GERENTE','BENI SUBGER','CARO ASESORA','DANI ASESOR','NORA','BENI','CARO','DANI']) {
+      ok('no se nombra a ' + n + ' en el panel del apoyo', v.panel.indexOf(n) < 0, v.panel.slice(0,400));
+      ok('ni en su tarjeta', v.movil.indexOf(n) < 0, v.movil.slice(0,300));
+    }
+    ok('ni le llega la nota al pie', v.panel.indexOf('tar-nota') < 0);
+    const mia = v.ent.correr('quienesTexto_({ quienes:[], externos:["@elena"], frec:"semanal" })');
+    ok('y lo suyo se le dice «te toca»', mia.indexOf('te toca') >= 0 && mia.indexOf('ELENA') < 0, mia);
+
+    /* Con número, su palomita deja de ser cosa de cualquiera: `puedeMarcar_`
+       se la da a ella y a gerencia, no al asesor que pase por ahí. Sin número
+       —el caso de arriba— sigue abierta, porque si no nadie podría ponerla. */
+    const otroAsesor = repartirComo({ empno:'900003', puesto:'Asesor' }, '1217', conEmp);
+    ok('arranca el asesor con el apoyo ya numerado', !otroAsesor.error, otroAsesor.error);
+    if (!otroAsesor.error) {
+      const t = { id:'bodega', dia: 1, quienes: [], externos: ['@elena'], frec:'semanal' };
+      ok('el asesor ya no palomea lo del apoyo numerado',
+         otroAsesor.ent.correr('String(puedeMarcar_(' + JSON.stringify(t) + '))') === 'false');
+      const sinEmp = repartirComo({ empno:'900003', puesto:'Asesor' });   // EQUIPO base, sin emp
+      ok('pero sí lo del apoyo sin número, o nadie podría',
+         !sinEmp.error &&
+         sinEmp.ent.correr('String(puedeMarcar_(' + JSON.stringify(
+           Object.assign({}, t, { dia: 0 })) + '))') === 'true', sinEmp.error);
+    }
+  }
+}
+
+/* ── 7-ter · Las sillas van con las mesas ─────────────────────────────── */
+{
+  /* Pedida el 21-sep-2026. Es diaria y de apertura, como las mesas: el cliente
+     se sienta en ellas todos los días, así que en la rueda semanal llegaría
+     tarde. Lo que se comprueba es que no se coló como semanal ni se quedó sin
+     el apoyo —los dos errores que no darían ningún aviso—. */
+  const sillas = ger.error ? [] : ger.reparto.filter(t => t.id === 'sillas');
+  ok('las sillas están en el reparto', sillas.length > 0);
+  ok('y son diarias, no semanales', sillas.every(t => t.frec === 'diaria'),
+     JSON.stringify(sillas.map(t => t.frec)));
+  ok('con un día cada una, sin repetirse',
+     new Set(sillas.map(t => t.dia)).size === sillas.length);
+  for (const t of sillas) {
+    ok('las sillas del día ' + t.dia + ' las hace quien abre',
+       t.quienes.every(p => ABREN.indexOf(ger.dias[t.dia][p]) >= 0),
+       t.quienes.join(',') + ' -> ' + t.quienes.map(p => ger.dias[t.dia][p]).join(','));
+    ok('y no llaman al apoyo el día que descansa',
+       t.externos.indexOf('@elena') < 0 || DIAS_APOYO.indexOf(t.dia) >= 0, 'día ' + t.dia);
+  }
+  for (const d of DIAS_APOYO)
+    ok('el día ' + d + ' las sillas son también del apoyo',
+       sillas.some(t => t.dia === d && t.externos.indexOf('@elena') >= 0),
+       JSON.stringify(sillas.find(t => t.dia === d) || null));
+}
+
 /* ── 8 · Fuera de la 1217 esto no existe ──────────────────────────────── */
 {
   /* Este archivo se publica también en `planeador-odemas`, para las tiendas sin
@@ -435,11 +559,22 @@ if (!ger.error) {
      Agregar una tarea al HTML y olvidar el SQL no rompe el reparto —se ve
      perfecto— pero al palomearla la base la rechaza. El reparto se vería bien y
      el checklist no registraría nada. */
-  const sql = fs.readFileSync(path.join(raiz, 'supabase_tareas.sql'), 'utf8');
-  const m   = sql.match(/tarea\s+IN\s*\(([^)]*)\)/i);
-  ok('el SQL declara los ids de tarea', !!m);
-  if (m) {
-    const enSql = m[1].split(',').map(s => s.trim().replace(/^'|'$/g, '')).sort();
+  const sql   = fs.readFileSync(path.join(raiz, 'supabase_tareas.sql'), 'utf8');
+  const listas = [...sql.matchAll(/tarea\s+IN\s*\(([^)]*)\)/gi)]
+                   .map(x => x[1].split(',').map(s => s.trim().replace(/^'|'$/g, '')).sort());
+  /* El id va en el SQL DOS veces: en el `CREATE TABLE` —para una base nueva— y
+     en el `ALTER … ADD CONSTRAINT` que lo rehace —para la que ya existe—. Si
+     solo se toca la primera, la 1217 se queda con la lista vieja y la palomita
+     de la tarea nueva se rechaza: el reparto se ve perfecto y no registra nada.
+     Fue lo que pasó al agregar «Limpiar sillas» el 21-sep-2026. */
+  ok('el SQL declara los ids de tarea en sus dos sitios', listas.length === 2,
+     'encontradas: ' + listas.length);
+  if (listas.length === 2)
+    ok('y las dos listas del SQL dicen lo mismo',
+       listas[0].join(',') === listas[1].join(','),
+       listas[0].join(',') + ' vs ' + listas[1].join(','));
+  if (listas.length) {
+    const enSql = listas[0];
     const enApp = (html.match(/id:\s*'([a-z]+)',\s*\n?\s*nombre:/g) || []);
     const ids   = [];
     const re    = /\{\s*id:\s*'([a-z_]+)',\s*nombre:/g;
