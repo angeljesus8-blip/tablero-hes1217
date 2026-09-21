@@ -4285,6 +4285,47 @@ se guardó, o vuelve a subirlo pensando que falló.
 un 9-oct, el ticket se sale de la ventana y el rechazo es indiscutible con el
 papel en la mano. `concursoFechaISO` está aparte y probada por eso.
 
+## Captura de Series: un solo botón sólido *(21-sep-2026, v265)*
+
+Medido antes de tocar nada, con la pantalla abierta: **seis botones a la vista
+y seis colores de fondo** distintos —rojo, gris, verde, naranja, dorado, azul—.
+Todos gritaban igual, así que lo que el asesor hace veinte veces al día pesaba
+lo mismo que lo que hace dos, y la pantalla no se parecía al menú nuevo (blanco,
+gris claro e iconos 3D).
+
+**Ahora el único sólido es «Agregar al reporte»**, que es el que cierra la
+tarea. Lo demás pasa a tinte: el mismo color, en fondo claro y con la letra del
+color. Qué color es cada cosa **se conserva a propósito** —naranja Mr Fix,
+dorado concurso, azul la hoja de ventas—: eso no es adorno, dice a qué flujo y a
+qué tabla va cada botón.
+
+Y `Agregar` sigue **verde, no rojo de marca**: lleva meses en piso siendo verde,
+y en un botón el rojo también se lee como «cuidado».
+
+**La foto y los campos son UNA tarjeta.** Eran dos bloques sueltos con el
+consejo de la luz flotando en medio, y la foto es el primer paso de rellenar
+esos campos —de ahí salen la serie, el SKU y el precio—. Ahora van los tres
+pasos en orden dentro de la misma tarjeta. Ningún identificador cambió:
+`btnPhoto`, `btnGal`, `serie`, `sku` y `btnAdd` son los mismos que conocía el
+resto del archivo, así que no se tocó una línea de lógica.
+
+⚠️ **El contraste se mide, no se supone.** Los cuatro tintes se midieron contra
+su letra (mínimo 4.5:1 para 14px en una pantalla que se mira con el sol del
+pasillo):
+
+| botón | antes | ahora |
+|---|---|---|
+| Mr Fix (naranja de marca sobre su tinte) | **2.66** ✗ | 4.85 con la letra en `#b8460f` |
+| Agregar (blanco sobre `--verde`) | **4.28** ✗ | 4.99 con `#178046` sólo en el botón |
+| Tomar foto · Concurso · Ventas | 4.60 · 4.82 · 4.83 | sin cambio |
+
+La variable `--verde` **no** se tocó: la usan textos e insignias de toda la
+pantalla, donde el verde va sobre blanco y ahí el problema no existe.
+
+Lo que **no** se movió: los paneles (Mr Fix, Concurso, Ventas del día) por
+dentro siguen igual —son otra pantalla, con su propio tema— y el botón morado
+de `ap-modo`, que es la acción principal cuando se entra por `?apartado=`.
+
 ### Leer la foto: el realce no siempre ayuda *(21-sep-2026, v261)*
 
 Ángel subió el ticket **34330** —foto buena: enfocada, plana, con luz— y la
