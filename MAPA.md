@@ -5091,7 +5091,8 @@ al principio del archivo; la que más importa: **el color dice algo o no se usa*
 (`--ok` verde, `--atencion` ámbar, `--alerta` rojo, `--info` azul; un número que
 solo informa va en `--tinta`).
 
-**Quién lo usa hoy:** solo `tablero.html`. Las demás páginas se pasan una por
+**Quién lo usa hoy:** `tablero.html` y, desde la v276, `captura_series.html`
+(ver «Captura con el estilo común» más abajo). Las demás páginas se pasan una por
 fase (plan en la memoria del proyecto: encabezado común → tablero → captura →
 horarios, que se edita en `horario-semanal` → comisiones y admin).
 
@@ -5182,5 +5183,75 @@ nombres.js no revienta). Cebos: 5 en las reglas y 3 en la conexión, todos
 cazados. Probado también contra las 96 descripciones del inventario real
 (fuera del repo): 0 vacías.
 
-**Pendiente:** Captura todavía muestra la descripción cruda (fase 4), y Admin
-aún no lista las abreviaturas sin traducir.
+**Ya no pendiente (v276):** Captura enseña el nombre traducido y Admin lista
+las abreviaturas sin traducir — ver la sección siguiente.
+
+## Captura con el estilo común *(22-sep-2026, v276 — rama `rediseno-captura`)*
+
+Fase 4 del rediseño visual, nivel «blinda». Cuatro cosas y una de Admin.
+
+**1. estilo.css y el encabezado `.barra`.** Captura carga `estilo.css` y su
+`<header>` es el `.barra` del tablero; el contador de la derecha dice «N hoy»
+en tinta (en rojo parecía alerta). La pantalla de «¿Quién eres?» —que era un
+logo grande centrado con su propio «‹»— lleva el mismo `.barra`.
+- **Colores: 84 → 16.** Un script mapeó cada hex a su token (grises a
+  `--tinta*`, verdes a `--ok`, naranjas a `--atencion`…) y lo que es SOLO de
+  Captura quedó con nombre en su `:root`: `--oro*` (concurso), `--plata*`,
+  `--preventa*`, `--apagado`, `--borde`, los `*-borde`. `PALETA_TOPE` bajó a 16.
+  Contrastes medidos tras el cambio: todos ≥ 4.5 (Agregar 5.39, Mr Fix 4.67;
+  la pastilla «KPI crítico» del seguro pasó de naranja 2.9 a `--atencion`).
+- **Estilos inline: 168 → 33.** Los repetidos son clases al FINAL del
+  `<style>` (`.f1`, `.btn-sec`, `.panel-cuerpo`, `.vd.z76`…): tienen la misma
+  especificidad que `.vd-pie`/`.vd-lista`/`.btn` y tienen que ganarles. Lo que
+  queda inline es estado (`display:none` que el JS prende) o un color calculado.
+  ⚠️ Al pasar atributos de cadenas de JS a clases se pegó uno
+  (`value="…"placeholder=`, en el ticket del concurso): si se repite la
+  operación, buscar `"' +` seguido de una línea que empiece con atributo.
+- `.tabs` y `.vendbar` se pegan a `top:63px` = `.barra` (60) + raya (3).
+
+**2. Seguro: «1 año» DESTACADO, NO MARCADO.** En el tablero sale marcado
+porque ahí solo se cotiza; aquí el toque ES el registro y va al Assurant
+attach. El modal tiene tres botones: «Sí · 1 año» (sólido, «Recomendado»,
+«protege 2 años con el de fábrica»), «Sí · 2 años» (tinte) y «Sin seguro».
+Los dos «Sí» registran `seguro: true` — la base no guarda años; «2 años» está
+para que quien lo vendió no toque un botón que dice otra cosa. Sin precio (lo
+decidió Ángel: aquí se registra lo ya cobrado en el POS).
+- Al abrir el modal se le quita el foco a todo: con el foco en la serie, un
+  Enter elegiría por el asesor.
+- `btnAdd` no hace nada con el modal abierto. Antes, Enter otra vez en la
+  serie (o doble toque) pisaba `_pendingVenta` y tiraba la foto de la primera.
+
+**3. Nombres (`nombres.js`).** `nomLineaCS` (memo en la propia función: un
+`const` suelto no existiría aún cuando `render()` corre al cargar) y
+`pintarNombreCS` (debajo del campo Descripción del paso 2). Se engancha en los
+cuatro sitios que escriben ese campo: `aplicarProducto`, el limpiado tras
+guardar, el borrador y el `input`. La lista del día enseña el nombre en su
+renglón y ya NO repite la descripción del sistema (un renglón más sacaba la
+lista de la pantalla); Ventas del día enseña los dos, la del sistema chica
+para cotejar con el POS. **Lo guardado no cambia**: `desc`, `p_desc`, el
+editor y el autollenado siguen con la descripción del sistema.
+- Ventas del día metía `v.desc` (y serie, SKU y vendedor) **sin escapar** en
+  el `innerHTML`. Ahora van con `esc`.
+
+**4. Pruebas.**
+- `pruebas/captura_nombres_seguro.js` (nueva): traduce en pantalla y guarda
+  la del sistema (campo, `items`, `p_desc`), sin nombres.js no revienta,
+  Ventas del día escapa, el modal sin `autofocus`/preselección/`.focus()`, y
+  el doble «Agregar». **11 cebos, 11 cazados.**
+- `pruebas/pantalla_390.js` mide también Captura (¿quién eres?, paso 1, paso
+  2, seguro, lista) a 390 y 360 px, y prueba el seguro con teclado y dedo de
+  verdad (CDP): nada con foco, Enter desde el cuerpo y desde la serie no
+  registra, tocar fuera no registra, y un toque real sobre «1 año» SÍ registra
+  con seguro y con la descripción del sistema. **5 cebos, 5 cazados** (foco
+  en «1 año», Enter que elige, velo que elige, «1 año» muerto, encabezado de
+  tres renglones).
+
+**5. Admin → 📦 Catálogo → «🔤 Nombres sin traducir».** Botón, no carga sola.
+Lee `tablero_todo` (la lectura pública del tablero, sin SQL nuevo) y pasa
+inventario + promos por `sinTraducirDe` —pura, con el `nombreCliente` de
+nombres.js—: abreviatura, cuántos productos, un ejemplo. Sin red dice «no se
+pudo leer» (una lista vacía diría «todo traducido»); sin nombres.js, igual.
+Lo prueba el final de `pruebas/nombres_cliente.js` con la función SACADA de
+admin.html (4 cebos cazados). Contra la base real el 22-sep: 246
+descripciones, 12 sin traducir — AM 3, PL 3, BNA 2, GRSP 2, NG 2 (cuando el
+color no va al final), P-MAX 2, PK 2, AN, BG, MC, NGC, RUN.
