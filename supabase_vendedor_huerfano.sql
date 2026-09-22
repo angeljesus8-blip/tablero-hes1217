@@ -36,6 +36,61 @@
 --  No cambia la firma ni las columnas, así que Admin sigue leyéndola igual.
 -- ============================================================
 
+-- ── LA REGLA DE «¿QUIÉN ES ÉSTE?», EN UN SOLO SITIO ─────────
+--
+-- La usan el informe (abajo) y el arreglo de los datos
+-- (_privado/unificar_vendedor_2.sql). Tiene que ser LA MISMA: si el informe
+-- dice «esto quedaría como X» con una regla y el UPDATE usa otra, el «mirar
+-- antes de tocar» miente — y eso es exactamente lo que se está arreglando.
+--
+-- Dos formas de reconocer a alguien, en orden, y las dos exigen que el
+-- resultado sea ÚNICO:
+--
+--   1. El nombre guardado es el PRINCIPIO del de la ficha.
+--        'Jorge Medina'  ->  'Jorge Medina Rejon'
+--
+--   2. Sus palabras aparecen, EN ORDEN, dentro del de la ficha. Hace falta
+--      porque hay quien se guarda con nombre y apellido paterno saltándose el
+--      segundo nombre, y eso no es un prefijo de nada:
+--        'Luis Vidal'  ->  'Luis de Jesus Ortega Vidal'
+--
+-- Devuelve CUÁNTOS casan y, si casa uno solo, cuál. Con dos o más no propone
+-- ninguno a propósito: elegir por el que salga primero le mueve la comisión a
+-- una persona real.
+CREATE OR REPLACE FUNCTION public.vendedor_probable_(p_store text, p_nombre text)
+RETURNS TABLE (cuantos bigint, nombre text)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
+AS $$
+  WITH g AS (
+    SELECT upper(unaccent_(coalesce(p_nombre, ''))) AS txt
+  ),
+  por_prefijo AS (
+    SELECT e.nombre
+      FROM public.empleados e, g
+     WHERE e.store_id = p_store
+       AND g.txt <> ''
+       AND upper(unaccent_(e.nombre)) LIKE g.txt || ' %'
+  ),
+  por_palabras AS (
+    SELECT e.nombre
+      FROM public.empleados e, g
+     WHERE e.store_id = p_store
+       AND g.txt <> ''
+       AND upper(unaccent_(e.nombre)) LIKE '%' || regexp_replace(g.txt, '\s+', '%', 'g') || '%'
+  ),
+  elegidos AS (
+    SELECT nombre FROM por_prefijo
+    UNION ALL
+    SELECT nombre FROM por_palabras
+     WHERE NOT EXISTS (SELECT 1 FROM por_prefijo)
+  )
+  SELECT count(*)::bigint, min(nombre) FROM elegidos;
+$$;
+
+REVOKE ALL ON FUNCTION public.vendedor_probable_(text,text) FROM public;
+GRANT EXECUTE ON FUNCTION public.vendedor_probable_(text,text) TO anon, authenticated;
+
+
 CREATE OR REPLACE FUNCTION public.equipo_divergencias(p_store text)
 RETURNS TABLE (nombre text, origen text, problema text)
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
@@ -102,24 +157,14 @@ AS $$
          format('%s %s desde el %s · %s',
                 x.n, x.que, to_char(x.desde, 'DD/MM/YYYY'),
                 CASE
-                  WHEN x.parecidos = 1 THEN 'parece ' || x.unico || ' escrito corto'
-                  WHEN x.parecidos > 1 THEN 'coincide con ' || x.parecidos::text ||
+                  WHEN vp.cuantos = 1 THEN 'parece ' || vp.nombre || ' escrito corto'
+                  WHEN vp.cuantos > 1 THEN 'coincide con ' || vp.cuantos::text ||
                        ' empleados: NO se puede unificar sin mirarlo'
                   ELSE 'no casa con ningun empleado: su comision no se suma a nadie'
                 END)
     FROM (
       SELECT t.vendedor, t.origen, count(*) AS n, min(t.cuando) AS desde,
-             max(t.que) AS que,
-             (SELECT count(*) FROM public.empleados e
-               WHERE e.store_id = p_store
-                 AND (upper(unaccent_(e.nombre)) LIKE upper(unaccent_(t.vendedor)) || ' %'
-                   OR upper(unaccent_(t.vendedor)) LIKE upper(unaccent_(e.nombre)) || ' %')
-             ) AS parecidos,
-             (SELECT min(e.nombre) FROM public.empleados e
-               WHERE e.store_id = p_store
-                 AND (upper(unaccent_(e.nombre)) LIKE upper(unaccent_(t.vendedor)) || ' %'
-                   OR upper(unaccent_(t.vendedor)) LIKE upper(unaccent_(e.nombre)) || ' %')
-             ) AS unico
+             max(t.que) AS que
         FROM (
           SELECT v.vendedor, 'ventas'::text AS origen, v.vendida_en AS cuando,
                  'venta(s)'::text AS que
@@ -137,7 +182,8 @@ AS $$
                 WHERE e.store_id = p_store
                   AND upper(unaccent_(e.nombre)) = upper(unaccent_(t.vendedor)))
        GROUP BY t.vendedor, t.origen
-    ) x;
+    ) x
+    CROSS JOIN LATERAL public.vendedor_probable_(p_store, x.vendedor) vp;
 $$;
 
 REVOKE ALL ON FUNCTION public.equipo_divergencias(text) FROM public;
