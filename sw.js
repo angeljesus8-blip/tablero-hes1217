@@ -2,7 +2,7 @@ importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
 // ÚNICO lugar donde vive la versión de la app. Las páginas ya no la repiten:
 // registran './sw.js' con updateViaCache:'none' y el navegador detecta el
 // cambio al ver que este archivo es distinto. Subir el número aquí y ya.
-const VERSION = 'v274';
+const VERSION = 'v275';
 const CACHE = 'hes1217-' + VERSION;
 const ARCHIVOS = [
   './index.html',
@@ -20,6 +20,9 @@ const ARCHIVOS = [
   // (adivina el producto) y admin (avisa de codigos que van a empatar).
   './acc_codigos.js',
   './lector_etiqueta.js',
+  // Los nombres en lenguaje de cliente (22-sep-2026). Sin él la página no se
+  // rompe —pinta la descripción cruda—, pero sin señal volvería el «AUDIF… HW».
+  './nombres.js',
   // El concurso ORO/PLATA. Van al precache por la misma razon que todo lo de
   // arriba: un <script src> que no llega NO rompe la pagina, deja la pestana
   // abierta y sin reaccionar al boton. Falla callando.

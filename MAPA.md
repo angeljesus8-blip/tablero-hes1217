@@ -5148,3 +5148,39 @@ con seguro, igual que los deja `selSeg`.
 diseñado) y el de la preventa, más abajo en el archivo, que lo pisaba en TODAS
 las tarjetas con morado sólido. El de preventa quedó como `.pv-btns .btn-apartar`.
 Si una regla de estilo sale "de la nada", buscar el mismo selector dos veces.
+
+## Nombres en lenguaje de cliente: `nombres.js` *(22-sep-2026, v275)*
+
+«AUDIF IN EAR HW F-BUDS PRO 4 VD» → **Audífonos Huawei FreeBuds Pro 4**, con
+«Verde» abajo y la descripción del sistema en chico.
+
+**Por qué llegan abreviados, y por qué NO se corrige en la base.** El catálogo
+corporativo topa la descripción en ~30 caracteres (93 de 96 SKUs miden 28-31)
+y quien da de alta abrevia a mano sin regla (AUDIF/AUDÍF, HW/HWEI). La carga
+diaria de Admin hace `SET descripcion = excluded.descripcion`: lo que se
+corrigiera en `catalogo` se borra al día siguiente. Por eso es solo de pantalla
+y por REGLAS (no lista por SKU): lo que llega mañana se traduce solo.
+
+**La cadena:** `nombres.js` (puro, sin DOM) → en tablero.html `nomDe` (memo) →
+`nomProd` (tarjetas: modelo · ficha y color · original en mono), `nomLinea`
+(WhatsApp al cliente, cotización y su texto compartido) y `coincide` (busca
+por `textoBusqueda`: original + traducido, sin acentos). Si `nombres.js` no
+llega, `nomDe` devuelve la descripción cruda: se ve como antes, no se rompe.
+- Lo desconocido sale TAL CUAL y queda en `sinTraducir`. Colores sin confirmar
+  (AN, PK, GRSP, PL, AM, BG, BNA, NGC) se dejan como vienen.
+- **El Excel del sistema trae la Í y la É rotas** (U+FFFD: «AUD�F», «CAF�»,
+  hasta el encabezado «DESCRIPCI�N»). Llegan así a la base. `repararTexto`
+  las arregla solo en palabras conocidas (`ROTAS`); un � en otra palabra se deja.
+- La descripción original NO cambia en ningún dato: la usan la venta, el
+  autollenado de Captura, el reporte regional y la etiqueta.
+
+**Lo cuida:** `pruebas/nombres_cliente.js` (las 211 descripciones del CATALOGO
+de captura_series.html: ninguna vacía, ninguna pierde modelo/memoria/color, ni
+una abreviatura conocida sin traducir, 10 trampas de escritura doble) y el
+bloque 16 de `casos_tablero.js` (pinta, busca, manda al cliente, y sin
+nombres.js no revienta). Cebos: 5 en las reglas y 3 en la conexión, todos
+cazados. Probado también contra las 96 descripciones del inventario real
+(fuera del repo): 0 vacías.
+
+**Pendiente:** Captura todavía muestra la descripción cruda (fase 4), y Admin
+aún no lista las abreviaturas sin traducir.
