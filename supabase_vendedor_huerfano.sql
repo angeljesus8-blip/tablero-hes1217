@@ -183,7 +183,39 @@ AS $$
                   AND upper(unaccent_(e.nombre)) = upper(unaccent_(t.vendedor)))
        GROUP BY t.vendedor, t.origen
     ) x
-    CROSS JOIN LATERAL public.vendedor_probable_(p_store, x.vendedor) vp;
+    CROSS JOIN LATERAL public.vendedor_probable_(p_store, x.vendedor) vp
+
+  -- ── Y el que no rompe las comisiones pero sí el attach ────
+  --
+  -- Un nombre puede casar con la ficha y estar escrito DISTINTO: con acentos
+  -- y sin ellos, normalmente. El reporte de comisiones los une —compara con
+  -- `unaccent_`— y por eso esto no sale en lo de arriba.
+  --
+  -- Pero `ventas_hoy` y los attach agrupan por el nombre TAL CUAL
+  -- (`GROUP BY h.vendedor`), y el tablero los indexa igual. Así que el mismo
+  -- asesor sale como DOS personas y su Assurant Attach se parte en dos
+  -- porcentajes, ninguno de los cuales es el suyo. No da error y no se nota
+  -- salvo que alguien cuente las filas.
+  UNION ALL
+
+  SELECT y.vendedor,
+         'grafia',
+         format('%s fila(s) escritas distinto a la ficha («%s»): para las '
+                'comisiones da igual, pero en el attach por asesor sale como '
+                'otra persona', y.n, y.ficha)
+    FROM (
+      SELECT t.vendedor, count(*) AS n, min(e.nombre) AS ficha
+        FROM (
+          SELECT v.vendedor FROM public.ventas v WHERE v.store_id = p_store
+          UNION ALL
+          SELECT a.vendedor FROM public.accesorios_ventas a WHERE a.store_id = p_store
+        ) t
+        JOIN public.empleados e
+          ON e.store_id = p_store
+         AND upper(unaccent_(e.nombre)) = upper(unaccent_(t.vendedor))
+       WHERE t.vendedor <> e.nombre
+       GROUP BY t.vendedor
+    ) y;
 $$;
 
 REVOKE ALL ON FUNCTION public.equipo_divergencias(text) FROM public;

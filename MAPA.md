@@ -4676,6 +4676,39 @@ sitios —`empleados.nombre` y `tiendas.vendedores`— y «¿Quién eres?» guar
 de la config. Mientras eso siga así, lo que lo caza es `equipo_divergencias`, y
 ahora mira también lo guardado: se ve en días, no a fin de mes.
 
+### El que no rompe las comisiones pero sí el attach *(22-sep-2026)*
+
+Unificadas las 182 filas, `equipo_divergencias` quedó en cero. Y aun así el
+mismo asesor seguía apareciendo **dos veces** en las ventas de un día: con
+acentos y sin ellos.
+
+Eso no lo caza el informe **y tiene razón**: el reporte de comisiones compara
+con `unaccent_`, así que las dos grafías suman a la misma persona. El dinero
+está bien.
+
+⚠️ **Lo que está mal es el attach.** `ventas_hoy` y los dos attach agrupan por
+el nombre TAL CUAL —`GROUP BY h.vendedor`— y el tablero los indexa igual
+(`vend[v.vendedor]`). Así que un asesor sale como dos personas y su Assurant
+Attach se parte en dos porcentajes, **ninguno de los cuales es el suyo**. Es el
+KPI crítico de la tienda y no da ningún error: hay que contar las filas para
+verlo.
+
+Y la unificación de hoy lo **empeoró** sin quererlo: al pasar 67 ventas del
+nombre corto a la grafía de la ficha —con acentos—, quedaron repartidas casi a
+la mitad con las que ya estaban escritas sin acentos.
+
+Dos cosas, entonces:
+
+- El informe pasa a decirlo (`origen` = `grafia`), porque hasta ahora era
+  invisible por diseño.
+- El arreglo deja en todas las filas **el texto exacto de la ficha**, que es el
+  único que casa con todo: con el `GROUP BY` literal y con el `unaccent_` de
+  las comisiones.
+
+Lo que queda pendiente y no se hizo: **normalizar el `GROUP BY`** de
+`ventas_hoy` y los attach. Con los datos unificados el síntoma desaparece hoy,
+pero la agrupación sigue dependiendo de cómo esté escrito el nombre.
+
 ### De paso: el ejemplo del campo Equipo
 
 Buscando el origen apareció otra cosa, que **no fue la causa** pero se arregló
