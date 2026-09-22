@@ -5080,3 +5080,46 @@ y se pintan, y `43739` se anuncia como TechSmart antes de guardar nada. Las dos
 escrituras llegan a su función y se paran en el token (`no_autorizado`), que es
 justo lo que prueba que los parámetros cuadran. **La escritura con token bueno
 no se probó**: habría dado de alta a alguien de verdad.
+
+## Estilo común: `estilo.css` *(22-sep-2026, v272 — rama `rediseno-visual`)*
+
+Hasta aquí cada página traía su propio estilo: Captura 84 colores distintos,
+el tablero 72, Horarios la paleta de Google, y cuatro encabezados diferentes.
+`estilo.css` es lo que TIENE que ser igual en todas; lo propio de cada pantalla
+sigue en su `<style>`, pero hecho con estas piezas. Sus reglas están escritas
+al principio del archivo; la que más importa: **el color dice algo o no se usa**
+(`--ok` verde, `--atencion` ámbar, `--alerta` rojo, `--info` azul; un número que
+solo informa va en `--tinta`).
+
+**Quién lo usa hoy:** solo `tablero.html`. Las demás páginas se pasan una por
+fase (plan en la memoria del proyecto: encabezado común → tablero → captura →
+horarios, que se edita en `horario-semanal` → comisiones y admin).
+
+**Lo que cambió en el tablero:**
+- Encabezado `.barra`: una franja de 60 px (medía 98, en tres renglones). Los
+  ids que usa el código no cambiaron: `#updated`, `#headerStoreSub`, `#btnBell`.
+- `#updated` ya no lo escriben cuatro lugares con su propio HTML: lo escribe
+  `pintarEstado(clase, titulo, detalle)`. Trae su propio escape porque corre al
+  cargar, **antes** de que exista `esc` (const): llamar `esc` ahí revienta.
+- La campana es SVG. Era emoji, y a un emoji no se le cambia el color: suscrito
+  o no se veía igual. Ahora `actualizarCampana` pone la clase `.activa`.
+- Tarjetas de Inicio: `FILTROS` lleva `img` (iconos/t_*.png) y `emoji` de
+  respaldo, sin `color`. El número lo pinta `cifraClase` por significado. Antes
+  el cuadrito de color se armaba con `${f.color}1a`, que solo funciona con
+  hexadecimal: con `var(--naranja)` salía sin fondo, y por eso solo Apartados
+  lo tenía.
+- «↻ Actualizar» de Promos pasó a botón secundario.
+- `.search-wrap` se pega a `top:63px` = alto de `.barra` + raya roja. Si la
+  barra cambia de alto, cambia este número.
+
+**Lo que lo cuida:**
+- `verificar.py` → regla `paleta`: tope de colores por página (`PALETA_TOPE`),
+  puede bajar y no subir; y la página que carga `estilo.css` exige que esté en
+  `ARCHIVOS` de `sw.js` (sin él, sin señal abre sin estilo).
+- `pruebas/pantalla_390.js`: la única prueba en un navegador DE VERDAD (Edge
+  sin ventana, sin dependencias). Pinta las cinco secciones a 390 y 360 px con
+  la tienda inventada y mide: nada se sale a lo ancho, encabezado ≤ 76 px, un
+  icono por tarjeta. Mete un cebo de 520 px en cada corrida y falla si no lo ve.
+  `--fotos DIR` guarda capturas: así se hace el antes/después.
+- Cebos probados el 22-sep: color suelto nuevo, estilo.css fuera del precache,
+  emoji devuelto al título, título que se parte — los cuatro se cazan.
