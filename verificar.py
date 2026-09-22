@@ -1642,7 +1642,8 @@ def r_pruebas():
                'comisiones_solo_mia.js',
                'login_por_correo.js', 'admin_sesion_ajena.js',
                'mrfix_corregir.js', 'cea_precio_nuevo.js', 'cea_vigencia.js',
-               'concurso_oro_plata.js', 'admin_preventa.js')
+               'concurso_oro_plata.js', 'admin_preventa.js',
+               'lector_etiqueta.js')
 
     # La lista de arriba es explícita a propósito —así falta un archivo y se
     # nota—, pero eso deja el hueco contrario: una prueba escrita y no añadida
