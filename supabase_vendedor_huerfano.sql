@@ -107,8 +107,8 @@ AS $$
          'accesorios',
          format('%s accesorio(s) desde el %s a nombre de alguien que no esta '
                 'en el equipo: su comision no se suma a nadie',
-                count(*), to_char(min(a.creado_en), 'DD/MM/YYYY'))
-    FROM public.accesorios a
+                count(*), to_char(min(a.vendida_en), 'DD/MM/YYYY'))
+    FROM public.accesorios_ventas a
    WHERE a.store_id = p_store
      AND coalesce(trim(a.vendedor),'') NOT IN ('', '(sin nombre)')
      AND NOT EXISTS (

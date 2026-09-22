@@ -1587,6 +1587,55 @@ def r_ejemplos_no_datos():
                               % (pagina, campo, que, ejemplo[:40], que))
 
 
+# ── 14-quater · Un SQL no puede nombrar una tabla que no existe ──
+# 21-sep-2026. Se le pasó a Ángel un SQL para pegar que decía
+# `FROM public.accesorios`, y esa tabla se llama `accesorios_ventas`. Lo cazó
+# Postgres al pegarlo —«relation does not exist»—, o sea el peor sitio: con el
+# editor abierto, a medio aplicar un cambio, y con la duda de si lo que ya
+# corrió quedó a medias.
+#
+# Es barato de comprobar antes: el repo versiona los CREATE de casi todo, así
+# que un nombre que no define NADIE es casi siempre un error de escritura.
+#
+# Las llamadas a función (`FROM public.ventas_hoy(...)`) quedan fuera: se
+# reconocen por el paréntesis. Y `empleados` y `tiendas` van en la lista de
+# conocidas porque existen en la base desde antes de que el repo versionara
+# esquemas — no se versionaron nunca, y eso es un hueco aparte.
+def r_tablas_que_existen():
+    CONOCIDAS_SIN_CREATE = {'empleados', 'tiendas'}
+    definidas = set(CONOCIDAS_SIN_CREATE)
+    sqls = []
+    for carpeta in ('', '_privado'):
+        d = os.path.join(BASE, carpeta) if carpeta else BASE
+        try:
+            for f in sorted(os.listdir(d)):
+                if f.endswith('.sql'):
+                    sqls.append(os.path.join(carpeta, f) if carpeta else f)
+        except OSError:
+            pass
+    textos = {}
+    for f in sqls:
+        t = leer(f)
+        if t is None:
+            continue
+        textos[f] = t
+        for m in re.finditer(r'create\s+(?:or\s+replace\s+)?'
+                             r'(?:table|view|materialized\s+view|function)\s+'
+                             r'(?:if\s+not\s+exists\s+)?public\.(\w+)', t, re.I):
+            definidas.add(m.group(1).lower())
+
+    for f, t in textos.items():
+        for m in re.finditer(r'\b(?:from|join|update|into)\s+public\.(\w+)(\s*\()?', t, re.I):
+            nombre, parentesis = m.group(1).lower(), m.group(2)
+            if parentesis:          # es una llamada a función, no una tabla
+                continue
+            if nombre not in definidas:
+                falla('sql', '%s usa public.%s y ningun CREATE del repo la define. '
+                             'Si es un nombre mal escrito, Postgres lo dira al pegarlo '
+                             '—con el cambio a medio aplicar—; si la tabla existe de '
+                             'verdad, falta versionar su CREATE.' % (f, nombre))
+
+
 # ── 15 · El precache tiene que bajar de la red ──────────────
 # 9-ago-2026. `c.add(url)` a secas pasa por la cache HTTP del navegador, y
 # GitHub Pages manda max-age=600: la cache nueva se llenaba con los HTML
@@ -2183,7 +2232,7 @@ def main():
     r_preventa_sb(); r_preventa_stock(); r_cargas_sb(); r_lectura_con_escritura()
     r_porteros(); r_contrato_sql(); r_join_sql()
     r_sql_volatilidad(); r_galeria(); r_reparaciones_fuera(); r_alias_variable(); r_returns_table_drop(); r_funcion_repetida()
-    r_personales(); r_nombres_forma(); r_secretos(); r_silencios(); r_cadenas(); r_precache(); r_scripts_locales(); r_ejemplos_no_datos(); r_pruebas()
+    r_personales(); r_nombres_forma(); r_secretos(); r_silencios(); r_cadenas(); r_precache(); r_scripts_locales(); r_ejemplos_no_datos(); r_tablas_que_existen(); r_pruebas()
 
     for regla, msg in avisos:
         print('  aviso  [%s] %s' % (regla, msg))
