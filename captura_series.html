@@ -2015,6 +2015,8 @@ function pintarVentasDia(){
                  onclick="event.stopPropagation(); verFoto('${v.captura_id}','${(v.serie||'').replace(/'/g,'')}')">🔍</button>` : ''}
             ${PUEDE_EDITAR && v.captura_id ? `<button class="vd-lupa" title="Corregir esta venta"
                  onclick="event.stopPropagation(); abrirEditarVenta(${i})">✏️</button>` : ''}
+            ${PUEDE_EDITAR && v.captura_id ? `<button class="vd-lupa" title="Borrar esta venta"
+                 onclick="event.stopPropagation(); borrarVentaDia(${i})">🗑️</button>` : ''}
             <div class="vd-check">✓</div>
           </div>`;
         }).join('');
@@ -3718,6 +3720,59 @@ window.guardarEdicionVenta = async function(){
     err('No se pudo guardar · ' + ((e && e.message) || 'sin conexión'));
   }finally{
     btn.disabled = false; btn.textContent = 'Guardar cambios';
+  }
+};
+
+/* ---------- Borrar una venta de la nube ----------
+   21-sep-2026. Faltaba, y no se notó hasta que hizo falta: apareció en la 1217
+   una venta de prueba —vendedor y serie sacados de los archivos de `pruebas/`—
+   y no había forma de quitarla desde ninguna pantalla.
+
+   Borrar SÍ existía, pero sólo en la lista local del día (`window.del`), que es
+   la de las capturas hechas EN ESTE teléfono. Una venta que está en la nube y
+   no en este aparato —la capturó otro, o entró por otro camino— sólo se podía
+   corregir. Y corregir no sirve cuando la venta entera sobra: se queda contando
+   en el inventario, en el conteo del día y en el attach.
+
+   ⚠️ Y hay un daño que no se ve: `ventas` tiene UNIQUE (store_id, serie). Una
+   venta falsa deja esa serie OCUPADA — cuando se venda de verdad, el alta se
+   rechaza por duplicada y el asesor no va a entender por qué.
+
+   Mismo permiso que corregir: gerente y subgerente. La función de la base ya
+   sabía hacer esto (`venta_eliminar`, que además protege las entregas de
+   apartados); lo único que no había era por dónde pedírselo. */
+window.borrarVentaDia = async function(i){
+  const v = _vdVentas[i];
+  if(!v || !v.captura_id) return;
+  /* Se enseña QUÉ se va a borrar, no «¿estás seguro?». Es irreversible y las
+     filas de la lista se parecen entre sí: la serie es lo único que distingue
+     dos ventas del mismo modelo el mismo día. */
+  if(!confirm('¿Borrar esta venta?\n\n' + (v.desc || v.sku || '') +
+              '\nSerie: ' + (v.serie || '—') +
+              '\nVendedor: ' + (v.vend || '—') +
+              '\n\nLa pieza vuelve al inventario y la venta sale del conteo del día.' +
+              '\nNo se puede deshacer.')) return;
+  try{
+    const d = await sbCallCS('venta_eliminar',
+      { p_token: GAS_TOKEN, p_captura_id: v.captura_id }, 12000);
+    /* El error de la base se enseña TAL CUAL: el caso del apartado entregado
+       explica qué hacer («deshazla desde Preventa») y resumirlo a «no se pudo»
+       dejaría al gerente probando otra vez lo mismo. */
+    if(!d || d.ok !== true){
+      toast((d && d.error) || 'No se pudo borrar · revisa la conexión', 'warn');
+      return;
+    }
+    /* Si además estaba en este teléfono, se va de las dos partes locales: de la
+       lista del día y de la cola de subida. Sin lo segundo, una captura que
+       siguiera pendiente la volvería a dar de alta al recuperar la señal. */
+    sbPend = sbPend.filter(c => c.p_captura_id !== v.captura_id);
+    saveSbPend();
+    const j = items.findIndex(x => x && x.id === v.captura_id);
+    if(j >= 0){ items.splice(j, 1); save(); render(); }
+    toast('Venta borrada ✓ · la pieza vuelve al inventario', 'ok');
+    cargarVentasDia(_vdFecha || new Date());   // de la nube, no de memoria
+  }catch(e){
+    toast('No se pudo borrar · ' + ((e && e.message) || 'sin conexión'), 'warn');
   }
 };
 

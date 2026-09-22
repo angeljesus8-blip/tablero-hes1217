@@ -4562,6 +4562,25 @@ sería rechazada por duplicada— y de paso descuenta stock y ensucia el conteo 
 día y el attach. Se borra desde Ventas del día, que llama a `venta_eliminar` con
 el `captura_id`.
 
+### Y faltaba poder borrarla *(v270)*
+
+Al ir a quitar esa fila se vio que **no había por dónde**. Borrar existía, pero
+sólo en la lista local del día (`window.del`), que son las capturas hechas en
+ESE teléfono. Lo que está en la nube y no en el aparato —lo capturó otro, o
+entró por otro camino— sólo se podía **corregir**, y corregir no sirve cuando la
+venta entera sobra: se queda contando en el inventario, en el conteo del día y
+en el attach.
+
+Ahora «Ventas del día» lleva 🗑️ junto a ✏️, con el mismo permiso —gerente y
+subgerente— y el mismo camino que ya usaba la lista local: `venta_eliminar`, que
+comprueba el token y **protege las entregas de apartados** (ésas se deshacen
+desde Preventa, y su negativa se enseña tal cual en vez de un «no se pudo»).
+El aviso dice qué se borra —modelo, serie y vendedor—, porque dos ventas del
+mismo modelo el mismo día sólo se distinguen por la serie.
+
+Lo fija `pruebas/venta_borrar.js`, probada con dos cebos: ofrecerle el botón al
+asesor, y resumir la razón de la base a un mensaje genérico.
+
 ### De paso: el ejemplo del campo Equipo
 
 Buscando el origen apareció otra cosa, que **no fue la causa** pero se arregló
