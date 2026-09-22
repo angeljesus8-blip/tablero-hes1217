@@ -1199,6 +1199,9 @@ NO_SON_NOMBRES = (
     'prueba solo pieza', 'prueba eol con', 'prueba eol agotado',
     'prueba sin precio', 'prueba promo sin',
     'prueba eol piso', 'prueba activo traido', 'prueba eol detenido',
+    # nombres de producto ya traducidos a lenguaje de cliente (nombres.js):
+    # escritos en Título, tres palabras parecen un nombre de pila y apellidos
+    'huawei watch kids',
 )
 
 # Un nombre nunca lleva una de éstas. Sirven para separar un nombre de una
@@ -1785,7 +1788,7 @@ def r_pruebas():
                'mrfix_corregir.js', 'cea_precio_nuevo.js', 'cea_vigencia.js',
                'concurso_oro_plata.js', 'admin_preventa.js',
                'lector_etiqueta.js', 'venta_borrar.js',
-               'venta_quien.js', 'pantalla_390.js')
+               'venta_quien.js', 'pantalla_390.js', 'nombres_cliente.js')
 
     # La lista de arriba es explícita a propósito —así falta un archivo y se
     # nota—, pero eso deja el hueco contrario: una prueba escrita y no añadida

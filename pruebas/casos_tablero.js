@@ -699,3 +699,39 @@ aplicarTodo(Object.assign(_deSupabase(JSON.parse(JSON.stringify(TIENDA))), { __s
        .split('</div>')[0].split(' active"').length === 2), bloques.length + ' bloques');
   filtroActivo = 'inicio'; render();
 }
+
+/* ── 16 · El nombre en lenguaje de cliente, conectado (22-sep-2026) ──────
+   Las reglas las prueba nombres_cliente.js. Aquí, que el tablero las USE en
+   los tres sitios que importan —lo que se pinta, lo que se busca y lo que se
+   le manda al cliente— sin perder la descripción del sistema, que es la que
+   trae la etiqueta de la caja. */
+{
+  const D1 = 'AUDIF IN EAR HW F-BUDS PRO 4 VD';
+  const h = nomProd(D1);
+  ok('la tarjeta dice el modelo para el cliente', h.indexOf('>Audífonos Huawei FreeBuds Pro 4<') >= 0, h);
+  ok('el color va abajo, traducido', h.indexOf('>Verde<') >= 0, h);
+  ok('y la descripción del sistema sigue ahí, para empatar la caja', h.indexOf('>' + D1 + '<') >= 0, h);
+  ok('al cliente le llega el nombre que entiende', nomLinea(D1) === 'Audífonos Huawei FreeBuds Pro 4 · Verde', nomLinea(D1));
+
+  // El buscador: por las dos formas y sin acentos.
+  const bOrig = busqueda;
+  for(const q of ['audifonos', 'audífonos', 'freebuds', 'f-buds', 'verde', '900001']){
+    busqueda = q;
+    ok('buscar «' + q + '» lo encuentra', coincide(D1, '900001'));
+  }
+  busqueda = 'freeclip'; ok('y no encuentra otro producto', !coincide(D1, '900001'));
+  busqueda = bOrig;
+
+  // Sin nombres.js (no llegó el <script>): se pinta lo crudo, no se rompe.
+  const guard = global.nombreCliente; delete global.nombreCliente; _nomMemo.clear();
+  let crudo = '', err = null;
+  try { crudo = nomProd(D1); } catch(e){ err = e.message; }
+  ok('sin nombres.js la tarjeta no revienta', !err, err);
+  ok('y pinta la descripción tal cual', crudo.indexOf('>' + D1 + '<') >= 0, crudo);
+  global.nombreCliente = guard; _nomMemo.clear();
+
+  // Las tarjetas de verdad lo usan.
+  filtroActivo = 'promo'; busqueda = ''; render();
+  ok('las tarjetas de precio pintan el nombre con nomProd', app.innerHTML.indexOf('class="nom-modelo"') >= 0);
+  filtroActivo = 'inicio'; render();
+}
