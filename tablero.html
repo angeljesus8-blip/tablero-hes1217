@@ -1183,15 +1183,15 @@ function desgloseHtml(p0, total, segCosto, anios) {
    Aquí solo se COTIZA: el tablero no guarda ventas, así que marcarlo no puede
    inflar el attach con un seguro que nadie eligió — eso es Captura, y allá se
    destaca sin marcar.
-   Arrancan en «Sin seguro»:
-     · lo que no tiene rango de seguro (no hay chip de 1 año que marcar);
-     · el M-Pencil — regla de la tienda: no se le pone seguro. Se le dejan los
-       chips (qué productos admiten seguro no se decide aquí), pero no se le
-       cotiza con uno de entrada. */
+   Arranca en «Sin seguro» solo lo que no tiene rango de seguro: no hay chip
+   de 1 año que marcar.
+   El M-Pencil NO es excepción (Ángel, 22-sep-2026: «va con seguro»). Vendido
+   solo lleva seguro como cualquier otro; la regla de no ponerle seguro es de
+   los COMBOS, donde el seguro se pasa a otro artículo — y aquí no se arman
+   combos. Se le quitó la excepción que tuvo unas horas en la v273.
+   `prodNombre` se queda en la firma por si otra excepción hace falta. */
 function segInicial(s, prodNombre) {
-  if (!s) return 0;
-  if (/\bPENCIL\b/i.test(String(prodNombre || ''))) return 0;
-  return 1;
+  return s ? 1 : 0;
 }
 /* El precio va PRIMERO y los meses al final, en gris (rediseño del 1-ago-2026):
    la tarjeta mostraba once bloques con el mismo peso y no había dónde caer

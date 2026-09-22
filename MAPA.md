@@ -5134,13 +5134,14 @@ fábrica, mismo criterio que `cotTextoSeguro`). El tachado y el −% nacen ocult
 con seguro, igual que los deja `selSeg`.
 - Solo cotiza: el tablero no guarda ventas, así que no puede inflar el attach.
   **En Captura NO se marca**, solo se destaca: allá el chip es lo que se registra.
-- Abren en «Sin seguro»: lo que no tiene rango en `SEGUROS`, y el **M-Pencil**
-  (regla de la tienda). Al Pencil se le dejan los chips: qué productos admiten
-  seguro no se decidió aquí.
+- Abre en «Sin seguro» solo lo que no tiene rango en `SEGUROS`. El **M-Pencil
+  NO es excepción** (v274, Ángel: «va con seguro»): vendido solo lleva seguro;
+  la regla de no ponérselo es de los COMBOS, y aquí no se arman combos. Tuvo la
+  excepción unas horas en la v273; el bloque 15 falla si alguien la repone.
 - El seguro va por el precio **regular** (`seguroPara(precioBase)`), no por el
   de promo. Ya era así; la prueba lo pregunta a la misma tabla.
 - Lo cuida el bloque 15 de `casos_tablero.js`; cinco cebos comprobados (vuelve a
-  Sin seguro, Pencil con seguro, tachado visible, sin la línea «incluye», MSI
+  Sin seguro, reponer la excepción del Pencil, tachado visible, sin la línea «incluye», MSI
   del precio sin seguro).
 
 **Botón Apartar.** Había dos `.btn-apartar`: el del 8-ago (azul suave, el
