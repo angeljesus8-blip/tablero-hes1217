@@ -4523,6 +4523,55 @@ código, y el continuo no tiene nada que ofrecerles. Y la foto se queda pase lo
 que pase — es el camino cuando el código está rayado, con el OCR del S/N
 detrás. La pregunta es si el continuo se **suma** al paso 1, no si lo sustituye.
 
+## Una venta de PRUEBA en la base de producción *(21-sep-2026, v269)*
+
+Ángel encontró en las ventas a **«ANA QUIROGA»**, y en la 1217 no trabaja
+ninguna Ana. No es un nombre mal escrito ni un asesor de otra tienda: **es una
+venta de prueba que acabó en la base real**. Cada campo suyo sale de un archivo
+de este repo:
+
+| Campo | Valor | De dónde sale |
+|---|---|---|
+| vendedor | `ANA QUIROGA` | `pruebas/casos_tablero.js` (marcador del concurso, empno 900001) |
+| serie | `6UTB826604020099` | `pruebas/ocr_ticket_real11.txt` |
+| sku y precio | `100276717` · 14 999 | el mismo ticket de prueba |
+| foto | no tiene | una prueba no fotografía la caja |
+
+Fue el **21-sep a las 16:27**, es la única en 45 días de histórico, y el
+`captura_id` (`i1790029640903bmcb`, que lleva dentro su propia hora) dice que se
+creó en ese momento: no es una venta vieja que subiera la cola de offline.
+
+**Lo que queda descartado, y cómo:**
+
+- **No fue el equipo.** El nombre no está en Admin → Equipo, y en 45 días no
+  aparece ninguna otra vez.
+- **No fueron las pruebas automáticas.** `pruebas/entorno.js` deja `fetch`
+  rechazando todo —«sin red en las pruebas»—, así que `verificar.py` no puede
+  escribir en Supabase por mucho que se corra.
+- **No fue la otra app.** `tablero-odemas` usa otra instancia de Supabase.
+
+Queda que alguien usó **la app** con los datos de prueba delante. Quién, no se
+puede saber: **`public.ventas` no guarda quién capturó la fila.**
+`public.accesorios` sí (`capturado_por`), y por eso ahí esta pregunta sí tendría
+respuesta. Mientras la columna no exista, la respuesta a «¿quién metió esto?» va
+a ser siempre «no se sabe».
+
+⚠️ **Y no es una fila inofensiva.** `ventas` tiene `UNIQUE (store_id, serie)`:
+mientras esté ahí, **esa serie no se puede volver a vender** —la venta buena
+sería rechazada por duplicada— y de paso descuenta stock y ensucia el conteo del
+día y el attach. Se borra desde Ventas del día, que llama a `venta_eliminar` con
+el `captura_id`.
+
+### De paso: el ejemplo del campo Equipo
+
+Buscando el origen apareció otra cosa, que **no fue la causa** pero se arregló
+igual: el campo Admin → Equipo tenía como ejemplo «Ana Quiroga / Luis Bermúdez /
+María Zepeda», tres nombres indistinguibles de una lista real. El código guarda
+lo que se teclea y no el ejemplo, así que no se cuela solo — pero un ejemplo que
+se puede confundir con el dato es una trampa esperando. Ahora dice «Un nombre
+por línea, como viene en nómina», y `r_ejemplos_no_datos` en `verificar.py`
+vigila que no vuelva a tener forma de nombre de persona.
+
 ## Lo que la foto de una etiqueta trae de verdad *(21-sep-2026, v268)*
 
 El lector de la foto se midió por primera vez contra fotos reales: **16

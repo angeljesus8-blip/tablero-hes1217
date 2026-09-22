@@ -1553,6 +1553,40 @@ def r_cadenas():
                         'menos stock del real (MAPA cadena 5)')
 
 
+# ── 14-ter · Un ejemplo no puede parecerse a un dato ─────────
+# 21-sep-2026. Buscando de dónde salía una venta de «ANA QUIROGA» en la 1217
+# —que resultó ser una venta de PRUEBA metida en la base real, ver MAPA.md— se
+# vio que el campo de Admin → Equipo tenía como ejemplo «Ana Quiroga / Luis
+# Bermúdez / María Zepeda»: tres nombres indistinguibles de una lista de verdad.
+#
+# NO fue la causa de aquella venta, y conviene que quede dicho para no defender
+# una regla con un motivo que no es. Pero el riesgo es real y barato de cerrar:
+# quien configura la tienda ve tres nombres con forma de equipo y no tiene cómo
+# saber que son de mentira. Si los deja, entran en el desplegable de Captura y
+# de ahí a las comisiones y al Excel de la región como una persona más.
+#
+# Por eso los campos que alimentan DATOS llevan instrucciones de ejemplo, no
+# ejemplos que se puedan confundir con el dato.
+def r_ejemplos_no_datos():
+    CAMPOS = [('admin.html', 'cfgVend', 'la lista del equipo')]
+    for pagina, campo, que in CAMPOS:
+        s = leer(pagina)
+        if s is None:
+            continue
+        m = re.search(r'id="%s"[^>]*placeholder="([^"]*)"' % campo, s)
+        if not m:
+            m = re.search(r'placeholder="([^"]*)"[^>]*id="%s"' % campo, s)
+        if not m:
+            continue
+        ejemplo = m.group(1)
+        # Dos palabras capitalizadas seguidas = tiene forma de nombre de persona.
+        if re.search(r'[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+', ejemplo):
+            falla('ejemplos', '%s: el ejemplo de "%s" (%s) tiene forma de nombre '
+                              'real ("%s"). Ya pasó una vez: se copió a %s y '
+                              'acabó en una venta.'
+                              % (pagina, campo, que, ejemplo[:40], que))
+
+
 # ── 15 · El precache tiene que bajar de la red ──────────────
 # 9-ago-2026. `c.add(url)` a secas pasa por la cache HTTP del navegador, y
 # GitHub Pages manda max-age=600: la cache nueva se llenaba con los HTML
@@ -2148,7 +2182,7 @@ def main():
     r_preventa_sb(); r_preventa_stock(); r_cargas_sb(); r_lectura_con_escritura()
     r_porteros(); r_contrato_sql(); r_join_sql()
     r_sql_volatilidad(); r_galeria(); r_reparaciones_fuera(); r_alias_variable(); r_returns_table_drop(); r_funcion_repetida()
-    r_personales(); r_nombres_forma(); r_secretos(); r_silencios(); r_cadenas(); r_precache(); r_scripts_locales(); r_pruebas()
+    r_personales(); r_nombres_forma(); r_secretos(); r_silencios(); r_cadenas(); r_precache(); r_scripts_locales(); r_ejemplos_no_datos(); r_pruebas()
 
     for regla, msg in avisos:
         print('  aviso  [%s] %s' % (regla, msg))
