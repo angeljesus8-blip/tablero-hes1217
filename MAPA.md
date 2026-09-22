@@ -4632,6 +4632,50 @@ misma persona; moverlos sería mover datos para nada. Aquí se dijo antes que
 había dos asesores partidos por los acentos — **no lo están**. Lo que parte a
 alguien en dos es una letra de más, que `unaccent_` no arregla.
 
+### Lo que destapó el informe: 166 ventas a nombre de nadie *(21-sep-2026)*
+
+Al aplicar `supabase_vendedor_huerfano.sql` no salieron las tres filas que se
+esperaban: salieron **ocho**, y la mayoría no eran lo que parecía.
+
+| Qué es | Cuánto | Desde |
+|---|---|---|
+| Cinco asesores guardados con el **nombre corto**, sin apellido materno | 166 ventas | 24-jun-2026 |
+| Un apellido con una letra de más | 2 ventas + 13 accesorios | 28-ago |
+| Un nombre de pila suelto | 1 venta | 8-ago |
+
+⚠️ **Los 166 no son gente que no existe: son el equipo escrito corto.** Pero
+para el reporte da igual el motivo — si el nombre no casa con la ficha, la
+venta sale `sin_nombre` en el Excel regional y su comisión no se suma a nadie.
+Llevaba **tres meses** pasando, y lo tapaba que `equipo_divergencias` miraba
+las listas y no lo guardado.
+
+**La primera versión del informe los metía a todos en el mismo saco** —«no está
+en el equipo»—, que era falso y además inútil: lo que hace falta saber es si se
+puede unificar y con quién. Ahora, para cada grafía que no casa, busca al
+empleado del que esa grafía es el principio y lo dice. Si coincide con dos, lo
+dice y no propone nada: elegir por el primero le movería la comisión a una
+persona real.
+
+**El arreglo de los datos** está en `_privado/unificar_vendedor_2.sql` (ahí, y
+no aquí, porque lleva nombres). Tres cosas suyas que valen para la próxima vez:
+
+- **No lleva lista de nombres.** El nombre bueno lo resuelve la base contra
+  `empleados` en el momento de correr. Una lista escrita a mano se copia mal y
+  envejece.
+- **Sólo toca las columnas `vendedor`.** El barrido de agosto recorría todas
+  las columnas de texto, y con un nombre completo y raro eso es seguro; con un
+  **nombre de pila suelto** no lo es — una nota, el OCR de un ticket o el
+  nombre de un cliente puede valer exactamente eso.
+- **`concurso_tickets.atendido_por` queda fuera a propósito.** Es «el texto tal
+  como lo imprimió el ticket, SIEMPRE»: la prueba del papel. Su pareja
+  `vendedor` —«el nombre bueno»— sí se unifica, que es para lo que existe. Y
+  `capturado_por` y `quien` guardan NÚMERO de empleado, no nombre.
+
+**Lo que hace que vuelva a pasar** sigue igual: el nombre se escribe en dos
+sitios —`empleados.nombre` y `tiendas.vendedores`— y «¿Quién eres?» guarda el
+de la config. Mientras eso siga así, lo que lo caza es `equipo_divergencias`, y
+ahora mira también lo guardado: se ve en días, no a fin de mes.
+
 ### De paso: el ejemplo del campo Equipo
 
 Buscando el origen apareció otra cosa, que **no fue la causa** pero se arregló
