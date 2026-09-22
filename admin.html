@@ -746,7 +746,13 @@ header h1 { font-size:15px;font-weight:800;margin-left:2px; }
       </div>
       <div class="field">
         <label>Vendedores del equipo (uno por línea)</label>
-        <textarea id="cfgVend" rows="6" placeholder="Ana Quiroga&#10;Luis Bermúdez&#10;María Zepeda"></textarea>
+        <!-- ⚠️ El ejemplo NO puede tener forma de nombre real. El anterior decía
+     «Ana Quiroga / Luis Bermúdez / María Zepeda», y el 21-sep-2026
+     apareció una venta de ANA QUIROGA en la 1217: un nombre de ejemplo
+     acabó dentro de la lista del equipo y de ahí, en el desplegable de
+     Captura y en una venta de la Hoja. Un ejemplo que se puede confundir
+     con un dato acaba siendo un dato. Ahora dice qué hacer, no un nombre. -->
+        <textarea id="cfgVend" rows="6" placeholder="Un nombre por línea, como viene en nómina"></textarea>
         <p style="font-size:11px;color:#aaa;margin-top:4px">Escritos <b>igual</b> que en 👥 Equipo. Con una letra de diferencia la comisión de ese asesor no se suma a nadie en el Excel regional.</p>
         <div id="divergCfg" class="note" style="display:none;margin-top:8px;background:#fff1f1;border-color:#ffc9c9;color:#8a1f1f"></div>
       </div>
