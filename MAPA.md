@@ -5123,3 +5123,27 @@ horarios, que se edita en `horario-semanal` → comisiones y admin).
   `--fotos DIR` guarda capturas: así se hace el antes/después.
 - Cebos probados el 22-sep: color suelto nuevo, estilo.css fuera del precache,
   emoji devuelto al título, título que se parte — los cuatro se cazan.
+
+### «1 año» marcado de entrada, y el botón morado que no era de nadie *(22-sep-2026, v273)*
+
+**Seguro.** Decisión de Ángel para subir el Assurant attach: las tarjetas de
+Precios y promos abren cotizando con **1 año**. `segInicial(s, prodNombre)`
+decide el chip; `segSelector` pinta el total, los MSI y el chip activo a partir
+de él, y `desgloseHtml` agrega «con seguro · protege N años» (contratado + el de
+fábrica, mismo criterio que `cotTextoSeguro`). El tachado y el −% nacen ocultos
+con seguro, igual que los deja `selSeg`.
+- Solo cotiza: el tablero no guarda ventas, así que no puede inflar el attach.
+  **En Captura NO se marca**, solo se destaca: allá el chip es lo que se registra.
+- Abren en «Sin seguro»: lo que no tiene rango en `SEGUROS`, y el **M-Pencil**
+  (regla de la tienda). Al Pencil se le dejan los chips: qué productos admiten
+  seguro no se decidió aquí.
+- El seguro va por el precio **regular** (`seguroPara(precioBase)`), no por el
+  de promo. Ya era así; la prueba lo pregunta a la misma tabla.
+- Lo cuida el bloque 15 de `casos_tablero.js`; cinco cebos comprobados (vuelve a
+  Sin seguro, Pencil con seguro, tachado visible, sin la línea «incluye», MSI
+  del precio sin seguro).
+
+**Botón Apartar.** Había dos `.btn-apartar`: el del 8-ago (azul suave, el
+diseñado) y el de la preventa, más abajo en el archivo, que lo pisaba en TODAS
+las tarjetas con morado sólido. El de preventa quedó como `.pv-btns .btn-apartar`.
+Si una regla de estilo sale "de la nada", buscar el mismo selector dos veces.

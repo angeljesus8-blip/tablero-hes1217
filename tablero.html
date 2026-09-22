@@ -188,6 +188,7 @@
     border-radius:20px; cursor:pointer; transition:.12s; }
   .seg-chip.active { background:var(--azul); color:#fff; border-color:var(--azul); }
   .seg-desglose { display:flex; align-items:baseline; flex-wrap:wrap; gap:4px; margin-bottom:0; }
+  .seg-incluye { flex-basis:100%; font-size:var(--t-sm); font-weight:700; color:var(--ok); margin-top:1px; }
   .seg-precio-total { font-size:25px; font-weight:800; color:var(--rojo); line-height:1.15;
     font-variant-numeric:tabular-nums; letter-spacing:-.01em; }
   /* Precio regular tachado, junto al de promo: el ahorro se ve sin buscarlo. */
@@ -471,8 +472,13 @@
   .pv-msi { font-size:11px; color:var(--azul); font-weight:700; }
   .pv-seg { font-size:12px; color:var(--verde); margin-top:6px; }
   .pv-btns { display:flex; gap:8px; margin-top:10px; }
-  .btn-apartar { flex:1; background:#7c3aed; color:#fff; border:none; border-radius:10px; padding:10px; font-family:inherit; font-size:13px; font-weight:700; cursor:pointer; }
-  .btn-apartar:disabled { background:#ddd; color:#999; cursor:default; }
+  /* Acotado a la preventa (22-sep-2026). Estaba como `.btn-apartar` a secas y,
+     por ir más abajo en el archivo, pisaba al de la l. ~223: TODAS las
+     tarjetas de producto salían con un botón morado sólido —tres o cuatro por
+     pantalla— cuando el diseño era el azul suave de "se trae de otra tienda". */
+  .pv-btns .btn-apartar { flex:1; margin-top:0; background:var(--azul); color:#fff; border-radius:10px;
+    padding:10px; font-size:var(--t-md); font-weight:700; }
+  .pv-btns .btn-apartar:disabled { background:#ddd; color:#999; cursor:default; }
   .btn-wa.pv-wa { width:auto; margin-top:0; padding:9px 14px; flex-shrink:0; }
   .ap-card { border-left-width:4px; }
   .ap-card.t-pre  { border-left-color:#7c3aed; }
@@ -1162,8 +1168,30 @@ function msiInfo(total) {
    gris repetía el dato y le robaba tamaño al número que de verdad se cobra.
    `p0` y `segCosto` se conservan en la firma porque selSeg los pasa y puede
    volver a hacer falta el desglose si algún día se cobra el seguro aparte. */
-function desgloseHtml(p0, total, segCosto) {
-  return `<span class="seg-precio-total">${money(total)}</span>`;
+/* Con seguro, una línea abajo dice que el precio YA lo incluye (22-sep-2026).
+   Desde que «1 año» sale marcado de entrada, el número grande es producto +
+   seguro; sin esta línea el asesor lo cantaría como el precio del equipo.
+   Los años van como se los dice al cliente: el contratado se SUMA al de
+   fábrica, así que «1 año» protege 2 (mismo criterio que cotTextoSeguro). */
+function desgloseHtml(p0, total, segCosto, anios) {
+  const incluye = segCosto > 0 && anios
+    ? `<span class="seg-incluye">con seguro · protege ${anios + 1} años</span>` : '';
+  return `<span class="seg-precio-total">${money(total)}</span>${incluye}`;
+}
+/* Qué chip sale marcado al abrir la tarjeta (22-sep-2026, decisión de Ángel:
+   «1 año» marcado de entrada, para subir el Assurant attach).
+   Aquí solo se COTIZA: el tablero no guarda ventas, así que marcarlo no puede
+   inflar el attach con un seguro que nadie eligió — eso es Captura, y allá se
+   destaca sin marcar.
+   Arrancan en «Sin seguro»:
+     · lo que no tiene rango de seguro (no hay chip de 1 año que marcar);
+     · el M-Pencil — regla de la tienda: no se le pone seguro. Se le dejan los
+       chips (qué productos admiten seguro no se decide aquí), pero no se le
+       cotiza con uno de entrada. */
+function segInicial(s, prodNombre) {
+  if (!s) return 0;
+  if (/\bPENCIL\b/i.test(String(prodNombre || ''))) return 0;
+  return 1;
 }
 /* El precio va PRIMERO y los meses al final, en gris (rediseño del 1-ago-2026):
    la tarjeta mostraba once bloques con el mismo peso y no había dónde caer
@@ -1188,22 +1216,27 @@ function segSelector(sku, precioBase, precioVenta, enMedio, regularTachado, dto,
      tocarlo, en el desglose gris de arriba: el asesor tenía que seleccionarlo
      para poder decir cuánto costaba, y con el cliente delante eso es tantear.
      Aquí se lee antes: "por 299 más te llevas un año". */
-  const chip1 = s ? `<button class="seg-chip" onclick="selSeg('${id}',1,${p0},${p1},${p2},${i1},${i2})">1 año <i>+${money(i1)}</i></button>` : '';
-  const chip2 = s ? `<button class="seg-chip" onclick="selSeg('${id}',2,${p0},${p1},${p2},${i1},${i2})">2 años <i>+${money(i2)}</i></button>` : '';
+  const ini = segInicial(s, prodNombre);
+  const act = i => i === ini ? ' active' : '';
+  const chip1 = s ? `<button class="seg-chip${act(1)}" onclick="selSeg('${id}',1,${p0},${p1},${p2},${i1},${i2})">1 año <i>+${money(i1)}</i></button>` : '';
+  const chip2 = s ? `<button class="seg-chip${act(2)}" onclick="selSeg('${id}',2,${p0},${p1},${p2},${i1},${i2})">2 años <i>+${money(i2)}</i></button>` : '';
   // El tachado va FUERA de .seg-desglose: selSeg reescribe ese nodo completo al
   // cambiar de seguro, y si estuviera dentro se borraría en el primer toque.
-  const tach = regularTachado ? `<span class="precio-reg">${money(regularTachado)}</span>` : '';
-  const badgeDto = dto ? `<span class="ah">−${dto}%</span>` : '';
+  // Con seguro de entrada nacen ocultos, igual que los deja selSeg al tocarlo.
+  const oculto = ini ? ' style="display:none"' : '';
+  const tach = regularTachado ? `<span class="precio-reg"${oculto}>${money(regularTachado)}</span>` : '';
+  const badgeDto = dto ? `<span class="ah"${oculto}>−${dto}%</span>` : '';
+  const total0 = ini === 1 ? p1 : p0;
   return `<div class="seg-sel" id="${id}">
     <div class="precio-linea">
-      <div class="seg-desglose">${desgloseHtml(p0, p0, 0)}</div>${tach}${badgeDto}
+      <div class="seg-desglose">${desgloseHtml(p0, total0, ini === 1 ? i1 : 0, ini)}</div>${tach}${badgeDto}
     </div>
     ${enMedio || ''}
     <div class="seg-chips">
-      <button class="seg-chip active" onclick="selSeg('${id}',0,${p0},${p1||p0},${p2||p0},${i1},${i2})">Sin seguro</button>
+      <button class="seg-chip${act(0)}" onclick="selSeg('${id}',0,${p0},${p1||p0},${p2||p0},${i1},${i2})">Sin seguro</button>
       ${chip1}${chip2}
     </div>
-    <div class="seg-msi">${msiInfo(p0)}</div>
+    <div class="seg-msi">${msiInfo(total0)}</div>
     <div class="prod-pie" style="justify-content:flex-end;border-top:none;padding-top:6px;margin-top:6px">
       ${botonCot(sku, prodNombre, p0, p1, p2, i1, i2, id)}
     </div>
@@ -1231,7 +1264,7 @@ function selSeg(id, idx, p0, p1, p2, i1, i2) {
   wrap.querySelectorAll('.seg-chip').forEach((c,i) => c.classList.toggle('active', i===idx));
   const total = idx===0 ? p0 : idx===1 ? p1 : p2;
   const segCosto = idx===1 ? i1 : idx===2 ? i2 : 0;
-  wrap.querySelector('.seg-desglose').innerHTML = desgloseHtml(p0, total, segCosto);
+  wrap.querySelector('.seg-desglose').innerHTML = desgloseHtml(p0, total, segCosto, idx);
   wrap.querySelector('.seg-msi').innerHTML = msiInfo(total);
 
   /* El precio regular tachado y el % de ahorro SOLO valen sin seguro
@@ -1835,7 +1868,7 @@ const APARTAR_EXCEPCION = new Set(['100274990']);
 function botonApartar(sku, producto, precio){
   const k = estadoSku(sku).k;
   if(k !== 'traer' && k !== 'piso' && !APARTAR_EXCEPCION.has(sku)) return '';
-  return `<button class="btn-apartar" onclick="abrirApartado('${sku}','${encodeURIComponent(producto||'')}',${Number(precio)||0})">📋 Apartar para un cliente</button>`;
+  return `<button class="btn-apartar" onclick="abrirApartado('${sku}','${encodeURIComponent(producto||'')}',${Number(precio)||0})">Apartar para un cliente</button>`;
 }
 
 function pastillaEstado(sku){

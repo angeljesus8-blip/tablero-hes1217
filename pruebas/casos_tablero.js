@@ -650,3 +650,51 @@ aplicarTodo(Object.assign(_deSupabase(JSON.parse(JSON.stringify(TIENDA))), { __s
   CONCURSO = guardado;
   filtroActivo = 'inicio'; busqueda = ''; render();
 }
+
+/* ── 15 · «1 año» sale marcado de entrada (22-sep-2026) ──────────────────
+   Decisión de Ángel para subir el Assurant attach: la tarjeta abre cotizando
+   con un año de seguro. Lo que se protege aquí es lo que falla callando:
+
+   · que el número grande, los meses y el «Sumar» digan LO MISMO que el chip
+     marcado. `cotSeguroElegido` lee el chip activo; si el precio de arriba
+     fuera sin seguro y el chip dijera «1 año», se sumaría una cosa y se
+     cantaría otra.
+   · que el precio con seguro diga que lo incluye — si no, el asesor lo canta
+     como precio del equipo — y en años de protección (1 contratado = 2).
+   · que el tachado y el −% de la promo NO acompañen a un precio con seguro:
+     $3,998 junto a un $3,999 tachado insinúa una rebaja que no existe.
+   · y las excepciones: el M-Pencil y lo que no tiene rango de seguro abren
+     en «Sin seguro». */
+{
+  const chipsDe = h => (h.match(/class="seg-chip( active)?"/g) || []);
+  const activo  = h => chipsDe(h).findIndex(c => / active"/.test(c));
+
+  // Un producto de $2,999 en promo, regular $3,999. El seguro va por el precio
+  // REGULAR (así lo cobra Assurant): se pregunta a la misma tabla del tablero.
+  const seg = seguroPara(3999, '900001').p1;
+  const h = segSelector('900001', 3999, 2999, '', 3999, 25, 'PRUEBA TEL');
+  ok('el chip marcado de entrada es «1 año»', activo(h) === 1, 'activo=' + activo(h));
+  ok('el precio grande ya trae el seguro', h.indexOf('>' + money(2999 + seg) + '<') >= 0, h.slice(0, 300));
+  ok('y dice que lo incluye, en años de protección',
+     h.indexOf('con seguro · protege 2 años') >= 0);
+  ok('los meses salen del precio con seguro', h.indexOf(money(Math.ceil((2999 + seg) / 6))) >= 0);
+  ok('el tachado de la promo nace oculto', /class="precio-reg" style="display:none"/.test(h));
+  ok('y el −% también', /class="ah" style="display:none"/.test(h));
+
+  const lapiz = segSelector('900050', 1999, 1999, '', null, 0, 'm-pencil de prueba');
+  ok('el M-Pencil abre en «Sin seguro»', activo(lapiz) === 0, 'activo=' + activo(lapiz));
+  ok('y sin la línea de seguro incluido', lapiz.indexOf('con seguro') < 0);
+  ok('pero conserva sus chips (qué admite seguro no se decide aquí)', chipsDe(lapiz).length === 3);
+
+  const barato = segSelector('900051', 99, 99, '', null, 0, 'CABLE');
+  ok('sin rango de seguro abre en «Sin seguro»', activo(barato) === 0 && chipsDe(barato).length === 1,
+     chipsDe(barato).length + ' chips, activo=' + activo(barato));
+
+  // El render entero: toda tarjeta con precio sale con UN solo chip marcado.
+  filtroActivo = 'promo'; busqueda = ''; render();
+  const bloques = app.innerHTML.split('class="seg-sel"').slice(1);
+  ok('cada tarjeta de precio tiene exactamente un chip marcado',
+     bloques.length > 0 && bloques.every(b => (b.split('class="seg-chips"')[1] || '')
+       .split('</div>')[0].split(' active"').length === 2), bloques.length + ' bloques');
+  filtroActivo = 'inicio'; render();
+}
