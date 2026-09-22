@@ -2,7 +2,7 @@ importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
 // ÚNICO lugar donde vive la versión de la app. Las páginas ya no la repiten:
 // registran './sw.js' con updateViaCache:'none' y el navegador detecta el
 // cambio al ver que este archivo es distinto. Subir el número aquí y ya.
-const VERSION = 'v271';
+const VERSION = 'v272';
 const CACHE = 'hes1217-' + VERSION;
 const ARCHIVOS = [
   './index.html',
@@ -51,6 +51,15 @@ const ARCHIVOS = [
   './iconos/horarios.png',
   './iconos/promos.png',
   './iconos/admin.png',
+  // El estilo común y los iconos de las tarjetas del tablero (22-sep-2026).
+  // Sin estilo.css en caché, la app abre sin encabezado ni colores cuando no
+  // hay señal.
+  './estilo.css',
+  './iconos/t_promo.png',
+  './iconos/t_apartados.png',
+  './iconos/t_eol.png',
+  './iconos/t_resurtir.png',
+  './iconos/t_preventa.png',
 ];
 
 self.addEventListener('install', e => {
