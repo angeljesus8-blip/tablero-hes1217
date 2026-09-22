@@ -83,39 +83,61 @@ AS $$
   -- cuando no lo estaban. Estas filas no las mira nadie hasta que el Excel
   -- del mes sale con un hueco, y para entonces ya hay que repararlas.
   --
+  -- ⚠️ Y NO TODAS SON LO MISMO. La primera versión de esto las metía todas en
+  -- el mismo saco —«no está en el equipo»— y al correrla salieron 166 ventas
+  -- que sí son del equipo: el mismo asesor guardado con el nombre corto, sin
+  -- apellido materno. Decirle «no está en el equipo» a eso es falso y además
+  -- inútil: lo que hace falta saber es SI SE PUEDE UNIFICAR y con quién.
+  --
+  -- Así que se busca al empleado del que ese nombre es el principio. Si hay
+  -- exactamente uno, se dice cuál. Si hay varios, se dice que no se puede
+  -- decidir — dos asesores que compartan nombre y primer apellido existen, y
+  -- elegir por el que salga primero le movería la comisión a alguien.
+  --
   -- `(sin nombre)` queda fuera: lo pone `venta_guardar` cuando la captura
   -- llega sin vendedor, ya se sabe lo que es y no es una grafía suelta.
   UNION ALL
 
-  SELECT v.vendedor,
-         'ventas',
-         format('%s venta(s) desde el %s a nombre de alguien que no esta en el '
-                'equipo: su comision no se suma a nadie',
-                count(*), to_char(min(v.vendida_en), 'DD/MM/YYYY'))
-    FROM public.ventas v
-   WHERE v.store_id = p_store
-     AND coalesce(trim(v.vendedor),'') NOT IN ('', '(sin nombre)')
-     AND NOT EXISTS (
-           SELECT 1 FROM public.empleados e
-            WHERE e.store_id = v.store_id
-              AND upper(unaccent_(e.nombre)) = upper(unaccent_(v.vendedor)))
-   GROUP BY v.vendedor
-
-  UNION ALL
-
-  SELECT a.vendedor,
-         'accesorios',
-         format('%s accesorio(s) desde el %s a nombre de alguien que no esta '
-                'en el equipo: su comision no se suma a nadie',
-                count(*), to_char(min(a.vendida_en), 'DD/MM/YYYY'))
-    FROM public.accesorios_ventas a
-   WHERE a.store_id = p_store
-     AND coalesce(trim(a.vendedor),'') NOT IN ('', '(sin nombre)')
-     AND NOT EXISTS (
-           SELECT 1 FROM public.empleados e
-            WHERE e.store_id = a.store_id
-              AND upper(unaccent_(e.nombre)) = upper(unaccent_(a.vendedor)))
-   GROUP BY a.vendedor;
+  SELECT x.vendedor, x.origen,
+         format('%s %s desde el %s · %s',
+                x.n, x.que, to_char(x.desde, 'DD/MM/YYYY'),
+                CASE
+                  WHEN x.parecidos = 1 THEN 'parece ' || x.unico || ' escrito corto'
+                  WHEN x.parecidos > 1 THEN 'coincide con ' || x.parecidos::text ||
+                       ' empleados: NO se puede unificar sin mirarlo'
+                  ELSE 'no casa con ningun empleado: su comision no se suma a nadie'
+                END)
+    FROM (
+      SELECT t.vendedor, t.origen, count(*) AS n, min(t.cuando) AS desde,
+             max(t.que) AS que,
+             (SELECT count(*) FROM public.empleados e
+               WHERE e.store_id = p_store
+                 AND (upper(unaccent_(e.nombre)) LIKE upper(unaccent_(t.vendedor)) || ' %'
+                   OR upper(unaccent_(t.vendedor)) LIKE upper(unaccent_(e.nombre)) || ' %')
+             ) AS parecidos,
+             (SELECT min(e.nombre) FROM public.empleados e
+               WHERE e.store_id = p_store
+                 AND (upper(unaccent_(e.nombre)) LIKE upper(unaccent_(t.vendedor)) || ' %'
+                   OR upper(unaccent_(t.vendedor)) LIKE upper(unaccent_(e.nombre)) || ' %')
+             ) AS unico
+        FROM (
+          SELECT v.vendedor, 'ventas'::text AS origen, v.vendida_en AS cuando,
+                 'venta(s)'::text AS que
+            FROM public.ventas v
+           WHERE v.store_id = p_store
+             AND coalesce(trim(v.vendedor),'') NOT IN ('', '(sin nombre)')
+          UNION ALL
+          SELECT a.vendedor, 'accesorios'::text, a.vendida_en, 'accesorio(s)'::text
+            FROM public.accesorios_ventas a
+           WHERE a.store_id = p_store
+             AND coalesce(trim(a.vendedor),'') NOT IN ('', '(sin nombre)')
+        ) t
+       WHERE NOT EXISTS (
+               SELECT 1 FROM public.empleados e
+                WHERE e.store_id = p_store
+                  AND upper(unaccent_(e.nombre)) = upper(unaccent_(t.vendedor)))
+       GROUP BY t.vendedor, t.origen
+    ) x;
 $$;
 
 REVOKE ALL ON FUNCTION public.equipo_divergencias(text) FROM public;
@@ -128,9 +150,15 @@ GRANT EXECUTE ON FUNCTION public.equipo_divergencias(text) TO anon, authenticate
 --
 --      SELECT * FROM public.equipo_divergencias('1217');
 --
---  Esperado el 21-sep-2026: tres filas de origen `ventas` —dos grafías de un
---  mismo apellido y un nombre de pila suelto— y lo que salga de `accesorios`.
---  Si sale vacío, o la función no se aplicó o alguien ya las corrigió.
+--  Lo que salió al correrlo el 21-sep-2026, y no era lo que se esperaba:
+--  OCHO filas, no tres. Cinco son el mismo equipo guardado con el nombre
+--  CORTO —sin apellido materno—, 166 ventas desde el 24/06/2026. Una es la
+--  letra de más de siempre (2 ventas + 13 accesorios) y otra, un nombre de
+--  pila suelto.
+--
+--  Por eso la función ahora dice de CADA una si parece alguien escrito corto
+--  —y quién— o si de verdad no casa con nadie. Sin esa distinción el informe
+--  no sirve para decidir: unificar lo primero es seguro, lo segundo no.
 --
 --  Cada nombre que aparezca se arregla con el barrido de
 --  `_privado/unificar_vendedor.sql`, cambiándole las dos constantes del
