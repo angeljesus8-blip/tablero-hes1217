@@ -1175,6 +1175,9 @@ NOMBRES_EJEMPLO = (
     'ana ramirez solis', 'luis ortega vidal', 'jesus ortega vidal',
     'elena navarro galvez', 'jorge medina rejon', 'maria fuentes bravo',
     'ana quiroga', 'luis bermudez', 'maria zepeda',
+    # Las formas CORTAS de los de arriba: hacen falta para poder escribir
+    # «asi se guarda» -> «asi esta en la ficha» sin usar a nadie real.
+    'jorge medina', 'luis vidal', 'luis ortega',
     'perez ramirez', 'ramirez soto', 'lopez', 'perez', 'martinez',
     'tadeo', 'luis', 'maria', 'ana', 'elena',
 )
