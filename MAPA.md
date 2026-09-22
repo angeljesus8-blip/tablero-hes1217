@@ -4556,11 +4556,17 @@ puede saber: **`public.ventas` no guarda quién capturó la fila.**
 respuesta. Mientras la columna no exista, la respuesta a «¿quién metió esto?» va
 a ser siempre «no se sabe».
 
-⚠️ **Y no es una fila inofensiva.** `ventas` tiene `UNIQUE (store_id, serie)`:
-mientras esté ahí, **esa serie no se puede volver a vender** —la venta buena
-sería rechazada por duplicada— y de paso descuenta stock y ensucia el conteo del
-día y el attach. Se borra desde Ventas del día, que llama a `venta_eliminar` con
-el `captura_id`.
+⚠️ **Y no es una fila inofensiva**, aunque no por lo que parecía. Aquí se
+escribió primero que dejaba esa serie ocupada para siempre —`UNIQUE (store_id,
+serie)`—, y **eso ya no es verdad**: desde `supabase_ventas_devolucion.sql` la
+restricción es `UNIQUE (store_id, serie, dia_venta)`, justo para que una
+devolución pueda volver a venderse. Sólo chocaría una venta de la misma serie
+**el mismo día**.
+
+Lo que sí hace mientras esté ahí: **descuenta esa pieza del inventario**
+—`inventario_vivo` resta de `ventas`—, cuenta en el conteo del día y en el
+attach de Assurant, y mete a alguien que no existe en el reparto de comisiones
+y en el Excel de la región. Se borra desde Ventas del día.
 
 ### Y faltaba poder borrarla *(v270)*
 
@@ -4580,6 +4586,51 @@ mismo modelo el mismo día sólo se distinguen por la serie.
 
 Lo fija `pruebas/venta_borrar.js`, probada con dos cebos: ofrecerle el botón al
 asesor, y resumir la razón de la base a un mensaje genérico.
+
+### Lo que queda preparado para que no se repita *(pendiente de pegar)*
+
+Dos SQL, y ninguno se despliega solo:
+
+**1 · `supabase_venta_capturado_por.sql` — quién tecleó la venta.**
+`public.ventas` no lo guarda, y por eso la pregunta «¿quién metió esto?» se
+quedó sin respuesta. `public.accesorios` sí lo guarda desde agosto
+(`capturado_por`), y la app **ya manda el dato** al corregir una venta
+(`p_quien`): lo único que no lo pedía era `venta_guardar`, que es el momento
+del alta — justo cuando hace falta.
+
+⚠️ **El orden importa y no es opcional.** Primero el SQL, después la app. Una
+app que manda un parámetro que la función no tiene recibe PGRST202 y **deja de
+guardar ventas**. Por eso `p_quien` va con `DEFAULT NULL`: así el paso 1 no
+rompe a las apps que ya están en la calle. El cambio del cliente está hecho y
+probado (`pruebas/venta_quien.js`), y **no se publica hasta que el SQL esté
+aplicado**.
+
+Las ventas viejas se quedan en NULL, que es la verdad —de ésas no se sabe— y no
+un cero disfrazado. Y se enseña donde se puede preguntar por ella: en el modal
+de corregir, sólo cuando el dato existe.
+
+**2 · `supabase_vendedor_huerfano.sql` — ventas a nombre de nadie.**
+Buscando el origen aparecieron tres filas más cuyo vendedor no corresponde a
+nadie del equipo: dos con una letra de más en un apellido y una con sólo el
+nombre de pila. Su comisión no se suma a nadie y el Excel regional las saca
+`sin_nombre`.
+
+Lo llamativo es que `equipo_divergencias` —la función de agosto que existe
+justo para esto— **devuelve vacío**, y tiene razón: mira la CONFIG y los
+EMPLEADOS, y hoy están de acuerdo. Lo que nadie mira es **lo ya guardado**, que
+se escribió cuando no lo estaban. Arreglar las listas no reescribe el pasado.
+
+Así que la función pasa a mirar también `ventas` y `accesorios`, con cuántas
+son y desde cuándo. **Dice, no corrige**: el UPDATE lleva nombres reales y vive
+en `_privado/unificar_vendedor_2.sql`, que reusa el barrido de agosto —recorre
+todas las columnas de texto del esquema, porque el nombre del vendedor está
+suelto en dos docenas de sitios—.
+
+Y una que **no** se toca: los acentos. El reporte casa con
+`upper(unaccent_(...))`, así que un apellido con acento y sin él ya suman a la
+misma persona; moverlos sería mover datos para nada. Aquí se dijo antes que
+había dos asesores partidos por los acentos — **no lo están**. Lo que parte a
+alguien en dos es una letra de más, que `unaccent_` no arregla.
 
 ### De paso: el ejemplo del campo Equipo
 
