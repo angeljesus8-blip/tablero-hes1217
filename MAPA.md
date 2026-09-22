@@ -4705,9 +4705,27 @@ Dos cosas, entonces:
   único que casa con todo: con el `GROUP BY` literal y con el `unaccent_` de
   las comisiones.
 
+**Cerrado el 22-sep-2026.** Entre las dos pasadas se unificaron **494 filas**:
+182 de nombres que no casaban con ninguna ficha y **312 de grafía** —cuatro de
+los cinco asesores tenían el nombre partido en dos—. `equipo_divergencias`
+quedó en cero en sus cinco clases, y los días que antes enseñaban al mismo
+asesor dos veces ahora lo enseñan una, con el nombre de su ficha.
+
+⚠️ **El Assurant Attach por asesor cambió ese día, y el cambio ES la
+corrección**: hasta entonces cuatro asesores salían repartidos en dos filas con
+porcentajes que no eran los suyos.
+
 Lo que queda pendiente y no se hizo: **normalizar el `GROUP BY`** de
-`ventas_hoy` y los attach. Con los datos unificados el síntoma desaparece hoy,
-pero la agrupación sigue dependiendo de cómo esté escrito el nombre.
+`ventas_hoy` y los attach. Con los datos unificados el síntoma desaparece, pero
+la agrupación sigue dependiendo de cómo esté escrito el nombre.
+
+**Y la lección que se pagó dos veces en este mismo arreglo:** el «mirar antes de
+tocar» tiene que mirar EXACTAMENTE lo que el UPDATE va a tocar. La primera
+versión del paso 1 usaba su propia copia de la regla —se arregló sacándola a
+`vendedor_probable_`— y la segunda sólo listaba una de las dos clases de fila,
+así que devolvía «0 filas» mientras quedaban 312 por cambiar. Un plan vacío no
+significa que no haya trabajo: significa que el plan no está mirando donde
+está el trabajo.
 
 ### De paso: el ejemplo del campo Equipo
 
