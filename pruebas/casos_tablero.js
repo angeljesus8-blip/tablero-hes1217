@@ -663,8 +663,10 @@ aplicarTodo(Object.assign(_deSupabase(JSON.parse(JSON.stringify(TIENDA))), { __s
      como precio del equipo — y en años de protección (1 contratado = 2).
    · que el tachado y el −% de la promo NO acompañen a un precio con seguro:
      $3,998 junto a un $3,999 tachado insinúa una rebaja que no existe.
-   · y las excepciones: el M-Pencil y lo que no tiene rango de seguro abren
-     en «Sin seguro». */
+   · y la única excepción: lo que no tiene rango de seguro abre en «Sin
+     seguro». El M-Pencil NO lo es (Ángel, 22-sep: «va con seguro»; la regla de
+     no ponerle seguro es de los combos) — se prueba para que nadie la reponga
+     creyendo que falta. */
 {
   const chipsDe = h => (h.match(/class="seg-chip( active)?"/g) || []);
   const activo  = h => chipsDe(h).findIndex(c => / active"/.test(c));
@@ -682,9 +684,8 @@ aplicarTodo(Object.assign(_deSupabase(JSON.parse(JSON.stringify(TIENDA))), { __s
   ok('y el −% también', /class="ah" style="display:none"/.test(h));
 
   const lapiz = segSelector('900050', 1999, 1999, '', null, 0, 'm-pencil de prueba');
-  ok('el M-Pencil abre en «Sin seguro»', activo(lapiz) === 0, 'activo=' + activo(lapiz));
-  ok('y sin la línea de seguro incluido', lapiz.indexOf('con seguro') < 0);
-  ok('pero conserva sus chips (qué admite seguro no se decide aquí)', chipsDe(lapiz).length === 3);
+  ok('el M-Pencil vendido solo abre con «1 año», como todo', activo(lapiz) === 1, 'activo=' + activo(lapiz));
+  ok('y con sus tres chips', chipsDe(lapiz).length === 3);
 
   const barato = segSelector('900051', 99, 99, '', null, 0, 'CABLE');
   ok('sin rango de seguro abre en «Sin seguro»', activo(barato) === 0 && chipsDe(barato).length === 1,
