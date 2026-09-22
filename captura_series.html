@@ -494,6 +494,7 @@
 <body>
 <script src="./continuidad.js"></script>
 <script src="./acc_codigos.js"></script>
+<script src="./lector_etiqueta.js"></script>
 <!-- Concurso ORO/PLATA (15-sep-2026). Tres archivos y no uno porque cada uno
      contesta una pregunta distinta: qué dice el papel, qué papel juega cada
      producto, y qué nivel alcanza el ticket. El de en medio es el que se va a
@@ -1585,26 +1586,21 @@ function reindexarPorSku(){
 
 // Solo códigos de barras 1D: producto (EAN/UPC) y serie (Code 128/39). NADA de QR/2D.
 const FORMATOS = ['code_128','code_39','ean_13','ean_8','upc_a','upc_e'];
-function routeCode(text, fmt){
-  const val = (text||'').trim();
-  if(!val) return false;
-  // Candado: ignora QR y cualquier código 2D (no son números de serie)
-  if(/qr|matrix|aztec|pdf417|maxi/i.test(fmt||'')) return false;
-  const esProducto = /ean|upc/i.test(fmt||'') || /^[0-9]{8}$|^[0-9]{12,13}$/.test(val);
-  if(esProducto){
-    const hit = CATALOGO[val] || CATALOGO[val.replace(/^0+/, '')];
-    if(hit){
-      aplicarProducto(hit);
-    } else {
-      $('sku').value = val;   // deja el EAN como referencia
-      setRecon(false);        // marca "no reconocido" (posible mala lectura)
-      toast('⚠ Producto NO reconocido · revisa o re-toma la foto', 'warn');
-    }
-  } else {
-    $('serie').value = val;
-    toast('Número de serie leído ✓', 'ok');
-  }
-  return true;
+
+/* Un EAN, venga de la foto o del teclado, entra por aquí.
+   Antes esto era la mitad de `routeCode`, que además decidía qué era cada
+   código: todo lo que no fuera EAN lo mandaba a Serie. Esa parte se fue a
+   `lector_etiqueta.js`, donde está medida contra fotos reales; aquí queda
+   sólo lo que esta pantalla sabe hacer: buscar en el catálogo. */
+function aplicarUpc(val){
+  const v = (val||'').trim();
+  if(!v) return false;
+  const hit = CATALOGO[v] || CATALOGO[v.replace(/^0+/, '')];
+  if(hit){ aplicarProducto(hit); return true; }
+  $('sku').value = v;       // deja el EAN como referencia
+  setRecon(false);          // marca "no reconocido" (posible mala lectura)
+  toast('⚠ Producto NO reconocido · revisa o re-toma la foto', 'warn');
+  return false;
 }
 
 /* ---------- Tomar foto y procesar ---------- */
@@ -1635,48 +1631,52 @@ function loadTesseract(){
   return tesseractLoading;
 }
 
-// Lee el número de serie del TEXTO impreso ("S/N: ...") con OCR
-async function ocrSerial(file){
-  try{
-    await loadTesseract();
-    toast('Leyendo número de serie…');
-    const worker = await Tesseract.createWorker('eng');
-    await worker.setParameters({ tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:/-SN' });
-    const { data } = await worker.recognize(file);
-    await worker.terminate();
-    const T = (data.text || '').toUpperCase().replace(/[ \t]+/g, ' ');
-    // Busca "S/N" (o "SN") seguido del valor alfanumérico
-    const re = /S\s*\/?\s*N\s*[:#.\-]?\s*([A-Z0-9][A-Z0-9\-]{7,23})/g;
-    let m, best = null;
-    while((m = re.exec(T))){
-      const cand = m[1].replace(/-/g, '');
-      if(cand.length >= 8 && cand.length <= 22) best = cand;
-    }
-    return best;
-  }catch(e){ return null; }
+/* Devuelve el TEXTO de un lienzo. Nada más: qué hay dentro de ese texto
+   —serie, UPC, o el IMEI que no hay que confundir con la serie— lo decide
+   `lector_etiqueta.js`, que es donde están las reglas y las pruebas.
+
+   Antes esta función leía el texto Y lo interpretaba con un patrón de una
+   línea. Ese patrón tiró dos series que el OCR había leído enteras y bien:
+   `S/N:-7YDTQ...` (dos separadores seguidos) y `SIN 7YDTQ...` (la barra
+   salió como I). No se vio nunca porque el síntoma era una casilla vacía,
+   que es lo mismo que se ve cuando el OCR de verdad no leyó nada. */
+let _ocrEtiqueta = null;
+async function ocrTexto(lienzo){
+  await loadTesseract();
+  /* El worker se crea UNA vez y se queda. Arrancarlo cuesta unos cuatro
+     segundos —descarga el idioma y levanta el WASM— y se estaba pagando
+     en cada foto que llegaba hasta aquí. Se conserva porque el asesor
+     captura una venta detrás de otra: de la segunda en adelante, gratis.
+     Es worker propio, aparte del `spa` de los tickets (accesorios,
+     Mr Fix, concurso): distinto idioma y distinta lista de caracteres. */
+  if(!_ocrEtiqueta){
+    _ocrEtiqueta = (async function(){
+      const w = await Tesseract.createWorker('eng');
+      await w.setParameters({ tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:/-SN' });
+      return w;
+    })().catch(function(e){ _ocrEtiqueta = null; throw e; });
+  }
+  const worker = await _ocrEtiqueta;
+  const { data } = await worker.recognize(lienzo);
+  return (data.text || '').toUpperCase().replace(/[ 	]+/g, ' ');
 }
 
 async function processImage(file){
   toast('Procesando foto…');
   setRecon(true); setPromo(false);   // limpia avisos de la foto anterior
   try{ lastPhoto = await compressImage(file); }catch(e){ lastPhoto = null; }   // guarda la foto para subirla
-  const vistos = new Set();
-  // 1) Códigos de barras: producto (EAN/UPC) y la serie si su código se puede leer
-  const detectores = [ window.ZXingBD, (('BarcodeDetector' in window) ? window.BarcodeDetector : null) ].filter(Boolean);
-  for(const D of detectores){
-    try{
-      const codes = await tryDetector(D, file);
-      codes.sort((a,b)=> (/ean|upc/i.test(a.format)?1:0) - (/ean|upc/i.test(b.format)?1:0));
-      let alguno = false;
-      codes.forEach(c => {
-        const v = (c.rawValue||'').trim();
-        if(v && !vistos.has(v)){ vistos.add(v); routeCode(v, c.format); alguno = true; }
-      });
-      if(alguno) break;
-    }catch(e){ /* siguiente detector */ }
-  }
-  // 1b) Respaldo de la librería si ningún detector encontró código
-  if(!vistos.size){
+
+  const r = await LECTOR.leerEtiqueta(file, {
+    detectores: [ window.ZXingBD, (('BarcodeDetector' in window) ? window.BarcodeDetector : null) ].filter(Boolean),
+    detectar: tryDetector,
+    ocr: ocrTexto,
+    aviso: function(t){ toast(t); }
+  });
+
+  /* Respaldo de la librería vieja, sólo si no salió absolutamente nada.
+     Sigue aquí porque es el único camino que no depende de ZXing, y un
+     teléfono viejo donde el módulo no cargue todavía captura la venta. */
+  if(!r.upc && !r.serie){
     try{
       const tmp = new Html5Qrcode('reader-file', { formatsToSupport: [
         Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39,
@@ -1684,22 +1684,33 @@ async function processImage(file){
         Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E ] });
       const text = await tmp.scanFile(file, false);
       try{ tmp.clear(); }catch(e){}   // limpiar el temporal es cortesia, no requisito
-      if(text) routeCode(text, '');
+      const cl = LECTOR.claseCodigo(text, '');
+      if(cl === 'producto') r.upc = (text||'').trim();
+      else if(cl === 'serie' || cl === 'serie_debil'){ r.serie = (text||'').trim().toUpperCase(); r.viaSerie = 'barras'; }
     }catch(e){ /* nada */ }
   }
-  // 2) Si la SERIE sigue vacía, léela del TEXTO "S/N" con OCR
-  if(!$('serie').value.trim()){
-    const s = await ocrSerial(file);
-    if(s) $('serie').value = s;
-  }
-  // 3) Mensaje final según lo que se haya llenado
+
+  if(r.upc) aplicarUpc(r.upc);
+
+  /* ⚠️ NO SE PISA LO QUE EL ASESOR YA ESCRIBIÓ. El paso 2 aparece en cuanto
+     se dispara la foto, así que mientras esto trabaja —y con el código de
+     barras rayado son segundos— él puede estar tecleando la serie a mano.
+     Antes se miraba la casilla ANTES de leer y se escribía DESPUÉS, sin
+     volver a mirar: lo tecleado se perdía sin que nada lo dijera. */
+  if(r.serie && !$('serie').value.trim()) $('serie').value = r.serie;
+
   const okSerie = !!$('serie').value.trim();
   const okProd  = !!$('sku').value.trim();
   if(okSerie || okProd){
     beep(); if('vibrate' in navigator) navigator.vibrate(60);
-    if(okSerie && okProd) toast('Serie y producto leídos ✓ · verifica la serie', 'ok');
-    else if(okSerie)      toast('Serie leída ✓ · verifica que coincida', 'ok');
-    else                  toast('Producto leído · falta la serie, toma otra foto', 'warn');
+    /* El mensaje dice DE DÓNDE salió la serie, porque no se comprueban
+       igual: del código de barras sale el valor exacto o no sale nada; del
+       texto puede salir un carácter cambiado —una S por un 5— que sólo se
+       caza mirando la etiqueta. */
+    const delTexto = /^ocr/.test(r.viaSerie || '');
+    if(okSerie && okProd)  toast(delTexto ? 'Producto ✓ · serie leída del texto: compárala con la etiqueta' : 'Serie y producto leídos ✓', 'ok');
+    else if(okSerie)       toast(delTexto ? 'Serie leída del texto · compárala con la etiqueta' : 'Serie leída ✓', 'ok');
+    else                   toast('Producto leído · falta la serie: acerca la cámara a su código y repite la foto', 'warn');
     return;
   }
   toast('No se detectó nada · acerca más, enfoca el S/N con buena luz', 'warn');

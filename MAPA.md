@@ -4523,6 +4523,113 @@ código, y el continuo no tiene nada que ofrecerles. Y la foto se queda pase lo
 que pase — es el camino cuando el código está rayado, con el OCR del S/N
 detrás. La pregunta es si el continuo se **suma** al paso 1, no si lo sustituye.
 
+## Lo que la foto de una etiqueta trae de verdad *(21-sep-2026, v268)*
+
+El lector de la foto se midió por primera vez contra fotos reales: **16
+etiquetas de piso** —Mate 80 Pro, Mate XT, nova Y74, MatePad SE, FreeBuds 7i y
+SE 4, FreeClip 2, Watch Ultimate 2, Watch GT 7 (41 y 46), Watch Kids X1, WiFi
+BE3, BE3 Pro y AX3S— con el UPC y la serie de cada una anotados a mano. Las
+fotos viven **fuera del repo**, en `05-Analisis/muestras-ocr-series/`, con el
+banco que las mide.
+
+| | serie correcta | **serie MAL** | vacía | UPC |
+|---|---|---|---|---|
+| antes | 7/16 | **4** | 5 | 16/16 |
+| ahora | 14/16 | **0** | 2 | 16/16 |
+
+⚠️ **Lo que importaba no eran las vacías: eran las cuatro MAL.** La etiqueta no
+trae un código, trae hasta cinco —EAN, IMEI1, IMEI2, MAC, EID y la serie— y
+`routeCode` mandaba a «Serie» todo lo que no fuera EAN. Así que el campo se
+llenaba con **el IMEI del teléfono, la MAC del ruteador o el EID del reloj**. Un
+campo vacío se ve; un número de 15 dígitos que nadie pidió, no: el asesor
+encuentra la casilla llena y ese número viaja a la Hoja de Google como la serie
+de la venta. Y encima el campo lleno **impedía que corriera el OCR**, que era
+justo lo que habría sacado la serie de verdad.
+
+Ahora cada código se reconoce por su forma —IMEI 15 dígitos, MAC 12 hex, EID 32,
+serie 16 alfanuméricos con letras y dígitos— y lo que no encaja **no entra a
+ninguna casilla**: se anota aparte. La regla vive en `lector_etiqueta.js` con sus
+pruebas en `pruebas/lector_etiqueta.js`, y los cebos son los cuatro valores que
+de verdad acabaron en el campo.
+
+### Las tres cosas que se aprendieron midiendo
+
+**1. Ampliar la etiqueta hace el trabajo que hacía el OCR, y lo hace bien.**
+Es la misma frase que ya estaba escrita arriba para el escaneo continuo —«lo que
+decide no es el modo, son los píxeles enfocados que ocupa el código»— aplicada
+donde sí se puede: el EAN se lee **siempre** (16 de 16) y su posición dice dónde
+está la etiqueta, así que se recorta alrededor, se amplía y se vuelve a
+decodificar. No hay que pedirle al asesor que se acerque. Ocho series que antes
+necesitaban OCR —o que no salían— ahora salen del código de barras **en menos de
+dos segundos y con el valor exacto**. El Mate 80 Pro pasó de 14 s de OCR a
+915 ms de código de barras.
+
+Y hay una diferencia que no es de velocidad: **el código de barras devuelve el
+valor exacto o no devuelve nada**. El OCR puede devolver quince aciertos y un
+fallo —`54P7S` leído `54P75`— que nadie distingue mirando la pantalla.
+
+**2. Al OCR, la foto entera; recortarle la etiqueta lo empeora.**
+Medido, y va contra lo que parece:
+
+- OCR sobre el **recorte ampliado**: 0 aciertos y **los 2 únicos falsos
+  positivos** de toda la medición.
+- OCR sobre la **foto entera reducida**: los 4 aciertos, ningún error, incluidas
+  las tres etiquetas negras con letra blanca.
+
+Es lo mismo que enseñó el realce de contraste en los tickets: el tratamiento que
+«debería» ayudar empeora la mitad de las veces. Tesseract hace su propio
+escalado y binarización; dárselo masticado le estorba. Por lo mismo **no se
+invierten las etiquetas negras**: Tesseract 5 las lee solo, y la pasada extra
+costaba segundos sin rescatar ninguna.
+
+**3. Al OCR se le exige la forma; al código de barras, no.**
+Las series miden 16 y son cinco alfanuméricos más once dígitos. Con eso se
+cazaron los dos inventos del OCR: `1L03PQU261290000` donde decía
+`63PQU26129000907`, y `BUSTADISPOSITIVO` —16 letras seguidas que el OCR pegó de
+la tabla de reciclaje italiana de una caja de FreeBuds—. Los dos tienen pinta de
+serie y los dos habrían llenado la casilla.
+
+⚠️ Pero la forma **sólo se le pide al OCR**. El Mate XT rompe el molde
+(`4DB0225C18000141`, con una C en la cola) y entra por código de barras. Si se
+le pidiera la forma también a ése, esa caja dejaría de capturarse y nadie sabría
+por qué. Hay una prueba que lo fija.
+
+### El IMEI se reconoce para tirarlo, y no se captura
+
+Preguntado y contestado el 21-sep-2026: **el IMEI no sirve para el reporte de
+ventas**. Se le da nombre en `claseCodigo` por una sola razón —para que no acabe
+en el campo Serie, que es lo que pasaba— y ahí se queda. No hay casilla para él
+ni la va a haber: la venta se reporta con la serie.
+
+### Lo que sigue sin salir, y por qué no es software
+
+Dos fotos —unos FreeBuds SE 4 y un WiFi BE3 Pro— **se quedan sin serie**, y se
+quedan a propósito: su Code 128 no decodifica **ni ampliado ×5 en 18 posiciones
+distintas**, y el OCR no saca de ahí nada con forma de serie. Es óptica: código
+fino, foto de 1200 px, poco enfocado. Lo que toca es acercar la cámara, que es
+lo que dice el aviso — «acerca la cámara a su código y repite la foto», no un
+«no se detectó nada» que no manda a ninguna parte.
+
+**La casilla se queda vacía a propósito.** Vacía manda a teclear los 16
+caracteres; con un número inventado no manda a nada, porque parece que ya está.
+
+### Dos cosas más que se arreglaron de camino
+
+- **Lo que el asesor teclea ya no se pisa.** El paso 2 aparece en cuanto se
+  dispara la foto, así que mientras el lector trabaja él puede estar escribiendo
+  la serie. El código miraba la casilla **antes** de leer y escribía **después**,
+  sin volver a mirar: lo tecleado se perdía y nada lo decía. Ahora se comprueba
+  al escribir. Está probado pasándole la foto lenta y tecleando encima.
+- **El worker de Tesseract se conserva entre fotos.** Arrancarlo cuesta unos
+  cuatro segundos y se pagaba en cada foto. Medido en la app: la primera foto que
+  llega al OCR tarda 15 s; la siguiente, **4.5 s**.
+
+### El mensaje dice de dónde salió la serie
+
+Porque no se comprueban igual. Si salió del código de barras, «Serie y producto
+leídos ✓». Si salió del texto, **«compárala con la etiqueta»**: ahí es donde cabe
+una S leída como 5.
+
 ## Captura de Series: una cosa a la vez *(21-sep-2026, v266)*
 
 Rediseño de FORMA, elegido por Ángel sobre maquetas (propuesta A con la
