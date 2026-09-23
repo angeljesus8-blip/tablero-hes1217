@@ -5358,3 +5358,49 @@ fase 1 solo se le pusieron el encabezado y las tarjetas de Inicio.
   `.barra-titulo/.barra-sub` llevan `margin:0` y `.barra, .barra *`
   `border-box`. La copia del planeador público se pone al día en el próximo
   `deploy.ps1` del horario (no le afecta: el horario trae su reinicio).
+
+## La paleta del tablero, a los tokens *(22-sep-2026, v280 — rama `rediseno-paleta-tablero`)*
+
+Lo último del rediseño. `tablero.html` pasó de **72 colores a 5** y de **29
+tamaños de letra a la escala** `--t-*` (más una excepción con nombre).
+
+**⚠️ El `:root` del tablero pisaba a `estilo.css`.** Se carga después, así
+que redefinía `--t-lg` (14 en vez de 15) y `--t-xl` (19 en vez de 20): el
+tablero parecía usar la escala común y no la usaba. Ahora ese `:root` solo
+tiene lo propio: `--t-kpi` (44 px, el % del Assurant, decisión de Ángel),
+`--mono`, `--preventa`/`--preventa-bg` (preventa y traspaso, mismos valores
+que Captura), `--oro` (concurso; el dorado de antes daba 3:1 a 10 px) y
+`--atencion-borde`. Los `--e-*` quedan como ALIAS (`--e-hay:var(--ok)`…): las
+reglas que los usan no cambiaron. `--verde`, `--gris` y `--bg` se fueron
+(→ `--ok`, `--tinta-2`, `--fondo`). **Si se redefine aquí un token de
+estilo.css, se pisa en silencio.**
+
+**Cómo:** un script con mapeo explícito por PROPIEDAD (el mismo hex va a un
+token distinto si es letra, fondo o borde) que se detiene ante un hex sin
+destino. Grises de letra: `#1a1a1a/#333/#444` → `--tinta`, `#555…#777` →
+`--tinta-2`, `#888…#ccc` → `--tinta-3` (varios daban 1.9–2.3:1). Tamaños:
+≤10.5 → xs, ≤12 → sm, ≤13.5 → md, ≤16 → lg, ≤22 → xl, ≤27 → 2xl.
+
+**Decisiones de Ángel:** el ámbar como LETRA pasa del naranja de marca (2.9:1)
+a `--atencion` —semáforo del Assurant 15-25 %, «quedan pocas», MSI 18,
+pendientes—; el naranja sigue en bordes y rellenos. El banner de preventa,
+morado sólido (era degradado). Umbrales del Assurant intactos.
+
+**Lo que se nota:** título de producto 14 → 15 px (los largos pasan a dos
+renglones a 360), precio grande 25 → 27, cifra de pastilla 19 → 20,
+etiquetas de 8–9.5 px a 10.5, «No hay» en `--tinta-2` (con -3 perdía
+contraste), tarjeta de 50 % lista con `--ok-bg` (era casi blanca). Los
+títulos de grupo bajaron su espaciado a .5px: a 11.5 px con 1px, «AGOTADOS ·
+SE TRAEN DE OTRA TIENDA (5)» se partía. La lupa del buscador es
+`currentColor`. Fuera CSS muerto: `.dash-*`, `.exh.trans-b`, `.lbl2`.
+
+**Lo que lo cuida (regla `paleta` de verificar.py):**
+- `PALETA_TOPE['tablero.html'] = 5` (el único hex fuera de `:root` es el
+  `<meta theme-color>`, que no admite `var()`).
+- `ESCALA_COMPLETA`: en esas páginas un `font-size` en px/rem/em es falla.
+- En esas mismas páginas, el naranja de marca como color de LETRA es falla
+  (CSS `color:var(--naranja)` o el `'var(--naranja)'` que arma el JS).
+- Cebos del 22-sep, 4 de 4 cazados: el ámbar del Assurant devuelto a naranja,
+  texto naranja en CSS, un `13px` suelto y un color suelto.
+- `pantalla_390.js` pasa a 390 y 360 px. Fotos antes/después en
+  `05-Analisis/rediseno-tablero-2026-09-22` (fuera del repo).
