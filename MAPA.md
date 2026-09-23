@@ -5255,3 +5255,44 @@ Lo prueba el final de `pruebas/nombres_cliente.js` con la función SACADA de
 admin.html (4 cebos cazados). Contra la base real el 22-sep: 246
 descripciones, 12 sin traducir — AM 3, PL 3, BNA 2, GRSP 2, NG 2 (cuando el
 color no va al final), P-MAX 2, PK 2, AN, BG, MC, NGC, RUN.
+
+## Horarios con el estilo común *(22-sep-2026, v277)*
+
+Fase 5. Se editó en `horario-semanal/horario_semanal.html` y se publicó con
+`deploy.ps1`, como siempre: `horarios.html` aquí es copia.
+
+**estilo.css también en el planeador público.** La página se publica en
+`planeador-odemas`, donde no existían ni `estilo.css` ni `fuentes/`, y por eso
+la letra venía del CDN de Google. Ahora `deploy.ps1` copia los dos DESDE ESTE
+REPO (la fuente de verdad) al planeador y los publica nombrándolos, y frena si
+faltan: sin ellos la copia multi-tienda abriría sin estilo y aquí se vería
+perfecta. Sin señal la letra ya no cambia.
+⚠️ `deploy.ps1` solo hace push del planeador si hay cambios SIN commit. Si el
+cambio ya se hizo commit en una rama, hay que hacer `git push` a mano primero.
+
+**Lo que cambió**
+- `.barra` (el «‹» solo dentro del tablero: `mostrarVolverAlMenu` enciende
+  `#barra-volver` y el enlace `#login-volver` del login; el botón flotante se
+  fue). La semana, en su renglón (`.semana-nav`). Antes la página medía 413 px
+  en un celular de 390 y el encabezado 108 px.
+- Colores 45 → 3, turnos incluidos (Ángel: «los colores de la app sí; los del
+  Excel se quedan»): apertura `--ok`, cierre `--info`, doble `--atencion`,
+  descanso `--alerta` tenue, vacaciones `--turno-aus`, y compensación, permiso,
+  capacitación, comida y Ley Silla en grises. La fila de tareas de la tabla va
+  en gris: en azul se leía como un cierre. **`exportarExcel` no se tocó** y no
+  usa ningún `#`: sus colores ARGB son los de siempre.
+- La leyenda usa las MISMAS clases que las celdas (`.ley-color.apertura`…): ya
+  no puede decir un color y pintar otro.
+- Fuera los dos logos en base64 (`logo_odemas.png`). Inline 61 → 23.
+
+**«Hoy» en fecha local.** `renderMovil` comparaba con `toISOString()` (UTC):
+desde las 6 p. m. marcaba mañana. Ahora `fechaLocal_`. Las tareas no fallaban
+(usan `getDay()`). Lo cuida `pruebas/horario_hoy.js`, con el reloj a las
+10 a. m., 6:30 p. m. y 11:50 p. m.; con el código viejo da «MIÉ 23».
+
+**`pantalla_390.js`** mide también el horario del asesor y del gerente a 390 y
+360 px. Con la página vieja reprueba (413 px, encabezado 108 px).
+
+**No llegó a tablero-odemás:** tiene su propia copia de `horarios.html`, más
+vieja, que `deploy.ps1` no toca. Si se porta, `estilo.css` y `fuentes/` van con
+ella.
