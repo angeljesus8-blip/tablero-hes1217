@@ -308,22 +308,21 @@
      para que se vea de un vistazo qué se está capturando: es el único dato del
      panel que decide a qué tabla va, y el único que no se puede corregir
      después sin borrar y volver a capturar. */
-  /* Separador de las tres partes del panel: el ticket, lo que lleva, y lo que
-     se va a agregar. Sin algo que las corte, el asesor no ve que la foto y el
-     numero son del TICKET y el producto es de UNA LINEA. */
-  .acc-sep{ font-size:11.5px; font-weight:800; color:var(--tinta-3); text-transform:uppercase;
-    letter-spacing:.04em; margin:16px 0 8px; padding-bottom:6px;
-    border-bottom:1px solid var(--linea); }
-  .acc-li{ display:flex; gap:8px; align-items:baseline; padding:8px 0;
-    border-bottom:1px solid var(--linea); font-size:13px; }
-  .acc-li .q{ flex:1; }
-  .acc-li .m{ font-weight:800; color:var(--ok); white-space:nowrap; }
-  .acc-li .x{ background:none; border:none; color:var(--alerta); font-size:16px;
-    cursor:pointer; padding:0 4px; font-family:inherit; }
-  .acc-li .et{ font-size:10px; font-weight:800; padding:2px 6px; border-radius:5px;
-    color:#fff; white-space:nowrap; }
-  .acc-li .et.acc{ background:var(--naranja); }
-  .acc-li .et.rep{ background:var(--rojo); }
+  /* Un concepto del ticket, como renglón de papel: nombre ······ importe
+     (22-sep-2026, v282). La etiqueta dice a qué tabla va: ámbar accesorio,
+     rojo reparación. */
+  .acc-li{ display:flex; gap:6px; align-items:baseline; padding:7px 0; font-size:var(--t-md); }
+  .acc-li .q{ font-weight:600; min-width:0; max-width:62%; overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap; }
+  .acc-li .q.falta{ color:var(--atencion); font-weight:800; }
+  .acc-li .pts{ flex:1; min-width:10px; border-bottom:2px dotted var(--borde); transform:translateY(-4px); }
+  .acc-li .m{ font-weight:800; color:var(--tinta); white-space:nowrap; font-variant-numeric:tabular-nums; }
+  .acc-li .x{ background:none; border:none; color:var(--tinta-3); font-size:15px;
+    cursor:pointer; padding:0 2px 0 6px; font-family:inherit; }
+  .acc-li .et{ font-size:var(--t-xs); font-weight:800; padding:1px 5px; border-radius:4px;
+    white-space:nowrap; flex-shrink:0; }
+  .acc-li .et.acc{ background:var(--atencion-bg); color:var(--atencion); }
+  .acc-li .et.rep{ background:var(--alerta-bg); color:var(--alerta); }
   .tipo-auto{ display:flex; gap:10px; align-items:center; margin-bottom:14px;
     padding:10px 12px; border-radius:11px; background:var(--info-bg);
     border-left:4px solid var(--azul); font-size:12.5px; color:var(--info); }
@@ -567,10 +566,8 @@
      Lo mide pantalla_390.js (un solo sólido, y es Guardar). */
   .btn.btn-guardar{ background:var(--rojo); color:var(--superficie); }
   .btn.btn-guardar:disabled{ opacity:.5; }
-  .btn.btn-tinte{ background:var(--info-bg); color:var(--info); }
-  .btn.btn-contorno{ background:var(--superficie); color:var(--tinta-2); border:1.5px solid var(--linea); }
-  /* A 360 px «📷 Foto del ticket» se partía en dos renglones a 15 px. */
-  .btn.btn-tinte, .btn.btn-contorno{ font-size:var(--t-md); padding:14px 8px; white-space:nowrap; }
+  .btn.btn-contorno{ background:var(--superficie); color:var(--tinta-2); border:1.5px solid var(--linea);
+    font-size:var(--t-md); padding:14px 8px; white-space:nowrap; }
   /* Herramientas del gerente: enlaces, no botones. Son para revisar, no
      para capturar, y como botones empujaban el formulario hacia abajo. */
   .acc-herr{ display:flex; gap:14px; flex-wrap:wrap; margin:-4px 0 12px; }
@@ -581,7 +578,57 @@
   .acc-aviso{ margin-top:12px; padding:10px 12px; border-radius:9px; font-size:var(--t-md); line-height:1.45; }
   .acc-aviso.info{ border-left:4px solid var(--azul); background:var(--info-bg); color:var(--info); }
   .acc-aviso.error{ border-left:4px solid var(--rojo); background:var(--alerta-bg); color:var(--alerta); }
-  .acc-datos{ margin-top:14px; }
+
+  /* ── El ticket con forma de papel (22-sep-2026, v282) ──────────────
+     Hoja blanca sobre gris, borde de abajo en zigzag, la foto «engrapada» en
+     la esquina y los campos escritos como renglones del ticket. Montserrat y
+     no una letra de ticket: la de ticket vendría del CDN y sin señal la
+     pantalla cambiaría de letra en silencio. Sin colores nuevos. */
+  .papel-fondo{ background:var(--fondo); }
+  .papel{ position:relative; background:var(--superficie); border-radius:8px 8px 0 0;
+    padding:16px 16px 18px; margin:6px 0 22px; box-shadow:var(--sombra); }
+  .papel::after{ content:''; position:absolute; left:0; right:0; bottom:-9px; height:9px;
+    background:linear-gradient(-45deg, transparent 6px, var(--superficie) 0) 0 0/12px 9px repeat-x,
+               linear-gradient(45deg, transparent 6px, var(--superficie) 0) 0 0/12px 9px repeat-x; }
+  .papel-cab{ padding-right:84px; min-height:96px; }
+  .papel-marca{ font-size:var(--t-lg); font-weight:800; letter-spacing:.18em; line-height:1.2; }
+  .papel-sub{ font-size:var(--t-xs); font-weight:600; color:var(--tinta-3); margin:1px 0 8px; }
+  .papel-cab .acc-estado{ margin:0 0 6px; font-size:var(--t-sm); }
+  .papel-campo{ display:flex; align-items:center; gap:8px; padding:5px 0; }
+  .papel-campo > span{ width:62px; flex-shrink:0; font-size:var(--t-xs); font-weight:800;
+    color:var(--tinta-3); text-transform:uppercase; letter-spacing:.05em; }
+  .papel-i{ flex:1; min-width:0; border:none; border-bottom:1.5px dashed var(--borde); border-radius:0;
+    background:transparent; font-family:inherit; font-size:var(--t-lg); font-weight:700;
+    color:var(--tinta); padding:5px 0; }
+  .papel-i::placeholder{ color:var(--tinta-3); font-weight:500; }
+  .papel-i:focus{ outline:none; border-bottom:1.5px solid var(--azul); }
+  .papel-sep{ border:none; border-top:1.5px dashed var(--borde); margin:12px 0 8px; }
+  .papel-vacio{ font-size:var(--t-sm); color:var(--tinta-3); line-height:1.45; margin:2px 0 0; }
+  .papel-agregar{ width:100%; margin-top:10px; border:1.5px dashed var(--azul); background:transparent;
+    color:var(--info); font-family:inherit; font-size:var(--t-md); font-weight:800;
+    border-radius:9px; padding:11px; cursor:pointer; }
+  .papel-total{ display:flex; justify-content:space-between; align-items:baseline; }
+  .papel-total span{ font-size:var(--t-sm); font-weight:800; letter-spacing:.14em; color:var(--tinta-2); }
+  .papel-total b{ font-size:var(--t-xl); font-weight:800; font-variant-numeric:tabular-nums; }
+  /* Lo escrito sin agregar: se ve distinto de lo ya agregado, y se toca. */
+  .pend{ margin:6px -8px 2px; padding:4px 8px 6px; border:1.5px dashed var(--atencion-borde);
+    background:var(--atencion-bg); border-radius:9px; cursor:pointer; }
+  .pend-nota{ font-size:var(--t-xs); font-weight:700; color:var(--atencion); }
+
+  .grapa{ position:absolute; top:-6px; right:12px; display:flex; flex-direction:column;
+    align-items:center; gap:2px; z-index:1; }
+  .grapa-foto{ position:relative; width:66px; height:84px; padding:0; overflow:hidden; cursor:pointer;
+    border:1.5px dashed var(--azul); border-radius:6px; background:var(--info-bg); color:var(--info);
+    transform:rotate(3deg); display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:2px; font-family:inherit; font-size:var(--t-xs); font-weight:800; box-shadow:var(--sombra); }
+  .grapa-foto.con-foto{ border:1px solid var(--linea); background:var(--superficie); }
+  .grapa-foto img{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+  .grapa-foto.con-foto .grapa-ico, .grapa-foto.con-foto .grapa-txt{ display:none; }
+  .grapa-ico{ font-size:24px; line-height:1; }
+  .grapa-gal{ background:none; border:none; padding:3px 2px; cursor:pointer; font-family:inherit;
+    font-size:var(--t-xs); font-weight:700; color:var(--info); }
+  .foto-grande{ display:flex; justify-content:center; background:var(--fondo); }
+  .foto-grande img{ max-width:100%; height:auto; border-radius:8px; }
 </style>
 </head>
 <body>
@@ -2965,6 +3012,7 @@ window.accTipo = function(t){
     if(!rep && r.cant && Number(r.cant) > 0) $('accCant').value = r.cant;
   }
   $('accError').style.display = 'none';
+  accPintarLineas();   // el «por confirmar» cambia de tipo y de importe con esto
 };
 
 /* Agrega un concepto al ticket que se está armando. NO guarda nada todavía:
@@ -3027,36 +3075,116 @@ window.accQuitarLinea = function(i){
   accPintarLineas();
 };
 
-function accPintarLineas(){
-  const n = _accLineas.length;
-  $('accVacio').style.display = n ? 'none' : '';
-  $('accLineas').innerHTML = _accLineas.map((l, i) => {
-    const imp = l.precio * l.cantidad;
-    return '<div class="acc-li">' +
-      '<span class="et ' + l.tipo + '">' + (l.tipo === 'rep' ? 'REPARACIÓN' : 'ACCESORIO') + '</span>' +
-      '<span class="q">' + (l.tipo === 'rep' ? 'Servicio' : esc(l.producto)) +
-        (l.cantidad > 1 ? ' ×' + l.cantidad : '') + '</span>' +
-      '<span class="m">$' + imp.toLocaleString('es-MX') + '</span>' +
-      '<button class="x" onclick="accQuitarLinea(' + i + ')" aria-label="Quitar">✕</button>' +
-    '</div>';
-  }).join('');
-
-  const total = _accLineas.reduce((s, l) => s + l.precio * l.cantidad, 0);
-  $('accGuardar').textContent = n
-    ? 'Guardar ' + n + (n === 1 ? ' concepto' : ' conceptos') + ' · $' + total.toLocaleString('es-MX')
-    : 'Guardar';
+/* Lo escrito en la hoja de agregar y aún no agregado. Es EXACTAMENTE lo que
+   `guardarAcc` agrega solo al guardar (misma condición: hay precio), así que
+   el papel lo enseña como renglón «por confirmar»: sin esto, lo que la lectura
+   del ticket llenaba quedaba en campos que el asesor ni veía, y entraba igual.
+   `valido` = lo que accAgregarLinea aceptaría por forma (producto en un
+   accesorio, precio > 0); los duplicados los sigue diciendo ella. */
+function accPendiente(){
+  const crudo = String($('accPrecio').value).trim();
+  if(!crudo) return null;
+  const rep = (_accTipo === 'rep');
+  const precio = Number(crudo.replace(/[^0-9.]/g, ''));
+  const prod = rep ? '' : $('accProd').value.trim();
+  const cant = rep ? 1 : Math.max(1, Number($('accCant').value) || 1);
+  return { tipo: _accTipo, producto: prod, cantidad: cant, precio: precio,
+           valido: precio > 0 && (rep || !!prod) };
 }
+
+function accPintarLineas(){
+  const renglon = (l, extra, x) => {
+    const imp = l.precio * l.cantidad;
+    const nombre = l.tipo === 'rep' ? 'Reparación' : (l.producto ? esc(l.producto) : '¿Qué producto?');
+    return '<div class="acc-li' + extra + '">' +
+      '<span class="et ' + l.tipo + '">' + (l.tipo === 'rep' ? 'REP' : 'ACC') + '</span>' +
+      '<span class="q' + (l.tipo === 'acc' && !l.producto ? ' falta' : '') + '">' + nombre +
+        (l.cantidad > 1 ? ' ×' + l.cantidad : '') + '</span>' +
+      '<span class="pts"></span>' +
+      '<span class="m">' + (imp > 0 ? '$' + imp.toLocaleString('es-MX') : '—') + '</span>' + x +
+    '</div>';
+  };
+  const pend = accPendiente();
+  const n = _accLineas.length + (pend && pend.valido ? 1 : 0);
+  $('accVacio').style.display = (_accLineas.length || pend) ? 'none' : '';
+  $('accLineas').innerHTML = _accLineas.map((l, i) => renglon(l, '',
+      '<button class="x" onclick="accQuitarLinea(' + i + ')" aria-label="Quitar">✕</button>')).join('')
+    + (pend ? '<div class="pend" role="button" tabindex="0" onclick="accAbrirHoja()">'
+        + renglon(pend, ' pend-li',
+            '<button class="x" onclick="event.stopPropagation(); accDescartarPendiente()" aria-label="Descartar">✕</button>')
+        + '<div class="pend-nota">Por confirmar · ' + (pend.valido
+            ? 'se agrega al guardar. Toca para revisarlo.'
+            : 'toca para elegir ' + (pend.tipo === 'acc' && !pend.producto ? 'el producto.' : 'el importe.'))
+        + '</div></div>' : '');
+
+  const total = _accLineas.reduce((s, l) => s + l.precio * l.cantidad, 0)
+              + (pend && pend.valido ? pend.precio * pend.cantidad : 0);
+  $('accTotal').textContent = '$' + total.toLocaleString('es-MX');
+  // Solo el total: los conceptos ya se cuentan en el papel, y con ellos el
+  // texto se partía en dos renglones a 390 px.
+  $('accGuardar').textContent = n ? 'Guardar · $' + total.toLocaleString('es-MX') : 'Guardar';
+}
+
+/* ── La hoja de agregar ──
+   #accError se muda con ella: el error de «Agregar al ticket» se tiene que ver
+   donde se pulsó, y el de «Guardar», debajo del papel. Es el MISMO nodo (lo
+   usan accAgregarLinea, guardarAcc y la foto), no dos: así nadie escribe en
+   uno que no se ve. */
+window.accAbrirHoja = function(){
+  $('accErrorHoja').appendChild($('accError'));
+  $('accError').style.display = 'none';
+  $('accHoja').classList.add('show');
+};
+window.accCerrarHoja = function(){
+  $('accErrorCasa').appendChild($('accError'));
+  $('accError').style.display = 'none';
+  $('accHoja').classList.remove('show');
+  accPintarLineas();
+};
+window.accAgregarDesdeHoja = function(){
+  if(accAgregarLinea()) accCerrarHoja();
+};
+window.accDescartarPendiente = function(){
+  $('accPrecio').value = ''; $('accCant').value = '1'; $('accProd').value = '';
+  accPintarLineas();
+};
+
+/* ── La foto engrapada ──
+   Sin foto, tocarla abre la cámara. Con foto, la enseña en grande para cotejar
+   el papel contra la pantalla. La miniatura sale del archivo mismo (al
+   instante), no de la comprimida, que tarda y es la que se sube. */
+let _accMiniUrl = null;
+function accMostrarMini(f){
+  // Callar es correcto en los dos: la miniatura es solo para cotejar. Sin ella
+  // la grapa vuelve a decir «Foto» y la foto se sube igual (va por compressImage).
+  if(_accMiniUrl){ try{ URL.revokeObjectURL(_accMiniUrl); }catch(e){ /* ya liberada: nada que hacer */ } _accMiniUrl = null; }
+  if(f){ try{ _accMiniUrl = URL.createObjectURL(f); }catch(e){ /* sin miniatura, ver arriba */ } }
+  $('accMini').hidden = !_accMiniUrl;
+  $('accMini').src = _accMiniUrl || '';
+  $('accFoto').classList.toggle('con-foto', !!_accMiniUrl);
+}
+window.accGrapa = function(){
+  if(!_accMiniUrl) return accTomarFoto();
+  $('accFotoGrande').src = _accMiniUrl;
+  $('accFotoVer').classList.add('show');
+};
+window.accCerrarFoto = function(){ $('accFotoVer').classList.remove('show'); };
 
 window.abrirAcc = async function(){
   accTipo('acc');            // cada ticket empieza en accesorio, que es lo habitual
   accTipoManual();           // hasta que se lea la foto no hay nada detectado
   _accFechaDudosa = ''; _accCrudo = ''; _accVendLeido = ''; _accVendCasado = null;
-  _accLineas = []; accPintarLineas();
+  _accLineas = [];
+  // Hoja y foto del ticket anterior, fuera: el error vuelve a su sitio bajo el papel.
+  $('accHoja').classList.remove('show'); $('accFotoVer').classList.remove('show');
+  $('accErrorCasa').appendChild($('accError'));
+  accMostrarMini(null);
   _accOcr = null;
   $('accEstado').textContent = '';
   $('accLeido').style.display = 'none';
   $('accError').style.display = 'none';
   $('accTicket').value = ''; $('accPrecio').value = ''; $('accCant').value = '1';
+  accPintarLineas();   // después de vaciar el precio: si no, pinta un «por confirmar» viejo
   $('accFecha').value = accHoyISO();
   _accFoto = null;
   $('accVend').innerHTML = VENDEDORES.map(n => '<option>' + esc(n) + '</option>').join('');
@@ -3098,6 +3226,7 @@ window.accProdCambio = function(){
   const op = $('accProd').selectedOptions[0];
   const ref = op && op.dataset ? op.dataset.p : '';
   if(ref && !$('accPrecio').value) $('accPrecio').value = ref;
+  accPintarLineas();
 };
 
 /* `onclick`/`onchange` van en el HTML del panel, NO aquí: este <script>
@@ -3124,6 +3253,7 @@ window.accFotoElegida = function(e){
   $('accLeido').style.display = 'none';
   $('accError').style.display = 'none';
   $('accEstado').textContent = 'Leyendo el ticket… puedes ir eligiendo el producto';
+  accMostrarMini(f);
 
   /* La foto se guarda como EVIDENCIA, comprimida igual que las de venta.
      Cuando el OCR lee mal el producto —y lee mal, según se vio en piso— la
@@ -3271,6 +3401,10 @@ window.accFotoElegida = function(e){
     el.style.display = 'block';
     return null;
   });
+  /* Lo leído aparece en el papel como «por confirmar». Va APARTE y no dentro
+     de la cadena: `_accOcr` tiene que seguir resolviendo con lo que devuelve
+     la lectura, porque guardarAcc la espera para sacar el texto del ticket. */
+  _accOcr.then(function(){ accPintarLineas(); });
 };
 
 window.guardarAcc = async function(){
@@ -5296,82 +5430,99 @@ refreshEolVenta(); // trae los EOL con 50% activo (solo exhibición)
       <h2 id="accTitulo">Ticket de Mr Fix</h2>
       <button class="vd-cerrar" onclick="cerrarAcc()" aria-label="Cerrar">×</button>
     </div>
-    <div class="vd-lista panel-cuerpo">
+    <div class="vd-lista panel-cuerpo papel-fondo">
 
       <!-- Solo gerente y subgerente. El reporte del mes es suyo: mueve las
-           comisiones de todo el equipo y se entrega a la región. -->
+           comisiones de todo el equipo y se entrega a la región. «Lo capturado
+           hoy» va junto porque es lo que se hace justo antes de bajarlo. Son
+           enlaces y no botones: son para revisar, no para capturar. -->
       <div class="acc-herr" id="accGestion" style="display:none">
         <button onclick="abrirAccReporte()">
           📊 Reporte del mes</button>
-        <!-- 6-sep-2026: hasta hoy, un ticket mal capturado no se podía tocar —no
-             había ni dónde volver a verlo—. Va junto al reporte porque es lo que
-             se hace justo antes de bajarlo: revisar lo del día. -->
         <button onclick="abrirMrFixDia()">
           🧾 Lo capturado hoy</button>
       </div>
 
-      <!-- ── 1 · EL TICKET. Uno solo, y una sola foto ──────────────────
-           La foto, el número y la fecha son del PAPEL, no de cada cosa que
-           lleva. Cuando el tipo se elegía arriba del todo, un ticket con una
-           mica y un cambio de pantalla obligaba a capturar dos veces y a
-           fotografiar el mismo papel dos veces. Lo mismo pasaba, desde antes,
-           con dos accesorios en un ticket. -->
-      <!-- Cámara Y galería, como arriba con fileCam/fileGal para las series.
-           `capture="environment"` no es una preferencia: en el celular ABRE LA
-           CÁMARA y deja fuera el carrete, así que el ticket que ya está en el
-           teléfono —capturado al cerrar el día, o el que un compañero mandó por
-           WhatsApp— no había forma de subirlo. Son dos inputs y no uno sin
-           `capture` porque quitarlo sin más cambia el caso normal: el asesor con
-           el cliente delante pasaría a elegir en un menú en vez de disparar. -->
+      <!-- Cámara Y galería: `capture="environment"` ABRE LA CÁMARA y deja fuera
+           el carrete, así que el ticket que ya está en el teléfono —capturado al
+           cerrar el día, o mandado por WhatsApp— necesita su propio input. -->
       <input type="file" accept="image/*" capture="environment" id="accFile" hidden onchange="accFotoElegida(event)">
       <input type="file" accept="image/*" id="accFileGal" hidden onchange="accFotoElegida(event)">
-      <div class="fila">
-        <button class="btn f1 btn-tinte" id="accFoto" onclick="accTomarFoto()">
-          📷 Foto del ticket</button>
-        <button class="btn f1 btn-contorno" id="accFotoGal" onclick="accElegirFoto()">
-          🖼️ Galería</button>
-      </div>
-      <!-- Solo ocupa lugar cuando dice algo («Leyendo el ticket…»): vacío
-           dejaba un hueco que cortaba el formulario en el borde. -->
-      <div id="accEstado" class="acc-estado"></div>
 
-      <div class="fila fila-10 acc-datos">
-        <div class="f1">
-          <label class="ed-l">N° de ticket</label>
-          <input id="accTicket" class="ed-i" inputmode="numeric" autocomplete="off">
+      <!-- ── EL TICKET, con la forma del papel (22-sep-2026, v282) ──────────
+           Capturar Mr Fix es pasar un papel a la pantalla y comprobar que quedó
+           igual; por eso la pantalla tiene su forma: encabezado, un renglón por
+           concepto y el total. La foto va «engrapada» en la esquina para
+           cotejar. Uno solo por ticket: la foto, el número, la fecha y quién
+           atendió son del PAPEL, no de cada cosa que lleva. -->
+      <div class="papel">
+        <div class="grapa">
+          <button type="button" id="accFoto" class="grapa-foto" onclick="accGrapa()" aria-label="Foto del ticket">
+            <img id="accMini" alt="" hidden>
+            <span class="grapa-ico">📷</span><span class="grapa-txt">Foto</span>
+          </button>
+          <button type="button" id="accFotoGal" class="grapa-gal" onclick="accElegirFoto()">o galería</button>
         </div>
-        <div class="f1">
-          <label class="ed-l">Fecha</label>
-          <input id="accFecha" class="ed-i" type="date">
+        <div class="papel-cab">
+          <div class="papel-marca">MR FIX</div>
+          <div class="papel-sub">Ticket de venta</div>
+          <div id="accEstado" class="acc-estado"></div>
+          <label class="papel-campo"><span>Ticket</span>
+            <input id="accTicket" class="papel-i" inputmode="numeric" autocomplete="off" placeholder="N° del ticket"></label>
+          <label class="papel-campo"><span>Fecha</span>
+            <input id="accFecha" class="papel-i" type="date"></label>
         </div>
+        <!-- «Lo atendió» es del ticket, no de cada línea: es UNA persona la que
+             atendió esa compra. -->
+        <label class="papel-campo"><span>Atendió</span>
+          <select id="accVend" class="papel-i"></select></label>
+
+        <hr class="papel-sep">
+        <!-- Los conceptos ya agregados y, al final, el «por confirmar»: lo que
+             está escrito en la hoja de agregar sin haberse agregado. Guardar lo
+             agrega solo (ver guardarAcc), así que se enseña aquí lo que va a
+             entrar. Lo pinta accPintarLineas. -->
+        <div id="accLineas"></div>
+        <p class="papel-vacio" id="accVacio">Sin conceptos todavía. Pueden ir
+          accesorios y una reparación en el mismo ticket.</p>
+        <button type="button" class="papel-agregar" onclick="accAbrirHoja()">＋ Agregar concepto</button>
+        <hr class="papel-sep">
+        <div class="papel-total"><span>TOTAL</span><b id="accTotal">$0</b></div>
       </div>
 
-      <!-- «Atendido por» es del ticket, no de cada línea: es UNA persona la que
-           atendió esa compra. Por eso está aquí y no dentro de cada concepto. -->
-      <label class="ed-l">Lo atendió</label>
-      <select id="accVend" class="ed-i"></select>
+      <!-- Lo que el OCR entendió, para poder desmentirlo de un vistazo -->
+      <div id="accLeido" class="acc-aviso info" style="display:none"></div>
+      <!-- #accError vive aquí con la hoja cerrada y se muda a la hoja cuando se
+           abre (accAbrirHoja): el error de «Agregar» tiene que verse donde se
+           pulsó, y el de «Guardar», aquí. -->
+      <div id="accErrorCasa"><div id="accError" class="acc-aviso error" style="display:none"></div></div>
+    </div>
+    <div class="vd-pie fila fila-10 pie-btns">
+      <button class="btn f1 btn-sec" onclick="cerrarAcc()">Cancelar</button>
+      <button class="btn f2 btn-guardar" id="accGuardar" onclick="guardarAcc()">Guardar</button>
+    </div>
+  </div>
+</div>
 
-      <!-- ── 2 · LO QUE LLEVA ────────────────────────────────────────── -->
-      <div class="acc-sep">Qué lleva este ticket</div>
-      <div id="accLineas"></div>
-      <p class="ed-n" id="accVacio">Todavía no has agregado nada. Elige abajo qué
-        lleva y pulsa <b>Agregar</b>. Puedes meter accesorios y reparaciones en el
-        mismo ticket.</p>
-
-      <!-- ── 3 · AGREGAR UN CONCEPTO ─────────────────────────────────── -->
-      <div class="acc-sep">Agregar</div>
-      <!-- El selector ya no decide «qué venta es esta», sino «qué voy a agregar
-           ahora». Cada concepto se guarda en la tabla que le toca, así que un
-           ticket mixto acaba con sus accesorios en `accesorios_ventas` y su
-           reparación en `reparaciones`, con la misma foto y el mismo ticket. -->
+<!-- ── Agregar un concepto al ticket (22-sep-2026, v282) ─────────────────
+     Sube encima del papel. El selector no decide «qué venta es esta» sino «qué
+     voy a agregar ahora»: cada concepto se guarda en la tabla que le toca, así
+     que un ticket mixto acaba con sus accesorios en `accesorios_ventas` y su
+     reparación en `reparaciones`, con la misma foto y el mismo ticket.
+     Cerrarla con × NO borra lo escrito: queda en el papel como «por confirmar». -->
+<div id="accHoja" class="vd z76">
+  <div class="vd-box">
+    <div class="vd-top">
+      <h2>Agregar concepto</h2>
+      <button class="vd-cerrar" onclick="accCerrarHoja()" aria-label="Cerrar">×</button>
+    </div>
+    <div class="vd-lista panel-cuerpo">
       <div class="tipo-sel" id="accTipoSel">
         <button type="button" data-t="acc" class="on" onclick="accTipo('acc')">🔌 Accesorio</button>
         <button type="button" data-t="rep" onclick="accTipo('rep')">🔧 Reparación</button>
       </div>
       <!-- Cuando el ticket lo dice sin lugar a dudas, el selector se esconde y
-           queda esto: lo elegido y POR QUE. Preguntar lo que ya esta impreso es
-           trabajo de mas, pero esconderlo sin decir nada seria peor — el asesor
-           tiene que poder ver que se decidio, y desdecirlo si el OCR fallo. -->
+           queda esto: lo elegido y POR QUÉ, con salida para desdecirlo. -->
       <div class="tipo-auto" id="accTipoAuto" style="display:none">
         <b id="accTipoAutoTxt"></b>
         <button type="button" onclick="accTipoManual()">cambiar</button>
@@ -5380,9 +5531,6 @@ refreshEolVenta(); // trae los EOL con 50% activo (solo exhibición)
       <div id="accSoloAcc">
         <label class="ed-l">Producto</label>
         <select id="accProd" class="ed-i" onchange="accProdCambio()"></select>
-        <!-- Se ve SIEMPRE, también para el asesor: si el producto no está, la venta
-             no se puede capturar, y quedarse mirando la lista sin saber qué hacer
-             es peor que no poder agregarlo uno mismo. -->
         <p class="ed-n">¿Falta un producto? Se agrega en <b>Admin → 📦 Catálogo</b>,
           abajo del todo. Lo hacen el gerente y el subgerente.</p>
       </div>
@@ -5390,27 +5538,36 @@ refreshEolVenta(); // trae los EOL con 50% activo (solo exhibición)
       <div class="fila fila-10">
         <div class="f1">
           <label class="ed-l" id="accPrecioLabel">Precio</label>
-          <input id="accPrecio" class="ed-i" inputmode="decimal" autocomplete="off">
+          <input id="accPrecio" class="ed-i" inputmode="decimal" autocomplete="off" oninput="accPintarLineas()">
         </div>
         <div class="w88" id="accSoloPiezas">
           <label class="ed-l">Piezas</label>
-          <input id="accCant" class="ed-i" inputmode="numeric" value="1" autocomplete="off">
+          <input id="accCant" class="ed-i" inputmode="numeric" value="1" autocomplete="off" oninput="accPintarLineas()">
         </div>
       </div>
 
       <p class="ed-n" id="accNotaRep" style="display:none">La reparación es del
         técnico: <b>no entra en el Excel de comisiones</b> ni cuenta como venta
         de la tienda.</p>
-
-      <button class="btn ancho mt10 btn-sec" id="accAgregar" onclick="accAgregarLinea()">＋ Agregar al ticket</button>
-
-      <!-- Lo que el OCR entendió, para poder desmentirlo de un vistazo -->
-      <div id="accLeido" class="acc-aviso info" style="display:none"></div>
-      <div id="accError" class="acc-aviso error" style="display:none"></div>
+      <div id="accErrorHoja"></div>
     </div>
+    <div class="vd-pie pie-btns">
+      <button class="btn ancho btn-guardar" id="accAgregar" onclick="accAgregarDesdeHoja()">Agregar al ticket</button>
+    </div>
+  </div>
+</div>
+
+<!-- La foto del ticket en grande, para cotejar sin salir de la captura. -->
+<div id="accFotoVer" class="vd z77" onclick="if(event.target === this) accCerrarFoto()">
+  <div class="vd-box alto">
+    <div class="vd-top">
+      <h2>Foto del ticket</h2>
+      <button class="vd-cerrar" onclick="accCerrarFoto()" aria-label="Cerrar">×</button>
+    </div>
+    <div class="vd-lista panel-cuerpo foto-grande"><img id="accFotoGrande" alt="Foto del ticket"></div>
     <div class="vd-pie fila fila-10 pie-btns">
-      <button class="btn f1 btn-sec" onclick="cerrarAcc()">Cancelar</button>
-      <button class="btn f2 btn-guardar" id="accGuardar" onclick="guardarAcc()">Guardar</button>
+      <button class="btn f1 btn-contorno" onclick="accCerrarFoto(); accTomarFoto()">📷 Tomar otra</button>
+      <button class="btn f1 btn-contorno" onclick="accCerrarFoto(); accElegirFoto()">🖼️ Galería</button>
     </div>
   </div>
 </div>

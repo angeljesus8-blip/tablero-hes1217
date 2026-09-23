@@ -34,11 +34,10 @@
      7. y un toque real sobre «1 año» SÍ registra la venta con seguro — si
         esto fallara, las tres de arriba pasarían por no funcionar nada.
 
-   TICKET DE MR FIX (22-sep-2026, v281): abierto como gerente, cabe a 390 y
-   360, UN solo botón sólido y es Guardar (salía con el gris del navegador y
-   parecía apagado), «Foto del ticket» y «Galería» en un renglón cada uno, y
-   las herramientas del gerente como enlaces (≤ 34 px). Cebos: Guardar sin
-   color, Galería sólida, la foto partida y las herramientas como botones.
+   TICKET DE MR FIX (v281, papel desde v282): abierto como gerente, cabe a
+   390 y 360; UN botón sólido en el papel (Guardar) y otro en la hoja de
+   agregar; la foto engrapada no tapa los campos; lo escrito sin agregar sale
+   como «por confirmar» y Guardar lo cuenta; agregar lo deja en el papel.
 
    HORARIOS (22-sep-2026, fase 5): la semana del asesor y la del gerente a
    390 y 360 px, con un equipo inventado. Antes del rediseño la página medía
@@ -338,45 +337,74 @@ async function main(){
         document.querySelector('main').appendChild(d); const m = ${MEDIR}; d.remove(); return m.nFuera; })()`);
       if(!cebo) falla(`captura a ${W}px: se metió un bloque de 520 px y la prueba no lo vio — está ciega`);
 
-      // ── Ticket de Mr Fix (22-sep-2026) ──
-      // UN botón sólido, y es Guardar. Antes Guardar no tenía color (salía con
-      // el gris del navegador y parecía apagado) mientras Foto, Galería y el
-      // tipo «Accesorio» eran sólidos: lo que se hace al final gritaba menos
-      // que todo lo demás. Las herramientas del gerente van como enlaces.
-      await ev(`abrirAcc(); true`); await dormir(400);
-      const mf = await ev(`(() => {
-        const p = $('accPanel');
+      // ── Ticket de Mr Fix: el papel (22-sep-2026, v281 → v282) ──
+      // UN botón sólido por vista: Guardar en el papel, «Agregar al ticket» en
+      // la hoja. En la v281 Guardar salía con el gris del navegador mientras
+      // Foto, Galería y el tipo eran sólidos. Y lo escrito sin agregar se ve
+      // en el papel como «por confirmar», porque Guardar lo agrega solo.
+      const solidosDe = sel => ev(`(() => {
+        const p = document.querySelector('${sel}');
         const vis = el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
         const lum = c => { const m = (c.match(/[\\d.]+/g) || [255, 255, 255]).map(Number);
           if(m.length > 3 && m[3] === 0) return 1;
           return (0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]) / 255; };
-        const solidos = [...p.querySelectorAll('button')].filter(vis)
-          .filter(b => lum(getComputedStyle(b).backgroundColor) < 0.75)
-          .map(b => b.id || b.textContent.trim().slice(0, 24));
-        const g = $('accGestion'), f = $('accFoto'), fg = $('accFotoGal');
-        return { abierto: vis(p.querySelector('.vd-box')), solidos,
-                 // Renglones del TEXTO, no alto del botón: en la fila los dos
-                 // se estiran a la misma altura aunque uno se parta.
-                 fotoMal: [f, fg].some(el => { const r = document.createRange(); r.selectNodeContents(el);
-                   const tops = [...r.getClientRects()].map(x => x.top).sort((a, b) => a - b);
-                   return tops.length && tops[tops.length - 1] - tops[0] > 8 || el.scrollWidth > el.clientWidth + 1; }),
-                 gestion: vis(g) ? Math.round(g.getBoundingClientRect().height) : 0 };
+        return { abierto: vis(p.querySelector('.vd-box')),
+                 solidos: [...p.querySelectorAll('button')].filter(vis)
+                   .filter(b => lum(getComputedStyle(b).backgroundColor) < 0.75)
+                   .map(b => b.id || b.textContent.trim().slice(0, 24)) };
       })()`);
+      await ev(`abrirAcc(); true`); await dormir(400);
+      const mf = await solidosDe('#accPanel');
       if(!mf.abierto) falla(`mr fix a ${W}px: abrirAcc() no abrió el panel`);
       else {
         const mm = await ev(MEDIR);
         if(mm.nFuera) falla(`mr fix a ${W}px: ${mm.nFuera} elemento(s) se salen — ${mm.fuera.join(', ')}`);
         if(mf.solidos.length !== 1 || mf.solidos[0] !== 'accGuardar')
-          falla(`mr fix a ${W}px: tiene que haber UN botón sólido y ser Guardar; hay ${mf.solidos.length}: ${mf.solidos.join(', ') || 'ninguno'}`);
-        if(mf.fotoMal) falla(`mr fix a ${W}px: «Foto del ticket» o «Galería» se parte en dos renglones o se sale`);
-        if(!mf.gestion) falla(`mr fix a ${W}px: el gerente no ve «Reporte del mes» ni «Lo capturado hoy»`);
-        else if(mf.gestion > 34)
-          falla(`mr fix a ${W}px: las herramientas del gerente miden ${mf.gestion} px (tope 34): pesan como la captura`);
+          falla(`mr fix a ${W}px: en el papel tiene que haber UN botón sólido y ser Guardar; hay ${mf.solidos.length}: ${mf.solidos.join(', ') || 'ninguno'}`);
+        const g = await ev(`(() => { const r = $('accGestion').getBoundingClientRect(); return r.height ? Math.round(r.height) : 0; })()`);
+        if(!g) falla(`mr fix a ${W}px: el gerente no ve «Reporte del mes» ni «Lo capturado hoy»`);
+        else if(g > 34) falla(`mr fix a ${W}px: las herramientas del gerente miden ${g} px (tope 34): pesan como la captura`);
+        // La foto engrapada no tapa los campos del ticket.
+        const tapa = await ev(`(() => { const a = $('accFoto').getBoundingClientRect();
+          return ['accTicket', 'accFecha', 'accVend'].filter(id => { const b = $(id).getBoundingClientRect();
+            return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom; }); })()`);
+        if(tapa.length) falla(`mr fix a ${W}px: la foto engrapada tapa ${tapa.join(', ')}`);
         await foto('mrfix', W);
-        await ev(`document.querySelector('#accPanel .panel-cuerpo').scrollTop = 1e5; true`); await dormir(150);
-        await foto('mrfix_abajo', W);
+
+        // La hoja de agregar: un solo sólido, y nada se sale.
+        await ev(`_accCat = [{ nombre:'KIT LIMPIEZA', precio_ref:169, sku:'43739' }, { nombre:'MICA HR', precio_ref:149, sku:'43739' }];
+                  accPintarLista(0, null); accAbrirHoja(); true`); await dormir(250);
+        const hj = await solidosDe('#accHoja');
+        if(!hj.abierto) falla(`mr fix a ${W}px: «Agregar concepto» no abrió la hoja`);
+        else {
+          const mh = await ev(MEDIR);
+          if(mh.nFuera) falla(`mr fix hoja a ${W}px: ${mh.nFuera} elemento(s) se salen — ${mh.fuera.join(', ')}`);
+          if(hj.solidos.length !== 1 || hj.solidos[0] !== 'accAgregar')
+            falla(`mr fix hoja a ${W}px: tiene que haber UN botón sólido y ser «Agregar al ticket»; hay ${hj.solidos.length}: ${hj.solidos.join(', ') || 'ninguno'}`);
+          await foto('mrfix_hoja', W);
+        }
+
+        // Lo escrito sin agregar aparece en el papel y Guardar lo cuenta.
+        await ev(`$('accProd').value = 'KIT LIMPIEZA'; $('accPrecio').value = '169'; accCerrarHoja(); true`); await dormir(150);
+        const pe = await ev(`({ pend: !!document.querySelector('#accLineas .pend'), txt: $('accGuardar').textContent,
+                               total: $('accTotal').textContent })`);
+        if(!pe.pend) falla(`mr fix a ${W}px: con precio y producto escritos no aparece el renglón «por confirmar»`);
+        if(!/169/.test(pe.txt) || !/169/.test(pe.total))
+          falla(`mr fix a ${W}px: Guardar («${pe.txt}») o el total (${pe.total}) no cuentan lo que se va a agregar`);
+        // Con el total, Guardar sigue en un renglón (se partía con «1 concepto · $169»).
+        const renglones = await ev(`(() => { const r = document.createRange(); r.selectNodeContents($('accGuardar'));
+          const t = [...r.getClientRects()].map(x => x.top); return t.length ? Math.max(...t) - Math.min(...t) : 0; })()`);
+        if(renglones > 8) falla(`mr fix a ${W}px: «${pe.txt}» se parte en dos renglones`);
+        await foto('mrfix_pendiente', W);
+
+        // Y agregarlo desde la hoja lo pasa a renglón y cierra la hoja.
+        await ev(`accAbrirHoja(); accAgregarDesdeHoja(); true`); await dormir(150);
+        const ag = await ev(`({ lineas: _accLineas.length, hoja: $('accHoja').classList.contains('show'),
+                               pend: !!document.querySelector('#accLineas .pend') })`);
+        if(ag.lineas !== 1 || ag.hoja || ag.pend)
+          falla(`mr fix a ${W}px: «Agregar al ticket» no dejó el concepto en el papel (${ag.lineas} renglones, hoja ${ag.hoja ? 'abierta' : 'cerrada'})`);
       }
-      await ev(`cerrarAcc(); true`); await dormir(150);
+      await ev(`accCerrarHoja(); cerrarAcc(); true`); await dormir(150);
     }
 
     // ── Horarios ──

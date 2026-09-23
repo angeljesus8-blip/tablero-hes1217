@@ -5428,3 +5428,43 @@ gerente): un solo sólido y es `accGuardar`, Foto/Galería en un renglón
 altura aunque uno se parta) y herramientas ≤ 34 px. Cebos: Guardar sin color,
 Galería sólida, foto partida y herramientas como botones — 4 de 4. Fotos en
 `05-Analisis/rediseno-mrfix-2026-09-22`.
+
+## Ticket de Mr Fix con forma de papel *(22-sep-2026, v282)*
+
+Ángel vio tres maquetas (paso a paso, ticket en papel, mostrador rápido) y
+eligió **el papel**: capturar Mr Fix es pasar un papel a la pantalla y
+comprobar que quedó igual, así que la pantalla tiene su forma.
+
+**Cómo está armado** (todos los `id` de antes siguen; las pruebas de Mr Fix no
+cambiaron):
+- `.papel`: encabezado MR FIX, Ticket/Fecha/Atendió como renglones
+  (`.papel-i`), los conceptos `nombre ······ importe` y el TOTAL (`#accTotal`).
+  Montserrat, NO letra de ticket (vendría del CDN). Cero colores nuevos.
+- La foto «engrapada» (`#accFoto` = `.grapa-foto`, «o galería» = `#accFotoGal`):
+  sin foto abre la cámara; con foto enseña la miniatura (`accMostrarMini`, del
+  archivo con `createObjectURL`, al instante) y al tocarla, `#accFotoVer` en
+  grande. `.papel-cab` lleva `padding-right` para que la grapa no tape campos.
+- `#accHoja` «Agregar concepto» sube encima: tipo, producto, precio, piezas y
+  «Agregar al ticket» (`accAgregarDesdeHoja` → `accAgregarLinea`, y cierra si
+  valió). Cerrar con × NO borra lo escrito.
+- ⚠️ **`#accError` es UN nodo que se muda**: vive en `#accErrorCasa` (bajo el
+  papel) y `accAbrirHoja` lo pasa a `#accErrorHoja`. Lo escriben
+  accAgregarLinea, guardarAcc y la foto; con dos nodos, alguno escribiría en el
+  que no se ve.
+- **«Por confirmar»** (`accPendiente`): lo escrito en la hoja sin agregar sale
+  en el papel como renglón punteado ámbar. Es la MISMA condición con la que
+  `guardarAcc` lo agrega solo (hay precio), así que se ve lo que va a entrar;
+  el total y «Guardar · $total» lo cuentan si es válido. Tocarlo abre la hoja;
+  ✕ lo descarta. Se repinta en `accTipo`, `accProdCambio`, el `oninput` de
+  precio y piezas, y al terminar la lectura del ticket
+  (`_accOcr.then(accPintarLineas)`, APARTE de la cadena: `_accOcr` tiene que
+  seguir resolviendo con lo leído, guardarAcc lo espera).
+- Guardar dice solo «Guardar · $total»: con «1 concepto» se partía a 390 px.
+
+**Lo cuida `pantalla_390.js`:** un sólido en el papel (Guardar) y uno en la
+hoja (Agregar), nada se sale en las dos, la grapa no tapa Ticket/Fecha/Atendió,
+el «por confirmar» aparece y Guardar/total lo cuentan, Guardar en un renglón,
+y agregar deja el renglón en el papel y cierra la hoja. **Cebos: 6 de 6.**
+⚠️ Al armar cebos con `String.replace`, un `$'` en el reemplazo inserta el
+resto del archivo: usar `split/join`. Así uno pareció «no cazado» cuando lo que
+pasó es que Captura no cargó. Fotos en `05-Analisis/rediseno-mrfix-papel-2026-09-22`.
