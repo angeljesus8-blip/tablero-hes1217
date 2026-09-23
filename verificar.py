@@ -11,7 +11,9 @@ import glob, io, json, os, re, subprocess, sys, tempfile
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 HTML = ['index.html', 'tablero.html', 'captura_series.html', 'admin.html',
-        'comisiones.html', 'actualizar_datos.html', 'horarios.html']
+        'comisiones.html', 'horarios.html']
+# actualizar_datos.html se retiró el 22-sep-2026: quedó una página mínima que
+# manda a Admin, sin cargas ni sesión. Por eso ya no está en estas listas.
 # horarios.html no se edita aquí: es copia de horario_semanal.html, que se
 # publica también en el repo planeador-odemas para las demás tiendas.
 # 9-sep-2026: la carpeta se reorganizó como bóveda de Obsidian. Antes esta ruta
@@ -493,7 +495,7 @@ def r_cargas_sb():
     # 1 · Ninguna pantalla puede volver a mandar una carga al Apps Script. Si lo
     #     hiciera, el Excel iría a una hoja que ya nadie lee y el tablero
     #     seguiría con el inventario del día anterior — sin avisar de nada.
-    for archivo in ('actualizar_datos.html', 'admin.html'):
+    for archivo in ('admin.html',):
         s = leer(archivo)
         if s is None: continue
         for tipo in ("tipo:'catalogo'", "tipo:'catalogo_ref'", "tipo:'exhibicion'",
@@ -633,7 +635,7 @@ def r_contrato_sql():
     sqls = [c for c in cambiados if c.endswith('.sql')]
     if not sqls: return
     htmls = ['tablero.html', 'captura_series.html', 'admin.html',
-             'comisiones.html', 'actualizar_datos.html']
+             'comisiones.html']
     for sql in sqls:
         s = leer(sql)
         if s is None: continue
@@ -1685,9 +1687,9 @@ def r_precache():
 # horarios.html es la COPIA que publica horario-semanal/deploy.ps1: si su tope
 # salta, el color nuevo se quita en horario_semanal.html, no aquí.
 PALETA_TOPE = {
-    'index.html': 34, 'tablero.html': 72, 'captura_series.html': 16,
+    'index.html': 2, 'tablero.html': 72, 'captura_series.html': 16,
     'admin.html': 6, 'horarios.html': 3, 'comisiones.html': 1,
-    'actualizar_datos.html': 22, 'accesorios_tecnico.html': 14,
+    'accesorios_tecnico.html': 1,
     'estilo.css': 19,
 }
 def _colores(texto):
@@ -1739,8 +1741,7 @@ def r_paleta():
 def r_scripts_locales():
     sw = leer('sw.js') or ''
     for pagina in ('index.html', 'tablero.html', 'captura_series.html',
-                   'admin.html', 'comisiones.html', 'horarios.html',
-                   'actualizar_datos.html'):
+                   'admin.html', 'comisiones.html', 'horarios.html'):
         s = leer(pagina)
         if s is None:
             continue
