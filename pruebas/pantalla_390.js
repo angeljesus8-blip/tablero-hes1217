@@ -34,6 +34,12 @@
      7. y un toque real sobre «1 año» SÍ registra la venta con seguro — si
         esto fallara, las tres de arriba pasarían por no funcionar nada.
 
+   TICKET DE MR FIX (22-sep-2026, v281): abierto como gerente, cabe a 390 y
+   360, UN solo botón sólido y es Guardar (salía con el gris del navegador y
+   parecía apagado), «Foto del ticket» y «Galería» en un renglón cada uno, y
+   las herramientas del gerente como enlaces (≤ 34 px). Cebos: Guardar sin
+   color, Galería sólida, la foto partida y las herramientas como botones.
+
    HORARIOS (22-sep-2026, fase 5): la semana del asesor y la del gerente a
    390 y 360 px, con un equipo inventado. Antes del rediseño la página medía
    413 px de ancho en un celular de 390: la navegación de semana se salía.
@@ -331,6 +337,46 @@ async function main(){
       const cebo = await ev(`(() => { const d = document.createElement('div'); d.style.cssText = 'width:520px;height:10px';
         document.querySelector('main').appendChild(d); const m = ${MEDIR}; d.remove(); return m.nFuera; })()`);
       if(!cebo) falla(`captura a ${W}px: se metió un bloque de 520 px y la prueba no lo vio — está ciega`);
+
+      // ── Ticket de Mr Fix (22-sep-2026) ──
+      // UN botón sólido, y es Guardar. Antes Guardar no tenía color (salía con
+      // el gris del navegador y parecía apagado) mientras Foto, Galería y el
+      // tipo «Accesorio» eran sólidos: lo que se hace al final gritaba menos
+      // que todo lo demás. Las herramientas del gerente van como enlaces.
+      await ev(`abrirAcc(); true`); await dormir(400);
+      const mf = await ev(`(() => {
+        const p = $('accPanel');
+        const vis = el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+        const lum = c => { const m = (c.match(/[\\d.]+/g) || [255, 255, 255]).map(Number);
+          if(m.length > 3 && m[3] === 0) return 1;
+          return (0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]) / 255; };
+        const solidos = [...p.querySelectorAll('button')].filter(vis)
+          .filter(b => lum(getComputedStyle(b).backgroundColor) < 0.75)
+          .map(b => b.id || b.textContent.trim().slice(0, 24));
+        const g = $('accGestion'), f = $('accFoto'), fg = $('accFotoGal');
+        return { abierto: vis(p.querySelector('.vd-box')), solidos,
+                 // Renglones del TEXTO, no alto del botón: en la fila los dos
+                 // se estiran a la misma altura aunque uno se parta.
+                 fotoMal: [f, fg].some(el => { const r = document.createRange(); r.selectNodeContents(el);
+                   const tops = [...r.getClientRects()].map(x => x.top).sort((a, b) => a - b);
+                   return tops.length && tops[tops.length - 1] - tops[0] > 8 || el.scrollWidth > el.clientWidth + 1; }),
+                 gestion: vis(g) ? Math.round(g.getBoundingClientRect().height) : 0 };
+      })()`);
+      if(!mf.abierto) falla(`mr fix a ${W}px: abrirAcc() no abrió el panel`);
+      else {
+        const mm = await ev(MEDIR);
+        if(mm.nFuera) falla(`mr fix a ${W}px: ${mm.nFuera} elemento(s) se salen — ${mm.fuera.join(', ')}`);
+        if(mf.solidos.length !== 1 || mf.solidos[0] !== 'accGuardar')
+          falla(`mr fix a ${W}px: tiene que haber UN botón sólido y ser Guardar; hay ${mf.solidos.length}: ${mf.solidos.join(', ') || 'ninguno'}`);
+        if(mf.fotoMal) falla(`mr fix a ${W}px: «Foto del ticket» o «Galería» se parte en dos renglones o se sale`);
+        if(!mf.gestion) falla(`mr fix a ${W}px: el gerente no ve «Reporte del mes» ni «Lo capturado hoy»`);
+        else if(mf.gestion > 34)
+          falla(`mr fix a ${W}px: las herramientas del gerente miden ${mf.gestion} px (tope 34): pesan como la captura`);
+        await foto('mrfix', W);
+        await ev(`document.querySelector('#accPanel .panel-cuerpo').scrollTop = 1e5; true`); await dormir(150);
+        await foto('mrfix_abajo', W);
+      }
+      await ev(`cerrarAcc(); true`); await dormir(150);
     }
 
     // ── Horarios ──
