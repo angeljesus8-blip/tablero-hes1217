@@ -5296,3 +5296,41 @@ desde las 6 p. m. marcaba mañana. Ahora `fechaLocal_`. Las tareas no fallaban
 **No llegó a tablero-odemás:** tiene su propia copia de `horarios.html`, más
 vieja, que `deploy.ps1` no toca. Si se porta, `estilo.css` y `fuentes/` van con
 ella.
+
+## Comisiones y Admin con el estilo común *(22-sep-2026, v278)*
+
+Fase 6, la última del plan. Las cinco pantallas del plan (tablero, Captura,
+Horarios, Comisiones, Admin) ya cargan `estilo.css`. **Fuera del plan siguen
+sin pasar:** `index.html` (menú), `actualizar_datos.html` y
+`accesorios_tecnico.html`.
+
+**Comisiones** (23 → 1 colores). `.barra` con «Comisiones» y la fecha del
+reporte en `.estado`; «y Extracoberturas» salió del título porque lo partía
+(84 px). Fuera el turquesa (no era de Odemás ni decía nada); la venta en tinta.
+**Los semáforos no cambiaron** —alcance ≥100/≥70, extracobertura ≥25/≥15—;
+el ámbar pasó a `--atencion` por contraste. `esc` para nombre y puesto.
+
+**Admin** (53 → 6 colores, 128 → 60 inline).
+- `.barra` con la tienda de la sesión (`fijarSubAdmin`, en `abrirAdmin`):
+  decía «HES 1217» fijo. La capa `#pinWrap` lleva la misma barra y
+  `mostrarCerrado` escribe en `#pinCuerpo`, no en toda la capa: si no, se
+  borraba el «‹».
+- Notas en `--tinta-2`: eran gris claro, 2.3:1, y son lo que más se lee aquí.
+- ⚠️ **`.field select` no tenía estilo** —solo `input`—: el selector de
+  Puesto de «Dar de alta» salía del tamaño de un botoncito. `.campo` es el
+  mismo estilo para un control fuera de `.field` (técnico, mes). Y la casilla
+  «Puede abrir Admin» es un `flex`: su texto va en UN `<span>`, o cada trozo
+  es una columna.
+- ⚠️ **Especificidad:** `.card .note` pesa más que una clase sola, así que
+  `.peligro`, `.t-rojo` y `.suave` sobre una nota van repetidas como
+  `.card .note.X`; si no, un error sale gris.
+- Con `estilo.css`, `.btn` ya existe en Admin: los cuatro `btn btn-sec` (que
+  salían con el botón gris del navegador) tienen `.btn.btn-sec`.
+- Ningún id ni `onclick` cambió.
+
+**Regla «nombres» y los datos de prueba:** tres palabras en mayúsculas junto a
+un número de seis cifras se leen como fila del concentrado. En las pruebas, los
+nombres inventados van de DOS palabras («ANA GERENTE»).
+
+**`pantalla_390.js`** mide Comisiones y las 9 pestañas de Admin (390, 360 y,
+Admin, 1280). Con el Comisiones viejo reprueba (encabezado de 84 px).
