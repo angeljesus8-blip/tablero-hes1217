@@ -5334,3 +5334,27 @@ nombres inventados van de DOS palabras («ANA GERENTE»).
 
 **`pantalla_390.js`** mide Comisiones y las 9 pestañas de Admin (390, 360 y,
 Admin, 1280). Con el Comisiones viejo reprueba (encabezado de 84 px).
+
+## Menú, consulta del técnico y retiro de actualizar_datos *(22-sep-2026, v279)*
+
+Con esto TODAS las páginas del tablero cargan `estilo.css`. Lo único que
+queda del rediseño es bajar la paleta de `tablero.html` (72 colores): en la
+fase 1 solo se le pusieron el encabezado y las tarjetas de Inicio.
+
+- **Menú** (34 → 2). `.barra` sin «‹» (es el menú); la tienda se corta con
+  «…» (medía 89 px). Los halos de los iconos, UNO (`--mosaico`) en vez de
+  siete pastel: aprobado por Ángel; `pantalla_390.js` falla si vuelven a ser
+  varios. El login conserva su teclado centrado.
+- **`accesorios_tecnico.html`** (14 → 1). Ahora con logo y Montserrat (se
+  veía con la letra del sistema). Sigue sin «‹» y fuera del service worker.
+- **`actualizar_datos.html` RETIRADA** (decisión de Ángel). Nadie la
+  enlazaba y Admin hace lo mismo. Queda una página mínima («Ahora se hace en
+  Admin») para quien la tenga en favoritos: sin cargas, sin sesión, fuera de
+  `ARCHIVOS` de sw.js y de las listas de verificar.py. La versión completa
+  está en git antes de v279. Las menciones en los .sql son historia.
+- ⚠️ **`estilo.css`: la barra ya no depende del reinicio de cada página.**
+  Sin `* { margin:0; box-sizing:border-box }` en la página, el margen de
+  h1/p y el `min-height` sumado al relleno la inflaban a 83 y 97 px. Ahora
+  `.barra-titulo/.barra-sub` llevan `margin:0` y `.barra, .barra *`
+  `border-box`. La copia del planeador público se pone al día en el próximo
+  `deploy.ps1` del horario (no le afecta: el horario trae su reinicio).
