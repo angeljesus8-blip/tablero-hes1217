@@ -335,9 +335,10 @@
   .tipo-sel button{ flex:1; padding:11px 8px; border:2px solid var(--linea);
     background:#fff; color:var(--tinta-2); border-radius:11px; font-size:13px; font-weight:800;
     font-family:inherit; cursor:pointer; }
-  .tipo-sel button.on{ color:#fff; border-color:transparent; }
-  .tipo-sel button.on[data-t="acc"]{ background:var(--naranja); }
-  .tipo-sel button.on[data-t="rep"]{ background:var(--rojo); }
+  /* Tinte, no sólido (22-sep-2026): en el ticket de Mr Fix el único sólido
+     es Guardar. El color sigue diciendo lo mismo: ámbar accesorio, rojo reparación. */
+  .tipo-sel button.on[data-t="acc"]{ background:var(--atencion-bg); color:var(--atencion); border-color:var(--atencion-borde); }
+  .tipo-sel button.on[data-t="rep"]{ background:var(--alerta-bg); color:var(--alerta); border-color:var(--alerta); }
   .lock-msg{ flex:1; text-align:center; font-size:12.5px; color:var(--tinta-2); font-weight:600;
     padding:13px; background:var(--fondo); border-radius:12px; }
   .lock-msg b{ color:var(--rojo); }
@@ -557,6 +558,30 @@
   .cn-nivel.grande{ font-size:15px; padding:7px 18px; }
   .cn-fila.cn-linea{ flex-wrap:wrap; padding:9px 6px; }
   .medalla{ font-size:34px; }
+
+  /* ── Ticket de Mr Fix (22-sep-2026) ──────────────────────────────
+     Guardar no tenía color —salía con el gris del navegador y parecía
+     apagado— mientras Foto, Galería y el tipo elegido eran sólidos. Ahora
+     el único sólido es Guardar; la foto es un tinte y la galería, contorno
+     (el tipo, arriba en `.tipo-sel`). Van al final: le ganan a `.btn`.
+     Lo mide pantalla_390.js (un solo sólido, y es Guardar). */
+  .btn.btn-guardar{ background:var(--rojo); color:var(--superficie); }
+  .btn.btn-guardar:disabled{ opacity:.5; }
+  .btn.btn-tinte{ background:var(--info-bg); color:var(--info); }
+  .btn.btn-contorno{ background:var(--superficie); color:var(--tinta-2); border:1.5px solid var(--linea); }
+  /* A 360 px «📷 Foto del ticket» se partía en dos renglones a 15 px. */
+  .btn.btn-tinte, .btn.btn-contorno{ font-size:var(--t-md); padding:14px 8px; white-space:nowrap; }
+  /* Herramientas del gerente: enlaces, no botones. Son para revisar, no
+     para capturar, y como botones empujaban el formulario hacia abajo. */
+  .acc-herr{ display:flex; gap:14px; flex-wrap:wrap; margin:-4px 0 12px; }
+  .acc-herr button{ background:none; border:none; padding:4px 0; font-family:inherit;
+    font-size:var(--t-sm); font-weight:700; color:var(--info); cursor:pointer; }
+  .acc-estado{ font-size:var(--t-md); color:var(--info); font-weight:700; margin-top:8px; }
+  .acc-estado:empty{ display:none; }
+  .acc-aviso{ margin-top:12px; padding:10px 12px; border-radius:9px; font-size:var(--t-md); line-height:1.45; }
+  .acc-aviso.info{ border-left:4px solid var(--azul); background:var(--info-bg); color:var(--info); }
+  .acc-aviso.error{ border-left:4px solid var(--rojo); background:var(--alerta-bg); color:var(--alerta); }
+  .acc-datos{ margin-top:14px; }
 </style>
 </head>
 <body>
@@ -5275,13 +5300,13 @@ refreshEolVenta(); // trae los EOL con 50% activo (solo exhibición)
 
       <!-- Solo gerente y subgerente. El reporte del mes es suyo: mueve las
            comisiones de todo el equipo y se entrega a la región. -->
-      <div class="fila mb12" id="accGestion" style="display:none">
-        <button class="btn f1 btn-sec btn-bajo" onclick="abrirAccReporte()">
+      <div class="acc-herr" id="accGestion" style="display:none">
+        <button onclick="abrirAccReporte()">
           📊 Reporte del mes</button>
         <!-- 6-sep-2026: hasta hoy, un ticket mal capturado no se podía tocar —no
              había ni dónde volver a verlo—. Va junto al reporte porque es lo que
              se hace justo antes de bajarlo: revisar lo del día. -->
-        <button class="btn f1 btn-sec btn-bajo" onclick="abrirMrFixDia()">
+        <button onclick="abrirMrFixDia()">
           🧾 Lo capturado hoy</button>
       </div>
 
@@ -5301,15 +5326,16 @@ refreshEolVenta(); // trae los EOL con 50% activo (solo exhibición)
       <input type="file" accept="image/*" capture="environment" id="accFile" hidden onchange="accFotoElegida(event)">
       <input type="file" accept="image/*" id="accFileGal" hidden onchange="accFotoElegida(event)">
       <div class="fila">
-        <button class="btn f1 btn-azul" id="accFoto" onclick="accTomarFoto()">
+        <button class="btn f1 btn-tinte" id="accFoto" onclick="accTomarFoto()">
           📷 Foto del ticket</button>
-        <button class="btn f1 btn-gris" id="accFotoGal" onclick="accElegirFoto()">
+        <button class="btn f1 btn-contorno" id="accFotoGal" onclick="accElegirFoto()">
           🖼️ Galería</button>
       </div>
-      <div id="accEstado" style="font-size:12.5px;color:var(--azul);font-weight:700;
-           margin-top:8px;min-height:18px"></div>
+      <!-- Solo ocupa lugar cuando dice algo («Leyendo el ticket…»): vacío
+           dejaba un hueco que cortaba el formulario en el borde. -->
+      <div id="accEstado" class="acc-estado"></div>
 
-      <div class="fila fila-10">
+      <div class="fila fila-10 acc-datos">
         <div class="f1">
           <label class="ed-l">N° de ticket</label>
           <input id="accTicket" class="ed-i" inputmode="numeric" autocomplete="off">
@@ -5379,16 +5405,12 @@ refreshEolVenta(); // trae los EOL con 50% activo (solo exhibición)
       <button class="btn ancho mt10 btn-sec" id="accAgregar" onclick="accAgregarLinea()">＋ Agregar al ticket</button>
 
       <!-- Lo que el OCR entendió, para poder desmentirlo de un vistazo -->
-      <div id="accLeido" style="display:none;margin-top:12px;padding:10px 12px;
-           border-radius:9px;border-left:4px solid var(--azul);background:var(--info-bg);
-           font-size:12.5px;line-height:1.45;color:var(--info)"></div>
-      <div id="accError" style="display:none;margin-top:12px;padding:10px 12px;
-           border-radius:9px;border-left:4px solid var(--rojo);background:var(--alerta-bg);
-           font-size:12.5px;line-height:1.45;color:var(--alerta)"></div>
+      <div id="accLeido" class="acc-aviso info" style="display:none"></div>
+      <div id="accError" class="acc-aviso error" style="display:none"></div>
     </div>
     <div class="vd-pie fila fila-10 pie-btns">
       <button class="btn f1 btn-sec" onclick="cerrarAcc()">Cancelar</button>
-      <button class="btn f2" id="accGuardar" onclick="guardarAcc()">Guardar</button>
+      <button class="btn f2 btn-guardar" id="accGuardar" onclick="guardarAcc()">Guardar</button>
     </div>
   </div>
 </div>
@@ -5405,9 +5427,7 @@ refreshEolVenta(); // trae los EOL con 50% activo (solo exhibición)
       <label class="ed-l">Mes</label>
       <select id="repMes" class="ed-i" onchange="cargarRep()"></select>
       <div class="t-md mt12" id="repResumen"></div>
-      <div id="repAviso" style="display:none;margin-top:10px;padding:10px 12px;
-           border-radius:9px;border-left:4px solid var(--rojo);background:var(--alerta-bg);
-           font-size:12.5px;line-height:1.45;color:var(--alerta)"></div>
+      <div id="repAviso" class="acc-aviso error" style="display:none"></div>
       <div class="mt12" id="repLista"></div>
     </div>
     <div class="vd-pie fila fila-10 pie-btns">

@@ -5404,3 +5404,27 @@ SE TRAEN DE OTRA TIENDA (5)» se partía. La lupa del buscador es
   texto naranja en CSS, un `13px` suelto y un color suelto.
 - `pantalla_390.js` pasa a 390 y 360 px. Fotos antes/después en
   `05-Analisis/rediseno-tablero-2026-09-22` (fuera del repo).
+
+## Ticket de Mr Fix: un solo botón sólido *(22-sep-2026, v281)*
+
+Ángel: «no me gusta cómo se mira». Lo que tenía, medido:
+- **Guardar no tenía color.** `btn f2` sin fondo: salía con el gris del
+  navegador y parecía apagado. Ahora `.btn-guardar` (rojo, el único sólido).
+  Sigue SIEMPRE activo a propósito: con el precio escrito agrega la línea solo
+  (ver `guardarAcc`), y si falta algo lo explica en `#accError`.
+- Foto (azul sólido), Galería (gris oscuro sólido) y el tipo elegido (naranja
+  o rojo sólido) competían con él. Ahora Foto es tinte `--info`, Galería
+  contorno, y el tipo un tinte con el MISMO significado (ámbar accesorio,
+  rojo reparación), cambiado en su sitio (`.tipo-sel`), no repetido abajo.
+- «Reporte del mes» y «Lo capturado hoy» (solo gerente) eran dos botones
+  grandes arriba de la captura; ahora enlaces (`.acc-herr`, decisión de Ángel).
+- `#accEstado` guardaba 18 px vacíos: ahora `:empty` no ocupa lugar.
+- `#accLeido`, `#accError` y `#repAviso`: de estilo inline a `.acc-aviso`.
+- «📷 Foto del ticket» se partía a 360 px: `--t-md` y `nowrap` en esos dos.
+
+Ningún id ni `onclick` cambió. Lo cuida `pantalla_390.js` (abre el panel como
+gerente): un solo sólido y es `accGuardar`, Foto/Galería en un renglón
+(cuenta renglones del TEXTO: en la fila los dos botones se estiran a la misma
+altura aunque uno se parta) y herramientas ≤ 34 px. Cebos: Guardar sin color,
+Galería sólida, foto partida y herramientas como botones — 4 de 4. Fotos en
+`05-Analisis/rediseno-mrfix-2026-09-22`.
