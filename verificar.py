@@ -1686,7 +1686,7 @@ def r_precache():
 # salta, el color nuevo se quita en horario_semanal.html, no aquí.
 PALETA_TOPE = {
     'index.html': 34, 'tablero.html': 72, 'captura_series.html': 16,
-    'admin.html': 53, 'horarios.html': 3, 'comisiones.html': 23,
+    'admin.html': 6, 'horarios.html': 3, 'comisiones.html': 1,
     'actualizar_datos.html': 22, 'accesorios_tecnico.html': 14,
     'estilo.css': 19,
 }
