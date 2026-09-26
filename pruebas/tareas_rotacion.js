@@ -20,6 +20,21 @@
    horario dicho de otra forma (ver `horario_solo_mio.js`).
    ============================================================ */
 'use strict';
+/* El reloj, FIJO (26-sep-2026). Con la hora real la prueba dependía de cuándo
+   se corriera: el sábado después de las 17:00 la página ya enseña la semana
+   siguiente, el panel del gerente deja de traer las tareas de «hoy» y ningún día
+   de esa semana se puede palomear todavía — y la prueba reprobaba sin que la
+   página tuviera nada mal. Lo destapó un commit hecho un sábado a las 17:22.
+   Se fija un miércoles al mediodía, como `horario_hoy.js` fija su martes. */
+process.env.TZ = 'America/Mexico_City';   // antes de crear cualquier Date
+function relojEn(iso){
+  const fijo = new Date(iso).getTime();
+  return class extends Date {
+    constructor(...a){ a.length ? super(...a) : super(fijo); }
+    static now(){ return fijo; }
+  };
+}
+const RELOJ = relojEn('2026-09-23T18:00:00Z');   // miércoles 23-sep-2026, 12:00 en CDMX
 const fs = require('fs'), path = require('path');
 const raiz = path.join(__dirname, '..');
 const html = fs.readFileSync(path.join(raiz, 'horarios.html'), 'utf8');
@@ -69,7 +84,7 @@ const ok = (t, c, extra) => { if(!c) fallos.push(t + (extra ? ' -> ' + extra : '
    (`_reparto`), el horario del que salió (`dias`) y lo que se escribió. */
 function repartirComo(opciones, tienda, equipo) {
   const ent = crearEntorno({ html, ruta:'/tablero-hes1217/horarios.html',
-                             extras:{ supabase: SUPABASE_FALSO } });
+                             extras:{ supabase: SUPABASE_FALSO, Date: RELOJ } });
   if (ent.err) return { error: ent.err };
   try {
     ent.correr('aplicarEquipo(' + JSON.stringify(equipo || EQUIPO) + ');');
@@ -343,15 +358,15 @@ if (!ger.error) {
        checklist dejaría de servir para lo que se pidió. */
     const filasG = [...ger.panel.matchAll(/data-tarea="([a-z_]+)" data-dia="(\d)"/g)]
                      .map(m => m[1] + '|' + m[2]);
-    const hoyG = new Date().getDay();
+    const hoyG = new RELOJ().getDay();
     const debeG = ger.reparto.filter(t => t.dia === hoyG || t.frec === 'semanal')
                              .map(t => t.id + '|' + t.dia);
     ok('el panel del gerente trae el reparto de todos',
        debeG.every(x => filasG.indexOf(x) >= 0),
        'pinta: ' + filasG.join(',') + ' · debe: ' + debeG.join(','));
-    /* Se pregunta a la función que lo decide y no al panel de hoy: qué tareas
-       caen esta semana depende del día en que se corra la prueba —y el sábado
-       después de las 17:00 la página ya enseña la semana siguiente—. */
+    /* Se pregunta a la función que lo decide y no al panel de hoy: aunque el
+       reloj esté fijo (ver arriba), el nombre no tiene por qué caer en el panel
+       de ese día en particular. */
     const txt = ger.ent.correr('quienesTexto_({ quienes:["A2"], externos:[], frec:"semanal" })');
     ok('el gerente ve el nombre de quien le toca', txt.indexOf('DANI') >= 0, txt);
     ok('la tabla lleva la fila de tareas', ger.tabla.indexOf('Tareas') >= 0);
@@ -393,7 +408,7 @@ if (!ger.error) {
        día con el piso sin barrer. El día se saca del domingo que pintó la
        página, no de repetir aquí la cuenta que hace ella. */
     const dom = new Date(JSON.parse(v.ent.correr('JSON.stringify(_tareasCtx.domingo)')));
-    const hoy0 = new Date(); hoy0.setHours(0,0,0,0);
+    const hoy0 = new RELOJ(); hoy0.setHours(0,0,0,0);
     for (const c of chks) {
       const f = new Date(dom); f.setDate(f.getDate() + c.dia); f.setHours(0,0,0,0);
       ok('la casilla del día ' + c.dia + ' está ' + (f > hoy0 ? 'apagada' : 'viva') + ' para el asesor',
@@ -482,7 +497,7 @@ if (!ger.error) {
        pide número activo— pero no el jueves desde el lunes, igual que el
        asesor. */
     const dom  = new Date(JSON.parse(v.ent.correr('JSON.stringify(_tareasCtx.domingo)')));
-    const hoy0 = new Date(); hoy0.setHours(0,0,0,0);
+    const hoy0 = new RELOJ(); hoy0.setHours(0,0,0,0);
     for (const c of chks) {
       const f = new Date(dom); f.setDate(f.getDate() + c.dia); f.setHours(0,0,0,0);
       ok('la casilla del día ' + c.dia + ' está ' + (f > hoy0 ? 'apagada' : 'viva') + ' para el apoyo',
@@ -653,7 +668,7 @@ if (!ger.error) {
      deje de tener apoyo—: sin él no hay nota al pie ni acompañante, pero el
      sanitario y la bodega siguen teniendo dueño. */
   const ent = crearEntorno({ html, ruta:'/tablero-hes1217/horarios.html',
-                             extras:{ supabase: SUPABASE_FALSO } });
+                             extras:{ supabase: SUPABASE_FALSO, Date: RELOJ } });
   if (ent.err) { ok('la página arranca sin apoyo capturado', false, ent.err); }
   else {
     const sinApoyo = Object.assign({}, EQUIPO); delete sinApoyo.externos;
