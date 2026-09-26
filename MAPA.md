@@ -5482,3 +5482,18 @@ Ahora vive fuera de `#paso1` y `#paso2`, justo después de la tarjeta: en el pas
 **Lo cuida `pantalla_390.js`** (Edge real, 390 y 360 px): después del toque real
 sobre «1 año» comprueba que se volvió al paso 1 y que el botón se VE. Con el
 código de antes reprobaba en los dos anchos.
+
+## Equipo: la baja saca de la lista *(26-sep-2026, v284)*
+
+Pedido de Ángel: «si lo das de baja que desaparezca; si vuelve a entrar al
+equipo, se vuelve a dar de alta». `pintarEquipo` enseña solo a los activos y
+dice abajo cuántos hay de baja; ya no existe «Reactivar». `altaEmpleado`, si el
+número ya existe DADO DE BAJA, hace `update` sobre esa ficha (activo, nombre,
+puesto, Admin como se marque; `user_id` a null si cambió el correo) en vez de
+`insert`, que la base rechazaría por `unique (store_id, empno)`. La ficha no se
+borra nunca desde la app. Lo cuida `pruebas/equipo_bajas.js`. Igual en odemás
+v35 (allá además apaga `ventas_dia`).
+
+**`tareas_rotacion.js` corre con el reloj fijo** (miércoles 23-sep 12:00): con
+la hora real reprobaba los sábados desde las 17:00, cuando `semanaDeMostrar` ya
+enseña la semana siguiente.
