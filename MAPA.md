@@ -5468,3 +5468,17 @@ y agregar deja el renglón en el papel y cierra la hoja. **Cebos: 6 de 6.**
 ⚠️ Al armar cebos con `String.replace`, un `$'` en el reemplazo inserta el
 resto del archivo: usar `split/join`. Así uno pareció «no cazado» cuando lo que
 pasó es que Captura no cargó. Fotos en `05-Analisis/rediseno-mrfix-papel-2026-09-22`.
+
+## «Cerrar venta» desaparecía al agregar un artículo *(26-sep-2026, v283)*
+
+Reportado por el equipo: «el botón de cerrar venta desaparece al cargar un SKU».
+En el rediseño de Captura (c238a0d, 21-sep) la barra `#ventaAbierta` quedó
+DENTRO de la tarjeta `#paso2`. Al agregar un artículo, `irPaso(1)` esconde esa
+tarjeta —y con ella la barra—, así que con la venta abierta no había cómo
+cerrarla sin cargar otro SKU. Su propio comentario decía «se ve SIEMPRE».
+
+Ahora vive fuera de `#paso1` y `#paso2`, justo después de la tarjeta: en el paso
+1 sale arriba de la lista del día, en el paso 2 debajo de «Agregar».
+**Lo cuida `pantalla_390.js`** (Edge real, 390 y 360 px): después del toque real
+sobre «1 año» comprueba que se volvió al paso 1 y que el botón se VE. Con el
+código de antes reprobaba en los dos anchos.
