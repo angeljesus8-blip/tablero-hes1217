@@ -4,6 +4,9 @@
 -- ============================================================
 --
 --  Va después de `supabase_candado.sql` (paso 1) y de publicar la app v290.
+--  Y, si se pegó, de `supabase_candado_lecturas.sql` y la app v291: usan el
+--  mismo `candado_ok_`, así que este archivo las cierra TODAS a la vez. La
+--  consulta de abajo ya mira todas las funciones; tiene que dar cero para todas.
 --
 --  ⚠️ CUÁNDO SE PEGA
 --  -----------------

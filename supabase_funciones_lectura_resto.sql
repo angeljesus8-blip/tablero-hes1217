@@ -117,7 +117,8 @@ AS $$
 $$;
 
 REVOKE ALL ON FUNCTION public.eol_lista(text) FROM public;
-GRANT EXECUTE ON FUNCTION public.eol_lista(text) TO anon, authenticated;
+-- ⚠️ Versión vieja y abierta: la vigente, con token, la arma supabase_candado_lecturas.sql.
+REVOKE ALL ON FUNCTION public.eol_lista(text) FROM public, anon, authenticated;
 
 
 -- ------------------------------------------------------------
@@ -265,8 +266,9 @@ REVOKE ALL ON FUNCTION public.comisiones_lista(text)  FROM public;
 REVOKE ALL ON FUNCTION public.estado_datos(text)      FROM public;
 REVOKE ALL ON FUNCTION public.tablero_todo(text)      FROM public;
 
-GRANT EXECUTE ON FUNCTION public.catalogo_completo(text) TO anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.eol_lista(text)         TO anon, authenticated;
+-- ⚠️ Versión vieja y abierta: la vigente, con token, la arma supabase_candado_lecturas.sql.
+REVOKE ALL ON FUNCTION public.catalogo_completo(text) FROM public, anon, authenticated;
+REVOKE ALL ON FUNCTION public.eol_lista(text)         FROM public, anon, authenticated;
 -- ⚠️ apartados_lista(text) y tablero_todo(text) ya no se conceden: las dos dan
 -- nombre y teléfono de clientes sin pedir nada. Las vigentes, con token, están
 -- en supabase_candado.sql (27-sep-2026).

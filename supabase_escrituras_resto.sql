@@ -290,7 +290,8 @@ AS $$
 $$;
 
 REVOKE ALL ON FUNCTION public.avisos_vigentes(text) FROM public;
-GRANT EXECUTE ON FUNCTION public.avisos_vigentes(text) TO anon, authenticated;
+-- ⚠️ Versión vieja y abierta: la vigente, con token, la arma supabase_candado_lecturas.sql.
+REVOKE ALL ON FUNCTION public.avisos_vigentes(text) FROM public, anon, authenticated;
 
 CREATE OR REPLACE FUNCTION public.aviso_guardar(
   p_store     text,

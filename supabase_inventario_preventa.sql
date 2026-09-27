@@ -107,6 +107,9 @@ AS $$
   WHERE c.store_id = p_store;
 $$;
 
+-- ⚠️ Versión vieja y abierta: la vigente, con token, la arma supabase_candado_lecturas.sql.
+REVOKE ALL ON FUNCTION public.inventario_vivo(text) FROM public, anon, authenticated;
+
 
 -- ------------------------------------------------------------
 -- El corte tiene que contar igual, o el arreglo dura UN DÍA
