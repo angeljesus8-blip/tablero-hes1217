@@ -3123,8 +3123,16 @@ Tres fallos de la vista del asesor, vistos el mismo sábado:
    toca (sábado 5 p. m.) o el dato tiene más de 2 min, lo vuelve a pedir
    forzando. Solo con `_leido`, que no existe en la vista del gerente.
 
+**El equipo ve SOLO la semana que le toca** (mismo día, pedido de Ángel: «ellos
+no deben de ver entre semanas, solo su semana actual»). Las flechas se ocultan
+si no `_puedeEditar` y `navSemana` se niega igual —esconder un botón no impide
+llamarlo—; el subgerente que entra con su número tampoco navega. Y para el
+equipo la regla es **solo lo guardado**, también en la semana que toca: el
+sábado a las 5 p. m. la siguiente pasa a ser la actual, y si aún no se guardó
+se le dice «todavía no se publica».
+
 Lo cubre `pruebas/horario_publicado.js`, con reloj fijo; comprobada contra el
-código viejo y con nueve cebos.
+código viejo y con cebos de cada regla.
 
 ### Cada quien ve su horario *(6-sep-2026, v230)*
 
