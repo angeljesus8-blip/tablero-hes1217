@@ -4287,10 +4287,12 @@ document.addEventListener('visibilitychange', function(){
    Lo que se PERDERÍA al recargar: la foto recién tomada, la venta esperando
    confirmación, el ticket de accesorios leído y sin guardar, y lo que se está
    corrigiendo. Los cuatro campos y la venta abierta NO cuentan: ya sobreviven a
-   una recarga (borrador de arriba y `hes1217_venta_abierta`). */
+   una recarga (borrador de arriba y `hes1217_venta_abierta`). Revisando una
+   captura (paso 2 o el seguro) tampoco se recarga: los campos volverían, pero
+   en el paso 1, y eso es sacarlo de la pantalla que estaba viendo. */
 window.HES_ocupado = function(){
   return !!(lastPhoto || _pendingVenta || _accFoto || (_accLineas && _accLineas.length)
-            || _edIdx !== null || _mfEditando);
+            || _edIdx !== null || _mfEditando || _paso > 1);
 };
 
 /* ---------- Vendedor / pantalla de inicio (HES 1217) ---------- */
