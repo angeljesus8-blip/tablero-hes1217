@@ -137,9 +137,8 @@ EXCEPTION
     RETURN jsonb_build_object('ok', false, 'error', SQLSTATE || ': ' || left(SQLERRM, 140));
 END $fn$;
 
-GRANT EXECUTE ON FUNCTION
-  public.venta_guardar(text,text,text,text,numeric,text,boolean,text,text,text,text)
-  TO anon, authenticated;
+-- Sin GRANT a propósito (27-sep-2026): esta versión no tiene candado. Ver el
+-- REVOKE de la sección 7 y supabase_candado.sql.
 
 
 -- ── 3 · Borrar una venta  ←  reemplaza tipo:'eliminar' ──────
@@ -439,6 +438,11 @@ END $fn$;
 
 
 -- ── 7 · Permisos ────────────────────────────────────────────
+/* ⚠️ `venta_guardar` de aquí es VIEJA Y SIN CANDADO — la vigente está en
+   `supabase_candado.sql` (27-sep-2026). Quitarle el GRANT no basta: Postgres
+   concede EXECUTE a PUBLIC al crear una función, así que repegar este archivo
+   la dejaría abierta igual. Por eso el REVOKE explícito. */
+REVOKE ALL ON FUNCTION public.venta_guardar(text,text,text,text,numeric,text,boolean,text,text,text,text) FROM public, anon, authenticated;
 REVOKE ALL ON FUNCTION public.venta_eliminar(text,text,text)                   FROM public;
 REVOKE ALL ON FUNCTION public.eol_guardar(text,text,text,numeric)              FROM public;
 REVOKE ALL ON FUNCTION public.eol_eliminar(text,text,text)                     FROM public;

@@ -1735,7 +1735,10 @@ async function cargarSinTraducir(){
   let d = null;
   try{
     if(sb || initSB()){
-      const r = await sb.rpc("tablero_todo", { p_store: String((_cfg && _cfg.store_id) || "") });
+      /* Con el token aunque aquí sólo se lea el catálogo: sin él, cada vez que
+         se abre esta pantalla sumaría una llamada al contador del candado, y
+         ese contador es el que dice cuándo se puede exigir (supabase_candado.sql). */
+      const r = await sb.rpc("tablero_todo", { p_store: String((_cfg && _cfg.store_id) || ""), p_token: GAS_TOKEN });
       if(!r.error) d = r.data;
     }
   }catch(e){ d = null; }

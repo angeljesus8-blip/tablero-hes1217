@@ -52,10 +52,33 @@ GRIS    = (0.45, 0.45, 0.45)
 LINEA   = (0.80, 0.80, 0.80)
 
 
+def token():
+    """La clave de escritura de la tienda (`tiendas.gas_token`).
+
+    27-sep-2026: `apartados_lista` la pide, porque trae nombre y teléfono de
+    cada cliente y hasta entonces se los daba a cualquiera (supabase_candado.sql).
+    NO se escribe aquí: este archivo va en el repo, que es público. Vive en
+    `_privado/gas_token.txt` —fuera de git y dentro del respaldo— o en la
+    variable HES_TOKEN.
+
+    Sin ella se para en vez de seguir: la lista llegaría vacía y saldría un PDF
+    sin etiquetas, que se lee como «no hay apartados»."""
+    t = os.environ.get('HES_TOKEN', '').strip()
+    ruta = os.path.join(BASE, '_privado', 'gas_token.txt')
+    if not t and os.path.exists(ruta):
+        with open(ruta, encoding='utf-8') as f:
+            t = f.read().strip()
+    if not t:
+        sys.exit('Falta la clave de la tienda. Pégala (una línea) en\n  %s\n'
+                 'Se saca en Supabase con:  select gas_token from tiendas '
+                 "where store_id = '%s';" % (ruta, STORE))
+    return t
+
+
 def apartados():
     req = urllib.request.Request(
         SB_URL + '/rest/v1/rpc/apartados_lista',
-        data=json.dumps({'p_store': STORE}).encode('utf-8'),
+        data=json.dumps({'p_store': STORE, 'p_token': token()}).encode('utf-8'),
         headers={'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY,
                  'Content-Type': 'application/json'})
     with urllib.request.urlopen(req, timeout=20) as r:

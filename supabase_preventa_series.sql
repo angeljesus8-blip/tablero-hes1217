@@ -381,7 +381,9 @@ REVOKE ALL ON FUNCTION public.apartado_serie(text,text,bigint,text)        FROM 
 REVOKE ALL ON FUNCTION public.apartado_entregar(text,text,bigint,text,text) FROM public;
 REVOKE ALL ON FUNCTION public.apartado_estatus(text,text,bigint,text)      FROM public;
 
-GRANT EXECUTE ON FUNCTION public.apartados_lista(text)                        TO anon, authenticated;
+-- ⚠️ apartados_lista(text) ya no se concede: da nombre y teléfono de clientes
+-- sin pedir nada. La vigente, con token, está en supabase_candado.sql.
+REVOKE ALL ON FUNCTION public.apartados_lista(text)                           FROM anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.apartado_guardar(text,text,text,text,text,text,numeric,boolean,text,text) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.apartado_serie(text,text,bigint,text)        TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.apartado_entregar(text,text,bigint,text,text) TO anon, authenticated;

@@ -267,7 +267,10 @@ REVOKE ALL ON FUNCTION public.tablero_todo(text)      FROM public;
 
 GRANT EXECUTE ON FUNCTION public.catalogo_completo(text) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.eol_lista(text)         TO anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.apartados_lista(text)   TO anon, authenticated;
+-- ⚠️ apartados_lista(text) y tablero_todo(text) ya no se conceden: las dos dan
+-- nombre y teléfono de clientes sin pedir nada. Las vigentes, con token, están
+-- en supabase_candado.sql (27-sep-2026).
+REVOKE ALL ON FUNCTION public.apartados_lista(text)   FROM anon, authenticated;
 /* ⚠️ NO SE CONCEDE, y no es un olvido (6-sep-2026).
    Esta version de un solo argumento devuelve el sueldo del equipo entero sin
    pedir nada, y la clave publicable viaja dentro de comisiones.html, en un repo
@@ -280,7 +283,7 @@ GRANT EXECUTE ON FUNCTION public.apartados_lista(text)   TO anon, authenticated;
    error, simplemente vuelve a contestarle a cualquiera. */
 REVOKE ALL ON FUNCTION public.comisiones_lista(text) FROM anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.estado_datos(text)      TO anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.tablero_todo(text)      TO anon, authenticated;
+REVOKE ALL ON FUNCTION public.tablero_todo(text)      FROM anon, authenticated;
 
 
 /* ============================================================

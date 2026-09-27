@@ -319,9 +319,10 @@ EXCEPTION
     RETURN jsonb_build_object('ok', false, 'error', SQLSTATE || ': ' || left(SQLERRM, 140));
 END $fn$;
 
-REVOKE ALL ON FUNCTION public.venta_guardar(text,text,text,text,numeric,text,boolean,text,text,text,text,boolean) FROM public;
-GRANT EXECUTE ON FUNCTION public.venta_guardar(text,text,text,text,numeric,text,boolean,text,text,text,text,boolean)
-  TO anon, authenticated;
+/* ⚠️ VERSIÓN VIEJA Y SIN CANDADO — la vigente está en `supabase_candado.sql`
+   (27-sep-2026), con `p_token`. Esta firma ya no se concede: repegar este
+   archivo la crearía sin permisos en vez de reabrir la puerta. */
+REVOKE ALL ON FUNCTION public.venta_guardar(text,text,text,text,numeric,text,boolean,text,text,text,text,boolean) FROM public, anon, authenticated;
 
 
 -- ============================================================

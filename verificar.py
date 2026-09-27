@@ -1799,7 +1799,7 @@ def r_pruebas():
         return
     # Bibliotecas, no pruebas: no se ejecutan solas.
     APOYO = ('dom.js', 'entorno.js', 'casos_tablero.js')
-    GUIONES = ('humo_tablero.js', 'humo_captura.js', 'humo_menu.js',
+    GUIONES = ('humo_tablero.js', 'candado_token.js', 'humo_captura.js', 'humo_menu.js',
                'login_a_captura.js', 'navegacion.js', 'actualizacion.js',
                'cola_ventas.js', 'catalogo_accesorios.js', 'mrfix_tipo.js',
                'mrfix_detecta.js', 'ventas_dia_seguro.js', 'acc_alias_codigos.js',
@@ -2276,6 +2276,99 @@ def r_funcion_repetida():
               % (fn, len(otros), ', '.join(otros)))
 
 
+# ── 22 · Lo que escribe, o da datos de clientes, no se abre a anon sin candado ──
+# Pendientes conocidos: se avisan en vez de fallar, para que sigan a la vista
+# hasta cerrarlos. Quitar de aquí en cuanto lleven su candado.
+CANDADO_PENDIENTES = {
+    'tarea_marcar': 'palomea tareas a nombre de cualquier número (ámbar, 27-sep-2026)',
+}
+
+def r_candado_anon():
+    """Con la clave publicable, lo que escribe o da clientes necesita candado.
+
+    27-sep-2026: `venta_guardar` escribía sin token desde el 4-ago. Nació como
+    copia de la hoja —la hoja era la verdad y esto un extra— y cuando la hoja
+    dejó de recibir ventas (17-ago) esta pasó a ser la única puerta sin que
+    nadie le pusiera el candado. Cualquiera con la clave publicable, que va en
+    el HTML de un repo público, podía meter ventas, y el nombre del vendedor
+    se pintaba sin escapar en el leaderboard de todos los celulares.
+    `apartados_lista` y `tablero_todo`, igual, daban nombre y teléfono de
+    cada cliente. Odemás lo había cerrado el 1-sep; aquí no llegó.
+
+    No lo pilló ninguna regla porque ninguna miraba PERMISOS. Y una trampa:
+    que el archivo no escriba `GRANT` no protege nada — Postgres concede
+    EXECUTE a PUBLIC al crear, y Supabase además a anon. Por eso se exige un
+    `REVOKE ... FROM ... anon` explícito, no la ausencia de GRANT.
+
+    Se mira cada ARCHIVO por separado, a propósito: repegar un .sql viejo es
+    lo que reabre en silencio, así que ninguno puede dejar una versión sin
+    candado al alcance de anon, sea o no la vigente.
+
+    «Sensible» = escribe, o su RETURNS TABLE trae `cliente`/`telefono`, o llama
+    a una función sensible (así `tablero_todo`, que devuelve jsonb, cae por
+    llevar dentro a `apartados_lista`). «Candado» = alguna de las guardas de la
+    casa en el cuerpo, con los comentarios quitados."""
+    ESCRIBE = re.compile(r'\b(?:INSERT\s+INTO|DELETE\s+FROM|UPDATE)\s+[\w"]', re.I)
+    CLIENTE = re.compile(r'\b(cliente|telefono)\s+text\b', re.I)
+    CANDADO = re.compile(r'\b(escritura_ok_|candado_ok_|admin_de|puede_admin|'
+                         r'tecnico_ok_)\s*\(|auth\.uid\s*\(|\.gas_token\b', re.I)
+    DEF = re.compile(r'CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+public\.(\w+)\s*\(', re.I)
+
+    archivos = {}
+    for ruta in sorted(glob.glob(os.path.join(BASE, 'supabase_*.sql'))):
+        arch = os.path.basename(ruta)
+        s = _sql_sin_comentarios(leer(arch) or '')
+        defs = []
+        for m in DEF.finditer(s):
+            cab = re.search(r'\bAS\s+(\$\w*\$)', s[m.end():], re.I)
+            if not cab: continue
+            tag = cab.group(1)
+            ini = m.end() + cab.end()
+            fin = s.find(tag, ini)
+            if fin < 0: continue
+            defs.append((m.group(1).lower(), s[m.end(): m.end() + cab.start()], s[ini:fin]))
+        archivos[arch] = (s, defs)
+
+    # Sensibles por sí mismas, en cualquier archivo…
+    sensibles = set()
+    for _, defs in archivos.values():
+        for n, cab, cuerpo in defs:
+            if ESCRIBE.search(cuerpo) or CLIENTE.search(cab):
+                sensibles.add(n)
+    # …y quien las llama, hasta que no aparezca ninguna nueva.
+    while True:
+        nuevas = set()
+        for _, defs in archivos.values():
+            for n, _, cuerpo in defs:
+                if n in sensibles: continue
+                if any(re.search(r'\b%s\s*\(' % re.escape(o), cuerpo, re.I) for o in sensibles):
+                    nuevas.add(n)
+        if not nuevas: break
+        sensibles |= nuevas
+
+    for arch, (s, defs) in sorted(archivos.items()):
+        for n, _, cuerpo in defs:
+            if n not in sensibles or CANDADO.search(cuerpo): continue
+            nom = re.escape(n)
+            concede = re.search(r'GRANT\s+EXECUTE\s+ON\s+FUNCTION\s+(?:public\.)?%s\b[^;]*\bTO\b[^;]*\b(anon|public)\b'
+                                % nom, s, re.I)
+            revoca = re.search(r'REVOKE\s+ALL\s+ON\s+FUNCTION\s+(?:public\.)?%s\b[^;]*\bFROM\b[^;]*\banon\b'
+                               % nom, s, re.I)
+            if not concede and revoca: continue
+            por = ('le da GRANT a anon' if concede else
+                   'no le quita el permiso a anon (Postgres lo da solo al crear)')
+            if n in CANDADO_PENDIENTES:
+                aviso('candado', '%s: `%s` %s y no pide token — pendiente: %s.'
+                                 % (arch, n, por, CANDADO_PENDIENTES[n]))
+                continue
+            falla('candado', '%s: `%s` escribe o da datos de clientes, %s y no '
+                             'comprueba el token. Con la clave publicable del HTML '
+                             'la puede llamar cualquiera. Ponle `escritura_ok_` / '
+                             '`candado_ok_`, o `REVOKE ALL ... FROM public, anon, '
+                             'authenticated` si es una versión vieja o interna.'
+                             % (arch, n, por))
+
+
 def main():
     # `--solo-datos <carpeta>`: corre SOLO la regla de datos personales, pero
     # sobre otro repo. Existe porque `horario-semanal` publica en un repo
@@ -2316,7 +2409,7 @@ def main():
     r_sesion_prefijada(); r_cupo()
     r_preventa_sb(); r_preventa_stock(); r_cargas_sb(); r_lectura_con_escritura()
     r_porteros(); r_contrato_sql(); r_join_sql()
-    r_sql_volatilidad(); r_galeria(); r_reparaciones_fuera(); r_alias_variable(); r_returns_table_drop(); r_funcion_repetida()
+    r_sql_volatilidad(); r_galeria(); r_reparaciones_fuera(); r_alias_variable(); r_returns_table_drop(); r_funcion_repetida(); r_candado_anon()
     r_personales(); r_nombres_forma(); r_secretos(); r_silencios(); r_cadenas(); r_precache(); r_paleta(); r_scripts_locales(); r_ejemplos_no_datos(); r_tablas_que_existen(); r_pruebas()
 
     for regla, msg in avisos:
