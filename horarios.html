@@ -560,8 +560,8 @@ body.solo-mi-horario .leyenda { display: none; }
 
 <div class="aviso-vacio" id="sin-asignar" style="display:none">
   <div class="aviso-ico">📋</div>
-  <div class="aviso-tit">Horario aún sin asignar</div>
-  <div style="font-size:12px;">Configura las excepciones en <strong>📅 Próx. semana</strong> para generar este horario.</div>
+  <div class="aviso-tit" id="sin-asignar-tit">Horario aún sin asignar</div>
+  <div style="font-size:12px;" id="sin-asignar-sub">Configura las excepciones en <strong>📅 Próx. semana</strong> para generar este horario.</div>
 </div>
 
 <!-- Leer y NO poder no es lo mismo que no haber horario (14-sep-2026).
@@ -892,13 +892,21 @@ function mostrarHorarioEquipo(data) {
      bien y ellos no» del 14-sep-2026. */
   _leido = { store_id: _tienda?.store_id, empno: _empno, hora: new Date() };
   aplicarEquipo(data.equipo);
-  _cache.excepciones = data.excepciones;
-  const guardada = data.semanas_guardadas?.[`semana_${_semana}`]
-                ?? data.excepciones?.__publicadas?.[`semana_${_semana}`];
-  const dias = guardada ? guardada.dias : generarSemana(_semana, data.historial, data.excepciones);
-  _espActual = data.excepciones?.[`semana_${_semana}`]?.turno_especial ?? {};
-  const comidas = calcularComidas(dias);
-  renderTabla(_semana, _domingo, dias, comidas);
+  /* TODO lo leído va a `_cache`, igual que en la vista del gerente (26-sep-2026).
+     Antes solo se guardaban las excepciones y esta función pintaba la semana
+     por su cuenta; al navegar con ◄ ► se pasaba a `renderSemana`, que buscaba
+     las semanas guardadas en un `_cache` donde no estaban, y le enseñaba al
+     asesor un horario RECALCULADO en vez del publicado. «Les aparecía otro
+     horario distinto al mío; ya que recargaron ya se podía ver bien.»
+     `__publicadas` queda debajo como respaldo, por los respaldos de antes del
+     4-ago-2026. */
+  _cache = {
+    historial:   data.historial,
+    excepciones: data.excepciones,
+    semanas_guardadas: Object.assign({}, data.excepciones?.__publicadas || {},
+                                     data.semanas_guardadas || {})
+  };
+  renderSemana();
 }
 
 /* ── Datos Supabase ──
@@ -2596,7 +2604,9 @@ function renderTabla(semana, domingo, dias, comidas) {
   const esActual  = semana === _base.semana;
   const esPasada  = semana < _base.semana;
   const guardada  = _cache.semanas_guardadas?.[`semana_${semana}`];
-  const prefijo   = esActual ? '● Semana actual  · ' : guardada ? '📌 ' : esPasada ? '~ Reconstruida · ' : '';
+  // Futura sin guardar solo la ve quien edita: es su borrador, y tiene que decirlo.
+  const prefijo   = esActual ? '● Semana actual  · ' : guardada ? '📌 '
+                  : esPasada ? '~ Reconstruida · ' : '📝 Borrador — el equipo aún no lo ve · ';
   document.getElementById('badge-semana').textContent =
     `${prefijo}Semana ${semana}  ·  ${fi.getDate()}–${ff.getDate()} ${fi.toLocaleString('es-MX',{month:'short'})} ${fi.getFullYear()}`;
 
@@ -2645,11 +2655,26 @@ async function init() {
   renderSemana();
 }
 
+/* El aviso de «no hay horario» habla distinto según quién lo lee: al gerente le
+   dice cómo generarlo; al equipo, que espere a que se publique. */
+function textosSinAsignar_() {
+  document.getElementById('sin-asignar-tit').textContent = _puedeEditar
+    ? 'Horario aún sin asignar' : 'Este horario todavía no se publica';
+  document.getElementById('sin-asignar-sub').innerHTML = _puedeEditar
+    ? 'Configura las excepciones en <strong>📅 Próx. semana</strong> para generar este horario.'
+    : 'Cuando tu gerente lo publique aparecerá aquí.';
+}
+
 function renderSemana() {
   const guardada   = _cache.semanas_guardadas?.[`semana_${_semana}`];
   const esFutura    = _semana > _base.semana;
   const tieneExcep  = !!_cache.excepciones?.[`semana_${_semana}`];
-  const sinAsignar  = esFutura && !guardada && !tieneExcep;
+  /* Una semana futura que NO se guardó no es horario de nadie (26-sep-2026).
+     El gerente la ve para planearla en cuanto tiene excepciones —y la etiqueta
+     dice que es borrador—; el equipo, nunca: le salía un horario calculado de
+     una semana que el gerente no había publicado, y podía cambiar. */
+  const sinAsignar  = esFutura && !guardada && (!_puedeEditar || !tieneExcep);
+  textosSinAsignar_();
 
   document.getElementById('sin-asignar').style.display   = sinAsignar ? '' : 'none';
   document.getElementById('wrapper-tabla').style.display = sinAsignar ? 'none' : '';
@@ -2999,6 +3024,7 @@ async function arrancar() {
     /* Sin horario todavía: se le dice, en vez de mandarlo a un login que no
        resuelve nada —él ya se identificó. */
     document.getElementById('cargando').classList.remove('activo');
+    textosSinAsignar_();
     document.getElementById('sin-asignar').style.display = '';
     return;
   }
@@ -3014,9 +3040,10 @@ async function arrancar() {
    Se dispara al volver a la app, al recuperar la red y al volver atrás desde el
    caché del navegador, que son los tres modos en que una pantalla vieja vuelve
    a la vista sin recargarse. */
-async function refrescarHorarioEquipo() {
+async function refrescarHorarioEquipo(forzar) {
   if (_refrescando || !_leido || !_leido.store_id || !_leido.empno) return;
-  if (Date.now() - _leido.hora.getTime() < 30000) return;   // no machacar al alternar
+  // no machacar al alternar; el latido (abajo) sí puede, porque ya espació él
+  if (!forzar && Date.now() - _leido.hora.getTime() < 30000) return;
   _refrescando = true;
   try {
     const datos = (await _sb.rpc('horario_equipo', {
@@ -3039,6 +3066,26 @@ async function refrescarHorarioEquipo() {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') refrescarHorarioEquipo();
 });
+
+/* ── Latido de la vista del equipo (26-sep-2026) ──
+   Lo de arriba solo actúa cuando la pantalla VUELVE a la vista. Una pantalla
+   que se queda abierta —la tablet de piso, el celular sobre el mostrador— no
+   vuelve nunca: se quedaba con el horario de antes aunque el gerente guardara
+   uno nuevo, y el sábado a las 5 p. m. no pasaba a la semana siguiente. Hoy
+   los chicos vieron la semana vieja hasta que recargaron.
+
+   Cada minuto se mira si cambió la semana que toca (entonces se pide ya) o si
+   el dato tiene más de 2 minutos (entonces se vuelve a pedir). Solo la vista
+   del equipo: `_leido` no existe en la del gerente, que puede estar editando. */
+const REFRESCO_EQUIPO_MS = 2 * 60 * 1000;
+function latidoEquipo_() {
+  if (!_leido || document.visibilityState === 'hidden') return;
+  const tocaOtraSemana = semanaDeMostrar().semana !== _base.semana;
+  if (tocaOtraSemana || Date.now() - _leido.hora.getTime() >= REFRESCO_EQUIPO_MS) {
+    return refrescarHorarioEquipo(true);
+  }
+}
+setInterval(latidoEquipo_, 60 * 1000);
 window.addEventListener('online', refrescarHorarioEquipo);
 window.addEventListener('pageshow', e => { if (e.persisted) refrescarHorarioEquipo(); });
 
