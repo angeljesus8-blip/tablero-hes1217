@@ -534,9 +534,9 @@ body.solo-mi-horario .leyenda { display: none; }
 </header>
 
 <nav class="semana-nav" aria-label="Semana">
-  <button onclick="navSemana(-1)" aria-label="Semana anterior">‹</button>
+  <button onclick="navSemana(-1)" aria-label="Semana anterior" id="btn-sem-ant">‹</button>
   <div class="semana-badge" id="badge-semana">—</div>
-  <button onclick="navSemana(1)" aria-label="Semana siguiente">›</button>
+  <button onclick="navSemana(1)" aria-label="Semana siguiente" id="btn-sem-sig">›</button>
 </nav>
 
 <!-- Barra de usuario (gerente).
@@ -775,6 +775,15 @@ function fijarSesion(tienda, opciones) {
      empleado de la que sacar un puesto. Un asesor nunca llega ahí. */
   _verTodo = _puedeEditar || esPuestoDeGestion_(opciones && opciones.puesto);
   document.body.classList.toggle('solo-mi-horario', !_verTodo);
+  /* Solo quien edita cambia de semana (26-sep-2026). Pedido de Ángel: «ellos no
+     deben de ver entre semanas, solo su semana actual». Se ocultan con
+     `visibility` y no con `display` para que la etiqueta de la semana no se
+     mueva; y `navSemana` también se niega, porque esconder un botón no impide
+     llamarlo. */
+  ['btn-sem-ant', 'btn-sem-sig'].forEach(id => {
+    const b = document.getElementById(id);
+    if (b) b.style.visibility = _puedeEditar ? '' : 'hidden';
+  });
   const h = document.getElementById('hdr-tienda');
   if (h) h.textContent = 'HES ' + _tienda.store_id + (_tienda.nombre ? ' · ' + _tienda.nombre : '');
 }
@@ -2669,11 +2678,13 @@ function renderSemana() {
   const guardada   = _cache.semanas_guardadas?.[`semana_${_semana}`];
   const esFutura    = _semana > _base.semana;
   const tieneExcep  = !!_cache.excepciones?.[`semana_${_semana}`];
-  /* Una semana futura que NO se guardó no es horario de nadie (26-sep-2026).
-     El gerente la ve para planearla en cuanto tiene excepciones —y la etiqueta
-     dice que es borrador—; el equipo, nunca: le salía un horario calculado de
-     una semana que el gerente no había publicado, y podía cambiar. */
-  const sinAsignar  = esFutura && !guardada && (!_puedeEditar || !tieneExcep);
+  /* Lo que no se guardó no es horario de nadie (26-sep-2026). El gerente ve la
+     semana futura para planearla en cuanto tiene excepciones —y la etiqueta
+     dice que es borrador—. El equipo ve SOLO lo guardado: le salía un horario
+     calculado de una semana que el gerente no había publicado, y podía cambiar.
+     Y no basta con las futuras: el sábado a las 5 p. m. la semana siguiente
+     pasa a ser «la que toca», y si aún no se guardó sería un borrador igual. */
+  const sinAsignar  = _puedeEditar ? (esFutura && !guardada && !tieneExcep) : !guardada;
   textosSinAsignar_();
 
   document.getElementById('sin-asignar').style.display   = sinAsignar ? '' : 'none';
@@ -2900,6 +2911,8 @@ async function exportarExcel() {
 }
 
 function navSemana(delta) {
+  // El equipo ve solo la semana que le toca: ver `fijarSesion`.
+  if (!_puedeEditar) return;
   _semana  += delta;
   const d   = new Date(_domingo);
   d.setDate(d.getDate() + delta * 7);
