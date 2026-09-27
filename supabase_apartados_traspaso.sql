@@ -159,7 +159,10 @@ $$;
 -- ── 4 · Permisos ────────────────────────────────────────────
 REVOKE ALL ON FUNCTION public.apartados_lista(text) FROM public;
 REVOKE ALL ON FUNCTION public.apartado_guardar(text,text,text,text,text,text,numeric,boolean,text,text,text,text,date) FROM public;
-GRANT EXECUTE ON FUNCTION public.apartados_lista(text) TO anon, authenticated;
+/* ⚠️ VERSIÓN VIEJA Y ABIERTA — devuelve nombre y teléfono de clientes sin
+   pedir nada. La vigente es `apartados_lista(store, token)` en
+   `supabase_candado.sql` (27-sep-2026). Ésta ya no se concede. */
+REVOKE ALL ON FUNCTION public.apartados_lista(text) FROM anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.apartado_guardar(text,text,text,text,text,text,numeric,boolean,text,text,text,text,date) TO anon, authenticated;
 
 

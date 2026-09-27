@@ -5590,3 +5590,58 @@ v35 (allá además apaga `ventas_dia`).
 **`tareas_rotacion.js` corre con el reloj fijo** (miércoles 23-sep 12:00): con
 la hora real reprobaba los sábados desde las 17:00, cuando `semanaDeMostrar` ya
 enseña la semana siguiente.
+
+## El candado que le faltaba a la venta y a los apartados *(27-sep-2026, v290)*
+
+Salió en una revisión general, no por un síntoma. De ~45 funciones que
+escriben, todas pasaban por `escritura_ok_` **menos `venta_guardar`** (y
+`tarea_marcar`, ver abajo). Y `apartados_lista` —más `tablero_todo`, que la
+lleva dentro— daba **nombre y teléfono de cada cliente** a cualquiera. La
+clave publicable va en el HTML de un repo público: no hacía falta entrar a la
+app para nada de esto.
+
+`venta_guardar` nació el 4-ago como copia de la hoja, cuando la hoja era la
+verdad. El 17-ago la hoja dejó de recibir ventas y ésta pasó a ser la única
+puerta, sin que nadie le pusiera el candado. Encadenado con otra cosa, era
+peor: el `vendedor` de una venta así se pintaba **sin escapar** en el
+leaderboard del Assurant (`equipoHtml`), o sea en los celulares de todo el
+equipo, donde `localStorage` guarda las sesiones. **Odemás lo había cerrado el
+1-sep** (su `r_escritura_con_token`); a la 1217 no volvió.
+
+```
+supabase_candado.sql   (paso 1)  p_token en las tres · equivocado = no · ausente = sí, CONTADO
+      ↓ app v290 manda el token (Captura al ENVIAR, no en la cola · tablero · Admin)
+candado_sin_token      un día de venta en cero
+      ↓
+supabase_candado_exigir.sql (paso 2)  ausente = no
+```
+
+**Por qué el token va al enviar y no en el cuerpo de la cola.** La cola de
+Captura vive en el celular hasta que hay red, a veces días. Con el token dentro,
+cambiarlo dejaría esas ventas fuera para siempre; puesto en `_sbInsertar`,
+siempre sale el de la sesión actual, y una venta de la cola de v289 sube con él.
+
+**`apartados_ok: false` no es «no hay apartados».** `tablero_todo` sigue
+entregando sin token lo que es público (inventario, promos, EOL, avisos) y
+manda los apartados vacíos con esa marca. `_deSupabase` lo convierte en `null`
+y `aplicarTodo` lo marca como carga fallida: una lista vacía habría llevado al
+asesor a negarle al cliente un equipo que sí tiene apartado.
+
+⚠️ **Quitar el `GRANT` no cierra nada.** Postgres da EXECUTE a PUBLIC al crear
+una función (y Supabase, además, a anon). `supabase_escrituras_resto.sql` nunca
+le dio GRANT a su `venta_guardar`, y repegarlo la habría dejado abierta. Por eso
+las ocho versiones viejas de estas tres funciones llevan ahora
+`REVOKE ... FROM public, anon, authenticated`, y el paso 1 borra **todas** las
+firmas que haya en la base en vez de nombrarlas.
+
+**Lo cuida `r_candado_anon`** (verificar.py): por archivo, toda función que
+escribe, que devuelve `cliente`/`telefono` o que llama a una de ésas, o tiene
+guarda, o lleva un `REVOKE` explícito a anon. Probada con nueve cebos (GRANT
+repuesto, en minúsculas y partido en líneas, guarda sólo en un comentario,
+REVOKE sólo a public, `tablero_todo` sin candado…): los caza todos y en limpio
+no marca nada. Del lado de la app, `pruebas/candado_token.js`.
+
+**Pendiente, a la vista:** `tarea_marcar` sigue sin token —palomea a nombre de
+cualquier número— y la regla lo avisa en cada commit (`CANDADO_PENDIENTES`).
+El script `etiquetas_preventa.py` lee el token de `_privado/gas_token.txt` o de
+`HES_TOKEN`; sin él se para en vez de sacar un PDF vacío.

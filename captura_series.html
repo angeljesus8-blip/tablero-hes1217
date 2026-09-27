@@ -978,10 +978,18 @@ function _sbCuerpo(row){
 async function _sbInsertar(cuerpo){
   try{
     if(!SB_STORE) return false;
+    /* La clave de escritura (27-sep-2026) se pone AQUÍ y no en `_sbCuerpo`.
+       Hasta v289 la venta entraba sin ella: con la clave publicable del HTML,
+       cualquiera podía meter ventas. Ver supabase_candado.sql.
+       Al enviar y no en el cuerpo, igual que en odemás desde el 1-sep: los
+       cuerpos de la cola se quedan en el celular hasta que hay red, a veces
+       días. Metida en el cuerpo, un token cambiado dejaría esas ventas fuera
+       para siempre; puesta aquí, siempre sale la de la sesión de ahora. Y
+       una venta vieja de la cola, sin token, sube con él la próxima vez. */
     const r = await fetch(SB_URL_CS + '/rest/v1/rpc/venta_guardar', {
       method:'POST',
       headers:{ apikey:SB_KEY_CS, Authorization:'Bearer '+SB_KEY_CS, 'Content-Type':'application/json' },
-      body: JSON.stringify(cuerpo)
+      body: JSON.stringify(Object.assign({}, cuerpo, { p_token: GAS_TOKEN }))
     });
     const d = await r.json();
     if(d && d.ok === true) return true;
@@ -1595,7 +1603,8 @@ async function apCargar(){
   // caminos abiertos con el cliente enfrente.
   $('btnAdd').style.display = 'none';
 
-  const filas = await sbCallCS('apartados_lista');
+  // Con el token: trae nombre y teléfono del cliente (supabase_candado.sql).
+  const filas = await sbCallCS('apartados_lista', { p_token: GAS_TOKEN });
   const a = Array.isArray(filas)
     ? filas.filter(x => String(x.id) === String(AP_MODO.id))[0] : null;
   if(!a){
