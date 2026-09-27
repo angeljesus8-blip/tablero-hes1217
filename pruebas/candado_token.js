@@ -132,6 +132,62 @@ const TOKEN = 'tok-candado-1217';
     ok('el nombre del vendedor sale como texto, no como HTML',
        eq.indexOf('<img') < 0 && eq.indexOf('&lt;img') >= 0, eq.slice(0, 300));
     ok('nombreCorto no revienta sin nombre', vm.runInThisContext('nombreCorto(null)') === '');
+
+    /* ── v291 · Las lecturas del negocio ──────────────────────────────── */
+    /* 5 · Sin token válido, `tablero_todo` contesta {ok:false}. El tablero no
+       puede tomarlo por un inventario vacío —pintaría todo agotado—: se va por
+       su respaldo y lo que ya había sigue en pantalla. */
+    const antes = vm.runInThisContext('Object.keys(invBySku).length');
+    respuesta = { ok:false, apartados_ok:false };
+    const r5 = await vm.runInThisContext('cargarTodoSupabase()');
+    ok('un {ok:false} no se aplica como inventario', r5 === false, String(r5));
+    ok('y el inventario que había sigue ahí', vm.runInThisContext('Object.keys(invBySku).length') === antes,
+       antes + ' → ' + vm.runInThisContext('Object.keys(invBySku).length'));
+
+    /* 6 · Los cebos de texto: un aviso con HTML y un combo con apóstrofo. */
+    const av = vm.runInThisContext(`cardAviso({ titulo:'<b>Hoy</b>', detalle:'Meta <25% & <img src=x>', d2:'', prioridad:'normal', tipo:'manual' })`);
+    ok('el aviso sale como texto', av.indexOf('<b>') < 0 && av.indexOf('<img') < 0 &&
+       av.indexOf('&lt;25%') >= 0, av);
+    const cb = vm.runInThisContext(`cardBundle({ nombre:"Kit D'Luxe <i>", skus:'900001', precio:999, d2:'' })`);
+    const onclick = (cb.match(/onclick="compartirWA\(([^"]*)\)"/) || [])[1] || '';
+    ok('el nombre del combo sale como texto', cb.indexOf('<i>') < 0 && cb.indexOf('&lt;i&gt;') >= 0, cb.slice(0, 200));
+    ok('y su apóstrofo no rompe el botón de WhatsApp', onclick && onclick.indexOf("D'") < 0 &&
+       onclick.indexOf('D%27Luxe') >= 0, onclick);
+  }
+
+  /* 7 · Captura pide catálogo, promos y precio de EOL con el token. */
+  {
+    const { crearEntorno } = require('./dom.js');
+    const html = fs.readFileSync(path.join(raiz, 'captura_series.html'), 'utf8');
+    const llamadas = [];
+    const ent = crearEntorno({
+      html, ruta:'/t/captura_series.html',
+      fetch: (url, op) => {
+        const fn = String(url).split('/rpc/')[1] || '';
+        let body = {}; try{ body = JSON.parse((op && op.body) || '{}'); }catch(e){}
+        llamadas.push({ fn, body });
+        return Promise.resolve({ ok:true, status:200, json:() => Promise.resolve([]), text:() => Promise.resolve('[]') });
+      },
+      ls: { hes1217_store: JSON.stringify({ store_id:'1217', nombre:'Prueba', gas_url:'', gas_token: TOKEN, vendedores:['Prueba Uno'] }),
+            hes1217_empleado: JSON.stringify({ empno:'1', nombre:'Prueba Uno', puesto:'gerente' }) }
+    });
+    if(!ent.err){
+      for(const fn of ['catalogo_completo', 'promos_vigentes', 'eol_precio_venta']){
+        llamadas.length = 0;
+        await ent.correr(`sbRpcCS('${fn}')`);
+        const c = llamadas.filter(l => l.fn === fn)[0];
+        ok('Captura pide ' + fn + ' con el token', c && c.body.p_token === TOKEN, JSON.stringify(c && c.body));
+      }
+    }
+  }
+
+  /* 8 · Admin, a la vista: sus tres lecturas llevan el token. */
+  {
+    const admin = fs.readFileSync(path.join(raiz, 'admin.html'), 'utf8');
+    for(const fn of ['bundles_vigentes', 'eol_lista', 'avisos_vigentes']){
+      ok('Admin lee ' + fn + ' con el token',
+         new RegExp("sbLeer\\('" + fn + "', \\{ p_token: GAS_TOKEN \\}\\)").test(admin));
+    }
   }
 
   if(fallos.length){

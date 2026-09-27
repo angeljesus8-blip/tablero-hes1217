@@ -5645,3 +5645,38 @@ no marca nada. Del lado de la app, `pruebas/candado_token.js`.
 cualquier número— y la regla lo avisa en cada commit (`CANDADO_PENDIENTES`).
 El script `etiquetas_preventa.py` lee el token de `_privado/gas_token.txt` o de
 `HES_TOKEN`; sin él se para en vez de sacar un PDF vacío.
+
+### Y las lecturas del negocio *(27-sep-2026, v291)*
+
+Ángel preguntó si estaba bien que `tablero_todo` siguiera entregando el
+inventario. No lo estaba: stock por SKU (qué equipos caros hay hoy en bodega),
+precios de EOL y el texto de las circulares. Y cerrar sólo `tablero_todo` no
+servía: lo mismo salía por siete funciones más. `supabase_candado_lecturas.sql`
+les pone el candado a las siete sin copiar ningún cuerpo:
+
+```
+función viva  ──RENAME──▶  <nombre>_filas_      (interna, sin permisos)
+<nombre>(p_store, p_token)  = candado_ok_ + RETURN QUERY de la interna
+                              columnas = pg_get_function_result de la viva
+quien la llamaba por dentro ──▶ reescrita a la interna (se busca en la BASE)
+```
+
+⚠️ **Las llamadas internas son la trampa.** `eol_precio_venta` llama a
+`inventario_vivo`, y `tablero_todo` a todas. Si siguieran por la puerta, cada
+lectura del tablero entraría sin token: ensuciaría el contador y el paso 2 la
+rompería. Se buscan en `pg_proc`, no en el repo, por si la base tiene alguna
+que el repo no conoce. La comprobación 2 del archivo tiene que dar cero.
+
+`tablero_todo` sin token válido contesta `{"ok": false}`: el tablero no ve
+inventario, no lo aplica (lo que había sigue en pantalla) y se va al respaldo.
+El paso 2 es el mismo `supabase_candado_exigir.sql`: cierra todo a la vez.
+
+**De paso, lo que se pintaba sin escapar:** avisos (`cardAviso`, y la lista de
+Admin) y nombres de combos. Los avisos de corporativo salen del texto del PDF,
+así que un «<25 %» rompía la tarjeta. Y `encodeURIComponent` **no codifica el
+apóstrofo**: un combo «Kit D'Luxe» cerraba la cadena dentro de
+`onclick="compartirWA('…')"`. Ahora va por `encAttr`, que lo deja en `%27`.
+
+`LECTURAS_CON_CANDADO` en `r_candado_anon` las nombra, porque su puerta se arma
+dentro de un DO y no se ve desde el archivo. `candado_token.js` caza siete
+cebos (quitar cada escape, cada token y la marca `apartados_ok`).

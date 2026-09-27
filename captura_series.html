@@ -1125,8 +1125,11 @@ const SB_URL_CS = 'https://rjdrljtujbwooejrpyqv.supabase.co';
 const SB_KEY_CS = 'sb_publishable_mELjDmCaFpNOxcwPi5MB2A_qSZ5ZA2z';
 const SB_STORE  = (_cfgCS && _cfgCS.store_id) || '';
 
+/* Con el token (27-sep-2026, v291): sus tres llamadas —catálogo, promos y
+   precio de EOL— son lecturas del negocio que hasta v290 contestaban a
+   cualquiera con la clave publicable. Ver supabase_candado_lecturas.sql. */
 async function sbRpcCS(fn, ms){
-  const d = await sbCallCS(fn, null, ms);
+  const d = await sbCallCS(fn, { p_token: GAS_TOKEN }, ms);
   return Array.isArray(d) ? d : null;
 }
 

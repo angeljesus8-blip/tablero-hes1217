@@ -2282,6 +2282,14 @@ def r_funcion_repetida():
 CANDADO_PENDIENTES = {
     'tarea_marcar': 'palomea tareas a nombre de cualquier número (ámbar, 27-sep-2026)',
 }
+# Lecturas del negocio que no escriben ni traen clientes, pero tampoco son
+# públicas: stock por SKU, precios de EOL, texto de circulares internas. Desde
+# supabase_candado_lecturas.sql (27-sep-2026) la vigente de cada una es una
+# puerta con candado, armada DENTRO de un DO — por eso no se puede deducir de
+# su cuerpo y se nombran aquí.
+LECTURAS_CON_CANDADO = {'inventario_vivo', 'catalogo_completo', 'promos_vigentes',
+                        'eol_lista', 'avisos_vigentes', 'bundles_vigentes',
+                        'eol_precio_venta'}
 
 def r_candado_anon():
     """Con la clave publicable, lo que escribe o da clientes necesita candado.
@@ -2330,7 +2338,7 @@ def r_candado_anon():
         archivos[arch] = (s, defs)
 
     # Sensibles por sí mismas, en cualquier archivo…
-    sensibles = set()
+    sensibles = set(LECTURAS_CON_CANDADO)
     for _, defs in archivos.values():
         for n, cab, cuerpo in defs:
             if ESCRIBE.search(cuerpo) or CLIENTE.search(cab):
@@ -2361,7 +2369,7 @@ def r_candado_anon():
                 aviso('candado', '%s: `%s` %s y no pide token — pendiente: %s.'
                                  % (arch, n, por, CANDADO_PENDIENTES[n]))
                 continue
-            falla('candado', '%s: `%s` escribe o da datos de clientes, %s y no '
+            falla('candado', '%s: `%s` escribe, da datos de clientes o del negocio, %s y no '
                              'comprueba el token. Con la clave publicable del HTML '
                              'la puede llamar cualquiera. Ponle `escritura_ok_` / '
                              '`candado_ok_`, o `REVOKE ALL ... FROM public, anon, '

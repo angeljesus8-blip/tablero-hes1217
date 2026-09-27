@@ -1029,6 +1029,11 @@ const invBySku = {};
    teclea el asesor, así que un apellido con `&` o un `<` cualquiera rompía la
    tarjeta —y una serie es un dato que hay que poder leer entero—. */
 const esc = s => String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+/* Texto que va DENTRO de un onclick="f('…')" (27-sep-2026). encodeURIComponent
+   deja pasar el apóstrofo: un combo «Kit D'Luxe» cerraba la cadena de JS y el
+   botón de WhatsApp dejaba de funcionar — y un nombre armado a propósito
+   metía código. %27 lo vuelve a leer igual decodeURIComponent. */
+const encAttr = s => encodeURIComponent(String(s==null?'':s)).replace(/'/g, '%27');
 
 /* ---- Nombre del producto en lenguaje de cliente (22-sep-2026) ----
    «AUDIF IN EAR HW F-BUDS PRO 4 VD» → «Audífonos Huawei FreeBuds Pro 4»,
@@ -2488,9 +2493,9 @@ function cardBundle(x){
   // de los artículos que le tocan (ver regla de combos), ofrecerlo aquí de
   // nuevo lo cobraría dos veces.
   const incluyeTxt = prods.map(p=>'• '+p).join('\n');
-  const waBtn = precioNum ? `<button class="btn-wa" onclick="compartirWA('${encodeURIComponent(x.nombre||'Bundle')}','${skuArr.join('+')}',${precioNum},${precioNum},true,'${encodeURIComponent(incluyeTxt)}')">📲 Compartir por WhatsApp</button>` : '';
+  const waBtn = precioNum ? `<button class="btn-wa" onclick="compartirWA('${encAttr(x.nombre||'Bundle')}','${skuArr.join('+')}',${precioNum},${precioNum},true,'${encAttr(incluyeTxt)}')">📲 Compartir por WhatsApp</button>` : '';
   return `<div class="card t-bundle">
-    <div class="top"><h3>${x.nombre||'Bundle'}</h3><span class="tag bundle">🎁</span></div>
+    <div class="top"><h3>${esc(x.nombre||'Bundle')}</h3><span class="tag bundle">🎁</span></div>
     ${desgloseBundle(x)}
     ${vig?`<div class="meta">${vig}</div>`:''}
     ${waBtn}
@@ -2502,7 +2507,7 @@ function cardPromo(x){
   const precioVenta = x.pp || x.pr;
   const pv = parseFloat(String(precioVenta||0).replace(/[^0-9.]/g,''))||0;
   const pb = parseFloat(String(precioBase||0).replace(/[^0-9.]/g,''))||0;
-  const waBtn = pv ? `<button class="btn-wa" onclick="compartirWA('${encodeURIComponent(x.producto)}','${x.sku}',${pv},${pb})">📲 Compartir</button>` : '';
+  const waBtn = pv ? `<button class="btn-wa" onclick="compartirWA('${encAttr(x.producto)}','${x.sku}',${pv},${pb})">📲 Compartir</button>` : '';
   /* Las existencias las resuelve `estadoSku`, la misma para todas las tarjetas.
      Antes cada una las deducía con sus propios if y por eso el mismo producto
      salía "sin piezas" en promos y "pedir caja" en resurtir. */
@@ -2532,7 +2537,7 @@ function cardPromo(x){
 }
 function cardPrecioReg(x){
   const precio = x.precio || 0;
-  const waBtn = precio ? `<button class="btn-wa" onclick="compartirWA('${encodeURIComponent(x.producto)}','${x.sku}',${precio},${precio})">📲 Compartir</button>` : '';
+  const waBtn = precio ? `<button class="btn-wa" onclick="compartirWA('${encAttr(x.producto)}','${x.sku}',${precio},${precio})">📲 Compartir</button>` : '';
   /* El estado y las piezas los pone `pastillaEstado`, que es la MISMA para todas
      las tarjetas. Los badges de aquí se quedan solo para lo que no es estado. */
   const e = estadoSku(x.sku);
@@ -2565,9 +2570,9 @@ function bundleTip(sku){
     const incluyeTxt=prods.map(p=>'• '+p).join('\n');
     return `<div class="eol-bundle-tip">
       <div class="tip-lbl">🎁 ${bs.length>1?'Opción de combo':'Mejor opción — vender en combo'}</div>
-      <div class="tip-nom">${b.nombre}</div>
+      <div class="tip-nom">${esc(b.nombre)}</div>
       <div class="meta"><span class="precio">${money(precioNum)}</span></div>
-      <button class="btn-wa" onclick="compartirWA('${encodeURIComponent(b.nombre||'Bundle')}','${skuArr.join('+')}',${precioNum},${precioNum},true,'${encodeURIComponent(incluyeTxt)}')">📲 Compartir combo</button>
+      <button class="btn-wa" onclick="compartirWA('${encAttr(b.nombre||'Bundle')}','${skuArr.join('+')}',${precioNum},${precioNum},true,'${encAttr(incluyeTxt)}')">📲 Compartir combo</button>
     </div>`;
   });
   if(tips.length===1) return tips[0];
@@ -2628,8 +2633,8 @@ function cardAviso(x){
   const vigTxt = x.d2 ? `<span class="badge">Vence ${x.d2}</span>` : '';
   const tipoTxt = (x.tipo&&x.tipo!=='manual') ? `<span class="badge" style="background:var(--info-bg);color:var(--azul)">${x.tipo.toUpperCase()}</span>` : '';
   return `<div class="card t-aviso ${x.prioridad==='alta'?'alta':''}">
-    <div class="top"><h3>${x.titulo}</h3><span class="tag aviso">Aviso</span></div>
-    <p class="det">${x.detalle||''}</p>
+    <div class="top"><h3>${esc(x.titulo)}</h3><span class="tag aviso">Aviso</span></div>
+    <p class="det">${esc(x.detalle)}</p>
     <div class="meta">${vigTxt}${tipoTxt}</div>
   </div>`;
 }

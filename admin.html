@@ -3007,7 +3007,7 @@ async function loadBundles(){
     /* En Supabase `skus` es un array de verdad y aqui se espera "a,b,c" --igual
        que en el tablero, ver _deSupabase--. Y las fechas se llaman
        vigente_desde/hasta, no d1/d2. */
-    renderBundles((await sbLeer('bundles_vigentes')).map(function(b){
+    renderBundles((await sbLeer('bundles_vigentes', { p_token: GAS_TOKEN })).map(function(b){
       return { id:String(b.id), nombre:b.nombre,
                skus: Array.isArray(b.skus) ? b.skus.join(',') : String(b.skus||''),
                precio:b.precio, d1:b.vigente_desde, d2:b.vigente_hasta };
@@ -3023,7 +3023,7 @@ function renderBundles(list){
     const skus=(b.skus||'').split(',').filter(Boolean);
     return `<div class="item">
       <div class="item-info">
-        <strong>${b.nombre||'Bundle'}</strong>
+        <strong>${escHtml(b.nombre||'Bundle')}</strong>
         <span>${skus.length} variante${skus.length!==1?'s':''} · ${money(b.precio)}${b.d2?' · hasta '+b.d2:''}</span>
       </div>
       <button class="btn-del" onclick="delBundle('${b.id}')">🗑️</button>
@@ -3278,7 +3278,7 @@ async function loadEol(){
      consume tal cual. Desde el 19-sep-2026 trae TAMBIEN los pausados; antes se
      filtraban en la funcion y un EOL detenido no se veia aqui, asi que no habia
      donde enterarse de que existia. */
-  try{ renderEol(await sbLeer('eol_lista')); }
+  try{ renderEol(await sbLeer('eol_lista', { p_token: GAS_TOKEN })); }
   catch{ document.getElementById('listE').innerHTML='<div class="empty">Error al cargar</div>'; }
 }
 function renderEol(list){
@@ -3432,7 +3432,8 @@ async function cargarListaAvisos(){
   const el=document.getElementById('ceaLista');
   el.innerHTML='<p class="vacio-chico">Cargando…</p>';
   try{
-    const data=(await sbLeer('avisos_vigentes')).map(function(a){
+    // Las tres lecturas llevan el token desde v291 (supabase_candado_lecturas.sql).
+    const data=(await sbLeer('avisos_vigentes', { p_token: GAS_TOKEN })).map(function(a){
       return { id:String(a.id), titulo:a.titulo, detalle:a.detalle||'',
                prioridad:a.prioridad||'normal',
                d2:a.vigente_hasta,
@@ -3445,8 +3446,8 @@ async function cargarListaAvisos(){
     }
     el.innerHTML=data.map(a=>`
       <div class="prev-item" style="border-left:4px solid ${a.prioridad==='alta'?'var(--rojo)':'var(--ok)'}">
-        <strong>${a.titulo}</strong>
-        <span>${(a.detalle||'').slice(0,120)}${a.detalle&&a.detalle.length>120?'…':''}</span>
+        <strong>${escHtml(a.titulo)}</strong>
+        <span>${escHtml((a.detalle||'').slice(0,120))}${a.detalle&&a.detalle.length>120?'…':''}</span>
         <span style="color:var(--tinta-3);font-size:11px;margin-top:4px;display:block">Vence: <b>${a.d2||'—'}</b> · ${a.tipo||'manual'}</span>
         <button onclick="eliminarAviso('${a.id}')" style="margin-top:8px;background:none;border:1.5px solid var(--alerta-borde);border-radius:8px;padding:5px 12px;font-family:'Montserrat',sans-serif;font-size:12px;font-weight:700;color:var(--rojo);cursor:pointer">🗑 Eliminar</button>
       </div>`).join('');

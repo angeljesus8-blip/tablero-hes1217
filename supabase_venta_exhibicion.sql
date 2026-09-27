@@ -244,7 +244,9 @@ AS $$
 $$;
 
 REVOKE ALL ON FUNCTION public.eol_precio_venta(text) FROM public;
-GRANT EXECUTE ON FUNCTION public.eol_precio_venta(text) TO anon, authenticated;
+-- ⚠️ Versión vieja y abierta: la vigente, con token, la arma supabase_candado_lecturas.sql.
+REVOKE ALL ON FUNCTION public.inventario_vivo(text)  FROM public, anon, authenticated;
+REVOKE ALL ON FUNCTION public.eol_precio_venta(text) FROM public, anon, authenticated;
 
 
 -- ── 5 · Guardar la venta sabiendo de dónde salió ────────────

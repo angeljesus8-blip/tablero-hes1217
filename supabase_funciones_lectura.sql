@@ -223,11 +223,12 @@ REVOKE ALL ON FUNCTION public.avisos_vigentes(text)    FROM public;
 REVOKE ALL ON FUNCTION public.ventas_hoy(text)         FROM public;
 REVOKE ALL ON FUNCTION public.ventas_detalle(text,date) FROM public;
 
-GRANT EXECUTE ON FUNCTION public.inventario_vivo(text)     TO anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.eol_precio_venta(text)    TO anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.promos_vigentes(text)     TO anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.bundles_vigentes(text)    TO anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.avisos_vigentes(text)     TO anon, authenticated;
+-- ⚠️ Versión vieja y abierta: la vigente, con token, la arma supabase_candado_lecturas.sql.
+REVOKE ALL ON FUNCTION public.inventario_vivo(text)     FROM public, anon, authenticated;
+REVOKE ALL ON FUNCTION public.eol_precio_venta(text)    FROM public, anon, authenticated;
+REVOKE ALL ON FUNCTION public.promos_vigentes(text)     FROM public, anon, authenticated;
+REVOKE ALL ON FUNCTION public.bundles_vigentes(text)    FROM public, anon, authenticated;
+REVOKE ALL ON FUNCTION public.avisos_vigentes(text)     FROM public, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.ventas_hoy(text)          TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.ventas_detalle(text,date) TO anon, authenticated;
 
