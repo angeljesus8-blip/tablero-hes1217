@@ -4282,6 +4282,17 @@ document.addEventListener('visibilitychange', function(){
   if(document.visibilityState === 'hidden') guardarBorrador();
 });
 
+/* ---------- ¿Hay trabajo a medias? (26-sep-2026) ----------
+   Lo pregunta continuidad.js antes de recargar por una versión nueva de la app.
+   Lo que se PERDERÍA al recargar: la foto recién tomada, la venta esperando
+   confirmación, el ticket de accesorios leído y sin guardar, y lo que se está
+   corrigiendo. Los cuatro campos y la venta abierta NO cuentan: ya sobreviven a
+   una recarga (borrador de arriba y `hes1217_venta_abierta`). */
+window.HES_ocupado = function(){
+  return !!(lastPhoto || _pendingVenta || _accFoto || (_accLineas && _accLineas.length)
+            || _edIdx !== null || _mfEditando);
+};
+
 /* ---------- Vendedor / pantalla de inicio (HES 1217) ---------- */
 // El equipo se edita en Admin → Equipo; de ahí baja en la config de tienda.
 // Sin sesión va vacío: este archivo es público y no debe traer nombres.

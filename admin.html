@@ -1595,6 +1595,16 @@ function showResult(id,ok,html){
    TAB CATÁLOGO — Piezas de exhibición
    ================================================================ */
 let parsedExhib = null;
+/* ¿Hay trabajo a medias? (26-sep-2026). Lo pregunta continuidad.js antes de
+   recargar por una versión nueva: no se recarga con una subida en curso (el
+   spinner) ni leyendo un PDF o una imagen. Un archivo ya leído NO cuenta:
+   `parsedCat` y compañía se quedan llenos después de subir, así que no dicen si
+   falta algo, y volver a elegir el archivo cuesta un segundo. */
+window.HES_ocupado = function(){
+  const vis = id => { const e = document.getElementById(id); return !!(e && e.style.display !== 'none'); };
+  return !!(document.querySelector('.spin')
+            || vis('ceaLoading') || vis('comisOcrStatus') || vis('garOcrStatus'));
+};
 
 async function parseExhibicion(file){
   const buf = await file.arrayBuffer();
