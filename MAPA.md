@@ -2800,6 +2800,18 @@ nuevo toma el control recarga una vez, con dos cuidados:
 Lo cubre `pruebas/actualizacion.js`, con reloj simulado; falla contra la versión
 anterior y caza diez cebos.
 
+**Y sin sacar a nadie de donde estaba (v288).** «Que se actualice pero que no
+los saque de la página que están viendo.» La recarga deja la misma dirección y
+el scroll; lo que se perdía era lo que no vivía en ella:
+
+- **Admin** volvía a 📦 Catálogo → `tab()` escribe `#pestaña` y `abrirAdmin()`
+  la reabre con `tabDeLaUrl_()`, pulsando su botón (así corre su carga).
+- **Captura** en el paso 2 volvía al paso 1 → `_paso > 1` cuenta como ocupado.
+- **Horarios**, el gerente en otra semana, volvía a la actual → la semana vista
+  va a `sessionStorage` (`hor_semana_vista`); solo para quien edita.
+
+Lo cubre `pruebas/recarga_en_su_sitio.js` (falla contra v287, cinco cebos).
+
 ---
 
 ## Cadena 6-bis · El cupo de preventa *(5-ago-2026)*

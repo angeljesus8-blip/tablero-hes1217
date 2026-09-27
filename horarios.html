@@ -2661,6 +2661,14 @@ async function init() {
   ]);
   aplicarEquipo(equipoData);
   _cache = { historial, excepciones, semanas_guardadas: semanas_guardadas || {} };
+  /* La semana que estaba viendo quien edita sobrevive a una recarga (26-sep-2026):
+     la app ahora recarga sola al llegar una versión nueva, y volver a la semana
+     en curso es sacarlo de donde estaba. `sessionStorage` dura lo que la
+     pestaña: al abrir la app de nuevo se empieza, como siempre, en la actual. */
+  try {
+    const g = JSON.parse(sessionStorage.getItem('hor_semana_vista') || 'null');
+    if (_puedeEditar && g && g.s && g.d) { _semana = g.s; _domingo = new Date(g.d); }
+  } catch (e) {}   // ilegible o sin almacenamiento: se empieza en la semana en curso
   renderSemana();
 }
 
@@ -2917,6 +2925,8 @@ function navSemana(delta) {
   const d   = new Date(_domingo);
   d.setDate(d.getDate() + delta * 7);
   _domingo  = d;
+  try { sessionStorage.setItem('hor_semana_vista', JSON.stringify({ s: _semana, d: _domingo.getTime() })); }
+  catch (e) {}   // sin almacenamiento solo se pierde volver a esta semana tras recargar
   renderSemana();
 }
 
