@@ -2780,6 +2780,26 @@ archivos sin subirla y se depuró horas sobre una versión que nadie tenía.)*
 `verificar.py` bloquea el commit si se te pasa. También avisa si el precache
 apunta a un archivo que ya no existe.
 
+**Llega sola, sin salir y volver (26-sep-2026, v287).** `continuidad.js`
+pregunta al abrir, al volver y **cada 5 min** con la app a la vista. Cuando el
+nuevo toma el control recarga una vez, con dos cuidados:
+
+- **La bandera contra el bucle guarda la HORA** (`hes_recargando`) y frena solo
+  15 s. Antes era un «1» para toda la sesión: la segunda versión del día ya no
+  recargaba en la app que pasa el día abierta.
+- **No recarga encima de trabajo a medias.** Cada pantalla declara
+  `window.HES_ocupado()` —Captura: foto sin guardar, venta por confirmar,
+  ticket de accesorios, corrección abierta; Admin: subida o lectura en curso;
+  tablero: apartado o cotización abiertos— y además se espera si alguien está
+  escribiendo. Se reintenta cada 15 s y al cambiar de app. **Tope:** 30 min
+  «ocupado» es abandono, y entonces recarga, pero solo en segundo plano (ir a
+  la cámara no cuenta: son segundos, no media hora).
+- `horarios.html` no carga `continuidad.js` (vive también en planeador-odemas):
+  trae su propio bloque, que solo actúa con service worker.
+
+Lo cubre `pruebas/actualizacion.js`, con reloj simulado; falla contra la versión
+anterior y caza diez cebos.
+
 ---
 
 ## Cadena 6-bis · El cupo de preventa *(5-ago-2026)*
