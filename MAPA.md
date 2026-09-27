@@ -3461,6 +3461,38 @@ las mesas dejando de serlo, `presente` sin mirar el turno —tarea a quien
 descansa—, y las dos formas de perder el reparto del dia (sin `libres` y sin
 apuntar en `yaEseDia`), que dejan mesas y sillas sobre la misma persona.
 
+#### Encargos: lo que gerencia asigna a mano *(27-sep-2026)*
+
+Lo de arriba se reparte solo. Los **encargos** son lo otro: «hoy, Fulano, cuenta
+los accesorios». Gerencia los escribe en el mismo panel (📌 Encargos) y a la
+persona le salen en «Tus tareas» y en su tarjeta del día.
+
+```
+Gerente con correo ──insert/update/delete──▶ tareas_asignadas  (RLS: admin_de)
+Asesor con número ──tareas_asignadas_mias()──▶ SOLO lo suyo + lo atrasado
+                  ──tarea_asignada_marcar()──▶ lo suyo, desde su día
+```
+
+- **Van por número de empleado** (`para_empno`): es lo único que el servidor
+  puede comprobar. Sin número no se le puede encargar nada.
+- **El filtro «solo lo suyo» está en el servidor.** Un encargo ajeno lleva fecha
+  y nombre: es el horario de otro dicho de otra forma (ver 6-sep-2026). El
+  asesor nunca lee la tabla directo.
+- **No se le encarga nada a quien ese día no está** (`candidatosEncargo_`, misma
+  regla `turnoPresente_` del reparto), ni a un día que ya pasó. Si el horario
+  cambia después, gerencia ve «⚠ ese día no está».
+- **Lo que no se hizo no desaparece**: `tareas_asignadas_mias` trae también lo
+  de antes sin hacer, y sale arriba como «Atrasados».
+- **Asigna solo quien entró con correo** (`asignaEncargos_()`): el subgerente que
+  entra con su número no trae sesión y la RLS lo rechazaría.
+- **El texto se pinta con `escH_`**, siempre: lo escribe una persona.
+- `tarea_asignada_marcar` está en `CANDADO_PENDIENTES`, junto a `tarea_marcar`:
+  el planeador aún no lleva token.
+
+Lo cubre `pruebas/tareas_asignadas.js` (6 bloques). Seis cebos muerden: texto
+sin escapar en el panel y en la tarjeta, sin freno al descanso, sin atrasados,
+casilla del futuro encendida, y carga fallida leída como «sin encargos».
+
 ### Un solo login *(4-ago-2026)*
 
 El planeador tenía su PROPIO proyecto de Supabase (`lgnyqfstmcqpkbekspte`), con

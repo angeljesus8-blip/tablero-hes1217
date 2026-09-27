@@ -1804,6 +1804,7 @@ def r_pruebas():
                'cola_ventas.js', 'catalogo_accesorios.js', 'mrfix_tipo.js',
                'mrfix_detecta.js', 'ventas_dia_seguro.js', 'acc_alias_codigos.js',
                'horario_solo_mio.js', 'horario_sesion_ajena.js', 'tareas_rotacion.js',
+               'tareas_asignadas.js',
                'comisiones_solo_mia.js',
                'login_por_correo.js', 'admin_sesion_ajena.js',
                'mrfix_corregir.js', 'cea_precio_nuevo.js', 'cea_vigencia.js',
@@ -2281,6 +2282,7 @@ def r_funcion_repetida():
 # hasta cerrarlos. Quitar de aquí en cuanto lleven su candado.
 CANDADO_PENDIENTES = {
     'tarea_marcar': 'palomea tareas a nombre de cualquier número (ámbar, 27-sep-2026)',
+    'tarea_asignada_marcar': 'marca encargos con solo el número de su dueño; mismo hueco que tarea_marcar, el planeador aún no lleva token (ámbar, 27-sep-2026)',
 }
 # Lecturas del negocio que no escriben ni traen clientes, pero tampoco son
 # públicas: stock por SKU, precios de EOL, texto de circulares internas. Desde
