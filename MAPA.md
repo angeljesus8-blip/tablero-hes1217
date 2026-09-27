@@ -2299,6 +2299,37 @@ Lo cubre `pruebas/cea_precio_nuevo.js` con los tres renglones reales del CEA
 sola promo. **Comprobada rompiéndola**: con el bloque `pp` original vuelven los
 seis fallos con las cifras del comunicado.
 
+### Un cambio de PRECIO DE LISTA no es una promoción *(26-sep-2026, v289)*
+
+El **CEA HUAWEI 273 BAJA DE PRECIO EN MATEPAD** baja el precio **regular** de
+siete MatePad «a partir del 15 de septiembre», sin fecha de fin. Pero el
+catálogo sale del Informe de Artículos Totales de Sonar, que tarda en traerlo, y
+la única puerta era Promos: entró como oferta del 20 al 30-sep —fin inventado,
+porque Promos lo exige— y el 1-oct la app volvía a cobrar $6,999 donde el
+precio es $4,999. Tachado, además, como si fuera oferta.
+
+```
+CEA con «PRECIO REGULAR ANTERIOR / NUEVO» y sin columna de promo
+  → Admin · Promos lo reconoce (_ceaEsCambioLista) → carga_precio_lista
+  → precio_lista (sku, anterior, nuevo, desde)      sin fecha de fin
+  → trigger en catalogo: si llega el ANTERIOR (o nada) y ya es la fecha,
+    se guarda el NUEVO
+```
+
+**El precio nuevo va al DATO, no a las lecturas.** El precio del catálogo lo
+leen el inventario, la mitad del EOL, Captura y el guardado de la venta; un
+trigger en `catalogo` los cubre a todos, y a cualquier carga futura.
+**Se retira solo:** en cuanto Sonar trae otro precio —el nuevo u otro—, manda
+Sonar. «Hoy» es hora de México, no UTC. Al registrarlo se quitan las promos que
+son ese mismo CEA subido por Promos (mismas cifras exactas); cualquier otra
+promo se queda.
+
+Lo cubren `pruebas/cea_precio_lista.js` (con los fragmentos reales de la página
+1 del PDF en `pruebas/cea/cea273_items.json`, sacados con la pdf.js 3.11.174 de
+admin.html; ocho cebos) y, al escribirlo, 28 comprobaciones del SQL contra
+Postgres real (PGlite) con el upsert idéntico al de `carga_catalogo`; ocho
+cebos.
+
 ### Un CEA de lanzamiento no dice "Vigencia:", y se perdía entero *(17-sep-2026, v244)*
 
 El **CEA HUAWEI 269 LANZAMIENTO WATCH GT 7 Y GT 7 PRO** (10-sep) se cargó por
