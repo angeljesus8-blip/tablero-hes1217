@@ -3104,6 +3104,28 @@ Lo que sostiene esto:
   `index.html` es un redirect a este mismo archivo y sería un círculo.
 - `logo_huawei.jpg` va precacheado: es el logo del Excel que exporta el gerente.
 
+### El equipo ve lo PUBLICADO, y le llega sin recargar *(26-sep-2026)*
+
+Tres fallos de la vista del asesor, vistos el mismo sábado:
+
+1. **Al navegar con ◄ ► salía un horario recalculado.** `mostrarHorarioEquipo`
+   pintaba por su cuenta y solo dejaba `excepciones` en `_cache`; `navSemana`
+   llama a `renderSemana`, que buscaba `semanas_guardadas` en `_cache` y no
+   estaban. Ahora `mostrarHorarioEquipo` llena `_cache` entero (con
+   `__publicadas` debajo, por los respaldos viejos) y pinta con `renderSemana`:
+   un solo camino para las dos vistas.
+2. **Semana futura sin guardar.** Para el equipo es «Este horario todavía no se
+   publica», nunca un borrador. El gerente la ve si tiene excepciones —«📅
+   Generar planeador» crea una configuración vacía, así le pasó a la 41— con el
+   rótulo «📝 Borrador — el equipo aún no lo ve».
+3. **Pantalla abierta = horario viejo.** `visibilitychange` solo actúa al
+   VOLVER a la app. `latidoEquipo_()` corre cada minuto: si cambió la semana que
+   toca (sábado 5 p. m.) o el dato tiene más de 2 min, lo vuelve a pedir
+   forzando. Solo con `_leido`, que no existe en la vista del gerente.
+
+Lo cubre `pruebas/horario_publicado.js`, con reloj fijo; comprobada contra el
+código viejo y con nueve cebos.
+
 ### Cada quien ve su horario *(6-sep-2026, v230)*
 
 Pedido en piso: el equipo ve **solo su semana**; el gerente y el subgerente, la
