@@ -234,6 +234,19 @@ body.solo-mi-horario .leyenda { display: none; }
   padding: 9px 12px; border-top: 1px solid var(--linea); background: var(--atencion-bg); }
 .tar-nota strong { color: var(--naranja); }
 .tar-vacia { font-size: 11px; color: var(--tinta-2); padding: 10px 12px; }
+/* Encargos: lo que gerencia asigna a mano. Misma fila que las de piso, con su
+   propia casilla (`enc-chk`) para que no se confundan al marcarlas. */
+.enc-chk  { width: 22px; height: 22px; flex-shrink: 0; cursor: pointer; accent-color: var(--rojo); }
+.enc-chk:disabled { cursor: default; opacity: 0.45; }
+.tar-sec-atras { color: var(--naranja); background: var(--atencion-bg); }
+.enc-quitar { border: none; background: none; color: var(--tinta-3); font-size: 14px;
+  cursor: pointer; padding: 0 2px; flex-shrink: 0; }
+.enc-form { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 9px 12px;
+  border-top: 1px solid var(--linea); }
+.enc-form .enc-texto { grid-column: 1 / -1; }
+.enc-form .btn-primario { grid-column: 1 / -1; padding: 8px; border: none; border-radius: 6px;
+  font-family: inherit; font-weight: 700; font-size: 12px; cursor: pointer; }
+.enc-msg { grid-column: 1 / -1; font-size: 11px; color: var(--rojo); min-height: 0; }
 /* En gris y no en azul: el azul de la tabla es «cierre», y una fila de tareas
    azul se leía como otro turno. */
 .tarea-td { background: var(--fondo); color: var(--tinta-2); font-size: 9px; font-weight: 600; }
@@ -2055,6 +2068,279 @@ function tareasDe_(persona, dia) {
   return _reparto.filter(t => t.dia === dia && tareaEsDe_(t, persona));
 }
 
+/* ── Encargos: lo que gerencia asigna a mano (27-sep-2026) ──
+   Lo de arriba se reparte SOLO y nadie lo toca. Esto es lo otro: «hoy, Fulano,
+   cuenta los accesorios de la vitrina». Vive en `tareas_asignadas` (ver
+   supabase_tareas_asignadas.sql) y NO se calcula: lo escribe gerencia.
+
+   Tres reglas, acordadas con Ángel:
+     · se le encarga a quien tiene número de empleado —es con lo que entra a
+       verlo—, y solo a quien ESE día está en la tienda según el horario;
+     · lo que no se hizo su día no desaparece: sale como atrasado hasta que se
+       marque o se borre;
+     · asigna solo quien entró con correo: escribe directo y la RLS decide.
+
+   ⚠️ Al asesor el servidor le manda SOLO lo suyo (`tareas_asignadas_mias`).
+   Un encargo ajeno lleva fecha y nombre, y eso es el horario de otro dicho de
+   otra forma: el filtro no puede ser de pintado.
+
+   ⚠️ El texto lo escribe una persona: se pinta SIEMPRE con `escH_`. */
+let _encargos      = [];     // { id, fecha:'AAAA-MM-DD', para, texto, hecha, mia, por }
+let _encargosSem   = null;   // de qué semana son, para no enseñar los de otra
+let _encargosFallo = false;  // la carga falló: no es lo mismo que «no hay»
+let _pintado       = null;   // { dias, comidas, domingo }: para repintar las tarjetas
+let _encForm       = { dia: null, para: '', texto: '' };   // lo que va escrito en el formulario
+const ENCARGO_MAX  = 120;    // el mismo tope que el CHECK del SQL
+
+function escH_(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+}
+
+// La fecha (AAAA-MM-DD, del teléfono) de un día de la semana que se ve.
+function fechaDeDia_(d) {
+  const f = new Date(_tareasCtx.domingo); f.setDate(f.getDate() + d);
+  return fechaLocal_(f);
+}
+// «Jueves 24» o, si no es de esta semana, «Jueves 17 sep».
+function fechaCorta_(iso) {
+  const p = String(iso).split('-').map(Number);
+  const f = new Date(p[0], p[1] - 1, p[2]);
+  let dEnSemana = -1;
+  if (_tareasCtx) for (let d = 0; d < 7; d++) if (fechaDeDia_(d) === iso) dEnSemana = d;
+  return DIAS_NOMBRES[f.getDay()] + ' ' + f.getDate()
+       + (dEnSemana < 0 ? ' ' + f.toLocaleString('es-MX', { month: 'short' }) : '');
+}
+const hoyISO_           = () => fechaLocal_(new Date());
+const encargoAtrasado_  = e => !e.hecha && e.fecha < hoyISO_();
+const asignaEncargos_   = () => _puedeEditar && !_empno;
+
+// El número de una clave del reparto, y al revés. Los encargos van por número:
+// es lo único que el servidor puede comprobar.
+function empDeClave_(k) {
+  if (!k) return '';
+  if (esExterno_(k)) return (externoDe_(k) || {}).emp || '';
+  return String((EQUIPO[k] || {}).emp || '').trim();
+}
+function claveDeEmp_(emp) {
+  const n = String(emp || '').trim();
+  if (!n) return null;
+  const p = PERSONAS.find(x => String(EQUIPO[x].emp || '').trim() === n);
+  if (p) return p;
+  const e = externosTareas_().find(x => x.emp && x.emp === n);
+  return e ? e.key : null;
+}
+const nombreDeEmp_ = emp => { const k = claveDeEmp_(emp); return k ? nombreTarea_(k) : '#' + emp; };
+
+// Los encargos de una persona un día de la semana que se ve (tarjetas).
+function encargosDe_(clave, dia) {
+  if (!_tareasCtx) return [];
+  const emp = empDeClave_(clave);
+  if (!emp) return [];
+  const f = fechaDeDia_(dia);
+  return _encargos.filter(e => e.para === emp && e.fecha === f);
+}
+
+/* A quién se le puede encargar algo ese día: quien tiene número y está en la
+   tienda según el horario pintado —misma regla que el reparto de piso: no se
+   le manda nada a quien descansa—, más el apoyo con número los días que viene. */
+function candidatosEncargo_(d) {
+  const dias = _pintado && _pintado.dias;
+  const out = [];
+  PERSONAS.forEach(p => {
+    const emp = empDeClave_(p);
+    if (!emp || EQUIPO[p].vacante) return;
+    if (!dias || !turnoPresente_(dias[d] && dias[d][p])) return;
+    out.push({ emp, nombre: EQUIPO[p].nombre });
+  });
+  externosTareas_().forEach(x => {
+    if (x.emp && x.dias.indexOf(d) >= 0 && !out.some(o => o.emp === x.emp))
+      out.push({ emp: x.emp, nombre: x.nombre });
+  });
+  return out;
+}
+
+/* ¿Puede marcarlo quien está viendo? Gerencia con cuenta, siempre. El dueño
+   del encargo, desde su día —el servidor pone el mismo freno, esto solo apaga
+   la casilla— y, para desmarcar, solo si lo marcó él. */
+function puedeMarcarEncargo_(e) {
+  if (asignaEncargos_()) return true;
+  if (!_empno || e.para !== String(_empno).trim()) return false;
+  if (e.fecha > hoyISO_()) return false;
+  return !e.hecha || e.mia;
+}
+
+async function cargarEncargos() {
+  if (!_tareasCtx || !_tienda || _tienda.store_id !== TIENDA_TAREAS) return;
+  const ctx = _tareasCtx, desde = fechaDeDia_(0), hasta = fechaDeDia_(6);
+  try {
+    let filas;
+    if (_empno) {
+      const { data, error } = await _sb.rpc('tareas_asignadas_mias', {
+        p_store_id: _tienda.store_id, p_empno: _empno, p_desde: desde, p_hasta: hasta });
+      if (error) throw error;
+      // NULL = el número no está activo. No es «sin encargos».
+      if (!Array.isArray(data)) throw new Error('el número no está activo');
+      const yo = String(_empno).trim();
+      filas = data.map(f => ({ id: f.id, fecha: f.fecha, para: yo, texto: f.texto,
+                               hecha: !!f.hecha, mia: !!f.mia, por: null }));
+    } else {
+      const { data, error } = await _sb.from('tareas_asignadas')
+        .select('id,fecha,para_empno,texto,hecha_en,hecha_por')
+        .eq('store_id', _tienda.store_id)
+        .or('and(fecha.gte.' + desde + ',fecha.lte.' + hasta + '),and(fecha.lt.' + desde + ',hecha_en.is.null)')
+        .order('fecha');
+      if (error) throw error;
+      filas = (data || []).map(f => ({ id: f.id, fecha: f.fecha, para: String(f.para_empno).trim(),
+                                       texto: f.texto, hecha: !!f.hecha_en, mia: false,
+                                       por: f.hecha_por || null }));
+    }
+    if (_tareasCtx !== ctx) return;
+    _encargos = filas; _encargosFallo = false;
+  } catch (e) {
+    if (_tareasCtx !== ctx) return;
+    console.warn('No se pudieron leer los encargos:', (e && e.message) || e);
+    _encargosFallo = true;
+  }
+  renderTareas();
+  // Las tarjetas del celular también los enseñan, y ya se pintaron sin ellos.
+  if (_pintado) renderMovil(_pintado.dias, _pintado.comidas, _pintado.domingo);
+}
+
+async function guardarEncargo_() {
+  const msg = document.getElementById('enc-msg');
+  const btn = document.getElementById('enc-guardar');
+  const d     = parseInt(_encForm.dia, 10);
+  const para  = String(_encForm.para || '').trim();
+  const texto = String(_encForm.texto || '').trim();
+  const decir = t => { if (msg) msg.textContent = t; };
+  if (!asignaEncargos_()) return decir('Solo gerencia con su cuenta puede asignar.');
+  if (!(d >= 0 && d <= 6)) return decir('Elige el día.');
+  // Nacería atrasado: el formulario ya no ofrece esos días, y aquí tampoco pasa.
+  if (fechaDeDia_(d) < hoyISO_()) return decir('Ese día ya pasó.');
+  if (!para) return decir('Elige a quién.');
+  if (!candidatosEncargo_(d).some(c => c.emp === para))
+    return decir('Ese día no está en la tienda según el horario.');
+  if (!texto) return decir('Escribe qué hay que hacer.');
+  if (texto.length > ENCARGO_MAX) return decir('Máximo ' + ENCARGO_MAX + ' letras.');
+  if (btn) btn.disabled = true;
+  try {
+    /* `.select()` para mirar lo que de verdad quedó: con la RLS en contra, un
+       insert no da error, solo no escribe nada. */
+    const { data, error } = await _sb.from('tareas_asignadas').insert({
+      store_id: _tienda.store_id, fecha: fechaDeDia_(d), para_empno: para, texto }).select('id');
+    if (error) throw error;
+    if (!data || !data.length) throw new Error('la base no lo guardó');
+    _encForm.texto = '';
+    await cargarEncargos();
+  } catch (e) {
+    decir('No se guardó: ' + ((e && e.message) || e));
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function borrarEncargo_(id) {
+  if (!asignaEncargos_() || !confirm('¿Borrar este encargo?')) return;
+  try {
+    const { data, error } = await _sb.from('tareas_asignadas').delete()
+      .eq('store_id', _tienda.store_id).eq('id', id).select('id');
+    if (error) throw error;
+    if (!data || !data.length) throw new Error('la base no lo borró');
+    await cargarEncargos();
+  } catch (e) {
+    alert('No se pudo borrar el encargo: ' + ((e && e.message) || e));
+  }
+}
+
+async function marcarEncargo_(chk) {
+  const id  = Number(chk.dataset.id);
+  const val = chk.checked;
+  const e   = _encargos.find(x => Number(x.id) === id);
+  if (!e) return renderTareas();
+  chk.disabled = true;
+  try {
+    if (_empno) {
+      const { data, error } = await _sb.rpc('tarea_asignada_marcar', {
+        p_store_id: _tienda.store_id, p_empno: _empno, p_id: id, p_hecha: val });
+      if (error) throw error;
+      if (!data || data.ok !== true) throw new Error(
+        data && data.error === 'no_es_tuya' ? 'Ese encargo lo marcó gerencia; solo gerencia puede quitarlo.'
+        : data && data.error === 'todavia_no' ? 'Se marca el día que toca.'
+        : 'No se pudo registrar (' + ((data && data.error) || 'sin respuesta') + ').');
+    } else {
+      const { data, error } = await _sb.from('tareas_asignadas')
+        .update({ hecha_en: val ? new Date().toISOString() : null, hecha_por: null })
+        .eq('store_id', _tienda.store_id).eq('id', id).select('id');
+      if (error) throw error;
+      if (!data || !data.length) throw new Error('la base no lo registró');
+    }
+    e.hecha = val; e.mia = val && !!_empno; e.por = val ? (_empno || null) : null;
+  } catch (err) {
+    // Sin tocar `e`: la casilla vuelve a como estaba al repintar.
+    alert('No se pudo registrar el encargo: ' + ((err && err.message) || err));
+  } finally {
+    renderTareas();
+  }
+}
+
+/* La fila de un encargo, en el panel. `conFecha` para las listas que mezclan
+   días (atrasados, y la de gerencia); `conNombre` solo para gerencia. */
+function filaEncargo_(e, conFecha, conNombre) {
+  const puede = puedeMarcarEncargo_(e);
+  const atr   = encargoAtrasado_(e);
+  const partes = [];
+  if (conFecha)  partes.push((atr ? '⚠ Atrasado · ' : '') + fechaCorta_(e.fecha));
+  if (conNombre) partes.push(escH_(nombreDeEmp_(e.para)));
+  /* El horario pudo cambiar después de encargarlo: si ese día ya no está, se
+     avisa a gerencia en vez de dejar un encargo que nadie va a ver en tienda. */
+  if (conNombre && !e.hecha && _pintado) {
+    const k = claveDeEmp_(e.para);
+    let d = -1;
+    for (let i = 0; i < 7; i++) if (fechaDeDia_(i) === e.fecha) d = i;
+    if (k && d >= 0 && !candidatosEncargo_(d).some(c => c.emp === e.para))
+      partes.push('⚠ ese día no está');
+  }
+  const por = !e.hecha ? '' : e.mia ? 'por ti'
+            : e.por ? 'por ' + escH_(nombreDeEmp_(e.por)) : 'por gerencia';
+  const id  = escH_(e.id);
+  return `<div class="tar-fila${e.hecha ? ' tar-hecha' : ''}">
+    <span class="tar-ico">📌</span>
+    <span class="tar-nom">${escH_(e.texto)}
+      <span class="tar-quien${atr ? ' tar-yo' : ''}">${partes.join(' · ') || '—'}</span></span>
+    ${e.hecha && (!puede || asignaEncargos_()) ? `<span class="tar-ok">✓ ${por}</span>` : ''}
+    <input type="checkbox" class="enc-chk" data-id="${id}"
+           ${e.hecha ? 'checked' : ''} ${puede ? '' : 'disabled'}
+           title="${puede ? 'Marcar como hecho'
+                    : e.fecha > hoyISO_() ? 'Se marca el ' + escH_(fechaCorta_(e.fecha)).toLowerCase()
+                    : 'Solo lo quita quien lo marcó'}">
+    ${asignaEncargos_() ? `<button class="enc-quitar" data-id="${id}" title="Borrar encargo">✕</button>` : ''}
+  </div>`;
+}
+
+// El formulario de gerencia. Se repinta con el panel, así que lo escrito vive
+// en `_encForm` y no en la caja: si no, la palomita que llega de la red a
+// media frase se lo llevaría.
+function formEncargo_() {
+  const hoy  = hoyISO_();
+  const dias = [0,1,2,3,4,5,6].filter(d => fechaDeDia_(d) >= hoy);
+  if (!dias.length) return `<div class="tar-vacia">Esta semana ya pasó: los encargos se asignan de hoy en adelante.</div>`;
+  if (dias.indexOf(parseInt(_encForm.dia, 10)) < 0) _encForm.dia = String(dias[0]);
+  const d = parseInt(_encForm.dia, 10);
+  const gente = candidatosEncargo_(d);
+  if (!gente.some(c => c.emp === _encForm.para)) _encForm.para = gente.length ? gente[0].emp : '';
+  return `<div class="enc-form">
+    <select class="eq-input" id="enc-dia">${dias.map(x =>
+      `<option value="${x}"${x === d ? ' selected' : ''}>${fechaCorta_(fechaDeDia_(x))}</option>`).join('')}</select>
+    <select class="eq-input" id="enc-para">${gente.length ? gente.map(c =>
+      `<option value="${escH_(c.emp)}"${c.emp === _encForm.para ? ' selected' : ''}>${escH_(c.nombre)}</option>`).join('')
+      : '<option value="">Nadie con número ese día</option>'}</select>
+    <input class="eq-input enc-texto" id="enc-texto" maxlength="${ENCARGO_MAX}"
+           placeholder="¿Qué hay que hacer?" value="${escH_(_encForm.texto)}">
+    <button class="btn-primario" id="enc-guardar">＋ Asignar encargo</button>
+    <div class="enc-msg" id="enc-msg"></div>
+  </div>`;
+}
+
 /* ¿Ese día ya llegó? Cada quien ve su semana entera, y una tarea del jueves
    palomeada el lunes es una tarea que nadie hizo: el checklist se leería al día
    y el piso estaría sin barrer. Gerencia no pasa por aquí —es quien valida—. */
@@ -2186,9 +2472,20 @@ function renderTareas() {
 
   let html = `<div class="tar-panel">
     <div class="tar-head">🧽 ${veTodo ? 'Tareas de la semana' : 'Tus tareas'}
-      <small>Se reparten solas con el horario · nadie las asigna a mano</small></div>`;
+      <small>Las de piso se reparten solas con el horario · 📌 encargos de gerencia</small></div>`;
 
   const fechaDe = d => { const f = new Date(_tareasCtx.domingo); f.setDate(f.getDate() + d); return f; };
+
+  /* Los encargos del asesor. El servidor ya manda solo los suyos; se vuelve a
+     filtrar por su número por si algún día no fuera así —el pintado no puede
+     ser la única puerta, pero tampoco tiene por qué abrir la segunda—. */
+  const yoEmp  = _empno ? String(_empno).trim() : '';
+  const misEnc = veTodo ? [] : _encargos.filter(e => yoEmp && e.para === yoEmp);
+  const encAtr = misEnc.filter(encargoAtrasado_);
+  if (!veTodo && encAtr.length) {
+    html += `<div class="tar-sec tar-sec-atras">Atrasados</div>`;
+    encAtr.forEach(e => { html += filaEncargo_(e, true, false); });
+  }
 
   /* Al asesor se le pinta su semana completa, día por día: saber el lunes que
      el jueves le toca el sanitario es poder organizarse, y era lo que se pedía
@@ -2201,11 +2498,13 @@ function renderTareas() {
   if (!veTodo) {
     for (let d = 0; d < 7; d++) {
       const delDia = mias.filter(t => t.dia === d);
-      if (!delDia.length) continue;
+      const encDia = misEnc.filter(e => e.fecha === fechaDeDia_(d) && encAtr.indexOf(e) < 0);
+      if (!delDia.length && !encDia.length) continue;
       const f = fechaDe(d);
       html += `<div class="tar-sec${d === diaHoy ? ' tar-sec-hoy' : ''}">${
         d === diaHoy ? 'Hoy · ' : ''}${DIAS_NOMBRES[d]} ${f.getDate()}</div>`;
       delDia.forEach(t => { html += fila(t); });
+      encDia.forEach(e => { html += filaEncargo_(e, false, false); });
     }
   } else {
     if (hoyTareas.length) {
@@ -2239,14 +2538,44 @@ function renderTareas() {
     });
   });
 
-  if (!mias.length)
+  if (!mias.length && !misEnc.length)
     html += `<div class="tar-vacia">${veTodo ? 'Sin tareas esta semana.'
                                              : 'Esta semana no te toca ninguna tarea.'}</div>`;
+
+  /* Gerencia: todos los encargos —los atrasados primero— y, si entró con su
+     cuenta, el formulario. Quien entró con su número (el subgerente desde el
+     tablero) no trae sesión: ve los suyos y no asigna. */
+  if (veTodo) {
+    const lista = yoEmp && !asignaEncargos_() ? _encargos.filter(e => e.para === yoEmp) : _encargos;
+    const orden = lista.slice().sort((a, b) =>
+      (encargoAtrasado_(b) - encargoAtrasado_(a)) || (a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : 0));
+    html += `<div class="tar-sec">📌 Encargos</div>`;
+    if (asignaEncargos_()) html += formEncargo_();
+    orden.forEach(e => { html += filaEncargo_(e, true, true); });
+    if (!orden.length && !_encargosFallo)
+      html += `<div class="tar-vacia">Sin encargos esta semana.</div>`;
+  }
+  // Una carga fallida no es una lista vacía: decir «sin encargos» sería mentir.
+  if (_encargosFallo)
+    html += `<div class="tar-vacia">⚠ No se pudieron cargar los encargos. Recarga la página.</div>`;
 
   cont.innerHTML = html + '</div>';
   cont.querySelectorAll('.tar-chk').forEach(chk => {
     chk.addEventListener('change', () => marcarTarea(chk));
   });
+  cont.querySelectorAll('.enc-chk').forEach(chk => {
+    chk.addEventListener('change', () => marcarEncargo_(chk));
+  });
+  cont.querySelectorAll('.enc-quitar').forEach(b => {
+    b.addEventListener('click', () => borrarEncargo_(Number(b.dataset.id)));
+  });
+  const fDia = document.getElementById('enc-dia'), fPara = document.getElementById('enc-para');
+  const fTxt = document.getElementById('enc-texto'), fBtn = document.getElementById('enc-guardar');
+  // Cambiar de día cambia quién está: se repinta para rehacer la lista.
+  if (fDia)  fDia.addEventListener('change', () => { _encForm.dia = fDia.value; renderTareas(); });
+  if (fPara) fPara.addEventListener('change', () => { _encForm.para = fPara.value; });
+  if (fTxt)  fTxt.addEventListener('input',  () => { _encForm.texto = fTxt.value; });
+  if (fBtn)  fBtn.addEventListener('click', guardarEncargo_);
 }
 
 /* ── La palomita ──
@@ -2392,6 +2721,8 @@ function mvDias(persona, dias, comidas, domingo, hoyISO) {
        no se pueden contradecir. */
     tareasDe_(persona, d).forEach(t =>
       extras.push(`<span>${t.icono} ${t.nombre}${tareaHecha_(t.id, t.dia) ? ' ✓' : ''}</span>`));
+    encargosDe_(persona, d).forEach(e =>
+      extras.push(`<span>📌 ${escH_(e.texto)}${e.hecha ? ' ✓' : ''}</span>`));
     out += `<div class="mv-dia${esHoy ? ' mv-hoy' : ''}">
       <div class="mv-fecha">${DIAS_CORTOS[d]}<b>${String(f.getDate()).padStart(2,'0')}</b></div>
       <div>
@@ -2417,7 +2748,9 @@ function mvCardExterno_(ext, domingo, hoyISO) {
     const viene = ext.dias.indexOf(d) >= 0;
     const esHoy = fechaLocal_(f) === hoyISO;
     const extras = tareasDe_(ext.key, d).map(t =>
-      `<span>${t.icono} ${t.nombre}${tareaHecha_(t.id, t.dia) ? ' ✓' : ''}</span>`);
+      `<span>${t.icono} ${t.nombre}${tareaHecha_(t.id, t.dia) ? ' ✓' : ''}</span>`)
+      .concat(encargosDe_(ext.key, d).map(e =>
+        `<span>📌 ${escH_(e.texto)}${e.hecha ? ' ✓' : ''}</span>`));
     out += `<div class="mv-dia${esHoy ? ' mv-hoy' : ''}">
       <div class="mv-fecha">${DIAS_CORTOS[d]}<b>${String(f.getDate()).padStart(2,'0')}</b></div>
       <div>
@@ -2533,6 +2866,12 @@ function renderTabla(semana, domingo, dias, comidas) {
      de estos mismos `dias`, así que no hay dos versiones de quién barre. */
   _reparto   = repartirTareas(dias, semana);
   _tareasCtx = { semana: semana, anio: anioISOde_(domingo), domingo: domingo };
+  _pintado   = { dias: dias, comidas: comidas, domingo: domingo };
+  // Los encargos de otra semana no se enseñan bajo el rótulo de ésta mientras
+  // llegan los buenos. Los de la MISMA semana sí se quedan: el refresco del
+  // equipo repinta cada rato, y vaciarlos haría parpadear la lista.
+  const semEnc = _tareasCtx.anio + '-' + semana;
+  if (_encargosSem !== semEnc) { _encargos = []; _encargosFallo = false; _encargosSem = semEnc; }
 
   for (let i = 0; i < 7; i++) {
     const f = new Date(domingo);
@@ -2607,6 +2946,7 @@ function renderTabla(semana, domingo, dias, comidas) {
      al llegar a la tienda. */
   renderTareas();
   cargarTareasHechas();
+  cargarEncargos();
 
   const fi = domingo;
   const ff = new Date(fi); ff.setDate(ff.getDate() + 6);
