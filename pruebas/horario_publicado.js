@@ -6,7 +6,8 @@
    Tres fallos del mismo día, todos de la vista del asesor:
 
      1. Al navegar con ◄ ► dejaba de enseñar la semana guardada y pintaba una
-        RECALCULADA: `mostrarHorarioEquipo` no dejaba las semanas guardadas en
+        RECALCULADA (y desde el mismo día el equipo ya no navega: ve solo la
+        semana que le toca): `mostrarHorarioEquipo` no dejaba las semanas guardadas en
         `_cache`, y `renderSemana` las buscaba ahí. «Les aparecía otro horario
         distinto al mío; ya que recargaron ya se podía ver bien.»
      2. Una semana futura sin guardar (la 41, con su configuración vacía) salía
@@ -95,34 +96,44 @@ const VACIA = { vacaciones:{}, turno_especial:{}, descanso_override:{} };
   // Martes 22-sep-2026 10:00 a. m. (CDMX): semana en curso = 39.
   const MARTES = '2026-09-22T16:00:00Z';
 
-  /* 1 · Navegar no cambia el horario publicado por uno recalculado. */
+  /* 1 · El equipo ve SOLO la semana que le toca (26-sep-2026: «ellos no deben
+        de ver entre semanas, solo su semana actual»), y es la publicada. */
   {
     const ent = arrancar(MARTES, { empno:'900003', puesto:'Asesor' });
     ent.correr('mostrarHorarioEquipo(' + JSON.stringify(datosCon(ent, [39, 40], { semana_41: VACIA })) + ')');
     ok('ASESOR · entra viendo la semana publicada', lunes(ent) === MARCA, lunes(ent));
-    ent.correr('navSemana(1)');
-    ok('ASESOR · la semana siguiente, guardada, es la publicada', lunes(ent) === MARCA, lunes(ent));
-    ent.correr('navSemana(-1)');
-    ok('ASESOR · al volver con ◄ sigue la publicada, no una recalculada', lunes(ent) === MARCA, lunes(ent));
+    ok('ASESOR · sin flechas para cambiar de semana',
+       ent.el('btn-sem-ant').style.visibility === 'hidden' && ent.el('btn-sem-sig').style.visibility === 'hidden');
+    ent.correr('navSemana(1); navSemana(2);');
+    ok('ASESOR · llamar a navSemana no lo mueve de semana', ent.correr('_semana') === 39, ent.correr('_semana'));
+    ok('ASESOR · y sigue la publicada, no una recalculada', lunes(ent) === MARCA, lunes(ent));
+    /* Subgerente que entra con su número: ve al equipo, pero no edita aquí, así
+       que tampoco navega. */
+    const sub = arrancar(MARTES, { empno:'900002', puesto:'Subgerente' });
+    sub.correr('mostrarHorarioEquipo(' + JSON.stringify(datosCon(sub, [39, 40], {})) + ')');
+    sub.correr('navSemana(1)');
+    ok('SUBGERENTE CON NÚMERO · tampoco cambia de semana', sub.correr('_semana') === 39);
+  }
 
-    /* 2 · La 41 no está guardada: al asesor no se le pinta nada. */
-    ent.correr('navSemana(2)');
-    ok('ASESOR · semana futura sin publicar: aviso visible', visible(ent, 'sin-asignar'));
-    ok('ASESOR · semana futura sin publicar: sin tabla', !visible(ent, 'wrapper-tabla'));
-    ok('ASESOR · el aviso le dice que no se ha publicado',
+  /* 2 · Sábado después de las 5 p. m. le toca la semana siguiente. Si esa no
+        está guardada, no se le pinta nada: se le dice que no se ha publicado. */
+  {
+    const ent = arrancar('2026-09-26T23:05:00Z', { empno:'900003', puesto:'Asesor' });   // sáb 5:05 p. m.
+    ent.correr('mostrarHorarioEquipo(' + JSON.stringify(datosCon(ent, [39], { semana_40: VACIA })) + ')');
+    ok('SIN PUBLICAR · le toca la 40', ent.correr('_semana') === 40, ent.correr('_semana'));
+    ok('SIN PUBLICAR · aviso visible', visible(ent, 'sin-asignar'));
+    ok('SIN PUBLICAR · sin tabla', !visible(ent, 'wrapper-tabla'));
+    ok('SIN PUBLICAR · le dice que no se ha publicado',
        /todavía no se publica/.test(ent.el('sin-asignar-tit').textContent), ent.el('sin-asignar-tit').textContent);
-    ok('ASESOR · y no le habla de configurar excepciones',
+    ok('SIN PUBLICAR · y no le habla de configurar excepciones',
        !/Configura/.test(ent.el('sin-asignar-sub').innerHTML));
-    ent.correr('navSemana(-1)');
-    ok('ASESOR · al regresar a una publicada, la tabla vuelve', visible(ent, 'wrapper-tabla') && lunes(ent) === MARCA);
   }
 
   /* Los respaldos de antes del 4-ago-2026 traen la semana en `__publicadas`. */
   {
     const ent = arrancar(MARTES, { empno:'900003', puesto:'Asesor' });
     ent.correr('mostrarHorarioEquipo(' + JSON.stringify(datosCon(ent, [39], {}, true)) + ')');
-    ent.correr('navSemana(1); navSemana(-1);');
-    ok('RESPALDO VIEJO · `__publicadas` se sigue leyendo al navegar', lunes(ent) === MARCA, lunes(ent));
+    ok('RESPALDO VIEJO · `__publicadas` se sigue leyendo', lunes(ent) === MARCA, lunes(ent));
   }
 
   /* 3 · El gerente sí ve el borrador de la 41, y dice que es borrador. */
@@ -130,7 +141,9 @@ const VACIA = { vacaciones:{}, turno_especial:{}, descanso_override:{} };
     const ent = arrancar(MARTES, { puedeEditar:true });
     ent.correr('_cache = ' + JSON.stringify((() => { const d = datosCon(ent, [39, 40], { semana_41: VACIA });
       return { historial:{}, excepciones:d.excepciones, semanas_guardadas:d.semanas_guardadas }; })()) + '; renderSemana();');
+    ok('GERENTE · con flechas', ent.el('btn-sem-sig').style.visibility !== 'hidden');
     ent.correr('navSemana(2)');
+    ok('GERENTE · sí cambia de semana', ent.correr('_semana') === 41, ent.correr('_semana'));
     ok('GERENTE · la semana con configuración y sin guardar se ve', visible(ent, 'wrapper-tabla'));
     ok('GERENTE · rotulada como borrador que el equipo no ve',
        /Borrador/.test(ent.el('badge-semana').textContent) && /equipo aún no lo ve/.test(ent.el('badge-semana').textContent),
@@ -178,7 +191,7 @@ const VACIA = { vacaciones:{}, turno_especial:{}, descanso_override:{} };
     const ent = arrancar(MARTES, { empno:'900003', puesto:'Asesor' });
     datosServidor = datosCon(ent, [], {});           // al leer: nada guardado aún
     ent.correr('mostrarHorarioEquipo(' + JSON.stringify(datosServidor) + ')');
-    ok('ABIERTA · sin guardar, ve la calculada', lunes(ent) !== MARCA);
+    ok('ABIERTA · sin guardar, no se le pinta horario', visible(ent, 'sin-asignar') && !visible(ent, 'wrapper-tabla'));
     datosServidor = datosCon(ent, [39], {});         // el gerente guarda
     rpcs = 0;
     en('2026-09-22T16:01:30Z');
@@ -187,7 +200,7 @@ const VACIA = { vacaciones:{}, turno_especial:{}, descanso_override:{} };
     en('2026-09-22T16:02:00Z');
     await ent.correr('latidoEquipo_()');
     ok('ABIERTA · a los 2 min se vuelve a pedir', rpcs === 1, rpcs);
-    ok('ABIERTA · y ya enseña la que guardó el gerente', lunes(ent) === MARCA, lunes(ent));
+    ok('ABIERTA · y ya enseña la que guardó el gerente', lunes(ent) === MARCA && visible(ent, 'wrapper-tabla'), lunes(ent));
   }
 
   /* 6 · El gerente no se refresca solo: puede tener cambios sin guardar. */
