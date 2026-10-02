@@ -19,8 +19,9 @@
      traduce solo. Una abreviatura que no se conoce sale TAL CUAL (se ve menos
      bonita, pero no se inventa nada) y queda en `sinTraducir` para agregarla.
 
-   Códigos de color confirmados por Ángel el 22-sep-2026. Los que no se
-   confirmaron (AN, PK, GRSP, PL, AM, BG, BNA, NGC) se dejan como vienen.
+   Códigos de color confirmados por Ángel el 22-sep-2026 (AM = Amarillo, el
+   1-oct-2026). Los que no se confirmaron (AN, PK, MC, GRSP, PL, BG, BNA, NGC)
+   se dejan como vienen.
 
    Función pura, sin DOM: la prueban `pruebas/nombres_cliente.js` y se puede
    usar desde cualquier página.
@@ -33,7 +34,7 @@
     VD:'Verde', VERDE:'Verde', GR:'Gris', GRIS:'Gris', RS:'Rosa', ROSA:'Rosa',
     RJ:'Rojo', ROJO:'Rojo', NJ:'Naranja', DO:'Dorado', DORADO:'Dorado',
     MO:'Morado', PR:'Púrpura', PT:'Plata', CF:'Café', 'CAFÉ':'Café', CAFE:'Café',
-    BGE:'Beige', BEIGE:'Beige',
+    BGE:'Beige', BEIGE:'Beige', AM:'Amarillo', AMARILLO:'Amarillo',
   };
 
   // Palabra del catálogo → como se escribe para el cliente.
