@@ -5293,7 +5293,8 @@ y por REGLAS (no lista por SKU): lo que llega mañana se traduce solo.
 por `textoBusqueda`: original + traducido, sin acentos). Si `nombres.js` no
 llega, `nomDe` devuelve la descripción cruda: se ve como antes, no se rompe.
 - Lo desconocido sale TAL CUAL y queda en `sinTraducir`. Colores sin confirmar
-  (AN, PK, GRSP, PL, AM, BG, BNA, NGC) se dejan como vienen.
+  (AN, PK, MC, GRSP, PL, BG, BNA, NGC) se dejan como vienen. AM = Amarillo
+  (confirmado el 1-oct-2026, v294).
 - **El Excel del sistema trae la Í y la É rotas** (U+FFFD: «AUD�F», «CAF�»,
   hasta el encabezado «DESCRIPCI�N»). Llegan así a la base. `repararTexto`
   las arregla solo en palabras conocidas (`ROTAS`); un � en otra palabra se deja.
@@ -5318,7 +5319,7 @@ regla que se agregue en el tablero le llega sola. Renombrar o mover el archivo
 la deja con la descripción cruda (no se rompe, pero se nota). Reglas nuevas,
 vistas en las promos vigentes: AIR, AERO, RUN (GT RUN 2 → Runner), P-MAX → Pro
 Max, «+PEN» → con M-Pen, FREECLIP2S, 43.5MM, y **«XT ULT» → Ultimate** (antes
-salía «Mate XT Ultra», que no existe). Colores AM, AN, MC, PK siguen sin confirmar.
+salía «Mate XT Ultra», que no existe). Colores AN, MC, PK siguen sin confirmar.
 
 ## Captura con el estilo común *(22-sep-2026, v276 — rama `rediseno-captura`)*
 

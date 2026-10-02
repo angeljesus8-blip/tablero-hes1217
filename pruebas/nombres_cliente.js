@@ -31,7 +31,7 @@ if(!m){ console.log('nombres: no encontré CATALOGO en captura_series.html'); pr
 const descs = [...new Set(Object.values(JSON.parse(m[1])).map(x => x.d))];
 ok('el catálogo trae descripciones para probar', descs.length > 100, String(descs.length));
 
-const CODIGOS = ['NG','BN','AZ','VD','GR','RS','RJ','NJ','DO','MO','PR','PT','CF','BGE'];
+const CODIGOS = ['NG','BN','AZ','VD','GR','RS','RJ','NJ','DO','MO','PR','PT','CF','BGE','AM'];
 const ABREV = /\b(HW|HWEI|AUD[IÍ]F|F-BUDS|ULT|TECLD|TCL|FDA|AMLD|CI[579]|CU[579])\b/;
 const norm = s => s.toUpperCase().replace(/\s+/g, '');
 
@@ -91,6 +91,7 @@ const exactos = {
   'HUAWEI WATCH GT RUN 2 43.5MM NJ': 'Huawei Watch GT Runner 2 43.5 mm · Naranja',
   'HUAWEI WATCH 5 46MM TI AERO PT':  'Huawei Watch 5 46 mm Titanio Aero · Plata',
   'AUDÍF OPEN EAR HW FREECLIP2S AZ': 'Audífonos Huawei FreeClip 2S · Azul',
+  'HUAWEI WATCH GT7 46MM AMOLED AM': 'Huawei Watch GT7 46 mm · Amarillo',   // AM confirmado 1-oct-2026
 };
 for(const [d, esperado] of Object.entries(exactos))
   ok('«' + d + '» → «' + esperado + '»', nombreLinea(d) === esperado, nombreLinea(d));
