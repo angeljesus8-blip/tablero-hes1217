@@ -82,6 +82,15 @@ const exactos = {
   'HUAWEI WATCH WATCH KID RS':       'Huawei Watch Kids · Rosa',
   'MATEBOOK 14 CU7 16GB 1TB VERDE':  'MateBook 14 Core Ultra 7 · 16 GB + 1 TB · Verde',
   'HUAWEI WATCH 5 46MM TI 1.5" PT':  'Huawei Watch 5 46 mm Titanio · Plata',
+  // 1-oct-2026: abreviaturas de las promos vigentes que salían tal cual.
+  'HUAWEI MATE XT ULT 16GB 1TB RJ':  'Huawei Mate XT Ultimate · 16 GB + 1 TB · Rojo',
+  'HUAWEI PURA 80 ULT 16/512GB NG':  'Huawei Pura 80 Ultra · 16 GB + 512 GB · Negro',
+  'MATEPAD AIR 12" 8/256GB AZ +PEN': 'MatePad Air 12 · 8 GB + 256 GB · con M-Pen · Azul',
+  'MATEPAD AIR 12" 8/256GB RS+PEN':  'MatePad Air 12 · 8 GB + 256 GB · con M-Pen · Rosa',
+  'MATEPAD P-MAX 13.2" 12/512GB AZ': 'MatePad Pro Max 13.2 · 12 GB + 512 GB · Azul',
+  'HUAWEI WATCH GT RUN 2 43.5MM NJ': 'Huawei Watch GT Runner 2 43.5 mm · Naranja',
+  'HUAWEI WATCH 5 46MM TI AERO PT':  'Huawei Watch 5 46 mm Titanio Aero · Plata',
+  'AUDÍF OPEN EAR HW FREECLIP2S AZ': 'Audífonos Huawei FreeClip 2S · Azul',
 };
 for(const [d, esperado] of Object.entries(exactos))
   ok('«' + d + '» → «' + esperado + '»', nombreLinea(d) === esperado, nombreLinea(d));
