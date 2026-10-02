@@ -5311,6 +5311,15 @@ cazados. Probado también contra las 96 descripciones del inventario real
 **Ya no pendiente (v276):** Captura enseña el nombre traducido y Admin lista
 las abreviaturas sin traducir — ver la sección siguiente.
 
+**v293 (1-oct-2026): lo usa también Promos Huawei.** La pestaña «vs Tienda» de
+`huawei-promos` carga `nombres.js` DESDE AQUÍ
+(`angeljesus8-blip.github.io/tablero-hes1217/nombres.js`), no una copia: una
+regla que se agregue en el tablero le llega sola. Renombrar o mover el archivo
+la deja con la descripción cruda (no se rompe, pero se nota). Reglas nuevas,
+vistas en las promos vigentes: AIR, AERO, RUN (GT RUN 2 → Runner), P-MAX → Pro
+Max, «+PEN» → con M-Pen, FREECLIP2S, 43.5MM, y **«XT ULT» → Ultimate** (antes
+salía «Mate XT Ultra», que no existe). Colores AM, AN, MC, PK siguen sin confirmar.
+
 ## Captura con el estilo común *(22-sep-2026, v276 — rama `rediseno-captura`)*
 
 Fase 4 del rediseño visual, nivel «blinda». Cuatro cosas y una de Admin.

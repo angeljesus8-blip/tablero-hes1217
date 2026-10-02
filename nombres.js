@@ -46,6 +46,8 @@
     KID:'Kids', KIDS:'Kids', MIN:'Mini', MINI:'Mini', DESIGN:'Design', GOLF:'Golf',
     ROUTER:'Router', MESH:'Mesh', MOUSE:'Mouse', SMARTWATCH:'Smartwatch',
     SENSOR:'Sensor', TI:'Titanio', RUNNER:'Runner', GEN:'gen.', '3RA':'3ra',
+    // 1-oct-2026, vistas en las promos vigentes (Promos Huawei las usa también).
+    AIR:'Air', AERO:'Aero', RUN:'Runner', 'P-MAX':'Pro Max',
     // Siglas que SON el modelo: se quedan como están, pero conocidas.
     SE:'SE', GT:'GT', XT:'XT', X:'X', S:'S',
     CI5:'Core i5', CI7:'Core i7', CI9:'Core i9',
@@ -54,7 +56,7 @@
   // Lo que en el catálogo solo gasta caracteres y al cliente no le dice nada.
   const FUERA = new Set(['IN','OPEN','OVER','EAR','AMLD','AMOLED','AL','VID','TOG']);
   // «+ algo» al final: lo que trae la caja.
-  const EXTRAS = { TECLD:'con teclado', TCL:'con teclado', FDA:'con funda', EXT:'con extensor' };
+  const EXTRAS = { TECLD:'con teclado', TCL:'con teclado', FDA:'con funda', EXT:'con extensor', PEN:'con M-Pen' };
 
   const sinAcento = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
 
@@ -111,10 +113,13 @@
       if(FUERA.has(t)) continue;
       if(i > 0 && t === toks[i - 1]) continue;            // «WATCH WATCH KID»
       let m;
+      // «MATE XT ULT» es el Mate XT Ultimate Design, no un «Ultra».
+      if(t === 'ULT' && toks[i - 1] === 'XT'){ out.push('Ultimate'); continue; }
       if(PALABRAS[t]){ out.push(PALABRAS[t]); continue; }
       if((m = t.match(/^(\d+)GB=(\d+)(GB|TB)$/))){ ficha.push(`${m[1]} GB + ${m[2]} ${m[3]}`); continue; }
       if((m = t.match(/^(\d+)(GB|TB)$/))){ ficha.push(`${m[1]} ${m[2]}`); continue; }
-      if((m = t.match(/^(\d+)MM$/))){ out.push(`${m[1]} mm`); continue; }
+      if((m = t.match(/^(\d+(?:\.\d+)?)MM$/))){ out.push(`${m[1]} mm`); continue; }   // 46MM, 43.5MM
+      if((m = t.match(/^FREECLIP(\d\w*)$/))){ out.push(`FreeClip ${m[1]}`); continue; } // FREECLIP2S
       if((m = t.match(/^(\d+)MB$/))){ ficha.push(`${m[1]} Mbps`); continue; }
       if((m = t.match(/^(\d+)PZ$/))){ ficha.push(`${m[1]} piezas`); continue; }
       if((m = t.match(/^WI-FI(\d)$/))){ out.push(`Wi-Fi ${m[1]}`); continue; }
