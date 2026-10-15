@@ -149,6 +149,9 @@
   .field select.unset{ color:var(--tinta-3); }
   .field.serie input{ font-weight:700; font-size:17px; letter-spacing:.5px; color:var(--rojo); }
   .field.serie input::placeholder{ color:var(--borde); font-weight:400; letter-spacing:0; }
+  .fecha-aviso{ display:none; margin-top:6px; padding:8px 10px; border-radius:10px; font-size:13px;
+    background:var(--atencion-bg); color:var(--atencion); border:1.5px solid var(--atencion-borde); }
+  .fecha-aviso.show{ display:block; }
   .row2{ display:flex; gap:10px; }
   .row2 .field{ flex:1; }
 
@@ -781,6 +784,13 @@
       <input type="checkbox" id="exhChk" onchange="marcarExhibicion()">
       <span>Es la pieza de <b>exhibición</b> — se cobra al 50 %</span>
     </label>
+    <!-- Para subir una venta de días anteriores (15-oct-2026). Arranca en hoy y
+         vuelve a hoy después de cada venta. Ver `fechaDeLaVenta_`. -->
+    <div class="field">
+      <label>Fecha de la venta</label>
+      <input type="date" id="fechaVenta" onchange="marcarFechaVenta(true)">
+      <div class="fecha-aviso" id="fechaAviso"></div>
+    </div>
     <div class="recon-warn" id="reconWarn">⚠ Producto NO reconocido — pudo ser mala lectura. Revisa o re-toma la foto.</div>
     <button class="btn btn-add mt6" id="btnAdd">＋ Agregar al reporte</button>
   </div>
@@ -1488,6 +1498,60 @@ window.cerrarVentaGrupo = function(){
   if(n) toast('Venta cerrada · ' + n + (n===1?' artículo':' artículos'), 'ok');
 };
 
+/* ---------- Fecha de la venta (15-oct-2026) ----------
+   Para subir una venta de días anteriores. Antes la fecha salía SIEMPRE del
+   reloj, y la única salida era capturarla hoy y moverla con ✏️ (solo gerencia).
+
+   · `_fechaElegida` distingue «la eligió el asesor» de «quedó de ayer»: con la
+     app abierta de un día para otro, el campo seguiría diciendo ayer y la venta
+     se iría a ese día sin que nadie lo pidiera. Si no la tocó, manda el reloj.
+   · Vuelve a hoy tras cada venta, igual que el interruptor de exhibición: si se
+     quedara, todas las siguientes caerían en el día viejo.
+   · Hasta 30 días atrás y nunca el futuro. `venta_guardar` acepta cualquier
+     fecha, así que el tope vive aquí.
+   · El precio que autollena la app es el de HOY (promo/EOL de hoy). En una
+     venta de otro día se dice, para que se coteje contra el ticket. */
+const FECHA_DIAS_ATRAS = 30;
+let _fechaElegida = false;
+function _isoDe(d){
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function fechaVentaAHoy(){
+  const f = $('fechaVenta');
+  if(!f) return;
+  const min = new Date(); min.setDate(min.getDate() - FECHA_DIAS_ATRAS);
+  f.value = hoyISO(); f.max = hoyISO(); f.min = _isoDe(min);
+  _fechaElegida = false;
+  marcarFechaVenta(false);
+}
+window.marcarFechaVenta = function(porElAsesor){
+  if(porElAsesor) _fechaElegida = true;
+  const f = $('fechaVenta'), av = $('fechaAviso');
+  if(!f || !av) return;
+  const otroDia = _fechaElegida && f.value && f.value !== hoyISO();
+  if(otroDia){
+    const p = f.value.split('-');
+    av.innerHTML = 'Se guarda como venta del <b>' + Number(p[2]) + '/' + Number(p[1]) + '</b>.'
+      + '<br>El precio que puso la app es el de <b>hoy</b>: compruébalo contra el ticket.';
+  }
+  av.classList.toggle('show', !!otroDia);
+};
+/* La fecha con el formato de `toLocaleDateString('es-MX')` («5/10/2026»), que
+   es lo que espera `venta_guardar`. null = fecha inválida (ya se avisó). */
+function fechaDeLaVenta_(){
+  const f = $('fechaVenta');
+  if(!f || !_fechaElegida || !f.value || f.value === hoyISO()) return hoyStr();
+  const m = f.value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(!m){ toast('La fecha no es válida', 'warn'); return null; }
+  if(f.value > hoyISO()){ toast('No se puede capturar una venta del futuro', 'warn'); return null; }
+  if(f.min && f.value < f.min){
+    toast('Solo se pueden subir ventas de hasta ' + FECHA_DIAS_ATRAS + ' días atrás', 'warn');
+    return null;
+  }
+  return Number(m[3]) + '/' + Number(m[2]) + '/' + m[1];
+}
+fechaVentaAHoy();   // el <input> está arriba del script: ya existe
+
 // Datos capturados al hacer clic, antes del modal
 let _pendingVenta = null;
 
@@ -1499,6 +1563,8 @@ $('btnAdd').onclick = () => {
   const serie = $('serie').value.trim();
   if(!serie){ toast('Falta el número de serie', 'warn'); $('serie').focus(); return; }
   if(!currentVend){ toast('Selecciona tu nombre', 'warn'); showGate(); return; }
+  const fecha = fechaDeLaVenta_();
+  if(!fecha){ $('fechaVenta').focus(); return; }
   const d = new Date();
   // Captura todo ahora; el seguro se define en el modal
   _pendingVenta = {
@@ -1508,7 +1574,7 @@ $('btnAdd').onclick = () => {
     precio: $('precio').value.trim(),
     desc: $('desc').value.trim(),
     vend: currentVend,
-    fecha: d.toLocaleDateString('es-MX'),
+    fecha,
     hora: d.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}),
     // De dónde salió la pieza: decide de qué contador se descuenta.
     exhibicion: $('exhChk').checked === true,
@@ -1563,11 +1629,17 @@ window.finalizarVenta = function(conSeguro){
      cobraría la mitad en la venta siguiente, y eso no lo caza nadie hasta el
      corte — para entonces ya se fue el cliente. */
   refrescarExhibicion('');
+  // La fecha también vuelve a hoy (ver «Fecha de la venta»).
+  const deOtroDia = item.fecha !== hoyStr();
+  fechaVentaAHoy();
   /* De vuelta al paso 1: la venta se cerró y lo siguiente es otra foto. Sin
      esto el asesor se quedaba mirando una ficha en blanco, sin señal de que
      lo suyo ya se guardó. */
   irPaso(1);
-  toast(conSeguro ? '🛡️ Con Assurant · Agregada ✓' : 'Agregada ✓ · sin seguro', 'ok');
+  /* Una venta de otro día no sale en «Capturadas hoy»: el aviso dice dónde quedó,
+     o parecería que no se guardó. */
+  toast((conSeguro ? '🛡️ Con Assurant · Agregada ✓' : 'Agregada ✓ · sin seguro')
+    + (deOtroDia ? ' · en el ' + item.fecha.replace(/\/\d{4}$/, '') : ''), 'ok');
 };
 
 /* ==========================================================
