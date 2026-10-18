@@ -2800,13 +2800,16 @@ function pvCeaOcultar(){
   c.style.display = 'none'; c.innerHTML = '';
 }
 
-/* Pura, para poder probarla sin red. `enTienda` y `enPreventa` son Sets de SKU. */
+/* Pura, para poder probarla sin red. `enTienda` y `enPreventa` son Sets de SKU.
+   Los precios llegan como los imprime el CEA —"7,999.00", texto—: `Number()`
+   los volvía NaN y la preventa se habría abierto a $0. Se leen con `_ceaNum`,
+   el mismo de todo el lector. */
 function pvCeaCandidatos(rows, enTienda, enPreventa){
   return (rows || []).filter(function(r){
-    return r && r.sku && r.est !== 'EOL' && (r.pp || r.pr) && !enTienda.has(String(r.sku));
+    return r && r.sku && r.est !== 'EOL' && (_ceaNum(r.pp) || _ceaNum(r.pr)) && !enTienda.has(String(r.sku));
   }).map(function(r){
-    return { sku:String(r.sku), producto:r.desc || '', precio:Number(r.pp || r.pr) || 0,
-             regular:Number(r.pr) || 0, d2:r.d2 || '', abierta:enPreventa.has(String(r.sku)) };
+    return { sku:String(r.sku), producto:r.desc || '', precio:_ceaNum(r.pp) || _ceaNum(r.pr) || 0,
+             regular:_ceaNum(r.pr) || 0, d2:r.d2 || '', abierta:enPreventa.has(String(r.sku)) };
   });
 }
 
@@ -2878,7 +2881,10 @@ async function pvCeaAbrir(){
   }
   /* La vigencia del CEA es el día en que la preventa debería terminar: la
      base no la cierra por fecha, solo por inventario, así que se le recuerda. */
-  const fin = marcados.map(function(x){ return x.d2; }).filter(Boolean).sort().pop();
+  /* Un CEA de lanzamiento casi nunca trae la fecha en el renglón: la escribe
+     el gerente en «Vigente hasta», y ese campo manda igual que en la subida. */
+  const fin = document.getElementById('vigD2Promos').value ||
+              marcados.map(function(x){ return x.d2; }).filter(Boolean).sort().pop();
   marcados.forEach(function(x){ x.abierta = true; });
   showResult('resPvCea', true, '✅ <b>' + (r.filas || marcados.length) + '</b> ' +
     ((r.filas || marcados.length) === 1 ? 'equipo abierto' : 'equipos abiertos') +
