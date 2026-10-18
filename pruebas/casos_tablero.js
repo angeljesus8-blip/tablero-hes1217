@@ -536,8 +536,8 @@ aplicarTodo(Object.assign(_deSupabase(JSON.parse(JSON.stringify(TIENDA))), { __s
      'la pastilla "SIN CUPO" sale ' + (h.split('>SIN CUPO<').length - 1) +
      ' vez/veces: el de cupo null también se dio por agotado');
 
-  /* Que ya haya llegado no cierra la preventa: el cliente paga hoy y recoge
-     cuando pueda. Esta es la diferencia con `botonApartar`, que solo ofrece
+  /* Si el gerente la reabre con existencia (la base la cierra sola al llegar,
+     ver supabase_preventa_autocierre.sql), se sigue pudiendo apartar. Esta es la diferencia con `botonApartar`, que solo ofrece
      apartar lo que NO se puede vender hoy. */
   ok('con existencia se sigue pudiendo apartar en preventa',
      conBotonPv.indexOf('900001') >= 0 && estadoSku('900001').k === 'hay');
@@ -549,6 +549,27 @@ aplicarTodo(Object.assign(_deSupabase(JSON.parse(JSON.stringify(TIENDA))), { __s
   busqueda = '';
 
   ok('con preventa, el Inicio la ofrece', seccionTieneItems('preventa'));
+
+  /* El seguro se cotiza sobre el precio REGULAR (17-oct-2026). Desde la v248
+     la tarjeta lo calculaba sobre el de preventa: el Watch D3 a $7,999 (regular
+     $9,999) decía «Con Seguro 1 año: $9,608» y en caja eran $9,678. */
+  {
+    const promosG = PROMOS;
+    PROMOS = promosG.concat([{ sku:'900208', producto:'PRUEBA PREVENTA CON CEA', pr:9999, pp:7999,
+                               d1:'2026-01-01', d2:'2099-12-31' }]);
+    const conCea = cardPreventa({ sku:'900208', producto:'PRUEBA PREVENTA CON CEA', precio:7999,
+                                  cupo:null, quedan:null, apartadas:0 });
+    const bien = money(7999 + seguroPara(9999, '900208').p1);
+    const mal  = money(7999 + seguroPara(7999, '900208').p1);
+    ok('el seguro de la preventa se cotiza sobre el regular', conCea.indexOf(bien) >= 0, conCea);
+    ok('y no sobre el precio de preventa', bien === mal || conCea.indexOf(mal) < 0, mal);
+
+    const sinReg = cardPreventa({ sku:'900209', producto:'PRUEBA PREVENTA SIN REGULAR', precio:7999,
+                                  cupo:null, quedan:null, apartadas:0 });
+    ok('sin regular conocido no inventa un total con seguro', sinReg.indexOf('Con Seguro') < 0, sinReg);
+    ok('y dice qué falta', /falta el precio regular/.test(sinReg), sinReg);
+    PROMOS = promosG;
+  }
 
   /* Y el resto del año no existe: sin preventa abierta, ni tarjeta en Inicio ni
      sección a la que entrar. Vacío es el estado normal. */
