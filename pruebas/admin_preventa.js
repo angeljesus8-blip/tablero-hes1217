@@ -32,6 +32,9 @@ function supaFalso(o, llamadas){
       llamadas.push({ fn:nombre, args:args });
       if(o.falta) return { data:null, error:{ message:
         'Could not find the function public.' + nombre + ' in the schema cache (PGRST202)' } };
+      if(nombre === 'tablero_todo')
+        return o.inventario === 'error' ? { data:null, error:{ message:'sin red' } }
+                                        : { data:{ inventario: o.inventario || [] }, error:null };
       if(nombre === 'carga_catalogo'){
         if(o.listaTrasCarga) o.lista = o.listaTrasCarga;
         return { data:{ ok:true, skus:2, agotados:0 }, error:null };
@@ -202,11 +205,65 @@ function abrir(o){
        !/preventa/i.test(caida.ent.htmlDe('resCat')), caida.ent.htmlDe('resCat'));
   }
 
+  /* ── 9 · Abrir la preventa desde el CEA de promociones ─────────────────── */
+  {
+    /* El CEA 282 (Watch D3): mismo formato que uno de promos. Se ofrece
+       preventa SOLO para lo que nunca ha llegado; un agotado que trae promo
+       no es preventa, es traspaso. */
+    const FILAS = [
+      { sku:'900210', desc:'PRUEBA WATCH NUEVO NG', pr:9999, pp:7999, est:'Activo', d2:'2026-10-31' },
+      { sku:'900211', desc:'PRUEBA WATCH NUEVO BN', pr:9999, pp:7999, est:'Activo', d2:'2026-10-31' },
+      { sku:'900212', desc:'PRUEBA AGOTADO CON PROMO', pr:4999, pp:3999, est:'Activo', d2:'2026-10-31' },
+      { sku:'900213', desc:'PRUEBA EOL NUEVO', pr:999, pp:499, est:'EOL', d2:'2026-10-31' },
+      { sku:'900214', desc:'PRUEBA YA EN PREVENTA', pr:2999, pp:1999, est:'Activo', d2:'2026-10-31' }
+    ];
+    const INV = [{ sku:'900212', onhand:0 }];   // existió y se agotó
+    const PV  = [{ sku:'900214', producto:'PRUEBA YA EN PREVENTA', precio:1999, cupo:null,
+                   apartadas:0, quedan:null, activa:true }];
+    const { ent, llamadas } = abrir({ lista:PV, inventario:INV });
+    ent.correr('window.__F = ' + JSON.stringify(FILAS));
+    await ent.correr('pvCeaPreparar(window.__F)');
+    const h = ent.htmlDe('pvCea');
+    ok('ofrece los que nunca llegaron', /900210/.test(h) && /900211/.test(h), h);
+    ok('no ofrece el agotado que sí existió', !/900212/.test(h), h);
+    ok('ni el EOL', !/900213/.test(h), h);
+    ok('el que ya está en preventa se ve, sin casilla', /ya está en preventa/.test(h) &&
+       (h.match(/class="pvCeaChk"/g) || []).length === 2, h);
+    ok('nada viene marcado solo', !/checked/.test(h), h);
+
+    await ent.correr('pvCeaAbrir()');
+    ok('sin marcar nada no se abre nada', !llamadas.some(l => l.fn === 'carga_preventa'));
+
+    /* El DOM de prueba no arma elementos desde innerHTML: las casillas se
+       simulan con lo que pvCeaAbrir les lee (checked y data-i). */
+    ent.correr("window.__chk = [0,1].map(i => ({ checked: i === 0, disabled:false, " +
+               "getAttribute: () => String(i) })); " +
+               "document.querySelectorAll = s => s === '.pvCeaChk' ? window.__chk : [];");
+    await ent.correr('pvCeaAbrir()');
+    const alta = llamadas.filter(l => l.fn === 'carga_preventa')[0];
+    const f0 = alta && alta.args.p_filas;
+    ok('abre solo lo marcado', f0 && f0.length === 1 && f0[0].sku === '900210', JSON.stringify(f0));
+    ok('al precio de promo, con su nombre y sin cupo',
+       f0 && f0[0].precio === 7999 && f0[0].producto === 'PRUEBA WATCH NUEVO NG' && f0[0].cupo === null,
+       JSON.stringify(f0));
+    const res = ent.htmlDe('resPvCea');
+    ok('recuerda subir las promos y la fecha del CEA', /Sube también las promociones/.test(res) &&
+       /2026-10-31/.test(res), res);
+
+    /* Sin inventario no se sabe qué es nuevo: ofrecer «todo» abriría preventa
+       de la tienda entera. */
+    const caida = abrir({ lista:[], inventario:'error' });
+    caida.ent.correr('window.__F = ' + JSON.stringify(FILAS));
+    await caida.ent.correr('pvCeaPreparar(window.__F)');
+    ok('sin inventario no ofrece nada', caida.ent.el('pvCea').style.display === 'none',
+       caida.ent.htmlDe('pvCea'));
+  }
+
   if(fallos.length){
     console.log('admin · preventa: ' + fallos.length + ' fallo(s)');
     fallos.forEach(f => console.log('   · ' + f));
     process.exit(1);
   }
   console.log('admin · preventa: se abre y se termina desde la pantalla, y el cupo vacío '
-            + 'no se vuelve un cero, y el cierre por inventario se avisa (8 bloques)');
+            + 'no se vuelve un cero, el cierre por inventario se avisa, y el CEA ofrece preventa solo de lo que nunca llegó (9 bloques)');
 })();
