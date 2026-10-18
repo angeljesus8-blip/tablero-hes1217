@@ -2771,8 +2771,19 @@ function cardPreventa(p){
                   : sinTope ? (Number(p.apartadas)||0) + ' apartadas'
                             : `Quedan ${quedan} de ${p.cupo}`;
   const precio    = Number(p.precio) || 0;
-  const s         = precio ? seguroPara(precio, p.sku) : null;
-  const segLine   = s ? `<div class="pv-seg">🛡️ Con Seguro 1 año: <b>${money(precio + s.p1)}</b></div>` : '';
+  /* El seguro se cotiza sobre el precio REGULAR, como en las demás tarjetas
+     (`segSelector` recibe `x.pr || x.pp`). La v1 de esta tarjeta lo hacía con
+     `p.reg`; en la v248 la preventa pasó a la base, `preventa_cupo` solo guarda
+     el precio de preventa y el seguro se quedó calculando sobre ese: el Watch
+     D3 decía $9,608 cuando en caja son $9,678 (17-oct-2026).
+     El regular sale del mismo sitio que en el resto del tablero: la promo del
+     CEA, y si no, el catálogo. Si no está en ninguno NO se cotiza: un total
+     con seguro más bajo que el de caja es peor que no dar ninguno. */
+  const promo     = PROMOS.find(x => String(x.sku) === String(p.sku));
+  const regular   = Number(promo && promo.pr) || Number((invBySku[p.sku] || {}).precio) || 0;
+  const s         = (precio && regular) ? seguroPara(regular, p.sku) : null;
+  const segLine   = s ? `<div class="pv-seg">🛡️ Con Seguro 1 año: <b>${money(precio + s.p1)}</b></div>`
+                  : precio ? `<div class="pv-seg">🛡️ Seguro: falta el precio regular — sube el CEA en Admin → Promos</div>` : '';
   const est       = estadoSku(p.sku);
   /* Desde el 17-oct-2026 la llegada SÍ cierra la preventa, en la base
      (supabase_preventa_autocierre.sql): el On Hand que pasa de 0 a algo la
