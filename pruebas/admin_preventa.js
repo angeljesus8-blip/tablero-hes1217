@@ -210,12 +210,15 @@ function abrir(o){
     /* El CEA 282 (Watch D3): mismo formato que uno de promos. Se ofrece
        preventa SOLO para lo que nunca ha llegado; un agotado que trae promo
        no es preventa, es traspaso. */
+    /* Tal como las devuelve el lector con el PDF real del CEA 282: precios en
+       texto con coma y SIN fecha de fin en el renglón (la pone el campo). Con
+       números limpios esta prueba pasaba y el PDF de verdad daba $0. */
     const FILAS = [
-      { sku:'900210', desc:'PRUEBA WATCH NUEVO NG', pr:9999, pp:7999, est:'Activo', d2:'2026-10-31' },
-      { sku:'900211', desc:'PRUEBA WATCH NUEVO BN', pr:9999, pp:7999, est:'Activo', d2:'2026-10-31' },
-      { sku:'900212', desc:'PRUEBA AGOTADO CON PROMO', pr:4999, pp:3999, est:'Activo', d2:'2026-10-31' },
-      { sku:'900213', desc:'PRUEBA EOL NUEVO', pr:999, pp:499, est:'EOL', d2:'2026-10-31' },
-      { sku:'900214', desc:'PRUEBA YA EN PREVENTA', pr:2999, pp:1999, est:'Activo', d2:'2026-10-31' }
+      { sku:'900210', desc:'PRUEBA WATCH NUEVO NG', pr:'9,999.00', pp:'7,999.00', est:'Activo', d2:'' },
+      { sku:'900211', desc:'PRUEBA WATCH NUEVO BN', pr:'9,999.00', pp:'7,999.00', est:'Activo', d2:'' },
+      { sku:'900212', desc:'PRUEBA AGOTADO CON PROMO', pr:'4,999.00', pp:'3,999.00', est:'Activo', d2:'' },
+      { sku:'900213', desc:'PRUEBA EOL NUEVO', pr:'999.00', pp:'499.00', est:'EOL', d2:'' },
+      { sku:'900214', desc:'PRUEBA YA EN PREVENTA', pr:'2,999.00', pp:'1,999.00', est:'Activo', d2:'' }
     ];
     const INV = [{ sku:'900212', onhand:0 }];   // existió y se agotó
     const PV  = [{ sku:'900214', producto:'PRUEBA YA EN PREVENTA', precio:1999, cupo:null,
@@ -230,6 +233,8 @@ function abrir(o){
     ok('el que ya está en preventa se ve, sin casilla', /ya está en preventa/.test(h) &&
        (h.match(/class="pvCeaChk"/g) || []).length === 2, h);
     ok('nada viene marcado solo', !/checked/.test(h), h);
+    ok('el precio sale del texto del CEA, no en $0', /\$7,999 \(regular \$9,999\)/.test(h) && !/\$0/.test(h), h);
+    ent.el('vigD2Promos').value = '2026-10-31';
 
     await ent.correr('pvCeaAbrir()');
     ok('sin marcar nada no se abre nada', !llamadas.some(l => l.fn === 'carga_preventa'));
