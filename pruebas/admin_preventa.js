@@ -32,6 +32,10 @@ function supaFalso(o, llamadas){
       llamadas.push({ fn:nombre, args:args });
       if(o.falta) return { data:null, error:{ message:
         'Could not find the function public.' + nombre + ' in the schema cache (PGRST202)' } };
+      if(nombre === 'carga_catalogo'){
+        if(o.listaTrasCarga) o.lista = o.listaTrasCarga;
+        return { data:{ ok:true, skus:2, agotados:0 }, error:null };
+      }
       if(nombre === 'preventa_lista')
         return o.lista === 'error'
           ? { data:null, error:{ message:'sin red' } }
@@ -170,11 +174,39 @@ function abrir(o){
        /vuelve a apartarse/.test(ent.htmlDe('resPvFin')), ent.htmlDe('resPvFin'));
   }
 
+  /* ── 8 · Si el inventario cierra una preventa, Admin lo dice ─────────── */
+  {
+    /* La cierra el trigger de supabase_preventa_autocierre.sql; aquí solo se
+       cuida que el gerente se entere y de cuántas piezas llegaron. Un cierre
+       callado deja al equipo buscando la tarjeta de preventa que ya no está. */
+    const D3 = { sku:'900206', producto:'PRUEBA WATCH EN PREVENTA', precio:7999,
+                 cupo:null, apartadas:2, quedan:null, activa:true };
+    const OTRA = { sku:'900207', producto:'PRUEBA SIGUE EN PREVENTA', precio:999,
+                   cupo:null, apartadas:0, quedan:null, activa:true };
+    const { ent } = abrir({ lista:[D3, OTRA], listaTrasCarga:[Object.assign({}, D3, { activa:false }), OTRA] });
+    await ent.correr("parsedCat=[{sku:'900206',desc:'x',onhand:'3'},{sku:'900207',desc:'y',onhand:'0'}]; subirCatalogo()");
+    const h = ent.htmlDe('resCat');
+    ok('la carga sale bien', /Catálogo actualizado/.test(h), h);
+    ok('se avisa la preventa que se cerró', /PRUEBA WATCH EN PREVENTA — 3 en tienda/.test(h), h);
+    ok('y no la que sigue abierta', !/PRUEBA SIGUE EN PREVENTA/.test(h), h);
+
+    const sin = abrir({ lista:[OTRA] });
+    await sin.ent.correr("parsedCat=[{sku:'900207',desc:'y',onhand:'0'}]; subirCatalogo()");
+    ok('sin cierres no hay aviso de preventa', !/preventa/i.test(sin.ent.htmlDe('resCat')),
+       sin.ent.htmlDe('resCat'));
+
+    const caida = abrir({ lista:'error' });
+    await caida.ent.correr("parsedCat=[{sku:'900206',desc:'x',onhand:'3'}]; subirCatalogo()");
+    ok('si no se puede leer la preventa, la carga igual sale y no inventa un cierre',
+       /Catálogo actualizado/.test(caida.ent.htmlDe('resCat')) &&
+       !/preventa/i.test(caida.ent.htmlDe('resCat')), caida.ent.htmlDe('resCat'));
+  }
+
   if(fallos.length){
     console.log('admin · preventa: ' + fallos.length + ' fallo(s)');
     fallos.forEach(f => console.log('   · ' + f));
     process.exit(1);
   }
   console.log('admin · preventa: se abre y se termina desde la pantalla, y el cupo vacío '
-            + 'no se vuelve un cero (7 bloques)');
+            + 'no se vuelve un cero, y el cierre por inventario se avisa (8 bloques)');
 })();

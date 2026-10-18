@@ -2065,15 +2065,54 @@ async function subirCatalogo(){
        segunda llamada para "confirmar": existian porque el Apps Script contesta
        antes de terminar de escribir. Aqui la funcion no vuelve hasta que la
        transaccion cerro, y si algo falla, lanza. */
+    const pvAntes = await preventasAbiertas();
     const rc = await sbCargaAdmin('carga_catalogo', { p_filas: parsedCat, p_by: 'Admin 1217' });
+    const pvCerradas = await preventasCerradasPorCarga(pvAntes);
     // Como hacía actualizar_datos.html (retirada el 22-sep-2026), y por lo mismo: quien sube desde
     // aquí tiene que enterarse de que algo dejó de ofrecerse.
     const bajasCat = (rc.agotados === -1)
       ? ` ⚠️ No se marcó nada como agotado: el archivo parece un pedazo y no la tienda completa.`
       : (rc.agotados > 0 ? ` <b>${rc.agotados}</b> quedaron en cero por no venir ya en el archivo.` : '');
-    showResult('resCat',true,`✅ Catálogo actualizado: <b>${rc.skus}</b> productos. El tablero ya lo está viendo.` + bajasCat);
+    showResult('resCat',true,`✅ Catálogo actualizado: <b>${rc.skus}</b> productos. El tablero ya lo está viendo.` + bajasCat
+      + avisoPreventaCerrada(pvCerradas, parsedCat));
   }catch(err){ showResult('resCat',false,'Error al subir: '+err.message); }
   btn.textContent='Subir y actualizar'; btn.disabled=false;
+}
+
+/* ── La preventa que se cerró sola con esta carga (17-oct-2026) ─────────
+   La cierra el trigger `preventa_cierra_al_llegar` (supabase_preventa_autocierre.sql)
+   cuando el On Hand de un SKU en preventa pasa de cero a algo. La base no lo
+   cuenta en la respuesta de `carga_catalogo` —para eso habría que copiar esa
+   función a otro archivo—, así que se compara la lista antes y después.
+
+   Se dice siempre que pase: una preventa que desaparece del tablero sin que el
+   gerente se entere es el mismo silencio que el 5-sep, al revés.
+   Si la lectura falla (null), no se avisa de nada en vez de inventar un cierre. */
+async function preventasAbiertas(){
+  const { filas, error } = await sbLeerMotivo('preventa_lista');
+  if(error) return null;
+  return filas.filter(function(r){ return r.activa; });
+}
+async function preventasCerradasPorCarga(antes){
+  if(!antes || !antes.length) return [];
+  const despues = await preventasAbiertas();
+  if(!despues) return [];
+  const siguen = new Set(despues.map(function(r){ return String(r.sku); }));
+  return antes.filter(function(r){ return !siguen.has(String(r.sku)); });
+}
+function avisoPreventaCerrada(cerradas, filas){
+  if(!cerradas || !cerradas.length) return '';
+  const onhand = {};
+  (filas || []).forEach(function(f){ onhand[String(f.sku)] = parseInt(f.onhand, 10) || 0; });
+  return '<br><br>🎁 <b>Llegó inventario de ' + cerradas.length +
+    (cerradas.length === 1 ? ' equipo en preventa' : ' equipos en preventa') +
+    '</b> y se cerró su preventa. Desde ya se venden normal:<br>' +
+    cerradas.map(function(r){
+      const n = onhand[String(r.sku)];
+      return '· ' + escHtml(r.producto || r.sku) + (n ? ' — ' + n + ' en tienda' : '');
+    }).join('<br>') +
+    '<br>Los apartados que ya había no se tocan. Si necesitas seguir apartando, ' +
+    'ábrela otra vez en <b>🎁 Preventa</b>: no se vuelve a cerrar hasta que se agote y llegue de nuevo.';
 }
 
 /* ================================================================

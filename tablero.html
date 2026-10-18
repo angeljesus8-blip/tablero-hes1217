@@ -2774,9 +2774,11 @@ function cardPreventa(p){
   const s         = precio ? seguroPara(precio, p.sku) : null;
   const segLine   = s ? `<div class="pv-seg">🛡️ Con Seguro 1 año: <b>${money(precio + s.p1)}</b></div>` : '';
   const est       = estadoSku(p.sku);
-  /* Que ya haya llegado no cierra la preventa: el cliente sigue pagando hoy y
-     recogiendo después. Pero el asesor necesita saberlo para no decirle que
-     espere tres semanas por algo que está en la vitrina. */
+  /* Desde el 17-oct-2026 la llegada SÍ cierra la preventa, en la base
+     (supabase_preventa_autocierre.sql): el On Hand que pasa de 0 a algo la
+     termina. Esto solo se ve si el gerente la reabrió teniendo stock, y ahí el
+     asesor necesita saberlo para no decirle al cliente que espere tres semanas
+     por algo que está en la vitrina. */
   const llegó     = est.k === 'hay'
     ? `<div class="pv-seg" style="color:var(--ok)">✅ Ya llegó: ${est.n} en tienda</div>` : '';
   return `<div class="card t-preventa${agot?' pv-agot':''}">
