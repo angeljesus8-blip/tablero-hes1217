@@ -415,6 +415,9 @@ body { font-family:'Montserrat',sans-serif; background:var(--fondo); color:var(-
       <button class="btn-pri mt14" id="btnPromos" onclick="subirPromos()" disabled>Subir promociones</button>
       <div class="result" id="resPromos"></div>
     </div>
+    <!-- Lo que el CEA lanza y la tienda nunca ha tenido: se ofrece abrirlo como
+         preventa. Lo llena pvCeaPreparar() al leer el archivo. -->
+    <div class="card" id="pvCea" style="display:none"></div>
   </div>
 
   <!-- BUNDLES -->
@@ -2664,6 +2667,7 @@ document.getElementById('filePromos').onchange=async function(e){
   document.getElementById('fboxPromos').classList.remove('ok');
   document.getElementById('detPromos').style.display='none';
   document.getElementById('vigPromos').style.display='none';
+  pvCeaOcultar();
   vigPromosTocada=false;
   try{
     const isXlsx=/\.(xlsx|xls)$/i.test(f.name);
@@ -2713,6 +2717,7 @@ document.getElementById('filePromos').onchange=async function(e){
     document.getElementById('vigD2Promos').value=prim('d2');
     document.getElementById('vigPromos').style.display='block';
     _vigPromosPintar();
+    await pvCeaPreparar(parsedPromos.rows);
   }catch(err){
     parsedPromos=null; document.getElementById('btnPromos').disabled=true;
     document.getElementById('vigPromos').style.display='none';
@@ -2769,6 +2774,121 @@ async function subirPromos(){
   /* No se re-habilita a ciegas: si la vigencia quedó incompleta, el botón
      tiene que seguir apagado. */
   _vigPromosPintar();
+}
+
+/* ── Abrir la preventa desde el CEA (17-oct-2026) ───────────────────────
+   El CEA 282 (Watch D3) llegó con el mismo formato que uno de promociones:
+   SKU, regular, promo, ACTIVO y MSI. Lo único que lo hacía preventa era que
+   la tienda no tenía ninguno. Así que no hay lector aparte: se aprovecha lo
+   que ya leyó esta pestaña y se pregunta por los SKUs que NUNCA han llegado.
+
+   «Nunca han llegado» = no están en el inventario de la tienda. NO «tienen
+   cero»: un CEA de promos trae a menudo equipos que se agotaron, y abrirles
+   preventa sería prometer una entrega que nadie programó. Lo de cero piezas se
+   aparta como traspaso, como siempre.
+
+   Va con su propio botón y sin marcar nada solo: subir las promos sigue
+   siendo lo de antes, y abrir preventa es una decisión aparte. El precio es
+   el de promo (lo que se cobra), sin cupo —el CEA no lo trae—. El regular
+   sale de la promo misma, así que el seguro de la tarjeta necesita que
+   también se suban las promociones; se dice. */
+let _pvCea = [];
+
+function pvCeaOcultar(){
+  _pvCea = [];
+  const c = document.getElementById('pvCea');
+  c.style.display = 'none'; c.innerHTML = '';
+}
+
+/* Pura, para poder probarla sin red. `enTienda` y `enPreventa` son Sets de SKU. */
+function pvCeaCandidatos(rows, enTienda, enPreventa){
+  return (rows || []).filter(function(r){
+    return r && r.sku && r.est !== 'EOL' && (r.pp || r.pr) && !enTienda.has(String(r.sku));
+  }).map(function(r){
+    return { sku:String(r.sku), producto:r.desc || '', precio:Number(r.pp || r.pr) || 0,
+             regular:Number(r.pr) || 0, d2:r.d2 || '', abierta:enPreventa.has(String(r.sku)) };
+  });
+}
+
+async function pvCeaPreparar(rows){
+  pvCeaOcultar();
+  let inv = null, pv = null;
+  try{
+    if(sb || initSB()){
+      const r = await sb.rpc('tablero_todo', { p_store: String((_cfg && _cfg.store_id) || ''), p_token: GAS_TOKEN });
+      if(!r.error && r.data && Array.isArray(r.data.inventario)) inv = r.data.inventario;
+    }
+  }catch(e){ inv = null; }
+  /* Sin inventario no se puede saber qué es nuevo: todo saldría «sin llegar»
+     y se ofrecería abrir preventa de la tienda entera. Se calla. */
+  if(!inv) return;
+  const lp = await sbLeerMotivo('preventa_lista');
+  pv = lp.error ? [] : lp.filas.filter(function(x){ return x.activa; });
+
+  _pvCea = pvCeaCandidatos(rows,
+    new Set(inv.map(function(x){ return String(x.sku); })),
+    new Set(pv.map(function(x){ return String(x.sku); })));
+  if(!_pvCea.length) return;
+
+  const nuevas = _pvCea.filter(function(c){ return !c.abierta; });
+  const c = document.getElementById('pvCea');
+  c.innerHTML =
+    '<h2>🎁 ¿Abrir como preventa?</h2>' +
+    '<p class="note">' + (_pvCea.length === 1 ? 'Este equipo del CEA nunca ha llegado' :
+      'Estos ' + _pvCea.length + ' equipos del CEA nunca han llegado') + ' a la tienda. ' +
+    'En preventa el equipo los puede apartar desde hoy, al precio de promo y sin límite de piezas. ' +
+    'Se cierra sola cuando el inventario los traiga.</p>' +
+    _pvCea.map(function(x, i){
+      return '<label class="ap-toggle" style="display:flex;gap:8px;align-items:flex-start;margin-top:8px">' +
+        (x.abierta
+          ? '<input type="checkbox" disabled>'
+          : '<input type="checkbox" class="pvCeaChk" data-i="' + i + '">') +
+        '<span><b>' + escHtml(x.sku) + '</b> · ' + escHtml(x.producto || '(sin nombre)') + '<br>' +
+        '<span class="note">' + money(x.precio) + (x.regular && x.regular > x.precio ? ' (regular ' + money(x.regular) + ')' : '') +
+        (x.abierta ? ' · <b>ya está en preventa</b>' : '') + '</span></span></label>';
+    }).join('') +
+    (nuevas.length
+      ? '<button class="btn-pri mt14" id="btnPvCea" onclick="pvCeaAbrir()">Abrir los marcados en preventa</button>'
+      : '') +
+    '<div class="result" id="resPvCea"></div>';
+  c.style.display = '';
+}
+
+async function pvCeaAbrir(){
+  const marcados = Array.prototype.slice.call(document.querySelectorAll('.pvCeaChk'))
+    .filter(function(ch){ return ch.checked; })
+    .map(function(ch){ return _pvCea[Number(ch.getAttribute('data-i'))]; })
+    .filter(Boolean);
+  if(!marcados.length){
+    showResult('resPvCea', false, 'Marca los equipos que quieres abrir.');
+    return;
+  }
+  const btn = document.getElementById('btnPvCea');
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span>Abriendo…';
+  const r = await sbEscribir('carga_preventa', {
+    p_filas: marcados.map(function(x){
+      return { sku:x.sku, producto:x.producto, precio:x.precio, cupo:null };
+    }),
+    p_by: 'Admin · CEA'
+  });
+  btn.disabled = false; btn.textContent = 'Abrir los marcados en preventa';
+  if(!r.ok){
+    showResult('resPvCea', false, '⚠ NO se abrió: ' + escHtml(pvError(r.error)));
+    return;
+  }
+  /* La vigencia del CEA es el día en que la preventa debería terminar: la
+     base no la cierra por fecha, solo por inventario, así que se le recuerda. */
+  const fin = marcados.map(function(x){ return x.d2; }).filter(Boolean).sort().pop();
+  marcados.forEach(function(x){ x.abierta = true; });
+  showResult('resPvCea', true, '✅ <b>' + (r.filas || marcados.length) + '</b> ' +
+    ((r.filas || marcados.length) === 1 ? 'equipo abierto' : 'equipos abiertos') +
+    ' en preventa. Se ven al recargar el tablero.<br>' +
+    '· Sube también las promociones (botón de arriba): de ahí sale el precio regular para cotizar el seguro.' +
+    (fin ? '<br>· El CEA vence el <b>' + escHtml(fin) + '</b>: si para entonces no ha llegado, termínala en 🎁 Preventa.' : ''));
+  document.querySelectorAll('.pvCeaChk').forEach(function(ch){
+    const x = _pvCea[Number(ch.getAttribute('data-i'))];
+    if(x && x.abierta){ ch.checked = false; ch.disabled = true; }
+  });
 }
 
 /* Un cambio de PRECIO DE LISTA no es una promoción (26-sep-2026): va a
