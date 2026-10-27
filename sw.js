@@ -9,7 +9,7 @@ try {
 // ÚNICO lugar donde vive la versión de la app. Las páginas ya no la repiten:
 // registran './sw.js' con updateViaCache:'none' y el navegador detecta el
 // cambio al ver que este archivo es distinto. Subir el número aquí y ya.
-const VERSION = 'v303';
+const VERSION = 'v304';
 const CACHE = 'hes1217-' + VERSION;
 const ARCHIVOS = [
   './index.html',

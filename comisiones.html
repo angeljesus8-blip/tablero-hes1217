@@ -135,10 +135,9 @@ const _storeId = _storeConfig.store_id;
 document.getElementById('storeSub').textContent = 'HES ' + _storeId + ' · ' + (_storeConfig.nombre || 'Odemás');
 document.getElementById('footerTxt').textContent = 'Odemás · Grupo Gigante — uso interno HES ' + _storeId;
 
-/* ====== Datos: caché local de esta tienda -> nube (GAS) -> respaldo estático embebido ====== */
-const CLOUD_URL = _storeConfig.gas_url || '';
-// El Apps Script exige token desde el 1-ago-2026. Sin esto la peticion se
-// rechaza y la pagina se queda con el cache viejo SIN avisar.
+/* ====== Datos: caché local de esta tienda -> Supabase ====== */
+// Token de la tienda para Supabase (GAS_ por herencia: nació como la llave
+// del Apps Script, que ya no se usa). Sin él la petición se rechaza.
 const GAS_TOKEN = _storeConfig.gas_token || '';
 const COMISKEY = 'hes' + _storeId + '_comisiones';
 
@@ -489,41 +488,10 @@ async function refreshComisionesCloud(){
             + 'correo (supabase_comisiones_gerente_correo.sql).');
     return;
   }
-  if(!CLOUD_URL) return;
-  const cb = '_cbComis' + Date.now();
-  window[cb] = function(data){
-    delete window[cb];
-    const sc = document.getElementById('_comis_sc'); if(sc) sc.remove();
-    if(data && data.error){ avisoNube('La nube rechazó la consulta (' + data.error + '). Vuelve a entrar desde el menú.'); return; }
-    if(data && Array.isArray(data.empleados) && data.empleados.length){
-      /* El respaldo por Apps Script devolvía el equipo entero y no sabe filtrar:
-         lee una hoja. Desde el 6-sep-2026 ese modo está apagado en el GAS —la
-         hoja llevaba desde el 7-ago sin recibir y servía JULIO con cara de hoy—,
-         así que esta rama ya casi no se alcanza. El filtro se queda igual: es la
-         segunda puerta a lo mismo, y el día que alguien reactive ese modo no va
-         a acordarse de esto.
-
-         ⚠️ Y aquí filtra de más, a propósito: la hoja NO trae número de empleado,
-         así que a un asesor no le casa ninguna fila y se queda sin ver la suya.
-         Es lo correcto de los dos errores posibles — casar por nombre es lo que
-         descuadró las comisiones de agosto, por un apellido con una letra de
-         más. Antes de enseñar la de otro, mejor no enseñar ninguna. */
-      D = Object.assign({}, data, { empleados: soloLoMio_(data.empleados) });
-      localStorage.setItem(COMISKEY, JSON.stringify(D));
-      pintarPeriodos();
-      render();
-      return;
-    }
-    // Respuesta sin datos: antes se ignoraba en silencio y la pantalla se
-    // quedaba con el caché viejo, que parecía actualizado.
-    avisoNube('No llegaron datos nuevos. Lo que ves es lo último guardado en este teléfono.');
-  };
-  const sc = document.createElement('script');
-  sc.id = '_comis_sc';
-  sc.src = CLOUD_URL + (CLOUD_URL.includes('?')?'&':'?') + 'modo=comisiones&callback=' + cb
-         + (GAS_TOKEN ? '&t=' + encodeURIComponent(GAS_TOKEN) : '');
-  sc.onerror = function(){ delete window[cb]; sc.remove(); avisoNube('Sin conexión con la nube.'); };
-  document.head.appendChild(sc);
+  /* Aquí había un respaldo al `modo=comisiones` del Apps Script, apagado en
+     el GAS desde el 6-sep-2026. Se quitó el 27-oct-2026: nada en esta app
+     le pregunta al Apps Script. Sin Supabase, se dice en pantalla. */
+  avisoNube('No llegaron datos nuevos. Lo que ves es lo último guardado en este teléfono.');
 }
 refreshComisionesCloud();
 if('serviceWorker' in navigator){

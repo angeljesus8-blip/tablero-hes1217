@@ -505,6 +505,25 @@ def r_cargas_sb():
                                 'a Supabase: usa carga_catalogo / carga_promos / …'
                       % (archivo, tipo))
 
+    # 1-bis · Ninguna pantalla le habla al Apps Script, ni de respaldo
+    #     (27-oct-2026). Sus hojas dejaron de recibir datos en agosto, y como
+    #     «red» entregaban precios, promos y EOL de entonces: Captura llegó a
+    #     poder cobrar el 50 % con la lista de agosto. Las `.gs` son la copia del
+    #     script, no llamadas; `pruebas/` puede nombrarlo para fingir sesiones.
+    for nombre in sorted(os.listdir(BASE)):
+        if not nombre.endswith(('.html', '.js')): continue
+        s = leer(nombre)
+        if s is None: continue
+        for marca in ('script.google.com', 'CLOUD_URL', 'gasPedir(', 'gasJsonp(',
+                      'catJsonp(', 'gasEnviar(', "modo=todo'", "'modo=promos'",
+                      "'modo=eol_venta'", "'modo=catalogo'"):
+            if marca in s:
+                falla('cargas', '%s le vuelve a hablar al Apps Script (%s). Todo sale '
+                                'de Supabase: sus hojas no reciben datos desde agosto y '
+                                'cualquier respaldo ahí es un dato falso con cara de hoy.'
+                      % (nombre, marca))
+                break
+
     # 2 · El stock solo se acepta de Supabase. El `modo=todo` del Apps Script
     #     también trae inventario, pero de una hoja que ya no recibe el Excel:
     #     un stock viejo no es un dato incompleto, es uno falso.
@@ -1477,7 +1496,8 @@ def r_cadenas():
             aviso('cadena', 'index.html: esperaba dos "const cfg"; revisa a mano '
                             'que ambos caminos de login guarden lo mismo')
         for n, bloque in enumerate(cfgs, 1):
-            for campo in ('store_id', 'gas_url', 'gas_token', 'vendedores'):
+            # `gas_url` salió el 27-oct-2026: nadie le habla ya al Apps Script.
+            for campo in ('store_id', 'gas_token', 'vendedores'):
                 if campo not in bloque:
                     falla('cadena', 'index.html: el cfg #%d no guarda "%s"; quien '
                                     'entre por ahí se queda sin él (MAPA cadena 1)'
@@ -1813,7 +1833,8 @@ def r_pruebas():
                'venta_quien.js', 'pantalla_390.js', 'nombres_cliente.js',
                'captura_nombres_seguro.js', 'horario_hoy.js',
                'equipo_bajas.js', 'horario_publicado.js', 'recarga_en_su_sitio.js',
-               'cea_precio_lista.js', 'captura_fecha.js', 'eol_cache.js')
+               'cea_precio_lista.js', 'captura_fecha.js', 'eol_cache.js',
+               'captura_promos_vacias.js')
 
     # La lista de arriba es explícita a propósito —así falta un archivo y se
     # nota—, pero eso deja el hueco contrario: una prueba escrita y no añadida

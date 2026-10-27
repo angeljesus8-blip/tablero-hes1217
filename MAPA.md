@@ -262,11 +262,31 @@ antes de tiempo y se perdió un día de ventas sin que nadie se enterara.
 ```
 refrescarNube()
    1º cargarTodoSupabase()  → tablero_todo (Supabase)   ~0,25 s
-   2º cargarTodoNube()      → modo=todo   (Apps Script) ~7 s
-   3º las siete sueltas, espaciadas
-         ↓  las tres pasan por
+   2º las siete sueltas     → tablero_todo otra vez, cada una marca SU carga
+         ↓  pasan por
    aplicarTodo()  →  aplicarInventario · aplicarPromos · aplicarEol · …
 ```
+
+**Nada le habla al Apps Script** *(27-oct-2026, v304)*. Hasta aquí era la
+segunda red del tablero (`modo=todo` y las sueltas), de Captura (catálogo,
+promos, 50 % de EOL) y de Comisiones. Sus hojas no reciben datos desde agosto:
+si Supabase no contestaba —mala señal, o un token viejo, que el candado
+rechaza—, el teléfono tomaba precios, promos y EOL de agosto y los guardaba.
+Ahora, sin Supabase, el teléfono se queda con lo último que trajo Supabase y el
+banner lo dice. Admin perdió el campo «URL del GAS» y la sesión ya no guarda
+`gas_url` (la columna sigue en `tiendas`). Lo vigila `r_cargas_sb` en
+`verificar.py`. `GAS_TOKEN` se llama así por herencia: es la llave de la tienda
+para Supabase.
+
+En Captura, **una lista de promos vacía también es respuesta**, pero solo si el
+catálogo llega con el mismo token: el candado contesta vacío a un token malo, y
+creerle dejaría sin promos a cualquier teléfono con sesión vieja
+(`pruebas/captura_promos_vacias.js`). En el tablero no hace falta: con token
+malo `tablero_todo` contesta `ok:false` y no se aplica nada.
+
+`aplicarInventario` también toma el **nombre** de la nube y **quita del
+teléfono** el SKU que la nube ya no trae (solo le llega el inventario completo
+de Supabase). Cubierto en `pruebas/eol_cache.js`.
 
 **Supabase devuelve filas; las funciones `aplicar*` esperan los objetos
 indexados del GAS.** Entre medias está `_deSupabase`, que traduce. Si se toca

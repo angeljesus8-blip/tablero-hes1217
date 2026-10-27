@@ -838,11 +838,9 @@ let CATALOGO = {"6941487240579":{"s":"100074509","d":"HUAWEI WATCH WATCH KID RS"
 const KEY = 'hes1217_series_v1';
 let items = JSON.parse(localStorage.getItem(KEY) || '[]');
 
-/* ====== NUBE: concentrado de ventas de todos (Hoja de Google) ====== */
-// Pega aquí la URL del Web App de Google Apps Script (termina en /exec):
-const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbwbZFsiDqZrNitPKNLqr4r6xOFu3VKprtXJacScftIJmcQdAl_yytjxK8BymWvy8I1gjA/exec';
-// Token del Apps Script: llega del login (hes1217_store), nunca escrito aquí —
-// este archivo es público. gasQS() lo pega a cada llamada.
+// Token de la tienda para Supabase: llega del login (hes1217_store), nunca
+// escrito aquí — este archivo es público. Se llama GAS_TOKEN por herencia:
+// nació como la llave del Apps Script, que ya no se usa (27-oct-2026).
 const _cfgCS = (function(){ try{ return JSON.parse(localStorage.getItem('hes1217_store')||'null'); }catch(e){ return null; } })();
 
 /* Sesión de antes del candado (1-ago-2026): no trae gas_token. Hoy el Apps
@@ -867,7 +865,6 @@ const _cfgCS = (function(){ try{ return JSON.parse(localStorage.getItem('hes1217
 })();
 
 const GAS_TOKEN = (_cfgCS && _cfgCS.gas_token) || '';
-const gasQS = qs => CLOUD_URL + '?' + qs + (GAS_TOKEN ? '&t=' + encodeURIComponent(GAS_TOKEN) : '');
 /* ── FASE 6 · la hoja dejó de recibir ventas (17-ago-2026, v170) ──────────
    Aquí vivían `gasPost`, `gasEnviar` y la cola del Sheet. Se fueron enteros:
    la captura ya no le escribe NADA al Apps Script. Ni al guardar ni al borrar.
@@ -1109,28 +1106,13 @@ function esCatalogoValido(c){
 // Cache corrupto: se ignora y se arranca con el catalogo de la app. La nube
 // lo reemplaza en cuanto responde, asi que callar aqui es correcto.
 try{ const c = JSON.parse(localStorage.getItem(CATKEY) || 'null'); if(esCatalogoValido(c)) CATALOGO = Object.assign({}, CATALOGO, c); }catch(e){}
-let _jsonpN = 0;
-function catJsonp(url){
-  return new Promise((res, rej)=>{
-    // Nombre de callback ÚNICO: Date.now() solo NO basta — varias llamadas
-    // disparadas juntas (catálogo/promos/eol) caían en el mismo milisegundo,
-    // colisionaban el callback y CRUZABAN las respuestas (ej. EOL recibía la
-    // lista de promos y marcaba todo como "EOL −50%"). El contador lo evita.
-    const cb = 'cc_' + Date.now() + '_' + (++_jsonpN); const s = document.createElement('script');
-    const t = setTimeout(()=>{ cleanup(); rej(); }, 15000);
-    function cleanup(){ clearTimeout(t); delete window[cb]; s.remove(); }
-    window[cb] = d => { cleanup(); res(d); };
-    s.onerror = () => { cleanup(); rej(); };
-    s.src = url + (url.includes('?')?'&':'?') + 'callback=' + cb;
-    document.head.appendChild(s);
-  });
-}
-/* ---------- FASE 2 · Supabase primero, Apps Script de respaldo ----------
-   4-ago-2026. Aquí se es más conservador que en el tablero, porque esto decide
-   el precio que se le cobra a un cliente: lo que llega de Supabase pasa por las
-   MISMAS validaciones de siempre (esCatalogoValido, esPromosValido…) y si no
-   las pasa, se ignora y se pide al Apps Script como toda la vida. Ante la duda,
-   el camino viejo. */
+/* ---------- Supabase, y nada más (27-oct-2026) ----------
+   Hasta aquí el Apps Script era el respaldo «ante la duda, el camino viejo».
+   Pero sus hojas dejaron de recibir datos en agosto: si Supabase no
+   contestaba, Captura llenaba precios de agosto y cobraba el 50 % de EOL con
+   la lista de agosto. Lo que llega de Supabase pasa por las MISMAS
+   validaciones de siempre (esCatalogoValido, esPromosValido…); si no las
+   pasa o no llega, se queda lo último que trajo Supabase a este teléfono. */
 const SB_URL_CS = 'https://rjdrljtujbwooejrpyqv.supabase.co';
 const SB_KEY_CS = 'sb_publishable_mELjDmCaFpNOxcwPi5MB2A_qSZ5ZA2z';
 const SB_STORE  = (_cfgCS && _cfgCS.store_id) || '';
@@ -1202,14 +1184,9 @@ async function refreshCatalogo(){
       return;
     }
   }
-  if(!CLOUD_URL) return;
-  catJsonp(gasQS('modo=catalogo')).then(c=>{
-    if(esCatalogoValido(c)){
-      CATALOGO = Object.assign({}, CATALOGO, c);   // la nube manda; el de la app rellena huecos
-      localStorage.setItem(CATKEY, JSON.stringify(c));
-      reindexarPorSku();                           // el índice por SKU también
-    }
-  }).catch(()=>{});
+  /* Si Supabase no contestó, se queda el catálogo que ya está en el teléfono
+     (CATKEY, cargado más arriba) más el que trae la app. Antes aquí se pedía
+     `modo=catalogo` al Apps Script, que servía precios de agosto. */
 }
 
 /* Promociones (subidas en "Actualizar datos"); por SKU, con vigencia */
@@ -1225,7 +1202,16 @@ try{ const p = JSON.parse(localStorage.getItem(PROMOKEY) || 'null'); if(esPromos
    el precio que se cobra. */
 async function refreshPromos(){
   const filas = await sbRpcCS('promos_vigentes');
-  if(filas && filas.length){
+  /* Una lista VACÍA también es respuesta (27-oct-2026): «hoy no hay promos».
+     Antes se exigía al menos una, y con cero —Admin · Limpiar todos, o el
+     fin de todas— el teléfono seguía cobrando las promos guardadas hasta su
+     fecha de fin.
+     Pero con un token que no vale, el candado TAMBIÉN contesta vacío. Así que
+     un cero solo se cree si el catálogo —que nunca está vacío— sí llega con
+     el mismo token; si no, se queda lo guardado. */
+  const vacioCreible = async () =>
+    { const c = await sbRpcCS('catalogo_completo'); return !!(c && c.length); };
+  if(Array.isArray(filas) && (filas.length || await vacioCreible())){
     const p = {};
     filas.forEach(function(x){
       p[x.sku] = { d:x.producto||'', pr:x.precio_reg, pp:x.precio_pro,
@@ -1233,10 +1219,9 @@ async function refreshPromos(){
     });
     if(esPromosValido(p)){ PROMOS = p; localStorage.setItem(PROMOKEY, JSON.stringify(p)); return; }
   }
-  if(!CLOUD_URL) return;
-  catJsonp(gasQS('modo=promos')).then(p=>{
-    if(esPromosValido(p)){ PROMOS = p; localStorage.setItem(PROMOKEY, JSON.stringify(p)); }
-  }).catch(()=>{});
+  /* Sin respuesta se usan las promos guardadas en el teléfono (PROMOKEY).
+     `promoActiva` exige fecha de fin y refiltra por fecha local en cada uso.
+     Antes aquí se pedía `modo=promos` al Apps Script: promos de agosto. */
 }
 // Fecha LOCAL del día. Con toISOString() (UTC) esto se corría un día completo
 // a partir de las 6 pm en México: el último día de una promo se dejaba de
@@ -1302,14 +1287,10 @@ async function refreshEolVenta(){
        la segunda entera — el fallo de `esCatalogoValido` del 2-ago, otra vez. */
     if(Array.isArray(filas)){ EOL_VENTA = auto; EOL_EXHIB = manual; return; }
   }
-  if(!CLOUD_URL) return;
-  /* El respaldo del Apps Script solo sabe de los automáticos: su `modo=eol_venta`
-     es anterior a esta distinción. Se queda como red para el 50% de siempre; el
-     interruptor de exhibición no aparecerá si Supabase no contestó, que es
-     preferible a ofrecerlo con un precio que nadie ha confirmado. */
-  catJsonp(gasQS('modo=eol_venta')).then(e=>{
-    if(esObjValido(e)){ EOL_VENTA = e; }   // solo de la nube en vivo, sin persistir
-  }).catch(()=>{});
+  /* Sin respuesta de Supabase NO hay precio al 50 % y el interruptor no
+     aparece. Antes caía al `modo=eol_venta` del Apps Script, con la lista de
+     EOL de agosto: cobraba la mitad a lo que ya no era EOL. No ofrecer el
+     50 % es mejor que ofrecerlo con un precio que nadie confirmó. */
 }
 
 const $ = id => document.getElementById(id);
