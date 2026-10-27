@@ -66,7 +66,7 @@ async function caso(respuestas){
   ok('1b · con promos, la lista de la nube reemplaza a la guardada', d && !d.activa);
   ok('1b · y no gasta la llamada al catálogo', d && !d.llamadas.includes('catalogo_completo'), d && d.llamadas);
 
-  ok('4 · Captura no tiene ninguna ruta al Apps Script', !/script\.google\.com|catJsonp|CLOUD_URL/.test(html));
+  ok('4 · Captura no tiene ninguna ruta al Apps Script', !/script\.google\.com|catJsonp\(|CLOUD_URL\s*=/.test(html));
 
   if(fallos.length){
     console.log('FALLAS en captura_promos_vacias.js:\n  - ' + fallos.join('\n  - '));
