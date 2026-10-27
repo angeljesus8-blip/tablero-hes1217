@@ -274,6 +274,14 @@ una de las dos formas hay que tocar el traductor, y **volver a comparar contra
 `modo=todo`** — es lo que se hizo antes de escribirlo: 215 SKUs sin diferencia
 en onhand, vendido, exhibición ni exh_vendida.
 
+**`aplicarEol` REEMPLAZA la lista, no la mezcla** *(26-oct-2026, v302)*. Solo
+agregaba lo de la nube encima del cache `hes1217_inv_cache`: el MateBook D16,
+quitado de `eol` al reactivarse (CEA 283), seguía EOL en todos los teléfonos y
+`guardarInvCache` lo volvía a guardar en cada carga; la compu sin cache lo veía
+bien. Por eso `_deSupabase` deja `eol` en `undefined` si la respuesta no trae el
+campo: un `[]` inventado borraría los remates buenos. Lo cubre
+`pruebas/eol_cache.js`.
+
 **Las tres rutas comparten `aplicarTodo` a propósito.** Si alguien duplica ese
 código "para el caso de Supabase", una de las ramas se quedará atrás y el
 tablero mostrará cosas distintas según qué nube contestó — y eso no da error.

@@ -3293,24 +3293,19 @@ function aplicarInventario(data){
   })(data);
 }
 
+/* La lista de la nube REEMPLAZA a la del cache (26-oct-2026). Antes solo
+   agregaba: un SKU que salia de EOL —el MateBook D16, reactivado por el CEA
+   283— se quedaba en el cache de cada telefono que alguna vez lo vio, y
+   `guardarInvCache` lo volvia a guardar en cada carga. La compu sin cache lo
+   veia bien; ningun telefono. La nube es la que sabe que es EOL hoy. */
 function aplicarEol(data){
-  const skusLocales = new Set((D.eol||[]).map(function(e){ return e.sku; }));
-  data.forEach(function(e){
-    if(skusLocales.has(e.sku)){
-      /* Ya lo teniamos (cache). La pausa se refresca igual: es lo unico de esta
-         fila que cambia sin que cambie el SKU, y un cache de ayer diciendo que
-         no esta pausado volveria a ofrecerlo al 50%. */
-      const loc = (D.eol||[]).find(function(x){ return x.sku === e.sku; });
-      if(loc) loc.pausado = e.pausado === true;
-      if(e.pausado === true) eolPausadoSet.add(e.sku);
-      else                   eolPausadoSet.delete(e.sku);
-      return;
-    }
-    // SKU subido via admin (ADENDUM PDF) que no estaba en datos.js
-    (D.eol = D.eol||[]).push({ sku: e.sku, precio: parseFloat(e.precio)||0,
-                               pausado: e.pausado === true });
+  D.eol = data.map(function(e){
+    return { sku: e.sku, precio: parseFloat(e.precio)||0, pausado: e.pausado === true };
+  });
+  eolSkuSet.clear(); eolPausadoSet.clear();
+  D.eol.forEach(function(e){
     eolSkuSet.add(e.sku);
-    if(e.pausado === true) eolPausadoSet.add(e.sku);
+    if(e.pausado) eolPausadoSet.add(e.sku);
   });
 }
 
@@ -3633,7 +3628,9 @@ function _deSupabase(d){
   return {
     inventario: inv,
     promos: pro,
-    eol: (d.eol||[]).map(function(e){
+    /* Sin campo `eol` no es «cero EOL»: `aplicarEol` reemplaza la lista, y un
+       arreglo vacio inventado borraria los remates buenos del telefono. */
+    eol: !Array.isArray(d.eol) ? undefined : d.eol.map(function(e){
       return { sku:e.sku, precio: e.precio!=null ? e.precio : e.precio_efectivo,
                // detenido por comercial: sigue siendo EOL, pero no se remata
                pausado: e.pausado === true }; }),
