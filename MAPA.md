@@ -2330,6 +2330,23 @@ admin.html; ocho cebos) y, al escribirlo, 28 comprobaciones del SQL contra
 Postgres real (PGlite) con el upsert idéntico al de `carga_catalogo`; ocho
 cebos.
 
+**Un EOL que regresa** *(26-oct-2026, v300)*. El **CEA HUAWEI 283 ACTIVACIÓN DE
+MATEBOOK D16** reactiva el 100279926 y sube su regular de $14,999 a $22,999
+desde el 15-oct. Dos fallas a la vez:
+
+- Su encabezado es «PRECIO REGULAR» y «NUEVO PRECIO REGULAR»: la columna vieja
+  no dice «anterior», y el «NUEVO PRECIO» de arriba viene partido en dos
+  renglones, así que tampoco lo encontraba la frase del título. Se leía como
+  **promo** de $22,999 a $14,999. Ahora, sin columna de promo, un regular que
+  no dice «nuevo» es el anterior.
+- El cambio de lista no tocaba `eol`. El SKU seguía EOL con `eol.precio` =
+  $14,999, y `eol_precio_venta` usa ese precio antes que el del catálogo: la
+  pieza de piso salía a $7,499.50 y sin seguro. Ahora, si el renglón **dice**
+  ACTIVO, `subirCambioLista` lo quita de EOL con `eol_eliminar`, y solo si el
+  precio sí se guardó. Sin columna de estatus (el 273) no se toca ningún EOL.
+
+Muestra real en `pruebas/cea/cea283_items.json`.
+
 ### Un CEA de lanzamiento no dice "Vigencia:", y se perdía entero *(17-sep-2026, v244)*
 
 El **CEA HUAWEI 269 LANZAMIENTO WATCH GT 7 Y GT 7 PRO** (10-sep) se cargó por
