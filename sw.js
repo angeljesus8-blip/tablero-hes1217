@@ -1,8 +1,15 @@
-importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
+/* OneSignal NO puede tumbar la app (26-oct-2026). Si `importScripts` falla
+   —un bloqueador de anuncios, el «DNS privado» de Android, el wifi de la
+   plaza— lanza, el service worker entero «no evalúa» y el navegador descarta
+   la versión nueva: ese teléfono se queda para siempre con la vieja y nada
+   avisa. Pasó con la v300. Sin OneSignal solo faltan las notificaciones. */
+try {
+  importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
+} catch (e) {}
 // ÚNICO lugar donde vive la versión de la app. Las páginas ya no la repiten:
 // registran './sw.js' con updateViaCache:'none' y el navegador detecta el
 // cambio al ver que este archivo es distinto. Subir el número aquí y ya.
-const VERSION = 'v300';
+const VERSION = 'v301';
 const CACHE = 'hes1217-' + VERSION;
 const ARCHIVOS = [
   './index.html',
