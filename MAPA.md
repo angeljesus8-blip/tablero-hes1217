@@ -282,6 +282,14 @@ bien. Por eso `_deSupabase` deja `eol` en `undefined` si la respuesta no trae el
 campo: un `[]` inventado borraría los remates buenos. Lo cubre
 `pruebas/eol_cache.js`.
 
+**Y el precio de la nube manda sobre el del cache** *(26-oct-2026, v303)*.
+`aplicarInventario` solo ponía `precio` si el item no traía uno, y el item del
+cache siempre trae: la D16 siguió en $14,999 en todos los teléfonos con la nube
+diciendo $22,999. Cualquier cambio de precio regular (CEA 273, 283…) se quedaba
+atorado así. Un precio vacío o en cero no borra el que hay. Mismo archivo de
+prueba. **Regla:** todo lo que llega de la nube y se mezcla con el cache tiene
+que REEMPLAZAR, no rellenar huecos.
+
 **Las tres rutas comparten `aplicarTodo` a propósito.** Si alguien duplica ese
 código "para el caso de Supabase", una de las ramas se quedará atrás y el
 tablero mostrará cosas distintas según qué nube contestó — y eso no da error.

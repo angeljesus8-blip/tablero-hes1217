@@ -3255,7 +3255,12 @@ function aplicarInventario(data){
       const cl = data[item.sku];
       if(cl && typeof cl.o === 'number'){
         Object.assign(item, rawFields(cl));
-        if(cl.p && !item.precio) item.precio = parseFloat(String(cl.p).replace(/[^0-9.]/g,''))||0;
+        /* El precio de la nube MANDA (26-oct-2026). Solo se ponía si el item no
+           traía uno, y el item del cache siempre trae: el MateBook D16 subió a
+           $22,999 (CEA 283) y todos los teléfonos siguieron en $14,999. Un
+           precio vacío o en cero no borra el que hay. */
+        const pn = cl.p ? parseFloat(String(cl.p).replace(/[^0-9.]/g,''))||0 : 0;
+        if(pn > 0) item.precio = pn;
       }
     });
     // Agrega al inventario local los SKUs que el GAS conoce (Catalogo o Catalogo_ref)

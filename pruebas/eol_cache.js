@@ -71,6 +71,14 @@ ok('PRECIO · el de la nube', correr('(D.eol.find(e => e.sku === "900004")||{}).
 correr('aplicarEol([{ sku:"900004", precio:2500, pausado:false }]);');
 ok('PAUSA · y lo suelta', !correr('eolPausadoSet.has("900004")'));
 
+// 3b · El precio de la nube manda sobre el del cache (el D16 seguía en $14,999)
+correr('D.inventario.find(x => x.sku === "100279926").precio = 14999;');
+correr('aplicarInventario({ "100279926": { d:"MATEBOOK D16 CI5 16GB 512GB GR", o:5, v:0, e:0, ev:0, p:22999 } });');
+ok('PRECIO · el D16 toma el de la nube', correr('D.inventario.find(x => x.sku === "100279926").precio') === 22999,
+   correr('D.inventario.find(x => x.sku === "100279926").precio'));
+correr('aplicarInventario({ "100279926": { d:"MATEBOOK D16 CI5 16GB 512GB GR", o:5, v:0, e:0, ev:0, p:null } });');
+ok('PRECIO · uno vacío no borra el bueno', correr('D.inventario.find(x => x.sku === "100279926").precio') === 22999);
+
 // 4 · Sin campo eol no es «cero EOL»
 const sinEol = correr('typeof _deSupabase === "function" ? _deSupabase({ inventario:[], promos:[] }) : null');
 if(sinEol){
@@ -83,4 +91,4 @@ if(fallos.length){
   console.log('FALLAS en eol_cache.js:\n  - ' + fallos.join('\n  - '));
   process.exit(1);
 }
-console.log('eol cache: un SKU que sale de EOL en la nube sale también del teléfono, y una respuesta sin eol no borra los buenos');
+console.log('eol cache: lo que sale de EOL y el precio nuevo de la nube llegan al teléfono, y una respuesta incompleta no borra lo bueno');
