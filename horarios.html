@@ -291,6 +291,32 @@ body.solo-mi-horario .leyenda { display: none; }
 .vac-dia-pill { display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; border-radius:4px; font-size:10px; font-weight:700; cursor:pointer; background:var(--linea); color:var(--tinta-3); border:1.5px solid var(--linea); transition:.12s; user-select:none; }
 .vac-dia-pill input { display:none; }
 .vac-dia-pill.activo { background:var(--rojo); color:#fff; border-color:var(--rojo); }
+.desc-extra-lbl  { font-size:9px; color:var(--tinta-2); margin-top:6px; }
+.desc-extra-nota { font-size:9px; color:var(--atencion); font-weight:700; margin-top:2px; }
+/* Cambio de un día: celda tocable, marca ✎ y la ventanita */
+td.editable, .mv-turno.editable { cursor:pointer; }
+td.editable:hover { outline:2px solid var(--azul); outline-offset:-2px; }
+.marca-cambio { color:var(--azul); font-weight:800; }
+#pop-dia { position:fixed; inset:0; z-index:9999; display:flex; align-items:center; justify-content:center; padding:16px; }
+#pop-dia .pop-fondo { position:absolute; inset:0; background:rgba(26,26,26,.35); }
+#pop-dia .pop-caja { position:relative; background:var(--superficie); color:var(--tinta); border-radius:var(--r-md); box-shadow:var(--sombra-alta); width:100%; max-width:420px; max-height:90vh; overflow:auto; padding:14px 16px 16px; font-family:'Montserrat',sans-serif; }
+#pop-dia .pop-tit { font-weight:800; font-size:var(--t-lg); display:flex; justify-content:space-between; align-items:center; gap:8px; }
+#pop-dia .pop-x { border:0; background:none; font-size:18px; cursor:pointer; color:var(--tinta-2); min-width:36px; min-height:36px; }
+#pop-dia .pop-hoy { font-size:var(--t-sm); color:var(--tinta-2); margin:2px 0 8px; }
+#pop-dia .pop-sec { font-size:var(--t-xs); font-weight:700; color:var(--tinta-3); text-transform:uppercase; letter-spacing:.04em; margin:10px 0 4px; }
+#pop-dia .pop-ops { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+#pop-dia .pop-op { border:1.5px solid var(--linea); background:var(--superficie); color:var(--tinta); border-radius:var(--r-sm); padding:9px 10px; font:600 var(--t-sm) 'Montserrat',sans-serif; cursor:pointer; min-height:40px; text-align:left; }
+#pop-dia .pop-op:hover { border-color:var(--azul); }
+#pop-dia .pop-op.actual { border-color:var(--naranja); background:var(--atencion-bg); }
+#pop-dia .pop-op.ancho { flex:1 1 100%; }
+#pop-dia .pop-op.volver { color:var(--azul); border-color:var(--azul); }
+#pop-dia .pop-nota { font-size:var(--t-xs); color:var(--tinta-3); margin-top:12px; }
+#pop-dia .pop-aviso { background:var(--alerta-bg); color:var(--alerta); border-radius:var(--r-sm); padding:10px; font-size:var(--t-sm); font-weight:600; margin:8px 0; }
+.desc-extra-ayuda { color:var(--tinta-3); font-size:8px; }
+.desc-extra-grid { display:flex; gap:2px; margin-top:2px; }
+.desc-extra-pill { padding:0; font-family:inherit; }
+.desc-extra-pill.activo { background:var(--atencion); color:#fff; border-color:var(--atencion); }
+.desc-extra-pill.fijo { opacity:.35; cursor:not-allowed; text-decoration:line-through; }
 .login-tabs { display: flex; gap: 6px; margin-bottom: 16px; }
 .ltab { flex: 1; padding: 8px; border: 1.5px solid var(--linea); border-radius: 6px; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; background: #fff; color: var(--tinta-2); transition: all .15s; }
 .ltab.activo { background: var(--rojo); color: #fff; border-color: var(--rojo); }
@@ -1292,6 +1318,14 @@ function renderFormProxima() {
     if (Array.isArray(v)) return v.includes(pk) ? [0,1,2,3,4,5,6] : [];
     return Array.isArray(v[pk]) ? v[pk] : [];
   };
+  /* 2º descanso: lo que ya se guardó o, si no, lo que el motor propone solo.
+     `auto` = hay vacaciones vecinas que lo justifican, aunque el día se quite. */
+  let extraEf = [], extraAuto = {};
+  try {
+    extraEf = calcDescansos_(semTarget, _datosAdmin.excepciones, true)._descExtra;
+    const base = calcDescansos_(semTarget, _datosAdmin.excepciones, false);
+    extraAuto = descansoExtraAuto_(semTarget, _datosAdmin.excepciones, base);
+  } catch (e) { console.warn('2º descanso:', e); }
   const rows = personas.map(p => {
     const esAs   = eq.asesores.some(a => a.key === p.key);
     const vacDias = getVacDias(p.key);
@@ -1325,7 +1359,20 @@ function renderFormProxima() {
           ${[0,1,2,3,4,5,6].map(i=>`<label class="vac-dia-pill${vacDias.includes(i)?' activo':''}"><input type="checkbox" class="chk-vac-dia" data-persona="${p.key}" data-dia="${i}" ${vacDias.includes(i)?'checked':''} onchange="this.closest('label').classList.toggle('activo',this.checked)">${DIAS_NOMBRES[i].charAt(0)}</label>`).join('')}
         </div>
       </td>
-      <td><select class="eq-input eq-short chk-desc" data-persona="${p.key}">${dOpts(descV)}</select></td>
+      <td><select class="eq-input eq-short chk-desc" data-persona="${p.key}">${dOpts(descV)}</select>${esAs ? '' : (() => {
+        const ef  = extraEf.find(x => x.persona === p.key);
+        const mot = extraAuto[p.key]?.motivo;
+        const nota = mot ? `<div class="desc-extra-nota">${mot.antes ? 'adelanta' : 'repone'} el de la sem ${mot.semana}</div>` : '';
+        /* Un toque pone el día, otro toque lo quita (23-nov-2026: «debe ser fácil
+           ponerlo y quitarlo»). El valor vive en `data-dia` del contenedor; -1 = ninguno. */
+        return `<div class="desc-extra-lbl">2º descanso <span class="desc-extra-ayuda">toca un día · otra vez para quitar</span></div>
+        <div class="desc-extra-grid chk-desc-extra" data-persona="${p.key}" data-auto="${mot ? 1 : 0}" data-dia="${ef ? ef.dia : -1}">
+          ${[0,1,2,3,4,5,6].map(i => {
+            const fijo = i === Number(descV);
+            return `<button type="button" class="vac-dia-pill desc-extra-pill${ef?.dia===i?' activo':''}${fijo?' fijo':''}" data-dia="${i}"${fijo?' disabled title="Su descanso fijo"':` title="${DIAS_NOMBRES[i]}"`} onclick="toggleDescExtra(this)">${DIAS_NOMBRES[i].charAt(0)}</button>`;
+          }).join('')}
+        </div>${nota}`;
+      })()}</td>
       ${espCell}</tr>`;
   }).join('');
   const esFuturaProx  = semTarget > _base.semana;
@@ -1346,6 +1393,26 @@ function renderFormProxima() {
   actualizarBotonGuardar();
 }
 function cambiarSemProx(delta) { _semProxOffset += delta; renderFormProxima(); }
+// 2º descanso: un toque lo pone, otro toque lo quita. Solo un día a la vez.
+function toggleDescExtra(btn) {
+  const grid = btn.closest('.chk-desc-extra');
+  const yaEra = btn.classList.contains('activo');
+  grid.querySelectorAll('.desc-extra-pill').forEach(b => b.classList.remove('activo'));
+  if (!yaEra) btn.classList.add('activo');
+  grid.dataset.dia = yaEra ? '-1' : btn.dataset.dia;
+}
+// Si cambian el descanso fijo, ese día ya no se puede elegir como 2º.
+document.addEventListener('change', e => {
+  const sel = e.target.closest?.('.chk-desc');
+  if (!sel) return;
+  const grid = document.querySelector(`.chk-desc-extra[data-persona="${sel.dataset.persona}"]`);
+  if (!grid) return;
+  grid.querySelectorAll('.desc-extra-pill').forEach(b => {
+    const fijo = b.dataset.dia === sel.value;
+    b.disabled = fijo; b.classList.toggle('fijo', fijo);
+    if (fijo && b.classList.contains('activo')) { b.classList.remove('activo'); grid.dataset.dia = '-1'; }
+  });
+});
 function onEspChange(sel) {
   const p = sel.dataset.persona, d = sel.dataset.dia, v = sel.value;
   sel.className = `esp-sel ${v==='apertura'?'sel-ap':v==='cierre'?'sel-ci':v==='permiso'?'sel-pm':v==='capacitacion'?'sel-cap':''}`;
@@ -1379,6 +1446,15 @@ function leerFormProxima() {
     const val = parseInt(sel.value);
     if (persona && val !== persona.descFijo) descanso_override[p] = val;
   });
+  /* 2º descanso: se guarda si se eligió un día, o si había propuesta automática
+     y se quitó a mano (-1), para que no vuelva a aparecer sola. Si no había
+     nada y no se eligió nada, no se guarda: así, si después se capturan unas
+     vacaciones vecinas, la propuesta sí llega. */
+  const descanso_extra = {};
+  document.querySelectorAll('.chk-desc-extra').forEach(grid => {
+    const val = parseInt(grid.dataset.dia);
+    if (val >= 0 || grid.dataset.auto === '1') descanso_extra[grid.dataset.persona] = val;
+  });
   const turno_especial = {};
   document.querySelectorAll('.esp-sel').forEach(sel => {
     const p = sel.dataset.persona, d = sel.dataset.dia, v = sel.value;
@@ -1392,7 +1468,9 @@ function leerFormProxima() {
       turno_especial[p][d] = v;
     }
   });
-  return { semana: semTarget, data: { vacaciones, descanso_override, turno_especial } };
+  const data = { vacaciones, descanso_override, turno_especial };
+  if (Object.keys(descanso_extra).length) data.descanso_extra = descanso_extra;
+  return { semana: semTarget, data };
 }
 
 // ── Validar configuración de una semana (simula el motor) ──
@@ -1408,6 +1486,22 @@ function validarSemana(sem, exc) {
     const nom = EQUIPO[m.persona].nombre.split(' ')[0];
     if (m.a === -1) graves.push(`🟠 ${nom}: no se pudo asignar su descanso — trabajaría toda la semana para no dejar la tienda sin gerente.`);
     else            avisos.push(`🟡 ${nom}: descanso movido de ${DIAS_NOMBRES[m.de]} a ${DIAS_NOMBRES[m.a]} para mantener cobertura.`);
+  });
+  (dias._descExtra || []).forEach(x => {
+    const nom = EQUIPO[x.persona].nombre.split(' ')[0];
+    const por = x.motivo ? ` (${x.motivo.antes ? 'adelanta' : 'repone'} el que pierde en la semana ${x.motivo.semana})` : '';
+    avisos.push(`🟡 ${nom}: 2º descanso el ${DIAS_NOMBRES[x.dia]}${por}.`);
+  });
+  /* Las vacaciones de esta semana le quitan el descanso a la pareja: su 2º
+     descanso cae en las semanas vecinas. Si alguna ya está guardada, manda lo
+     guardado y la propuesta no llega sola: hay que decirlo. */
+  GERENTES.forEach(g => {
+    if (!pierdeDescanso_(sem, exc, g)) return;
+    const nom = EQUIPO[g].nombre.split(' ')[0];
+    [sem - 1, sem + 1].forEach(v => {
+      if (_cache.semanas_guardadas?.[`semana_${v}`] && v >= _base.semana)
+        avisos.push(`🟡 ${nom} pierde su descanso esta semana, pero la Semana ${v} ya está guardada: desbloquéala para que le salga su 2º descanso.`);
+    });
   });
   return { graves, avisos };
 }
@@ -1448,6 +1542,11 @@ async function guardarAdmin() {
         const ok = confirm(`⚠ Atención antes de guardar la Semana ${sem}:\n\n${[...graves, ...avisos].join('\n')}\n\n¿Guardar de todas formas?`);
         if (!ok) { msg.textContent='Guardado cancelado. Ajusta vacaciones o descansos.'; msg.style.color='var(--alerta)'; return; }
       }
+      /* Semana ya guardada = manda el horario guardado, y lo que se acaba de
+         cambiar (un 2º descanso puesto o quitado, vacaciones…) no se vería.
+         Antes se quedaba callado; ahora lo dice. */
+      if (_cache.semanas_guardadas?.[`semana_${sem}`])
+        avisos.push(`🟠 La Semana ${sem} ya estaba guardada: para que se vea el cambio, ábrela y pulsa «Desbloquear» y luego «Guardar semana».`);
       _datosAdmin.excepciones = exc;
       await guardarConfig('excepciones', exc);
       msg.innerHTML = `✓ Semana ${sem} guardada.` + (avisos.length ? '<br>' + avisos.join('<br>') : '');
@@ -1548,11 +1647,16 @@ let _espActual    = {};
 // ============================================================
 //  MOTOR DE ROTACIÓN (N asesores)
 // ============================================================
-function generarSemana(semana, historial, excepciones) {
+/* ── Descansos de una semana ─────────────────────────────────────────────
+   Sale de `generarSemana` para que se pueda preguntar por una semana VECINA
+   («¿la pareja pierde su descanso la semana que entra?») sin generar el
+   horario entero. `conExtra = false` es justo esa pregunta: sin 2º descanso,
+   porque el 2º descanso de una semana depende de sus vecinas y, si las vecinas
+   también miraran el suyo, una semana llamaría a la otra sin fin. */
+function calcDescansos_(semana, excepciones, conExtra) {
   const exc     = excepciones?.[`semana_${semana}`] || {};
   const vacRaw  = exc.vacaciones        || {};
   const descOvr = exc.descanso_override || {};
-  const espDia  = exc.turno_especial    || {};
 
   const descFijo = {};
   PERSONAS.forEach(p => { descFijo[p] = descOvr[p] ?? EQUIPO[p].descFijo; });
@@ -1561,8 +1665,8 @@ function generarSemana(semana, historial, excepciones) {
     if (Array.isArray(vacRaw)) return vacRaw.includes(p); // backward compat
     return Array.isArray(vacRaw[p]) ? vacRaw[p].includes(d) : false;
   };
-  const enVac   = p => Array.isArray(vacRaw) ? vacRaw.includes(p) : (Array.isArray(vacRaw[p]) && vacRaw[p].length > 0);
-  const trabaja = (p, d) => !EQUIPO[p].vacante && !enVacDia(p, d) && descFijo[p] !== d;
+  const descExtra = {};   // gerente → día del 2º descanso
+  const trabaja = (p, d) => !EQUIPO[p].vacante && !enVacDia(p, d) && descFijo[p] !== d && descExtra[p] !== d;
 
   // Si un gerente no trabaja ningún día de la semana, su pareja no descansa
   GERENTES.forEach(ger => {
@@ -1572,8 +1676,32 @@ function generarSemana(semana, historial, excepciones) {
     if (!partnerTrabaja) descFijo[ger] = -1; // trabaja todos los días
   });
 
+  /* 2º descanso (23-nov-2026). Cuando un gerente sale de vacaciones y su pareja
+     se queda los 7 días en doble, esa pareja pierde su descanso. Se le paga
+     ANTES (la semana previa al bloque de vacaciones) Y DESPUÉS (la semana en
+     que el otro regresa): así lo pidió gerencia. Lo cubre en doble el que se va
+     o el que regresa, que esa semana sí está.
+       · `descanso_extra[p]` guardado manda: un día, o -1 = «no le toca».
+       · Sin guardar, se calcula solo (`descansoExtraAuto_`).
+     Se guarda al guardar la semana en Admin, para que mover después unas
+     vacaciones no le cambie por debajo un horario que ya se planeó. */
+  const _descExtra = [];
+  if (conExtra) {
+    const guardado = exc.descanso_extra || {};
+    const auto = descansoExtraAuto_(semana, excepciones, { descFijo, enVacDia, trabaja });
+    GERENTES.forEach(g => {
+      if (descFijo[g] === -1 || EQUIPO[g].vacante) return;   // esta semana no descansa: no hay 2º
+      const v = guardado[g] ?? guardado[String(g)];
+      const dia = (v === undefined || v === null) ? (auto[g]?.dia ?? -1) : Number(v);
+      if (dia < 0 || dia > 6 || dia === descFijo[g] || enVacDia(g, dia)) return;
+      descExtra[g] = dia;
+      _descExtra.push({ persona: g, dia, motivo: auto[g]?.motivo || null, auto: v === undefined || v === null });
+    });
+  }
+
   // Ningún día puede quedar sin gerente. Si la única ausencia es un descanso
   // (no vacaciones), se mueve ese descanso a otro día donde sí haya cobertura.
+  // El 2º descanso no se mueve: si choca, se mueve el fijo de la pareja.
   const _descMovidos = [];
   for (let d = 0; d <= 6; d++) {
     if (GERENTES.some(g => trabaja(g, d))) continue;          // ya hay gerente
@@ -1582,12 +1710,54 @@ function generarSemana(semana, historial, excepciones) {
     if (!movible) continue;                                    // todos en vacaciones: no se puede cubrir
     let nuevoDesc = -1;
     for (let nd = 0; nd <= 6; nd++) {
-      if (nd === d || enVacDia(movible, nd)) continue;
+      if (nd === d || enVacDia(movible, nd) || descExtra[movible] === nd) continue;
       if (GERENTES.some(g => g !== movible && trabaja(g, nd))) { nuevoDesc = nd; break; }
     }
     descFijo[movible] = nuevoDesc;
     _descMovidos.push({ persona: movible, de: d, a: nuevoDesc });
   }
+  return { descFijo, descExtra, enVacDia, trabaja, _descMovidos, _descExtra };
+}
+
+/* ¿Pierde `g` su descanso en la semana `sem`? Lo pierde si se queda sin día
+   de descanso (`-1`) y no es porque él mismo falte toda la semana. */
+function pierdeDescanso_(sem, excepciones, g) {
+  if (EQUIPO[g].vacante) return false;
+  const r = calcDescansos_(sem, excepciones, false);
+  if (r.descFijo[g] !== -1) return false;
+  return [0,1,2,3,4,5,6].some(d => !r.enVacDia(g, d));
+}
+
+/* Día que se propone solo para el 2º descanso: pegado al fijo (el día después,
+   luego el de antes) para que sean dos seguidos; nunca sábado ni domingo, que
+   es cuando más se vende; y solo un día en que la pareja trabaje, para no
+   dejar la tienda sin gerente. */
+function descansoExtraAuto_(sem, excepciones, ctx) {
+  const out = {};
+  GERENTES.forEach(g => {
+    const partner = GERENTES.find(x => x !== g);
+    if (!partner || EQUIPO[partner].vacante) return;
+    let motivo = null;
+    if (pierdeDescanso_(sem + 1, excepciones, g))      motivo = { antes: true,  semana: sem + 1 };
+    else if (pierdeDescanso_(sem - 1, excepciones, g)) motivo = { antes: false, semana: sem - 1 };
+    if (!motivo) return;
+    const fijo = ctx.descFijo[g];
+    const libre = d => d >= 1 && d <= 5 && d !== fijo && !ctx.enVacDia(g, d) && ctx.trabaja(partner, d);
+    const orden = fijo >= 0 ? [fijo + 1, fijo - 1, fijo + 2, fijo - 2, fijo + 3, fijo - 3, fijo + 4, fijo - 4] : [];
+    [1,2,3,4,5].forEach(d => { if (!orden.includes(d)) orden.push(d); });
+    const dia = orden.find(libre);
+    if (dia !== undefined) out[g] = { dia, motivo };
+  });
+  return out;
+}
+
+function generarSemana(semana, historial, excepciones) {
+  const exc     = excepciones?.[`semana_${semana}`] || {};
+  const espDia  = exc.turno_especial    || {};
+
+  const { descFijo, descExtra, enVacDia, trabaja, _descMovidos, _descExtra } =
+    calcDescansos_(semana, excepciones, true);
+  const enVac   = p => [0,1,2,3,4,5,6].some(d => enVacDia(p, d));
   const abre    = t => t === 'apertura' || t === 'apertura_10';
   const getEsp  = (p, d) => {
     const e = espDia[p];
@@ -1774,6 +1944,9 @@ function generarSemana(semana, historial, excepciones) {
     if (!partner || EQUIPO[partner].vacante) continue;
     for (let d = 0; d <= 5; d++) {
       if (dias[d][ger]!=='doble' || dias[d][partner]!=='descanso') continue;
+      /* El doble que cubre el 2º descanso de la pareja NO se compensa
+         (23-nov-2026, gerencia): solo se compensa el del descanso normal. */
+      if (descExtra[partner] === d) continue;
       for (let nd = d+1; nd <= 6; nd++) {
         if (['descanso','vacante'].includes(dias[nd][ger])) continue;
         if (dias[nd][ger] === 'doble') continue;
@@ -1784,6 +1957,7 @@ function generarSemana(semana, historial, excepciones) {
   }
 
   if (_descMovidos.length) dias._descMovidos = _descMovidos;
+  if (_descExtra.length)   dias._descExtra   = _descExtra;
   return dias;
 }
 
@@ -2676,6 +2850,154 @@ function td(v, cls) {
   return `<td class="${cls || ''}">${v || '—'}</td>`;
 }
 
+/* ══ Cambio de UN día en un horario ya generado (23-nov-2026) ══════════════
+   Un asesor pide cambiar su turno o su descanso de un día. Antes había que
+   desbloquear la semana —y regenerarla entera— o tocar Admin. Ahora el gerente
+   toca la celda y cambia solo ese día; el resto de la semana no se mueve.
+   El cambio se escribe sobre el horario GUARDADO (lo que ve el equipo), y la
+   comida, las tareas, el celular y el Excel salen de esos mismos días, así
+   que se ajustan solos. Cada cambio queda en `cambios` con lo que decía antes:
+   así se marca con ✎ y se regresa con un toque. */
+function cambiosSemana_() {
+  return _cache.semanas_guardadas?.[`semana_${_semana}`]?.cambios || [];
+}
+function nombreTurno_(persona, turno, d) {
+  return infoTurno(persona, turno, d).label || turno;
+}
+function marcaCambio_(persona, d) {
+  if (!veElEquipo_() && !_puedeEditar) return '';
+  const c = cambiosSemana_().find(x => x.p === persona && x.d === d);
+  return c ? ` <span class="marca-cambio" title="Cambiado a mano · antes: ${escH_(nombreTurno_(persona, c.de, d))}">✎</span>` : '';
+}
+function tdTurno_(persona, d, inf) {
+  const edit = _puedeEditar && !EQUIPO[persona].vacante;
+  return `<td class="${inf.cls || ''}${edit ? ' editable' : ''}"${edit ? ` onclick="abrirCambioDia('${persona}',${d})" title="Toca para cambiar este día"` : ''}>${inf.label || '—'}${marcaCambio_(persona, d)}</td>`;
+}
+
+// Lo que se puede poner a mano, por puesto. La capacitación no está porque
+// necesita horas: esa sigue en Admin → Solicitud especial.
+const OPC_TURNO_ = {
+  ger: ['apertura', 'cierre', 'doble', 'comp_apertura', 'comp_cierre'],
+  as:  ['apertura', 'apertura_10', 'cierre'],
+};
+
+function revisarDia_(dias, d) {
+  const av = [], dia = DIAS_NOMBRES[d];
+  const esta = p => !NO_ESTA.includes(dias[d][p]);
+  const gers = GERENTES.filter(p => !EQUIPO[p].vacante && esta(p));
+  if (!gers.length) av.push(`🔴 ${dia}: la tienda queda SIN gerente.`);
+  else if (gers.length === 1 && dias[d][gers[0]] !== 'doble')
+    av.push(`🟠 ${dia}: un solo gerente y no está en turno doble.`);
+  if (!PERSONAS.some(p => esta(p) && TURNOS_QUE_ABREN.includes(dias[d][p]))) av.push(`🔴 ${dia}: nadie abre.`);
+  if (!PERSONAS.some(p => esta(p) && ['cierre','doble','comp_cierre'].includes(dias[d][p]))) av.push(`🔴 ${dia}: nadie cierra.`);
+  return av;
+}
+
+let _cambioDeshacer = null;
+function cerrarCambioDia() {
+  document.getElementById('pop-dia')?.remove();
+}
+function abrirCambioDia(persona, d) {
+  if (!_puedeEditar || !_diasActuales) return;
+  cerrarCambioDia();
+  const dias = _diasActuales, eq = EQUIPO[persona], tipo = eq.tipo;
+  const actual = dias[d][persona];
+  const orig = cambiosSemana_().find(x => x.p === persona && x.d === d);
+  const nom = escH_(eq.nombre.split(' ')[0]);
+  const btn = (txt, accion, cls) => `<button type="button" class="pop-op${cls ? ' ' + cls : ''}" onclick='${accion}'>${txt}</button>`;
+  const js = lista => `aplicarCambioDia(${JSON.stringify(lista)})`;
+  let html = '';
+
+  // Turnos de su puesto, con su horario real
+  const turnos = OPC_TURNO_[tipo] || [];
+  html += `<div class="pop-sec">Turno</div><div class="pop-ops">` + turnos.map(t =>
+    btn(escH_(nombreTurno_(persona, t, d)), js([{ d, p: persona, a: t }]), t === actual ? 'actual' : '')).join('') + `</div>`;
+  html += `<div class="pop-ops">` +
+    btn('😴 Descanso', js([{ d, p: persona, a: 'descanso' }]), actual === 'descanso' ? 'actual' : '') +
+    btn('📝 Permiso',  js([{ d, p: persona, a: 'permiso'  }]), actual === 'permiso'  ? 'actual' : '') + `</div>`;
+
+  // Atajo: pasar su descanso de otro día a éste (cambio de descanso)
+  const trabajaHoy = !NO_ESTA.includes(actual);
+  const descOtros = [0,1,2,3,4,5,6].filter(y => y !== d && dias[y][persona] === 'descanso');
+  if (trabajaHoy && descOtros.length) {
+    html += `<div class="pop-sec">Cambio de descanso</div><div class="pop-ops">` + descOtros.map(y =>
+      btn(`⇄ Descansa el ${DIAS_NOMBRES[d]} y trabaja el ${DIAS_NOMBRES[y]} (${escH_(nombreTurno_(persona, actual, y))})`,
+          js([{ d, p: persona, a: 'descanso' }, { d: y, p: persona, a: actual }]), 'ancho')).join('') + `</div>`;
+  }
+  // Atajo: intercambiar turno con alguien de su mismo puesto que ese día tiene otro
+  const pares = PERSONAS.filter(q => q !== persona && EQUIPO[q].tipo === tipo && !EQUIPO[q].vacante &&
+    !NO_ESTA.includes(dias[d][q]) && dias[d][q] !== actual);
+  if (trabajaHoy && pares.length) {
+    html += `<div class="pop-sec">Intercambiar turno este día</div><div class="pop-ops">` + pares.map(q =>
+      btn(`⇄ con ${escH_(EQUIPO[q].nombre.split(' ')[0])} (${escH_(nombreTurno_(q, dias[d][q], d))})`,
+          js([{ d, p: persona, a: dias[d][q] }, { d, p: q, a: actual }]), 'ancho')).join('') + `</div>`;
+  }
+  if (orig) {
+    /* Un cambio de descanso o un intercambio movió DOS celdas: se regresan
+       juntas. Regresar solo una dejaba a la persona sin descanso en la semana
+       (o con dos), y nada lo decía. */
+    const grupo = cambiosSemana_().filter(x => orig.g && x.g === orig.g);
+    const todo = grupo.length ? grupo : [orig];
+    const otros = todo.filter(x => !(x.p === persona && x.d === d))
+      .map(x => `${x.p === persona ? '' : escH_(EQUIPO[x.p].nombre.split(' ')[0]) + ' '}${DIAS_NOMBRES[x.d]}`);
+    html += `<div class="pop-ops">` + btn(`↩ Regresar a lo generado (${escH_(nombreTurno_(persona, orig.de, d))})${otros.length ? ' — también ' + otros.join(', ') : ''}`,
+      js(todo.map(x => ({ d: x.d, p: x.p, a: x.de }))), 'ancho volver') + `</div>`;
+  }
+  const guardada = !!_cache.semanas_guardadas?.[`semana_${_semana}`];
+  const nota = guardada ? 'Solo cambia este día; el resto de la semana se queda igual.'
+                        : '⚠ Esta semana aún no está guardada: al aplicar el cambio se guarda tal como se ve y el equipo ya la ve.';
+  const pop = document.createElement('div');
+  pop.id = 'pop-dia';
+  pop.innerHTML = `<div class="pop-fondo" onclick="cerrarCambioDia()"></div>
+    <div class="pop-caja" role="dialog" aria-label="Cambiar un día">
+      <div class="pop-tit">${nom} · ${DIAS_NOMBRES[d]}<button type="button" class="pop-x" onclick="cerrarCambioDia()" aria-label="Cerrar">✕</button></div>
+      <div class="pop-hoy">Hoy dice: <b>${escH_(nombreTurno_(persona, actual, d))}</b></div>
+      ${html}
+      <div class="pop-nota">${nota}</div>
+    </div>`;
+  document.body.appendChild(pop);
+}
+
+async function aplicarCambioDia(lista, esDeshacer) {
+  const guardada = _cache.semanas_guardadas?.[`semana_${_semana}`];
+  const dias = JSON.parse(JSON.stringify(guardada ? guardada.dias : _diasActuales));
+  const cambios = JSON.parse(JSON.stringify(guardada?.cambios || []));
+  const antes = [];
+  const g = Date.now();   // las celdas de un mismo toque se regresan juntas
+  lista.forEach(({ d, p, a }) => {
+    antes.push({ d, p, a: dias[d][p] });
+    let c = cambios.find(x => x.p === p && x.d === d);
+    if (!c) { c = { p, d, de: dias[d][p] }; cambios.push(c); }
+    c.a = a; c.g = g; c.cuando = new Date().toISOString();
+    dias[d][p] = a;
+  });
+  // Lo que volvió a quedar como se generó deja de ser un cambio.
+  const vivos = cambios.filter(c => c.a !== c.de);
+  try {
+    await guardarDiasSemana_(dias, vivos);
+  } catch (e) { return; }   // guardarConfig ya avisó
+  renderSemana();
+  const diasTocados = [...new Set(lista.map(x => x.d))];
+  const avisos = diasTocados.flatMap(d => revisarDia_(dias, d));
+  // Y por persona: quedarse sin descanso en la semana no lo ve ningún día solo.
+  [...new Set(lista.map(x => x.p))].forEach(p => {
+    if (EQUIPO[p].vacante) return;
+    const desc = [0,1,2,3,4,5,6].filter(d => dias[d][p] === 'descanso').length;
+    const fuera = [0,1,2,3,4,5,6].some(d => dias[d][p] === 'vacante');
+    if (!desc && !fuera) avisos.push(`🟠 ${escH_(EQUIPO[p].nombre.split(' ')[0])} se queda sin descanso esta semana.`);
+  });
+  if (esDeshacer || !avisos.length) { cerrarCambioDia(); return; }
+  // Algo quedó flojo: se dice y se deja deshacer en el mismo lugar.
+  _cambioDeshacer = antes;
+  const caja = document.querySelector('#pop-dia .pop-caja');
+  if (caja) caja.innerHTML = `<div class="pop-tit">✓ Cambio guardado<button type="button" class="pop-x" onclick="cerrarCambioDia()" aria-label="Cerrar">✕</button></div>
+    <div class="pop-aviso">${avisos.join('<br>')}</div>
+    <div class="pop-ops">
+      <button type="button" class="pop-op ancho volver" onclick="aplicarCambioDia(_cambioDeshacer, true)">↩ Deshacer</button>
+      <button type="button" class="pop-op ancho" onclick="cerrarCambioDia()">Dejarlo así</button>
+    </div>`;
+}
+
 // La fila de tareas solo existe donde el checklist existe (la 1217).
 function hayTareas_() { return _reparto.length > 0; }
 function tdTareas_(persona, dia) {
@@ -2726,7 +3048,7 @@ function mvDias(persona, dias, comidas, domingo, hoyISO) {
     out += `<div class="mv-dia${esHoy ? ' mv-hoy' : ''}">
       <div class="mv-fecha">${DIAS_CORTOS[d]}<b>${String(f.getDate()).padStart(2,'0')}</b></div>
       <div>
-        <div class="mv-turno ${inf.cls || ''}">${inf.label || '—'}</div>
+        <div class="mv-turno ${inf.cls || ''}${_puedeEditar && !EQUIPO[persona].vacante ? ' editable' : ''}"${_puedeEditar && !EQUIPO[persona].vacante ? ` onclick="abrirCambioDia('${persona}',${d})"` : ''}>${inf.label || '—'}${marcaCambio_(persona, d)}</div>
         ${extras.length ? `<div class="mv-extra">${extras.join('')}</div>` : ''}
       </div>
     </div>`;
@@ -2890,7 +3212,7 @@ function renderTabla(semana, domingo, dias, comidas) {
     for (let d = 0; d < 7; d++) {
       const inf = infoTurno(persona, dias[d][persona], d);
       const com = comidas[d][persona] || '';
-      rowH += td(inf.label, inf.cls);
+      rowH += tdTurno_(persona, d, inf);
       rowC += td(com, com ? 'comida' : 'vacio');
       rowT += tdTareas_(persona, d);
     }
@@ -2910,7 +3232,7 @@ function renderTabla(semana, domingo, dias, comidas) {
     for (let d = 0; d < 7; d++) {
       const inf = infoTurno(persona, dias[d][persona], d);
       const com = comidas[d][persona] || '';
-      rowH  += td(inf.label, inf.cls);
+      rowH  += tdTurno_(persona, d, inf);
       rowC  += td(com,      com      ? 'comida'    : 'vacio');
       rowL1 += td(inf.ls1,  inf.ls1  ? 'ley-silla' : 'vacio');
       rowL2 += td(inf.ls2,  inf.ls2  ? 'ley-silla' : 'vacio');
@@ -3065,24 +3387,34 @@ function renderSemana() {
   renderTabla(_semana, _domingo, dias, comidas);
 }
 
-async function guardarSemana() {
-  const yaGuardada = !!_cache.semanas_guardadas?.[`semana_${_semana}`];
-  if (yaGuardada && !confirm(`¿Reemplazar el horario guardado de la Semana ${_semana}?`)) return;
-  // 1. Guardar Sáb/Dom en historial (base para rotación futura)
+/* Guarda `dias` como el horario publicado de la semana `_semana`: el Sáb/Dom
+   va al historial (base de la rotación de la semana siguiente) y el horario
+   completo a `semanas_guardadas` (máx 4 semanas). Lo usan el botón
+   «Guardar semana» y el cambio de un solo día. `cambios` = lo que se movió a
+   mano día por día; se guarda junto al horario para poder marcarlo y deshacerlo. */
+async function guardarDiasSemana_(dias, cambios) {
   const extract = d => ({
-    apertura: PERSONAS.filter(p => ['apertura','apertura_10','doble','comp_apertura'].includes(_diasActuales[d][p])),
-    cierre:   PERSONAS.filter(p => ['cierre','doble','comp_cierre'].includes(_diasActuales[d][p])),
+    apertura: PERSONAS.filter(p => ['apertura','apertura_10','doble','comp_apertura'].includes(dias[d][p])),
+    cierre:   PERSONAS.filter(p => ['cierre','doble','comp_cierre'].includes(dias[d][p])),
   });
   const historial = { ..._cache.historial, [`semana_${_semana}`]: { sabado: extract(6), domingo: extract(0) } };
   await guardarConfig('historial', historial);
   _cache.historial = historial;
 
-  // 2. Guardar horario completo en semanas_guardadas (máx 4 semanas)
-  const sg = { ..._cache.semanas_guardadas, [`semana_${_semana}`]: { dias: _diasActuales } };
+  const sem = { dias };
+  if (cambios && cambios.length) sem.cambios = cambios;
+  const sg = { ..._cache.semanas_guardadas, [`semana_${_semana}`]: sem };
   const claves = Object.keys(sg).map(k => parseInt(k.replace('semana_',''))).sort((a,b) => b-a);
   claves.slice(4).forEach(k => delete sg[`semana_${k}`]); // borrar más antiguas
   await guardarConfig('semanas_guardadas', sg);
   _cache.semanas_guardadas = sg;
+}
+
+async function guardarSemana() {
+  const prev = _cache.semanas_guardadas?.[`semana_${_semana}`];
+  if (prev && !confirm(`¿Reemplazar el horario guardado de la Semana ${_semana}?`)) return;
+  // Volver a guardar lo que ya se ve conserva los cambios de día hechos a mano.
+  await guardarDiasSemana_(_diasActuales, prev?.cambios);
 
   /* Ya no hay paso 3. Hasta el 4-ago-2026 aquí se guardaba una SEGUNDA copia del
      horario dentro de `excepciones.__publicadas`, porque el RPC que leía el
@@ -3097,7 +3429,9 @@ async function guardarSemana() {
 }
 
 async function desbloquearSemana() {
-  if (!confirm(`¿Desbloquear Semana ${_semana}? El horario se regenerará desde el historial.`)) return;
+  const nCamb = _cache.semanas_guardadas?.[`semana_${_semana}`]?.cambios?.length || 0;
+  const extra = nCamb ? `\n\n⚠ Se pierden ${nCamb} cambio${nCamb > 1 ? 's' : ''} de día hecho${nCamb > 1 ? 's' : ''} a mano (los marcados con ✎).` : '';
+  if (!confirm(`¿Desbloquear Semana ${_semana}? El horario se regenerará desde el historial.${extra}`)) return;
   const sg = { ..._cache.semanas_guardadas };
   delete sg[`semana_${_semana}`];
   await guardarConfig('semanas_guardadas', sg);
