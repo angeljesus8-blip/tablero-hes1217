@@ -1193,6 +1193,8 @@ def r_personales():
 
 # Nombres inventados que sí pueden aparecer. Ninguno es de nadie.
 NOMBRES_EJEMPLO = (
+    # Tiendas de la red, no personas (traspasos, 24-nov-2026).
+    'gran terraza coapa', 'plaza central iztapalapa',
     'ana ramirez solis', 'luis ortega vidal', 'jesus ortega vidal',
     'elena navarro galvez', 'jorge medina rejon', 'maria fuentes bravo',
     'ana quiroga', 'luis bermudez', 'maria zepeda',
@@ -1834,7 +1836,7 @@ def r_pruebas():
                'captura_nombres_seguro.js', 'horario_hoy.js',
                'equipo_bajas.js', 'horario_publicado.js', 'recarga_en_su_sitio.js',
                'cea_precio_lista.js', 'captura_fecha.js', 'eol_cache.js',
-               'captura_promos_vacias.js')
+               'captura_promos_vacias.js', 'trf_solicitud.js')
 
     # La lista de arriba es explícita a propósito —así falta un archivo y se
     # nota—, pero eso deja el hueco contrario: una prueba escrita y no añadida

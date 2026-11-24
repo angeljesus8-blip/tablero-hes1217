@@ -514,6 +514,25 @@
     font-size:var(--t-lg); font-weight:700; background:var(--fondo); color:var(--tinta-2); }
   .ap-toggle { display:flex; align-items:center; gap:9px; font-size:var(--t-md); margin:16px 2px 4px; cursor:pointer; }
   .ap-toggle input { width:20px; height:20px; accent-color:var(--ok); }
+  /* Traspasos entre tiendas (24-nov-2026) */
+  .btn-pedir { background:var(--info-bg); color:var(--azul); margin-top:7px; }
+  .ap-pieza, .trf-lin, .trf-fila { display:flex; align-items:center; gap:8px; margin-top:8px; }
+  .ap-pieza b { font-size:var(--t-sm); white-space:nowrap; }
+  .ap-pieza select { flex:1; min-width:0; padding:10px; font-size:var(--t-md); }
+  .ap-pieza label { white-space:nowrap; }
+  .trf-fila > :first-child { flex:1; min-width:0; }
+  .trf-lin span { flex:1; min-width:0; font-size:var(--t-md); font-weight:600; }
+  .trf-lin small { display:block; font-size:var(--t-sm); color:var(--tinta-3); }
+  .trf-lin button:not(.trf-btn) { width:34px; height:34px; border:1.5px solid var(--linea); border-radius:9px;
+    background:var(--superficie); font-size:var(--t-lg); cursor:pointer; }
+  .trf-btn { border:none; border-radius:var(--r-sm); padding:11px 14px; font-family:inherit;
+    font-size:var(--t-md); font-weight:800; cursor:pointer; background:var(--azul); color:var(--superficie); }
+  .trf-btn.trf-wa { background:var(--ok); }
+  .trf-btn.trf-gris { background:var(--fondo); color:var(--tinta-2); }
+  .trf-alta, .trf-grupo { border:1.5px solid var(--linea); border-radius:12px; padding:12px; margin-bottom:12px; }
+  .trf-bloque { margin:0 16px 14px; }
+  .trf-bloque > .trf-gris { background:var(--superficie); border:1.5px solid var(--linea); }
+  .trf-bloque h4 { margin-top:12px; font-size:var(--t-md); }
   .ap-guardar { width:100%; background:var(--preventa); color:var(--superficie); border:none; border-radius:12px; padding:14px; font-family:inherit; font-size:var(--t-lg); font-weight:800; cursor:pointer; margin-top:18px; }
   .ap-guardar:disabled { background:var(--preventa); opacity:.4; }
 </style>
@@ -580,8 +599,9 @@
       <input id="apPrecio" class="ap-inp" type="text" inputmode="decimal" placeholder="$ del ticket" autocomplete="off">
     </div>
     <div id="apTraspaso">
-      <label class="ap-lbl">¿De qué tienda viene?</label>
-      <input id="apOrigen" class="ap-inp" type="text" placeholder="Ej. Parque Puebla" autocomplete="off">
+      <label class="ap-lbl">¿De qué tienda viene? · 🛡️ si lleva seguro</label>
+      <div id="apFilas"></div>
+      <button class="trf-btn trf-gris" style="margin-top:8px" onclick="apFilaMas()">＋ Otra pieza</button>
       <label class="ap-lbl">¿Para cuándo se lo prometiste?</label>
       <input id="apPromesa" class="ap-inp" type="date">
     </div>
@@ -589,8 +609,33 @@
     <div id="apVend" class="ap-quien"></div>
     <label class="ap-lbl">N° de transacción</label>
     <input id="apTransaccion" class="ap-inp" type="text" inputmode="numeric" placeholder="Folio del ticket de pago" autocomplete="off">
-    <label class="ap-toggle"><input id="apSeguro" type="checkbox"> 🛡️ El cliente se llevó <b>Seguro</b></label>
     <button id="apGuardar" class="ap-guardar" onclick="guardarApartado()">Guardar apartado</button>
+  </div>
+</div>
+
+<div id="trfPanel" class="ap-modal">
+  <div class="ap-box">
+    <div class="ap-head"><div><div class="ap-title">🚚 Consultar a otra tienda</div>
+      <div class="ap-sub">Antes de vender: falta que su gerencia confirme</div></div>
+      <button class="ap-close" onclick="trfCerrar()" aria-label="Cerrar">✕</button></div>
+    <div id="trfCuerpo"></div>
+  </div>
+</div>
+
+<div id="trfMail" class="ap-modal">
+  <div class="ap-box">
+    <div class="ap-head"><div><div class="ap-title">✉️ Solicitud de TRF</div>
+      <div class="ap-sub" id="trfMailSub"></div></div>
+      <button class="ap-close" onclick="trfMailCerrar()" aria-label="Cerrar">✕</button></div>
+    <div class="ap-sub">Marca las piezas que vas a pedir.</div>
+    <div id="trfMailLista"></div>
+    <label class="ap-lbl">Texto del correo</label>
+    <textarea id="trfMailTxt" class="ap-inp" rows="13" style="font-size:var(--t-md)"></textarea>
+    <div class="trf-fila"><button id="trfVia_app" class="trf-btn" onclick="trfEnviar('app')">✉️ Abrir en Outlook</button>
+      <button id="trfVia_web" class="trf-btn" onclick="trfEnviar('web')">Outlook web</button></div>
+    <div class="trf-fila"><button class="trf-btn trf-gris" onclick="trfCopiar('texto')">Copiar texto</button>
+      <button class="trf-btn trf-gris" onclick="trfCopiar('asunto')">Copiar asunto</button></div>
+    <p class="ap-sub" id="trfMailAviso" style="margin-top:8px" role="status"></p>
   </div>
 </div>
 
@@ -1904,10 +1949,249 @@ function estadoSku(sku){
      pueda ligar la serie. Sin esto no hay forma de meterlo por la app. */
 const APARTAR_EXCEPCION = new Set(['100274990']);
 
+/* ===================== TRASPASOS ENTRE TIENDAS (24-nov-2026) =====================
+   El orden es el de la operación: gerencia CONSULTA por WhatsApp, la otra
+   gerencia confirma, el asesor vende y aparta, y gerencia manda el correo
+   formal. Por eso la consulta vive en el producto y el correo en Apartados: lo
+   que no se ha apartado no se puede pedir formalmente.
+
+   Los correos NO se guardan: Para y CC los ponen ellos en Outlook. */
+const TRF_TIENDAS = [
+  ['1041','Galerías Guadalajara'], ['1087','Galerías Metepec'],
+  ['1089','Galerías Monterrey'],   ['1187','Parque Delta'],
+  ['1207','Parque Lindavista'],    ['1393','Las Américas Cancún'],
+  ['1606','Galerías Pachuca'],     ['1608','Gran Terraza Coapa'],
+  ['1610','Plaza Central Iztapalapa']
+];
+const TRF_DESTINO = TIENDA_ID === '1217' ? '1217 Angelópolis' : (TIENDA_ID + ' ' + TIENDA_NOMBRE);
+const TRF_ASUNTO  = 'Solicitud de TRF · ' + TRF_DESTINO;
+
+function trfNorm_(t){
+  return String(t||'').toLowerCase().normalize('NFD').replace(SIN_ACENTOS,'').replace(/\s+/g,' ').trim();
+}
+/* Los apartados de antes traen la tienda a mano («Delta», «pque lindavista»).
+   Sin reconocerlos saldrían dos correos a la misma tienda. Manda el número;
+   si no hay, la última palabra del nombre, que no se repite en ninguna. */
+function trfOrigen(txt){
+  const n = trfNorm_(txt);
+  if(!n) return '';
+  const t = TRF_TIENDAS.find(x => new RegExp('(^|\\D)' + x[0] + '(\\D|$)').test(n))
+         || TRF_TIENDAS.find(x => n.split(/[^a-z0-9]+/).includes(trfNorm_(x[1]).split(' ').pop()));
+  return t ? t[0] + ' ' + t[1] : String(txt).trim();
+}
+const trfNombre = o => o.replace(/^\d{4}\s+/, '');
+const trfPzas = n => n + (n === 1 ? ' pieza' : ' piezas');
+const trfProd = (sku, resp) => nomLinea((invBySku[sku] && invBySku[sku].producto) || resp || ('SKU ' + sku));
+const trfPuede = sku => PUEDE_GESTIONAR && !eolSkuSet.has(sku);
+
+function trfOpciones(sel){
+  const claves = TRF_TIENDAS.filter(t => t[0] !== String(TIENDA_ID)).map(t => t[0] + ' ' + t[1]);
+  const otra = sel && claves.indexOf(sel) < 0;
+  return '<option value="">Elige la tienda…</option>'
+    + claves.map(c => `<option${c === sel ? ' selected' : ''}>${esc(c)}</option>`).join('')
+    + (otra ? `<option selected>${esc(sel)}</option>` : '')
+    + '<option value="__otra">Otra tienda…</option>';
+}
+/* «Otra» se pregunta con un cuadro y entra a la lista ya normalizada: teclear
+   «delta» ahí da la misma tienda que elegirla. */
+function trfElegir(sel){
+  if(sel.value !== '__otra') return sel.value;
+  const t = trfOrigen(prompt('Número y nombre de la tienda:') || '');
+  sel.innerHTML = trfOpciones(t);
+  return t;
+}
+
+/* ── Los textos ── aparte de la pantalla para poder probarlos enteros */
+function trfTextoWA(saludo, lineas){
+  const datos = lineas.map(l => '📦 ' + l.producto + '\nSKU ' + l.sku + ' · *' + trfPzas(l.piezas) + '*').join('\n\n');
+  return (saludo.trim() ? saludo.trim() + '\n\n' : '') + datos;
+}
+function trfSaludo(h){ return h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches'; }
+function trfTextoCorreo(origen, lineas, hora){
+  const uno = lineas.length === 1;
+  const cuerpo = lineas.map((l, i) =>
+    (uno ? '' : (i + 1) + ') ') + 'SKU ' + l.sku + '\n'
+    + (uno ? '' : '   ') + l.producto + '\n'
+    + (uno ? '' : '   ') + 'Piezas: ' + l.piezas).join('\n\n');
+  const total = lineas.reduce((s, l) => s + l.piezas, 0);
+  return trfSaludo(hora) + ', equipo ' + trfNombre(origen) + ':\n\n'
+    + 'Conforme a lo acordado, solicito su apoyo para generar la siguiente transferencia:\n\n'
+    + 'Tienda origen: ' + origen + '\nTienda destino: ' + TRF_DESTINO + '\n\n'
+    + cuerpo + '\n\n'
+    + (uno ? '' : 'Total: ' + trfPzas(total) + '\n\n')
+    + 'Pongo en copia a nuestro distrital para su conocimiento.\n\nSaludos cordiales.';
+}
+function trfSumar(aps){
+  const m = new Map();
+  aps.forEach(a => {
+    if(!m.has(a.sku)) m.set(a.sku, { sku:a.sku, producto:trfProd(a.sku, a.color), piezas:0 });
+    m.get(a.sku).piezas += 1;
+  });
+  return [...m.values()];
+}
+
+/* ── Consulta por WhatsApp ───────────────────────────────────────────── */
+const TRF_KEY = 'hes1217_trf';
+let TRF = { lineas:[], msgs:{} };
+try{
+  const g = JSON.parse(localStorage.getItem(TRF_KEY) || 'null');
+  if(g && Array.isArray(g.lineas)) TRF = { lineas:g.lineas, msgs:g.msgs || {} };
+}catch(e){}   // copia ilegible = lista vacía; se vuelve a armar
+function trfGuardar(){
+  try{ localStorage.setItem(TRF_KEY, JSON.stringify(TRF)); }catch(e){}   // sin espacio se pierde la copia, no la lista
+}
+let _trfSku = '', _trfGrupos = [];
+function botonPedir(sku){
+  if(!trfPuede(sku)) return '';
+  return `<button class="btn-apartar btn-pedir" onclick="trfAbrir('${sku}')">🚚 Consultar a otra tienda</button>`;
+}
+function trfAbrir(sku){
+  _trfSku = sku || '';
+  document.getElementById('trfPanel').classList.add('show');
+  trfPintar();
+}
+function trfCerrar(){ document.getElementById('trfPanel').classList.remove('show'); }
+function trfAgregar(){
+  const o = trfElegir(document.getElementById('trfTienda'));
+  const n = Math.max(1, parseInt(document.getElementById('trfN').value, 10) || 1);
+  if(!o){ alert('Elige a qué tienda se la vas a pedir.'); return; }
+  const ya = TRF.lineas.find(l => l.sku === _trfSku && l.origen === o);
+  if(ya) ya.piezas += n;
+  else TRF.lineas.push({ sku:_trfSku, producto:trfProd(_trfSku), origen:o, piezas:n });
+  trfGuardar(); trfPintar();
+}
+function trfPiezas(i, d){
+  const l = TRF.lineas[i]; if(!l) return;
+  l.piezas += d;
+  if(l.piezas < 1) TRF.lineas.splice(i, 1);
+  trfGuardar(); trfPintar();
+}
+function trfMsg(g, txt){ TRF.msgs[_trfGrupos[g]] = txt; trfGuardar(); }
+function trfVaciar(g){
+  const o = _trfGrupos[g];
+  if(!confirm('¿Quitar lo de ' + o + ' de la lista?')) return;
+  TRF.lineas = TRF.lineas.filter(l => l.origen !== o);
+  delete TRF.msgs[o];
+  trfGuardar(); trfPintar();
+}
+function trfWA(g){
+  const o = _trfGrupos[g];
+  const t = trfTextoWA(TRF.msgs[o] || '', TRF.lineas.filter(l => l.origen === o));
+  window.open('https://wa.me/?text=' + encodeURIComponent(t), '_blank');
+}
+function trfPintar(){
+  const caja = document.getElementById('trfCuerpo');
+  if(!caja) return;
+  _trfGrupos = [...new Set(TRF.lineas.map(l => l.origen))];
+  let h = '';
+  if(_trfSku){
+    h += `<div class="trf-alta"><h4>${esc(trfProd(_trfSku))}</h4><div class="ap-sub">SKU ${esc(_trfSku)}</div>
+      <label class="ap-lbl">¿A qué tienda?</label>
+      <select id="trfTienda" class="ap-inp" onchange="trfElegir(this)">${trfOpciones('')}</select>
+      <label class="ap-lbl">Piezas</label>
+      <div class="trf-fila"><input id="trfN" class="ap-inp" type="number" min="1" inputmode="numeric" value="1">
+      <button class="trf-btn" onclick="trfAgregar()">＋ Agregar</button></div></div>`;
+  }
+  h += _trfGrupos.map((o, g) => `<div class="trf-grupo"><h4>${esc(o)}</h4>`
+    + TRF.lineas.map((l, i) => l.origen !== o ? '' : `<div class="trf-lin">
+        <span>${esc(l.producto)}<small>SKU ${esc(l.sku)}</small></span>
+        <button aria-label="Quitar una" onclick="trfPiezas(${i},-1)">−</button><b>${l.piezas}</b>
+        <button aria-label="Agregar una" onclick="trfPiezas(${i},1)">＋</button></div>`).join('')
+    + `<label class="ap-lbl">Tu mensaje</label>
+      <textarea class="ap-inp" rows="2" oninput="trfMsg(${g},this.value)">${esc(TRF.msgs[o] || '')}</textarea>
+      <div class="trf-fila"><button class="trf-btn trf-wa" onclick="trfWA(${g})">📲 Consultar por WhatsApp</button>
+      <button class="trf-btn trf-gris" onclick="trfVaciar(${g})">Quitar</button></div></div>`).join('');
+  caja.innerHTML = h || '<div class="empty">No hay nada por consultar.<br>Busca el producto y toca «Consultar a otra tienda».</div>';
+}
+
+/* ── Correo formal ─────────────────────────────────────────────────────
+   No se lleva la cuenta de qué se pidió (Ángel, 24-nov-2026: sin
+   confirmaciones). Por eso las piezas nacen DESMARCADAS cuando hay varias: con
+   todo marcado, pedir una nueva volvería a pedir las de ayer. */
+let _trfMail = null;
+/* Con serie ya llegó: no hay nada que pedir. */
+function trfVivo(a){
+  const e = String(a.estatus||'').toLowerCase();
+  return a.tipo === 'traspaso' && !!a.origen && !a.serie && e !== 'entregado' && e !== 'cancelado';
+}
+function trfPendientes(){
+  const g = new Map();
+  APARTADOS.filter(trfVivo).forEach(a => {
+    const o = trfOrigen(a.origen);
+    if(!g.has(o)) g.set(o, []);
+    g.get(o).push(a);
+  });
+  return g;
+}
+function trfBloque(){
+  if(!PUEDE_GESTIONAR) return '';
+  let h = `<div class="trf-bloque"><button class="trf-btn trf-gris" onclick="trfAbrir('')">🚚 Mis consultas${TRF.lineas.length ? ' (' + TRF.lineas.length + ')' : ''}</button>`;
+  const g = trfPendientes();
+  if(g.size) h += '<h4>✉️ Solicitar traspaso por correo</h4>';
+  [...g.keys()].forEach(o => {
+    h += `<div class="trf-lin"><span>${esc(o)}<small>${trfPzas(g.get(o).length)}</small></span>
+      <button class="trf-btn" data-o="${esc(o)}" onclick="trfMailAbrir(this.dataset.o)">✉️ Solicitar</button></div>`;
+  });
+  return h + '</div>';
+}
+function trfMailAbrir(o){
+  const aps = trfPendientes().get(o) || [];
+  if(!aps.length) return;
+  const sola = aps.length === 1;
+  _trfMail = { origen:o, aps:aps, sel:new Set(sola ? [String(aps[0].id)] : []) };
+  document.getElementById('trfMailSub').textContent = o;
+  document.getElementById('trfMailLista').innerHTML = aps.map(a => `<label class="ap-toggle">
+    <input type="checkbox" ${sola ? 'checked' : ''} onchange="trfMailSel('${a.id}',this.checked)">
+    <span>${esc(trfProd(a.sku, a.color))}<br><small>${esc(a.cliente||'')}${a.fecha ? ' · apartado el ' + esc(fechaCortaAp_(a.fecha)) : ''}</small></span></label>`).join('');
+  document.getElementById('trfMail').classList.add('show');
+  trfMailTexto();
+}
+function trfMailCerrar(){ document.getElementById('trfMail').classList.remove('show'); _trfMail = null; }
+function trfMailSel(id, si){ if(si) _trfMail.sel.add(id); else _trfMail.sel.delete(id); trfMailTexto(); }
+function trfMailTexto(){
+  const aps = _trfMail.aps.filter(a => _trfMail.sel.has(String(a.id)));
+  document.getElementById('trfMailTxt').value = aps.length ? trfTextoCorreo(_trfMail.origen, trfSumar(aps), new Date().getHours()) : '';
+  document.getElementById('trfMailAviso').textContent = '';
+  const via = localStorage.getItem('hes1217_trf_via') || 'app';
+  ['app','web'].forEach(v => {
+    const b = document.getElementById('trfVia_' + v);
+    if(b) b.classList.toggle('trf-gris', v !== via);
+  });
+}
+/* iPhone: el esquema propio de Outlook. En Android y en la compu, `mailto`, que
+   abre la app predeterminada (o deja elegirla). Los saltos van como CRLF, que es
+   lo que pide mailto; con LF suelto Outlook de Windows los junta. */
+function trfUrl(via, asunto, txt){
+  const a = encodeURIComponent(asunto), b = encodeURIComponent(txt.replace(/\r?\n/g, '\r\n'));
+  if(via === 'web') return 'https://outlook.office.com/mail/deeplink/compose?subject=' + a + '&body=' + b;
+  if(/iPhone|iPad/.test(navigator.userAgent || '')) return 'ms-outlook://compose?subject=' + a + '&body=' + b;
+  return 'mailto:?subject=' + a + '&body=' + b;
+}
+function trfEnviar(via){
+  if(!_trfMail || !_trfMail.sel.size){ alert('Marca por lo menos una pieza.'); return; }
+  const url = trfUrl(via, TRF_ASUNTO, document.getElementById('trfMailTxt').value);
+  /* Windows corta los mailto largos sin avisar: saldría una solicitud incompleta. */
+  if(via === 'app' && url.length > 2000){
+    alert('Son muchos artículos para abrirlo directo. Usa «Copiar texto» y pégalo en Outlook.');
+    return;
+  }
+  try{ localStorage.setItem('hes1217_trf_via', via); }catch(e){}   // sin espacio solo se olvida la preferencia
+  if(via === 'web') window.open(url, '_blank'); else location.href = url;
+}
+async function trfCopiar(que){
+  const t = que === 'asunto' ? TRF_ASUNTO : document.getElementById('trfMailTxt').value;
+  const av = document.getElementById('trfMailAviso');
+  try{ await navigator.clipboard.writeText(t); av.textContent = que === 'asunto' ? 'Asunto copiado.' : 'Texto copiado.'; }
+  catch(e){ av.textContent = 'No se pudo copiar. Mantén presionado el texto para copiarlo.'; }
+}
 function botonApartar(sku, producto, precio){
   const k = estadoSku(sku).k;
-  if(k !== 'traer' && k !== 'piso' && !APARTAR_EXCEPCION.has(sku)) return '';
-  return `<button class="btn-apartar" onclick="abrirApartado('${sku}','${encodeURIComponent(producto||'')}',${Number(precio)||0})">Apartar para un cliente</button>`;
+  /* Con existencia también (24-nov-2026): el cliente quiere 5, aquí hay 3 y las
+     otras 2 vienen de fuera. Solo activos: de un EOL no se trae. */
+  const conPiezas = k === 'hay' && !eolSkuSet.has(sku);
+  if(k !== 'traer' && k !== 'piso' && !conPiezas && !APARTAR_EXCEPCION.has(sku)) return '';
+  return `<button class="btn-apartar" onclick="abrirApartado('${sku}','${encodeURIComponent(producto||'')}',${Number(precio)||0})">${conPiezas ? 'Apartar piezas de otra tienda' : 'Apartar para un cliente'}</button>`
+       + botonPedir(sku);
 }
 
 function pastillaEstado(sku){
@@ -2236,6 +2520,7 @@ function seccionApartados(){
   if(CARGAS.apartados !== 'ok'){
     html += `<div class="pv-banner"><div class="pv-banner-n">⏳ Confirmando los apartados con la nube — puede faltar alguno</div></div>`;
   }
+  html += trfBloque();
   if(tarde.length){
     html += `<div class="aviso-franja" style="margin:0 16px 12px">
       <h4>⏰ Se pasó la fecha prometida</h4>
@@ -2267,6 +2552,32 @@ function seccionApartados(){
   }
   return html;
 }
+/* Una fila = una pieza = un apartado, porque cada apartado lleva UNA serie
+   (24-nov-2026). Cliente, ticket y fecha se capturan una sola vez. */
+let _apFilas = [], _apGuardando = false;
+function apFilasPintar(){
+  const c = document.getElementById('apFilas');
+  if(!c) return;
+  c.innerHTML = _apFilas.map((f, i) => `<div class="ap-pieza">
+    <b>${f.ok ? '✅' : 'Pieza ' + (i + 1)}</b>
+    <select class="ap-inp" ${f.ok ? 'disabled' : ''} onchange="apFilaTienda(${i},this)">${trfOpciones(f.origen)}</select>
+    <label title="Lleva seguro"><input type="checkbox" ${f.seguro ? 'checked' : ''} ${f.ok ? 'disabled' : ''} onchange="apFilaSeguro(${i},this.checked)"> 🛡️</label>
+    ${_apFilas.length > 1 && !f.ok ? `<button class="cot-quitar" aria-label="Quitar pieza" onclick="apFilaQuitar(${i})">×</button>` : ''}
+  </div>`).join('');
+}
+function apFilaTienda(i, sel){ _apFilas[i].origen = trfElegir(sel); _apartBorradorGuardar(); }
+function apFilaSeguro(i, si){ _apFilas[i].seguro = si; _apartBorradorGuardar(); }
+function apFilaMas(){
+  if(_apGuardando) return;
+  const u = _apFilas[_apFilas.length - 1];
+  _apFilas.push({ origen: u ? u.origen : '', seguro:false, ok:false });
+  apFilasPintar(); _apartBorradorGuardar();
+}
+function apFilaQuitar(i){
+  if(_apGuardando) return;
+  _apFilas.splice(i, 1); apFilasPintar(); _apartBorradorGuardar();
+}
+
 let _apartSku = null, _apartCtx = null;
 
 /* Sirve para los dos casos y por eso recibe el producto: en la preventa salía
@@ -2288,7 +2599,10 @@ function abrirApartado(sku, prodEnc, precio){
   _apartCtx = { producto, precio: px, tipo: 'traspaso' };
 
   document.getElementById('apModalTitle').textContent = 'Apartar para un cliente';
-  document.getElementById('apModalSub').textContent = producto + (px ? ' · '+money(px) : '');
+  const hay = estadoSku(sku);
+  document.getElementById('apModalSub').textContent = producto + (px ? ' · '+money(px) : '')
+    + (hay.k === 'hay' && !PREVENTA.some(p => p.sku === sku)
+       ? ' · Tienes ' + hay.n + ' en tienda: aparta solo las que vienen de fuera' : '');
   /* El precio solo se pregunta cuando NO se sabe por ningún lado. Es el último
      recurso, no un paso más del formulario: si el tablero lo conoce, teclearlo
      sería pedirle al asesor que copie algo que ya está en pantalla, con el
@@ -2296,7 +2610,7 @@ function abrirApartado(sku, prodEnc, precio){
   document.getElementById('apPrecioBox').style.display = px ? 'none' : '';
   document.getElementById('apPrecio').value = '';
   document.getElementById('apTraspaso').style.display = '';
-  document.getElementById('apOrigen').value = '';
+  _apFilas = [{ origen:'', seguro:false, ok:false }];
   // Por defecto, para dentro de tres días: es lo que suele tardar un traspaso y
   // evita que se quede sin fecha, que es lo que impide avisar de un retraso.
   const d = new Date(); d.setDate(d.getDate()+3);
@@ -2310,9 +2624,9 @@ function abrirApartado(sku, prodEnc, precio){
      nombre de otro. */
   document.getElementById('apVend').textContent = YO && YO.nombre ? YO.nombre : '⚠️ sin sesión de empleado';
   document.getElementById('apTransaccion').value='';
-  document.getElementById('apSeguro').checked=false;
   document.getElementById('apModal').classList.add('show');
   _apartBorradorRestaurar(sku);
+  apFilasPintar();
 }
 
 /* ── El apartado a medio llenar sobrevive al cambio de app ──────
@@ -2323,10 +2637,10 @@ function abrirApartado(sku, prodEnc, precio){
 
    Se guarda por SKU: dos apartados distintos no se pisan el borrador. */
 const AP_BORRADOR = 'hes_apartado_borrador';
-const AP_CAMPOS = ['apOrigen','apPromesa','apCliente','apTel','apTransaccion'];
+const AP_CAMPOS = ['apPromesa','apCliente','apTel','apTransaccion'];
 function _apartBorradorGuardar(){
   if(!_apartSku) return;
-  const d = { sku:_apartSku, ts:Date.now(), seguro:document.getElementById('apSeguro').checked };
+  const d = { sku:_apartSku, ts:Date.now(), filas:_apFilas };
   AP_CAMPOS.forEach(id => { d[id] = document.getElementById(id).value; });
   try{ localStorage.setItem(AP_BORRADOR, JSON.stringify(d)); }catch(e){}   // sin cuota se pierde el borrador, no el apartado
 }
@@ -2341,24 +2655,24 @@ function _apartBorradorRestaurar(sku){
   if(!d || d.sku !== sku || Date.now() - d.ts > 2*60*60*1000) return;
   if(!AP_CAMPOS.some(id => (d[id]||'').trim())) return;   // borrador vacío: nada que restaurar
   AP_CAMPOS.forEach(id => { if(d[id]) document.getElementById(id).value = d[id]; });
-  document.getElementById('apSeguro').checked = !!d.seguro;
+  if(Array.isArray(d.filas) && d.filas.length) _apFilas = d.filas;
 }
 AP_CAMPOS.forEach(id => {
   const el = document.getElementById(id);
   if(el) el.addEventListener('input', _apartBorradorGuardar);
 });
-(function(){ const s = document.getElementById('apSeguro');
-  if(s) s.addEventListener('change', _apartBorradorGuardar); })();
 
 function cerrarApartado(){
+  // A media escritura no se cierra: se perdería cuáles piezas ya quedaron.
+  if(_apGuardando) return;
   document.getElementById('apModal').classList.remove('show');
   _apartSku=null;
   // Cerrar es abandonar: el borrador solo sirve para volver de otra app, y el
   // modal cerrado ya no se está llenando.
   _apartBorradorTirar();
 }
-function guardarApartado(){
-  const sku=_apartSku; if(!sku) return;
+async function guardarApartado(){
+  const sku=_apartSku; if(!sku || _apGuardando) return;
   const cliente=document.getElementById('apCliente').value.trim();
   const tel=document.getElementById('apTel').value.trim();
   const vend = (YO && YO.nombre) ? YO.nombre : '';
@@ -2369,8 +2683,11 @@ function guardarApartado(){
     return;
   }
   const transaccion=document.getElementById('apTransaccion').value.trim();
-  const seguro=document.getElementById('apSeguro').checked?'Si':'No';
   if(!cliente){ alert('Escribe el nombre del cliente.'); return; }
+  /* Sin tienda no hay a quién mandarle el correo. En preventa no aplica: el
+     equipo viene de Huawei y pasa por esta misma ventana. */
+  const esPreventa = PREVENTA.some(p => p.sku === sku);
+  if(!esPreventa && _apFilas.some(x => !x.ok && !x.origen)){ alert('Elige de qué tienda viene cada pieza.'); return; }
   const btn=document.getElementById('apGuardar'); btn.disabled=true; btn.textContent='Guardando…';
   /* En `color` va el producto ENTERO, no solo el color: "Pura 90S Pro Max
      12/512GB · Negro". Antes se guardaba solo "Negro" y, al abrir la hoja o
@@ -2383,7 +2700,6 @@ function guardarApartado(){
      si algún día alguien quiere filtrar o contar por color, tendrá que partir
      el texto por el "·". Está aquí escrito para que no le pille por sorpresa. */
   const producto = (_apartCtx && _apartCtx.producto) || ('SKU '+sku);
-  const origen  = (document.getElementById('apOrigen')||{}).value || '';
   const promesa = (document.getElementById('apPromesa')||{}).value || null;
   /* Cuando el campo está a la vista, manda lo que se tecleó: se enseña
      justamente porque el precio del catálogo no sirve para este apartado. Si
@@ -2399,44 +2715,66 @@ function guardarApartado(){
      vigila la tabla `apartados` y hasta hoy nadie insertaba ahí, así que nunca
      se disparó. El único freno contra dos asesores apartando la última pieza a
      la vez era el número de este navegador — y dos navegadores no se ven. */
-  sbEscribir('apartado_guardar', {
-    p_sku: sku, p_color: producto, p_cliente: cliente, p_telefono: tel,
-    p_precio: precio, p_seguro: (seguro === 'Si'),
-    p_vendedor: vend, p_transaccion: transaccion,
-    p_tipo: 'traspaso', p_origen: origen.trim() || null, p_promesa: promesa || null
-  }).then(function(data){
-    btn.disabled=false; btn.textContent='Guardar apartado';
-    if(data && data.ok === true){
+  const filas = _apFilas;
+  _apGuardando = true;
+  let error = '';
+  /* Una por una y en orden. Al primer fallo se para: lo guardado queda con su
+     palomita y el siguiente toque solo manda lo que falta. */
+  for(const fila of filas){
+    if(fila.ok) continue;
+    const antes = new Set(APARTADOS.map(a => String(a.id)));
+    // sbEscribir no lanza: un corte de red llega como null.
+    const data = await sbEscribir('apartado_guardar', {
+      p_sku: sku, p_color: producto, p_cliente: cliente, p_telefono: tel,
+      p_precio: precio, p_seguro: !!fila.seguro,
+      p_vendedor: vend, p_transaccion: transaccion,
+      p_tipo: 'traspaso', p_origen: fila.origen || null, p_promesa: promesa || null
+    });
+    if(!data){
+      /* Sin respuesta no es lo mismo que sin guardar: la base pudo recibirlo y
+         perderse el «ok». Se mira si apareció antes de dejar reintentar; si no
+         se puede mirar, se dice, porque reintentar a ciegas duplica. */
+      const lista = await sbCall('apartados_lista', { p_token: GAS_TOKEN });
+      if(!Array.isArray(lista)){
+        error = 'Se fue la conexión y no sé si la última pieza se guardó. Revisa Apartados antes de volver a intentarlo.';
+        break;
+      }
+      APARTADOS = lista.map(_apartadoDeSupabase);
+      const llego = APARTADOS.find(a => !antes.has(String(a.id)) && a.sku === sku
+        && a.cliente === cliente && (a.origen||'') === (fila.origen||''));
+      if(!llego){ error = 'Sin conexión — esa pieza NO se guardó. Intenta de nuevo.'; break; }
+      fila.ok = true;
+    } else if(data.ok === true){
+      fila.ok = true;
       // el mismo texto que se acaba de mandar, para que la lista local y la
       // nube no digan cosas distintas hasta el próximo refresco
       APARTADOS.push({id:String(data.id), sku:sku, color:producto, cliente:cliente,
-        telefono:tel, precio:String(precio||''), seguro:seguro, vend:vend,
+        telefono:tel, precio:String(precio||''), seguro:fila.seguro?'Si':'No', vend:vend,
         estatus:'Apartado', transaccion:transaccion, serie:'',
-        tipo:'traspaso', origen:origen.trim(), promesa:promesa||'', diasTarde:null});
-      /* La preventa lleva su cuenta aparte —la calcula la base en
-         `preventa_lista`, no sale de `apartados_lista`—, así que sin esto la
-         tarjeta seguiría diciendo el mismo "quedan N" hasta el próximo viaje
-         completo. Quien aparta dos seguidos vería el cupo quieto y creería que
-         no se guardó. `quedan` en null es "sin límite" y se queda en null. */
-      const pvFila = PREVENTA.filter(function(p){ return p.sku === sku; })[0];
-      if(pvFila){
-        pvFila.apartadas = (pvFila.apartadas||0) + 1;
-        if(pvFila.quedan !== null && pvFila.quedan !== undefined)
-          pvFila.quedan = Math.max(0, pvFila.quedan - 1);
-      }
-      cerrarApartado(); render(); cargarApartadosNube();
-    } else if(data && data.error){
+        tipo:'traspaso', origen:fila.origen, promesa:promesa||'', diasTarde:null});
+    } else {
       // "Cupo agotado: 4 de 4 piezas ya apartadas" llega tal cual desde la
       // base. Se muestra: el asesor tiene al cliente enfrente y necesita saber
       // que esa pieza ya no existe, no un "hubo un error".
-      alert('No se guardó: ' + data.error);
-    } else {
-      alert('Sin conexión — el apartado NO se guardó. Intenta de nuevo.');
+      error = 'No se guardó: ' + (data.error || 'sin detalle');
+      break;
     }
-  }).catch(function(){
-    btn.disabled=false; btn.textContent='Guardar apartado';
-    alert('Sin conexión — el apartado NO se guardó. Intenta de nuevo.');
-  });
+    /* La preventa lleva su cuenta aparte —la calcula la base en
+       `preventa_lista`—, así que sin esto la tarjeta seguiría diciendo el mismo
+       "quedan N" hasta el próximo viaje. `quedan` en null es "sin límite". */
+    const pvFila = PREVENTA.filter(function(p){ return p.sku === sku; })[0];
+    if(pvFila){
+      pvFila.apartadas = (pvFila.apartadas||0) + 1;
+      if(pvFila.quedan !== null && pvFila.quedan !== undefined)
+        pvFila.quedan = Math.max(0, pvFila.quedan - 1);
+    }
+  }
+  _apGuardando = false;
+  btn.disabled=false; btn.textContent='Guardar apartado';
+  if(!error){ cerrarApartado(); render(); cargarApartadosNube(); return; }
+  _apartBorradorGuardar(); apFilasPintar(); render();
+  const ya = filas.filter(x => x.ok).length;
+  alert(error + (ya ? '\n\nYa quedaron guardadas ' + ya + ' de ' + filas.length + ' (las que tienen ✅). Al reintentar solo se mandan las demás.' : ''));
 }
 /* Los apartados salen SOLO de Supabase desde el 7-ago-2026.
    No hay caída al Apps Script a propósito: la hoja ya no recibe preventa, así

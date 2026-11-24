@@ -75,9 +75,11 @@ ok('vendible = stock, o piso solo si es EOL',
 // ── 4 · El botón de apartar, solo donde toca ────────────────
 filtroActivo = 'promo'; render();
 const conBoton = [...new Set([...app.innerHTML.matchAll(/abrirApartado\('(\d+)'/g)].map(m => m[1]))];
-ok('no se aparta lo que sí se puede vender',
-   !conBoton.some(s => tieneExistencia_(s) && !APARTAR_EXCEPCION.has(s)),
-   conBoton.filter(s => tieneExistencia_(s) && !APARTAR_EXCEPCION.has(s)).join(', '));
+// Desde el 24-nov-2026 un activo CON piezas sí se aparta (faltan unidades y se
+// traen de otra tienda). El EOL con existencia sigue fuera.
+ok('no se aparta un descontinuado con existencia',
+   !conBoton.some(s => eolSkuSet.has(s) && tieneExistencia_(s) && !APARTAR_EXCEPCION.has(s)),
+   conBoton.filter(s => eolSkuSet.has(s) && tieneExistencia_(s)).join(', '));
 ok('no se aparta un descontinuado agotado',
    !conBoton.some(s => estadoSku(s).k === 'no'),
    conBoton.filter(s => estadoSku(s).k === 'no').join(', '));

@@ -5775,3 +5775,21 @@ apóstrofo**: un combo «Kit D'Luxe» cerraba la cadena dentro de
 `LECTURAS_CON_CANDADO` en `r_candado_anon` las nombra, porque su puerta se arma
 dentro de un DO y no se ve desde el archivo. `candado_token.js` caza siete
 cebos (quitar cada escape, cada token y la marca `apartados_ok`).
+
+## Traspasos entre tiendas: consulta y solicitud *(24-nov-2026, v308)*
+
+El orden es el de la operación: gerencia consulta por WhatsApp → la otra
+gerencia confirma → el asesor vende y aparta → gerencia manda el correo formal.
+
+- **Quién:** consulta y correo solo con `PUEDE_GESTIONAR`. El asesor aparta.
+- **Apartar con existencia:** `botonApartar` ya sale en 'hay' si NO es EOL (el
+  cliente quiere 5, hay 3). Un apartado = una pieza = una serie: `_apFilas`
+  guarda una por una y al reintentar no repite las que ya tienen palomita.
+- **Tienda obligatoria**, salvo en preventa, que usa el mismo modal.
+- **`trfOrigen`** normaliza la tienda: los apartados viejos traen «Delta» a mano.
+- **No se lleva cuenta de lo solicitado** (sin SQL, decisión de Ángel). Mientras
+  el apartado no tenga serie sigue en la lista; las piezas nacen desmarcadas
+  cuando hay varias, para no volver a pedir las de ayer.
+- **Los correos no se guardan:** Para y CC van vacíos. El repo es público.
+- La lista de consultas es de cada equipo (`hes1217_trf`).
+- Prueba: `pruebas/trf_solicitud.js` (textos aprobados por Ángel, literales).
