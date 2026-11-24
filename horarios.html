@@ -950,6 +950,9 @@ function estadoAvisos_() {
   if (!soporta) return esIphone_() && !esInstalada_()
     ? { k: 'ios',  txt: 'En iPhone los avisos solo llegan si abres la app desde la pantalla de inicio: en Safari toca Compartir → «Agregar a inicio» y entra desde ese ícono.' }
     : { k: 'no',   txt: 'Este navegador no puede recibir avisos. Abre el horario en Chrome.' };
+  /* Brave lo bloquea con sus escudos (24-nov-2026, el OnePlus de Ángel): se
+     arregla apagándolos solo para esta página, no cambiando de navegador. */
+  if (_avisos.error === 'bloqueado' && navigator.brave) return { k: 'cdn', txt: 'Brave está bloqueando los avisos. Toca el león 🦁 junto a la dirección, apaga los escudos para esta página y vuelve a tocar 🔔.' };
   if (_avisos.error === 'bloqueado') return { k: 'cdn', txt: 'Este celular bloquea el servicio de avisos (DNS privado o bloqueador de anuncios). Desactívalo para esta página o no te llegarán los recordatorios.' };
   if (_avisos.error) return { k: 'err', txt: 'Los avisos fallaron: ' + _avisos.error };
   if (Notification.permission === 'denied') return { k: 'bloq', txt: 'Bloqueaste los avisos. Candado junto a la dirección → Permisos → Notificaciones → Permitir, y vuelve a tocar 🔔.' };
@@ -963,7 +966,9 @@ function estadoAvisos_() {
 function pintarCampana_() {
   const b = document.getElementById('btn-avisos');
   const t = document.getElementById('avisos-txt');
-  if (!b || !_avisos.activo) return;
+  // Sin campana (el gerente en la PC, por ejemplo) el renglón solo enseña un
+  // mensaje pasajero de los recordatorios, y al vencer se esconde.
+  if (!b || !_avisos.activo) { if (t) t.style.display = 'none'; return; }
   const e = estadoAvisos_();
   b.textContent = (e.k === 'on' || e.k === 'sinficha') ? '🔔' : '🔕';
   b.classList.toggle('on', e.k === 'on');
@@ -1007,6 +1012,86 @@ async function tocarCampana() {
   mostrarAvisoCampana_(ahora.k === 'on'
     ? '✅ Listo. Te avisaremos antes de tu comida y de cada Ley Silla.'
     : (ahora.txt || 'No quedó activado. Vuelve a tocar 🔔 en unos segundos.'));
+}
+
+/* ── Recordatorios automáticos (fase 2) · 24-nov-2026 ──────────────────────
+   La app NO manda los recordatorios: le pasa a Supabase la lista de horas de
+   la semana y el reloj de allá (`avisos_tick`, cada minuto) los manda aunque
+   nadie tenga la app abierta. Las horas salen de las MISMAS funciones que
+   pintan la tarjeta (`calcularComidas` e `infoTurno`), así que el aviso y el
+   horario no pueden decir horas distintas.
+
+   Se manda la lista al publicar, al cambiar un día, al desbloquear (lista
+   vacía = se borran) y cada vez que el gerente abre el horario: esto último
+   cubre las semanas que se publicaron antes de que existieran los avisos. */
+function avisosSincronizables_() {
+  return _puedeEditar && _tienda && _tienda.store_id === AVISOS_TIENDA;
+}
+
+// El domingo de la semana N, buscándola cerca de la actual: las claves no
+// traen año, y así el cambio de año (52/53 → 1) no se equivoca.
+function domingoDeNumero_(semN) {
+  for (let k = -2; k <= 8; k++) {
+    const dom = new Date(_base.domingo); dom.setDate(dom.getDate() + k * 7);
+    if (semanaISO(new Date(dom.getTime() + 86400000)) === semN) return dom;
+  }
+  return null;
+}
+
+function filasAvisosSemana_(dias, domingo) {
+  const comidas = calcularComidas(dias);
+  const filas = [], sinNumero = new Set();
+  for (let d = 0; d < 7; d++) {
+    const f = new Date(domingo); f.setDate(f.getDate() + d);
+    const fecha = fechaLocal_(f);
+    PERSONAS.forEach(p => {
+      const turno = dias[d] && dias[d][p];
+      if (!turno) return;
+      const inf = infoTurno(p, turno, d);
+      const textos = { comida: comidas[d][p], ls1: inf.ls1, ls2: inf.ls2 };
+      const emp = String(EQUIPO[p].emp || '').trim();
+      Object.keys(textos).forEach(tipo => {
+        const m = /(\d{1,2}):(\d{2})/.exec(textos[tipo] || '');
+        if (!m) return;
+        if (!emp) { sinNumero.add(p); return; }
+        filas.push({ fecha, empno: emp, tipo, hora: m[1].padStart(2, '0') + ':' + m[2] });
+      });
+    });
+  }
+  return { filas, sinNumero: [...sinNumero] };
+}
+
+async function sincronizarAvisos_(semN) {
+  if (!avisosSincronizables_()) return;
+  const dom = domingoDeNumero_(semN);
+  if (!dom) return;   // semana lejana: ni ha empezado a importar ni ya importa
+  const g = _cache.semanas_guardadas?.[`semana_${semN}`];
+  const { filas, sinNumero } = g ? filasAvisosSemana_(g.dias, dom) : { filas: [], sinNumero: [] };
+  const fin = new Date(dom); fin.setDate(fin.getDate() + 6);
+  try {
+    const { data, error } = await _sb.rpc('avisos_semana_guardar', {
+      p_store: _tienda.store_id, p_desde: fechaLocal_(dom), p_hasta: fechaLocal_(fin), p_filas: filas });
+    if (error) throw error;
+    if (!data || data.ok !== true) throw new Error((data && data.error) || 'sin respuesta');
+    if (sinNumero.length) mostrarAvisoCampana_(
+      `⚠ ${sinNumero.join(', ')} no tiene número de empleado en Admin → Equipo: no le llegarán sus recordatorios.`);
+  } catch (e) {
+    const msg = (e && e.message) || String(e);
+    /* Si falta pegar el SQL de la fase 2, la función no existe: se dice una
+       vez por consola y no se le grita al gerente en cada apertura. */
+    if (/avisos_semana_guardar|PGRST202|function/i.test(msg)) console.warn('Avisos: falta el SQL de la fase 2 —', msg);
+    else mostrarAvisoCampana_(`⚠ Los recordatorios de la semana ${semN} no se guardaron: ${msg}`);
+  }
+}
+
+// Al abrir: la semana en curso y las ya publicadas que vienen.
+function sincronizarAvisosAbiertas_() {
+  if (!avisosSincronizables_()) return;
+  const actual = _base.semana;
+  Object.keys(_cache.semanas_guardadas || {})
+    .map(k => parseInt(k.replace('semana_', ''), 10))
+    .filter(n => { const dom = domingoDeNumero_(n); return dom && dom >= _base.domingo || n === actual; })
+    .forEach(n => sincronizarAvisos_(n));
 }
 
 /* Sin alert(): el mensaje se queda en el renglón de la campana unos segundos. */
@@ -3573,6 +3658,7 @@ async function init() {
     if (_puedeEditar && g && g.s && g.d) { _semana = g.s; _domingo = new Date(g.d); }
   } catch (e) {}   // ilegible o sin almacenamiento: se empieza en la semana en curso
   renderSemana();
+  sincronizarAvisosAbiertas_();
 }
 
 /* El aviso de «no hay horario» habla distinto según quién lo lee: al gerente le
@@ -3666,6 +3752,7 @@ async function guardarDiasSemana_(dias, cambios, semana) {
     .slice(SEMANAS_PASADAS).forEach(k => delete sg[`semana_${k}`]);
   await guardarConfig('semanas_guardadas', sg);
   _cache.semanas_guardadas = sg;
+  sincronizarAvisos_(semN);   // publicar o cambiar un día reprograma los recordatorios
 }
 
 async function guardarSemana() {
@@ -3694,6 +3781,7 @@ async function desbloquearSemana() {
   delete sg[`semana_${_semana}`];
   await guardarConfig('semanas_guardadas', sg);
   _cache.semanas_guardadas = sg;
+  sincronizarAvisos_(_semana);   // desbloqueada = sin horario = sin recordatorios
   /* Los respaldos de antes del 4-ago-2026 traen la copia vieja dentro de
      `__publicadas`; si quedara, el equipo seguiría viendo la semana que se acaba
      de desbloquear. Se limpia cuando existe. */
@@ -3723,6 +3811,7 @@ async function quitarSemanaProx() {
     delete sg[`semana_${semTarget}`];
     await guardarConfig('semanas_guardadas', sg);
     _cache.semanas_guardadas = sg;
+    sincronizarAvisos_(semTarget);   // ya no hay horario: se borran sus recordatorios
   }
   renderFormProxima();
   const msg = document.getElementById('admin-msg');
