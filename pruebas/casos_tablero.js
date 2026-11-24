@@ -213,6 +213,33 @@ ok('y el banner la nombra de forma reconocible en piso',
 aplicarTodo(Object.assign(_deSupabase(JSON.parse(JSON.stringify(TIENDA))), { __sb:true }));
 
 
+/* ── 8-bis · El monto vendido en seguros (24-nov-2026) ───────────────────
+   900099 está en promo (regular 5999, promo 4999): el seguro va por el regular.
+   Lo que no tiene años se dice; nunca se cuenta como $0 ni como 1 año. */
+{
+  const T = JSON.parse(JSON.stringify(TIENDA));
+  T.ventas_hoy = [
+    { vendedor:'Prueba Uno', con_seguro:2, sin_seguro:0,
+      seguros:[{ sku:'900099', anios:1 }, { sku:'900099', anios:null }] },
+    { vendedor:'Prueba Dos', con_seguro:1, sin_seguro:0, seguros:[{ sku:'900099', anios:2 }] } ];
+  aplicarTodo(Object.assign(_deSupabase(T), { __sb:true }));
+  const r = seguroPara(5999);
+  ok('el seguro de una promo va por el precio regular', montoSeguro('900099', 1) === r.p1, montoSeguro('900099', 1));
+  const t = sumaSegurosTienda();
+  ok('el monto suma 1 y 2 años', t && t.monto === r.p1 + r.p2, JSON.stringify(t));
+  ok('y lo que no tiene años se cuenta aparte', t && t.sin === 1, JSON.stringify(t));
+  busqueda = ''; filtroActivo = 'inicio'; render();
+  ok('la tarjeta enseña el monto', app.innerHTML.indexOf(money(r.p1 + r.p2) + ' · 1 sin monto</b> en seguros') >= 0);
+  const eraAb = EQUIPO_ABIERTO; EQUIPO_ABIERTO = true;
+  ok('y cada asesor el suyo', equipoHtml().indexOf(money(r.p2) + '</span>') >= 0, equipoHtml());
+  EQUIPO_ABIERTO = eraAb;
+  // Un servidor sin el SQL no manda `seguros`: no se enseña nada, ni $0.
+  aplicarTodo(Object.assign(_deSupabase(JSON.parse(JSON.stringify(TIENDA))), { __sb:true }));
+  render();
+  ok('sin el dato no inventa un monto', app.innerHTML.indexOf('en seguros') < 0);
+}
+
+
 /* ── 9 · La pieza de exhibición vendida desaparece del aparador ──────────
    Con los números REALES del caso que lo destapó (17-ago-2026, v175):
    HUAWEI WATCH FIT 4 — 5 piezas cerradas, 1 en exhibición, y esa se vendió

@@ -157,8 +157,8 @@ function venderUna(ent, conSeguro){
       if(/\schecked|aria-pressed="true"|class="[^"]*\b(on|sel|activo)\b/.test(modal))
         fallos.push('seguro: el modal trae una opción ya elegida — en Captura se destaca, no se marca');
       const btn = id => (modal.match(new RegExp('<button[^>]*id="' + id + '"[^>]*>')) || [''])[0];
-      if(!/finalizarVenta\(true\)/.test(btn('segSi1'))) fallos.push('seguro: «1 año» no registra la venta CON seguro');
-      if(!/finalizarVenta\(true\)/.test(btn('segSi2'))) fallos.push('seguro: «2 años» no registra la venta CON seguro');
+      if(!/finalizarVenta\(true,1\)/.test(btn('segSi1'))) fallos.push('seguro: «1 año» no registra la venta CON seguro');
+      if(!/finalizarVenta\(true,2\)/.test(btn('segSi2'))) fallos.push('seguro: «2 años» no registra la venta CON seguro');
       if(!/finalizarVenta\(false\)/.test(btn('segNo'))) fallos.push('seguro: «Sin seguro» no registra la venta sin seguro');
       if(!/class="btn-con-seg"/.test(btn('segSi1')) || modal.indexOf('seg-reco') < 0)
         fallos.push('seguro: «1 año» perdió el destacado (el sólido y «Recomendado»)');

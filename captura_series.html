@@ -960,6 +960,8 @@ function _sbCuerpo(row){
     // seguro puede venir true/false o vacío en capturas viejas: NULL no es
     // lo mismo que "sin seguro" y hundiría el attach rate si se confunden.
     p_seguro: (row.seguro === true || row.seguro === false) ? row.seguro : null,
+    // null = no se sabe (capturas de antes). No se rellena con 1: inventaría dinero.
+    p_seguro_anios: row.segAnios || null,
     p_fecha: String(row.fecha || ''),
     p_hora:  String(row.hora || ''),
     /* El id de esta captura. Es lo único que permite volver a encontrar la fila
@@ -1569,12 +1571,13 @@ $('btnAdd').onclick = () => {
   $('modalSeguro').classList.add('show');
 };
 
-window.finalizarVenta = function(conSeguro){
+window.finalizarVenta = function(conSeguro, anios){
   $('modalSeguro').classList.remove('show');
   if(!_pendingVenta) return;
   const v = _pendingVenta; _pendingVenta = null;
   const item = { id:v.id, serie:v.serie, sku:v.sku, precio:v.precio,
     desc:v.desc, vend:v.vend, fecha:v.fecha, hora:v.hora, seguro:conSeguro,
+    segAnios: conSeguro && (anios === 1 || anios === 2) ? anios : null,
     exhibicion: v.exhibicion === true,
     // Agrupa los artículos de una misma compra. Ver `cargarVentaAbierta`.
     grupo: grupoActual() };
@@ -1584,7 +1587,7 @@ window.finalizarVenta = function(conSeguro){
      además el aparador ocupado por una pieza que ya salió. Es la cadena 1 del
      MAPA otra vez — lo que no se nombra se pierde en silencio. */
   const pend = { id:item.id, fecha:item.fecha, hora:item.hora, serie:item.serie,
-    sku:item.sku, desc:item.desc, precio:item.precio, vend:item.vend, seguro:item.seguro,
+    sku:item.sku, desc:item.desc, precio:item.precio, vend:item.vend, seguro:item.seguro, segAnios:item.segAnios,
     exhibicion: item.exhibicion, grupo: item.grupo };
   if(v._foto){ photoMap[item.id] = v._foto; pend.foto = true; }
   /* SUPABASE PRIMERO, y por su cuenta (17-ago-2026, fase 5).
@@ -2160,6 +2163,7 @@ async function cargarVentasDia(dia){
                   seguro», es una captura vieja sin el dato, y confundirlos
                   pinta de rojo un attach que nadie midió. */
                seguro: (v.con_seguro === true || v.con_seguro === false) ? v.con_seguro : null,
+               segAnios: Number(v.seguro_anios) || null,
                // 'preventa' | 'traspaso' | '' — ver la etiqueta en pintarVentasDia
                entrega: v.entrega || '',
                // Cuándo se cobró el apartado: dice en qué corte está su ticket
@@ -3932,7 +3936,7 @@ window.bajarRepExcel = async function(){
    El formulario manda SIEMPRE los siete campos, no solo los tocados: así no
    hay que distinguir "no lo toques" de "ponlo vacío", que es la clase de
    ambigüedad con la que se borran datos sin querer. */
-let _edIdx = null, _edSeguro = null, _edSkuOriginal = '';
+let _edIdx = null, _edSeguro = null, _edAnios = null, _edSkuOriginal = '';
 const AVISO_SKU_BASE = 'Al cambiar el SKU se corrige también el inventario de '
   + 'los <b>dos</b> productos. Comprueba el stock de ambos después.';
 
@@ -3963,7 +3967,7 @@ window.abrirEditarVenta = function(i){
   /* El seguro arranca en lo que diga la venta. `null` (ventas viejas sin dato)
      NO se convierte en `false`: son cosas distintas y confundirlas hunde el
      attach. Se deja sin marcar y no se puede guardar hasta elegir. */
-  edSeguro(typeof v.seguro === 'boolean' ? v.seguro : null);
+  edSeguro(typeof v.seguro === 'boolean' ? v.seguro : null, v.segAnios);
 
   /* Quién la tecleó, cuando se sabe. No es un campo que se corrija: es para
      poder preguntarle a esa persona. Las ventas anteriores al 21-sep-2026 y las
@@ -4051,9 +4055,14 @@ window.edMirarSku = function(){
   }
 };
 
-window.edSeguro = function(val){
+/* Con seguro y sin años (ventas de antes) no se enciende ninguno de los dos:
+   se puede guardar otra corrección sin inventarle los años. */
+window.edSeguro = function(val, anios){
   _edSeguro = val;
-  $('edSegSi').className = val === true ? 'on' : '';
+  _edAnios = val === true ? (anios || null) : null;
+  $('edSegSi1').className = _edAnios === 1 ? 'on' : '';
+  $('edSegSi2').className = _edAnios === 2 ? 'on' : '';
+  $('edSegSin').style.display = val === true && !_edAnios ? '' : 'none';
   $('edSegNo').className = val === false ? 'on no' : '';
 };
 
@@ -4079,6 +4088,7 @@ window.guardarEdicionVenta = async function(){
       p_precio: Number($('edPrecio').value.replace(/[^0-9.]/g,'')) || null,
       p_vendedor: $('edVend').value,
       p_seguro: _edSeguro,
+      p_seguro_anios: _edAnios,
       p_fecha: $('edFecha').value || null,
       p_quien: MI_EMPNO
     }, 15000);
@@ -5772,9 +5782,11 @@ refreshEolVenta(); // trae los EOL con 50% activo (solo exhibición)
       <input id="edFecha" class="ed-i" type="date">
       <label class="ed-l">Seguro Assurant</label>
       <div class="ed-seg">
-        <button type="button" id="edSegSi" onclick="edSeguro(true)">🛡️ Con seguro</button>
+        <button type="button" id="edSegSi1" onclick="edSeguro(true,1)">🛡️ 1 año</button>
+        <button type="button" id="edSegSi2" onclick="edSeguro(true,2)">🛡️ 2 años</button>
         <button type="button" id="edSegNo" onclick="edSeguro(false)">Sin seguro</button>
       </div>
+      <div class="mt10 t-chica" id="edSegSin" style="display:none">Va con seguro, pero no se guardó si fue de 1 o 2 años.</div>
       <!-- Solo aparece si se toca el SKU: es el único campo que mueve stock. -->
       <div id="edAvisoSku" style="display:none;margin-top:12px;padding:10px 12px;
            border-radius:9px;border-left:4px solid var(--naranja);background:var(--atencion-bg);
@@ -5806,16 +5818,15 @@ refreshEolVenta(); // trae los EOL con 50% activo (solo exhibición)
          ni se elige con Enter o tocando fuera — el attach tiene que contar
          seguros que alguien vendió, no el botón que quedó encendido.
          `pruebas/pantalla_390.js` lo comprueba en un navegador de verdad.
-         1 y 2 años registran lo mismo (`seguro: true`): la base no guarda los
-         años. «2 años» está para que quien lo vendió no tenga que tocar un
-         botón que dice otra cosa. -->
+         Cada botón guarda SUS años (24-nov-2026): el tablero les pone precio
+         para el monto vendido en seguros. Ver supabase_seguro_anios.sql. -->
     <div class="modal-seg-btns">
-      <button type="button" class="btn-con-seg" id="segSi1" onclick="finalizarVenta(true)">
+      <button type="button" class="btn-con-seg" id="segSi1" onclick="finalizarVenta(true,1)">
         <span class="seg-reco">Recomendado</span>
         <span class="seg-lbl">🛡️ Sí · 1 año</span>
         <span class="seg-det">protege 2 años con el de fábrica</span>
       </button>
-      <button type="button" class="btn-con-seg2" id="segSi2" onclick="finalizarVenta(true)">🛡️ Sí · 2 años</button>
+      <button type="button" class="btn-con-seg2" id="segSi2" onclick="finalizarVenta(true,2)">🛡️ Sí · 2 años</button>
       <button type="button" class="btn-sin-seg" id="segNo" onclick="finalizarVenta(false)">Sin seguro</button>
     </div>
   </div>

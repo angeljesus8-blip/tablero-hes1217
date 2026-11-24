@@ -61,7 +61,7 @@ const ok = (t, c, extra) => { if(!c) fallos.push(t + (extra ? ' -> ' + extra : '
     s.el('desc').value   = 'Equipo de prueba';
     s.caja.setVend(EQUIPO[1]);            // ya eligió su nombre
     s.el('btnAdd').onclick();            // abre el modal del seguro
-    s.caja.finalizarVenta(true);          // "con Assurant"
+    s.caja.finalizarVenta(true, 2);       // "con Assurant", 2 años
 
     const cola = s.colaSb();
     ok('la venta entra en la cola de Supabase aunque no haya red',
@@ -70,6 +70,7 @@ const ok = (t, c, extra) => { if(!c) fallos.push(t + (extra ? ' -> ' + extra : '
       ok('y con la serie correcta', cola[0].p_serie === 'SERIE-PRUEBA-1', cola[0].p_serie);
       /* El seguro es lo que decide el Assurant. `false` y `null` NO son lo
          mismo: null es "no se sabe" y hunde el attach si se confunden. */
+      ok('y con los años que se tocaron', cola[0].p_seguro_anios === 2, String(cola[0].p_seguro_anios));
       ok('y con el seguro tal cual se marcó', cola[0].p_seguro === true, String(cola[0].p_seguro));
       ok('y con el id de captura, que es lo único que permite borrarla luego',
          !!cola[0].p_captura_id, 'llegó vacío');

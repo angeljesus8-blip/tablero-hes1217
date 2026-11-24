@@ -2066,6 +2066,20 @@ Esa prueba corre en cada commit y comprueba las dos cosas que fallarían sin dar
 señal: que una venta capturada **sin red** acaba en la cola de Supabase, y que
 la cola vieja se rescata una vez y solo una. Las dos, comprobadas rompiéndolas.
 
+### El monto vendido en seguros *(24-nov-2026, v317)*
+
+La base guarda **los años** (`ventas.seguro_anios`, `apartados.seguro_anios`),
+nunca el importe: el precio sale de `SEGUROS` en `tablero.html`, sobre el precio
+regular (`montoSeguro`). `ventas_hoy` manda `seguros: [{sku, anios}]` por asesor.
+
+- Escriben: `venta_guardar`, `venta_editar` y `apartado_guardar`
+  (`p_seguro_anios`). Lee además `ventas_detalle`, para corregir.
+- `null` = no se sabe (ventas anteriores, app vieja). Sale como «N sin monto»,
+  nunca como $0 ni como 1 año.
+- Si cambia el precio de lista a media jornada, el monto de hoy se recalcula.
+- ⚠️ `supabase_seguro_anios.sql` va ANTES de publicar la app.
+- Lo cubren el caso 8-bis de `casos_tablero.js` y `cola_ventas.js`.
+
 ### El Assurant del día también lleva candado *(17-ago-2026, v168)*
 
 Tercer candado `__sb`, junto al del stock y el de los apartados, y por el mismo

@@ -359,6 +359,7 @@
   .lead-row:last-of-type { border-bottom:none; }
   .lead-name { flex:1; font-size:var(--t-md); font-weight:700; }
   .lead-ventas { font-size:var(--t-sm); color:var(--tinta-3); font-weight:700; white-space:nowrap; min-width:52px; text-align:center; }
+  .lead-monto { font-size:var(--t-sm); font-weight:700; min-width:58px; max-width:84px; text-align:right; }
   .lead-att { font-size:var(--t-sm); font-weight:800; white-space:nowrap; min-width:80px; text-align:right; }
   /* ── Concurso Oro/Plata, tarjeta hermana de la del Assurant (21-sep-2026) ──
      Misma familia visual —cabecera, filas y cierre— porque son lo mismo para
@@ -520,7 +521,7 @@
   .ap-pieza, .trf-lin, .trf-fila { display:flex; align-items:center; gap:8px; margin-top:8px; }
   .ap-pieza b { font-size:var(--t-sm); white-space:nowrap; }
   .ap-pieza select { flex:1; min-width:0; padding:10px; font-size:var(--t-md); }
-  .ap-pieza label { white-space:nowrap; }
+  .ap-pieza select.ap-seg { flex:0 0 104px; }
   .trf-fila > :first-child { flex:1; min-width:0; }
   .trf-lin span { flex:1; min-width:0; font-size:var(--t-md); font-weight:600; }
   .trf-lin small { display:block; font-size:var(--t-sm); color:var(--tinta-3); }
@@ -1559,9 +1560,44 @@ function attPorVendedor(){
   ventasHoyLocal().forEach(v=>{
     const n = v.vend || '(sin nombre)';
     if(!acc[n]) acc[n] = {c:0,s:0};
-    if(v.seguro===true) acc[n].c++; else acc[n].s++;
+    if(v.seguro===true){ acc[n].c++; (acc[n].seg = acc[n].seg || []).push({ sku:v.sku, anios:v.segAnios }); }
+    else acc[n].s++;
   });
   return acc;
+}
+/* ---- Monto vendido en seguros (24-nov-2026) ----
+   La base guarda el SKU y los años; el precio sale de SEGUROS, sobre el
+   REGULAR, como en las tarjetas. Lo que no se puede poner en pesos —años sin
+   guardar, SKU fuera de la tabla— se cuenta en `sin`: nunca como $0. */
+function montoSeguro(sku, anios){
+  const promo = PROMOS.find(x => String(x.sku) === String(sku));
+  const regular = Number(promo && promo.pr) || Number((invBySku[sku] || {}).precio) || 0;
+  const s = seguroPara(regular, sku);
+  return !s ? null : Number(anios) === 1 ? s.p1 : Number(anios) === 2 ? s.p2 : null;
+}
+// null = el servidor todavía no manda los seguros: no se enseña nada.
+function sumaSeguros(a){
+  if(!a || !Array.isArray(a.seg)) return null;
+  const r = { monto:0, sin:0 };
+  a.seg.forEach(function(x){
+    const m = montoSeguro(x.sku, x.anios);
+    if(m === null) r.sin++; else r.monto += m;
+  });
+  return r;
+}
+function sumaSegurosTienda(){
+  const por = attPorVendedor(); let t = null;
+  Object.keys(por).forEach(function(n){
+    const r = sumaSeguros(por[n]);
+    if(!r) return;
+    t = t || { monto:0, sin:0 };
+    t.monto += r.monto; t.sin += r.sin;
+  });
+  return t;
+}
+function textoSeguros(r){
+  if(!r || (!r.monto && !r.sin)) return '';
+  return [r.monto ? money(r.monto) : '', r.sin ? r.sin + ' sin monto' : ''].filter(Boolean).join(' · ');
 }
 function attCapturado(){
   const por = attPorVendedor(); const t = {c:0,s:0};
@@ -1586,7 +1622,7 @@ function filasLeaderboard(){
   return nombres.map(v=>{
     const a = por[v] || {c:0,s:0};
     const t = a.c + a.s;
-    return { vend:v, c:a.c, s:a.s, total:t, pct: t>0 ? Math.round(a.c/t*100) : null };
+    return { vend:v, c:a.c, s:a.s, total:t, seg:textoSeguros(sumaSeguros(a)), pct: t>0 ? Math.round(a.c/t*100) : null };
   }).sort((a,b)=>{
     if(a.pct===null && b.pct===null) return a.vend.localeCompare(b.vend);
     if(a.pct===null) return 1;
@@ -1717,6 +1753,7 @@ function equipoHtml(){
     return `<div class="lead-row">
       <span class="lead-name">${esc(nombreCorto(f.vend))}</span>
       <span class="lead-ventas">${f.total?f.total+' vta'+(f.total!==1?'s':''):'—'}</span>
+      <span class="lead-monto">${f.seg || '—'}</span>
       <span class="lead-att" style="color:${col}">${f.pct!==null?f.pct+'% '+ev:'—'}</span>
     </div>`;
   }).join('');
@@ -1739,9 +1776,11 @@ function resumenWA(){
   const avisosAct=(D.avisos||[]).filter(a=>!a.d2||a.d2>=HOY_ISO).length;
   let msg=`📊 *Resumen HES ${TIENDA_ID} · ${hoy}*\n\n`;
   msg+=`🛡️ *Assurant: ${total>0?pct+'% '+emoji:'sin registros'}* (${att.c}/${total})\n`;
+  const segT = textoSeguros(sumaSegurosTienda());
+  if(segT) msg+=`💵 Vendido en seguros: *${segT}*\n`;
   filasLeaderboard().forEach(f=>{
     if(!f.total) return;
-    msg+=`  · ${nombreCorto(f.vend)} → ${f.c}/${f.total} = ${f.pct}% ${f.pct>=25?'✅':f.pct>=15?'⚠️':'🔴'}\n`;
+    msg+=`  · ${nombreCorto(f.vend)} → ${f.c}/${f.total} = ${f.pct}% ${f.pct>=25?'✅':f.pct>=15?'⚠️':'🔴'}${f.seg?' · '+f.seg:''}\n`;
   });
   if(promoAct) msg+=`\n🔥 Promos vigentes: ${promoAct}`;
   if(eolList)  msg+=`\n🏷️ EOL al 50%: ${eolList}`;
@@ -2595,7 +2634,12 @@ function apFilasPintar(){
   c.innerHTML = _apFilas.map((f, i) => `<div class="ap-pieza">
     <b>${f.ok ? '✅' : 'Pieza ' + (i + 1)}</b>
     <select class="ap-inp" ${f.ok ? 'disabled' : ''} onchange="apFilaTienda(${i},this)">${trfOpciones(f.origen)}</select>
-    <label title="Lleva seguro"><input type="checkbox" ${f.seguro ? 'checked' : ''} ${f.ok ? 'disabled' : ''} onchange="apFilaSeguro(${i},this.checked)"> 🛡️</label>
+    <select class="ap-inp ap-seg" aria-label="Seguro" ${f.ok ? 'disabled' : ''} onchange="apFilaSeguro(${i},this.value)">
+      ${f.seguro && !f.anios ? '<option value="" selected>🛡️ ¿años?</option>' : ''}
+      <option value="0"${f.seguro ? '' : ' selected'}>Sin 🛡️</option>
+      <option value="1"${f.anios === 1 ? ' selected' : ''}>🛡️ 1 año</option>
+      <option value="2"${f.anios === 2 ? ' selected' : ''}>🛡️ 2 años</option>
+    </select>
     ${_apFilas.length > 1 && !f.ok ? `<button class="cot-quitar" aria-label="Quitar pieza" onclick="apFilaQuitar(${i})">×</button>` : ''}
   </div>`).join('');
 }
@@ -2613,7 +2657,7 @@ function apVendPintar(){
     + nombres.map(n => `<option value="${esc(n)}"${n === _apVend ? ' selected' : ''}>${esc(n)}</option>`).join('') + '</select>';
 }
 function apFilaTienda(i, sel){ _apFilas[i].origen = trfElegir(sel); _apartBorradorGuardar(); }
-function apFilaSeguro(i, si){ _apFilas[i].seguro = si; _apartBorradorGuardar(); }
+function apFilaSeguro(i, v){ const n = Number(v) || 0; _apFilas[i].seguro = n > 0; _apFilas[i].anios = n || null; apFilasPintar(); _apartBorradorGuardar(); }
 function apFilaMas(){
   if(_apGuardando) return;
   const u = _apFilas[_apFilas.length - 1];
@@ -2783,7 +2827,7 @@ async function guardarApartado(){
     // sbEscribir no lanza: un corte de red llega como null.
     const data = await sbEscribir('apartado_guardar', {
       p_sku: sku, p_color: producto, p_cliente: cliente, p_telefono: tel,
-      p_precio: precio, p_seguro: !!fila.seguro,
+      p_precio: precio, p_seguro: !!fila.seguro, p_seguro_anios: fila.seguro ? (fila.anios || null) : null,
       p_vendedor: vend, p_transaccion: transaccion,
       p_tipo: 'traspaso', p_origen: fila.origen || null, p_promesa: promesa || null
     });
@@ -3273,6 +3317,7 @@ function render(){
     const pct=total>0?Math.round(att.c/total*100):0;
     const col=pct>=25?'var(--ok)':pct>=15?'var(--atencion)':'var(--rojo)';
     const barW=Math.min(pct,100);
+    const segTienda = textoSeguros(sumaSegurosTienda());
     /* De dónde salen las ventas. Ya no se enumeran capturas contra ajustes
        manuales porque los manuales dejaron de existir: o son las de toda la
        tienda, o —sin red— solo las de este aparato, y ESO sí hay que decirlo. */
@@ -3285,7 +3330,7 @@ function render(){
       <div class="att-cifra">
         <div class="att-rate" id="attRate" style="color:${col}">${total>0?pct+'%':'—'}</div>
         <div class="att-sub" id="attSub">${total>0
-          ? `${att.c} con seguro<br>de ${total} venta${total!==1?'s':''} hoy ${pct>=25?'✅':'⚠️'}`
+          ? `${att.c} con seguro<br>de ${total} venta${total!==1?'s':''} hoy ${pct>=25?'✅':'⚠️'}${segTienda ? `<br><b>${segTienda}</b> en seguros` : ''}`
           : 'Aún sin ventas<br>registradas hoy'}</div>
       </div>
       <div class="att-prog">
@@ -3714,6 +3759,7 @@ function _vendDeSupabase(filas){
   const vend = {};
   (filas || []).forEach(function(v){
     vend[v.vendedor] = { c:Number(v.con_seguro)||0, s:Number(v.sin_seguro)||0 };
+    if(Array.isArray(v.seguros)) vend[v.vendedor].seg = v.seguros;
   });
   return vend;
 }
@@ -3725,6 +3771,7 @@ function aplicarVentas(data){
   Object.keys(data.vend).forEach(function(n){
     const v = data.vend[n] || {};
     acc[n] = { c:Number(v.c)||0, s:Number(v.s)||0 };
+    if(Array.isArray(v.seg)) acc[n].seg = v.seg;
   });
   VENTAS_NUBE = acc;
   VENTAS_NUBE_HORA = 'actualizado ' + new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
