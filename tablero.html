@@ -1507,7 +1507,7 @@ function cotCompartir(){
   const txt = 'Tu cotización HES Angelópolis:\n\n' + lin
             + '\n\nTOTAL: ' + money(cotTotal()) + msi
             + '\n\n*Precios sujetos a disponibilidad.*';
-  window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
+  compartirTexto(txt);
 }
 
 /* slidePromo y onPromoSliderScroll se retiraron el 7-ago-2026 junto con las dos
@@ -1746,7 +1746,7 @@ function resumenWA(){
   if(eolList)  msg+=`\n🏷️ EOL al 50%: ${eolList}`;
   if(avisosAct)msg+=`\n📢 Avisos activos: ${avisosAct}`;
   msg+=`\n\n_HES ${TIENDA_NOMBRE} · Odemás Grupo Gigante_`;
-  window.open('https://wa.me/?text='+encodeURIComponent(msg.trim()),'_blank');
+  compartirTexto(msg.trim());
 }
 /* ---- WhatsApp share ---- */
 function compartirWA(prodEnc,sku,pv,pb,sinSeguro,incluyeEnc){
@@ -1774,7 +1774,7 @@ function compartirWA(prodEnc,sku,pv,pb,sinSeguro,incluyeEnc){
   const msi=msiPlazos(pv).map(m=>m+' MSI'+(m===18?'*':''));
   if(msi.length) msg+='\n\n💳 '+msi.join(' · ')+' disponibles';
   msg+='\n\n_HES Angelópolis Puebla_';
-  window.open('https://wa.me/?text='+encodeURIComponent(msg.trim()),'_blank');
+  compartirTexto(msg.trim());
 }
 
 /* ¿Se le puede vender HOY a un cliente que está enfrente?
@@ -2077,12 +2077,13 @@ function trfVaciar(g){
 function trfWA(g){
   const o = _trfGrupos[g];
   const t = trfTextoWA(TRF.msgs[o] || '', TRF.lineas.filter(l => l.origen === o));
-  trfCompartir(t);
+  compartirTexto(t);
 }
-/* En el celular va por el menú Compartir: con WhatsApp y Business instalados,
+/* Por aquí salen TODOS los WhatsApp del tablero.
+   En el celular va por el menú Compartir: con WhatsApp y Business instalados,
    `wa.me` abre siempre el que Android tenga por defecto y no deja escoger. En la
    compu, y donde no exista el menú, sigue `wa.me`. */
-async function trfCompartir(t){
+async function compartirTexto(t){
   if(navigator.share && /Android|iPhone|iPad/.test(navigator.userAgent || '')){
     try{ await navigator.share({ text:t }); return; }
     catch(e){ if(e && e.name === 'AbortError') return; }   // la persona cerró el menú: no se abre nada más
@@ -3021,7 +3022,7 @@ function resurtirWA(){
     RESURTIR.forEach(x => lines.push('• ' + x.producto + ' (SKU ' + x.sku + ')'));
   }
   lines.push('', '_HES ' + TIENDA_NOMBRE + ' · Odemás Grupo Gigante_');
-  window.open('https://wa.me/?text=' + encodeURIComponent(lines.join('\n')), '_blank');
+  compartirTexto(lines.join('\n'));
 }
 
 function marcarNoResurtir(sku, producto, btn){

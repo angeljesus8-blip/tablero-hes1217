@@ -83,18 +83,19 @@ ok('CORREO · una sola nace marcada', correr('_trfMail.sel.size') === 1 && /Lind
 
 // ── Guardado de varias piezas ──
 (async () => {
+  ok('COMPARTIR · un solo wa.me en todo el tablero', html.split('wa.me/?text').length === 2);
   // Compartir: menú en el celular, wa.me en la compu o si el menú falla
   global.__abierto = []; global.__menu = [];
   global.open = u => global.__abierto.push(u);
   const nav = (ua, share) => Object.defineProperty(global, 'navigator', { configurable:true, writable:true, value:{ userAgent:ua, share } });
   const bien = async d => { global.__menu.push(d.text); };
-  nav('Android', bien); await correr('trfCompartir("x")');
+  nav('Android', bien); await correr('compartirTexto("x")');
   ok('COMPARTIR · celular usa el menú', global.__menu.join() === 'x' && !global.__abierto.length);
-  nav('Android', async () => { throw Object.assign(new Error(), { name:'AbortError' }); }); await correr('trfCompartir("x")');
+  nav('Android', async () => { throw Object.assign(new Error(), { name:'AbortError' }); }); await correr('compartirTexto("x")');
   ok('COMPARTIR · cerrar el menú no abre nada', !global.__abierto.length);
-  nav('Android', async () => { throw new Error('no'); }); await correr('trfCompartir("x")');
+  nav('Android', async () => { throw new Error('no'); }); await correr('compartirTexto("x")');
   ok('COMPARTIR · si falla, wa.me', global.__abierto.length === 1);
-  nav('Windows', bien); await correr('trfCompartir("x")');
+  nav('Windows', bien); await correr('compartirTexto("x")');
   ok('COMPARTIR · compu, wa.me', global.__abierto.length === 2 && global.__menu.length === 1);
 
   const prep = filas => {
