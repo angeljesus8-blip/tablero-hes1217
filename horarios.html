@@ -294,8 +294,11 @@ body.solo-mi-horario .leyenda { display: none; }
 .desc-extra-lbl  { font-size:9px; color:var(--tinta-2); margin-top:6px; }
 .desc-extra-nota { font-size:9px; color:var(--atencion); font-weight:700; margin-top:2px; }
 /* Cambio de un día: celda tocable, marca ✎ y la ventanita */
-td.editable, .mv-turno.editable { cursor:pointer; }
-td.editable:hover { outline:2px solid var(--azul); outline-offset:-2px; }
+td.editable, .mv-turno.editable { cursor:pointer; outline:2px dashed var(--azul); outline-offset:-3px; }
+td.editable:hover, .mv-turno.editable:hover { outline-style:solid; }
+#barra-cambios { position:fixed; left:12px; right:12px; bottom:12px; z-index:9000; display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--azul); color:#fff; border-radius:var(--r-md); box-shadow:var(--sombra-alta); padding:10px 12px; font:600 var(--t-sm) 'Montserrat',sans-serif; }
+#barra-cambios button { border:0; background:#fff; color:var(--azul); font:800 var(--t-sm) 'Montserrat',sans-serif; border-radius:var(--r-sm); padding:9px 14px; min-height:40px; cursor:pointer; white-space:nowrap; }
+body.modo-cambios { padding-bottom:76px; }
 .marca-cambio { color:var(--azul); font-weight:800; }
 #pop-dia { position:fixed; inset:0; z-index:9999; display:flex; align-items:center; justify-content:center; padding:16px; }
 #pop-dia .pop-fondo { position:absolute; inset:0; background:rgba(26,26,26,.35); }
@@ -475,6 +478,7 @@ td.editable:hover { outline:2px solid var(--azul); outline-offset:-2px; }
 .btn-sm.btn-lleno { border: none; color: #fff; }
 .btn-lleno.azul { background: var(--azul); } .btn-lleno.ok { background: var(--ok); }
 .btn-lleno.gris { background: var(--tinta-2); }
+.btn-lleno.naranja { background: var(--naranja); }
 .btn-sm.btn-peligro { background: var(--superficie); color: var(--alerta); border: 1.5px solid var(--alerta); }
 </style>
 </head>
@@ -588,6 +592,7 @@ td.editable:hover { outline:2px solid var(--azul); outline-offset:-2px; }
   <div id="acciones-ger">
     <button class="btn-sm btn-admin" onclick="abrirAdmin()">✎ Editar datos</button>
     <button class="btn-sm btn-lleno azul" id="btn-guardar-sem" onclick="guardarSemana()" style="display:none">💾 Guardar semana</button>
+    <button class="btn-sm btn-lleno naranja" id="btn-cambiar-dias" onclick="toggleModoCambios(true)" style="display:none" title="Activa el cambio de un solo día: sin esto, tocar el horario no cambia nada">✏️ Cambiar días</button>
     <button class="btn-sm btn-lleno gris" id="btn-desbloquear-sem" onclick="desbloquearSemana()" style="display:none">🔓 Desbloquear</button>
     <button class="btn-sm btn-lleno ok" id="btn-exportar" onclick="exportarExcel()" style="display:none">⬇ Excel</button>
     <button class="btn-sm" onclick="respaldoBajar()" title="Descarga equipo, historial, excepciones y semanas guardadas en un archivo">🗄️ Respaldo</button>
@@ -2875,6 +2880,33 @@ function td(v, cls) {
    comida, las tareas, el celular y el Excel salen de esos mismos días, así
    que se ajustan solos. Cada cambio queda en `cambios` con lo que decía antes:
    así se marca con ✎ y se regresa con un toque. */
+/* Modo cambios (24-nov-2026). Tocar una celda por error ya no cambiaba nada
+   —solo abría la ventanita—, pero gerencia pidió que ni eso: las celdas solo
+   responden después de pulsar «✏️ Cambiar días». No se recuerda: se apaga con
+   «Terminar», al cambiar de semana y al recargar. */
+let _modoCambios = false;
+function puedeTocar_(persona) {
+  return _puedeEditar && _modoCambios && !EQUIPO[persona].vacante;
+}
+function pintarBarraCambios_() {
+  let b = document.getElementById('barra-cambios');
+  if (!_modoCambios) { if (b) b.remove(); return; }
+  if (!b) {
+    b = document.createElement('div');
+    b.id = 'barra-cambios';
+    b.innerHTML = `<span>✏️ <b>Modo cambios</b> · toca el día que quieras cambiar</span>
+      <button type="button" onclick="toggleModoCambios(false)">✓ Terminar</button>`;
+    document.body.appendChild(b);
+  }
+}
+function toggleModoCambios(on) {
+  if (on && !_puedeEditar) return;
+  _modoCambios = !!on;
+  if (!on) cerrarCambioDia();
+  pintarBarraCambios_();
+  document.body.classList.toggle('modo-cambios', _modoCambios);
+  renderSemana();
+}
 function cambiosSemana_() {
   return _cache.semanas_guardadas?.[`semana_${_semana}`]?.cambios || [];
 }
@@ -2887,7 +2919,7 @@ function marcaCambio_(persona, d) {
   return c ? ` <span class="marca-cambio" title="Cambiado a mano · antes: ${escH_(nombreTurno_(persona, c.de, d))}">✎</span>` : '';
 }
 function tdTurno_(persona, d, inf) {
-  const edit = _puedeEditar && !EQUIPO[persona].vacante;
+  const edit = puedeTocar_(persona);
   return `<td class="${inf.cls || ''}${edit ? ' editable' : ''}"${edit ? ` onclick="abrirCambioDia('${persona}',${d})" title="Toca para cambiar este día"` : ''}>${inf.label || '—'}${marcaCambio_(persona, d)}</td>`;
 }
 
@@ -2915,7 +2947,7 @@ function cerrarCambioDia() {
   document.getElementById('pop-dia')?.remove();
 }
 function abrirCambioDia(persona, d) {
-  if (!_puedeEditar || !_diasActuales) return;
+  if (!puedeTocar_(persona) || !_diasActuales) return;
   cerrarCambioDia();
   const dias = _diasActuales, eq = EQUIPO[persona], tipo = eq.tipo;
   const actual = dias[d][persona];
@@ -3065,7 +3097,7 @@ function mvDias(persona, dias, comidas, domingo, hoyISO) {
     out += `<div class="mv-dia${esHoy ? ' mv-hoy' : ''}">
       <div class="mv-fecha">${DIAS_CORTOS[d]}<b>${String(f.getDate()).padStart(2,'0')}</b></div>
       <div>
-        <div class="mv-turno ${inf.cls || ''}${_puedeEditar && !EQUIPO[persona].vacante ? ' editable' : ''}"${_puedeEditar && !EQUIPO[persona].vacante ? ` onclick="abrirCambioDia('${persona}',${d})"` : ''}>${inf.label || '—'}${marcaCambio_(persona, d)}</div>
+        <div class="mv-turno ${inf.cls || ''}${puedeTocar_(persona) ? ' editable' : ''}"${puedeTocar_(persona) ? ` onclick="abrirCambioDia('${persona}',${d})"` : ''}>${inf.label || '—'}${marcaCambio_(persona, d)}</div>
         ${extras.length ? `<div class="mv-extra">${extras.join('')}</div>` : ''}
       </div>
     </div>`;
@@ -3384,6 +3416,9 @@ function renderSemana() {
   if (btnD) btnD.style.display = (!sinAsignar && guardada) ? '' : 'none';
   const btnE = document.getElementById('btn-exportar');
   if (btnE) btnE.style.display = sinAsignar ? 'none' : '';
+  const btnC = document.getElementById('btn-cambiar-dias');
+  if (btnC) btnC.style.display = (_puedeEditar && !sinAsignar && !_modoCambios) ? '' : 'none';
+  if (sinAsignar && _modoCambios) { _modoCambios = false; pintarBarraCambios_(); }
   if (sinAsignar) {
     _diasActuales = null;
     /* Sin horario no hay reparto: dejar el panel puesto enseñaría las tareas de
@@ -3626,6 +3661,8 @@ async function exportarExcel() {
 function navSemana(delta) {
   // El equipo ve solo la semana que le toca: ver `fijarSesion`.
   if (!_puedeEditar) return;
+  // Al cambiar de semana se apaga el modo cambios: se enciende para UNA semana.
+  if (_modoCambios) { _modoCambios = false; pintarBarraCambios_(); }
   _semana  += delta;
   const d   = new Date(_domingo);
   d.setDate(d.getDate() + delta * 7);
