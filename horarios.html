@@ -43,6 +43,15 @@ body {
    lleva de orilla a orilla a pesar del padding del body. */
 .barra { margin: -14px -14px 0; }
 .barra-volver { display: none; }
+/* Campana de avisos (24-nov-2026). Apagada = gris; encendida = verde. */
+.btn-avisos { margin-left: auto; flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%;
+              border: 2px solid var(--tinta-3); background: var(--fondo); font-size: 18px;
+              cursor: pointer; line-height: 1; padding: 0; }
+.btn-avisos.on   { border-color: var(--ok); background: var(--ok-bg); }
+.btn-avisos.alerta { border-color: var(--rojo); }
+.avisos-txt { margin: 8px 0 0; padding: 8px 12px; border-radius: 8px; font-size: 12px;
+              background: var(--fondo); color: var(--tinta-3); border-left: 4px solid var(--rojo); }
+.avisos-txt.on { border-left-color: var(--ok); }
 /* La semana, en su propio renglón bajo la barra: en la barra no cabía y en el
    celular empujaba la página a 413 px de ancho (medido el 22-sep-2026). */
 .semana-nav {
@@ -574,7 +583,11 @@ body.modo-cambios { padding-bottom:76px; }
     <h1 class="barra-titulo" id="hdr-tienda">Planeador de Horarios</h1>
     <p class="barra-sub">Horarios · Odemás</p>
   </div>
+  <!-- Solo aparece donde los avisos pueden funcionar (ver `prepararAvisos_`). -->
+  <button id="btn-avisos" class="btn-avisos" onclick="tocarCampana()" style="display:none"
+          aria-label="Avisos al celular" title="Avisos al celular">🔕</button>
 </header>
+<div id="avisos-txt" class="avisos-txt" style="display:none"></div>
 
 <nav class="semana-nav" aria-label="Semana">
   <button onclick="navSemana(-1)" aria-label="Semana anterior" id="btn-sem-ant">‹</button>
@@ -830,6 +843,181 @@ function fijarSesion(tienda, opciones) {
   });
   const h = document.getElementById('hdr-tienda');
   if (h) h.textContent = 'HES ' + _tienda.store_id + (_tienda.nombre ? ' · ' + _tienda.nombre : '');
+  prepararAvisos_();
+}
+
+/* ── Avisos al celular (OneSignal) · 24-nov-2026 ─────────────────────────────
+   Para que lleguen los recordatorios de comida y Ley Silla a CADA quien, el
+   celular tiene que estar (1) suscrito y (2) ligado a una persona. El
+   diagnóstico del 24-nov dio 5 celulares suscritos desde el tablero y NINGUNO
+   con dueño: solo se podía mandar «a todos». Aquí se liga con
+   `OneSignal.login(<tienda>-<número>)`; el servidor manda luego a ese id.
+
+   Solo donde puede funcionar: dentro del tablero de la tienda que tiene su app
+   de OneSignal (mismo origen y mismo sw.js que el tablero). En el planeador
+   público o en otra tienda la campana ni se pinta: una campana que no avisa es
+   peor que no tenerla.
+
+   La cuenta de correo no trae número: se le pide a `vincular_mi_cuenta`, que
+   lo saca de la ficha atada al correo. La cuenta de la tienda no tiene ficha
+   (ver gerente sin ficha) y entonces se dice, en vez de ligar a nadie. */
+const AVISOS_TIENDA = '1217';
+const AVISOS_APP    = 'db32a1ef-d484-4be3-adfc-2a9e17f7e4f1';   // no es secreto: también va en tablero.html
+const _avisos = { activo: false, cargado: false, listo: false, error: '', id: null, ligado: null, sinFicha: false };
+
+function avisosPosibles_() {
+  return prefijoDelTablero_() === 'hes1217_' && _tienda && _tienda.store_id === AVISOS_TIENDA;
+}
+function esIphone_() { return /iPhone|iPad|iPod/.test(navigator.userAgent); }
+function esInstalada_() {
+  return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+}
+function avisosSuscrito_() {
+  try { return !!(window.OneSignal && OneSignal.User.PushSubscription.optedIn); } catch (e) { return false; }
+}
+
+async function prepararAvisos_() {
+  if (_avisos.activo || !avisosPosibles_()) return;
+  _avisos.activo = true;
+  document.getElementById('btn-avisos').style.display = '';
+  pintarCampana_();
+
+  // ¿De quién es este celular?
+  if (_empno) _avisos.id = AVISOS_TIENDA + '-' + String(_empno).trim();
+  else {
+    try {
+      const v = (await _sb.rpc('vincular_mi_cuenta')).data;
+      if (v && v.ok && v.empno && v.store_id === AVISOS_TIENDA) _avisos.id = AVISOS_TIENDA + '-' + String(v.empno).trim();
+      else _avisos.sinFicha = true;
+    } catch (e) { _avisos.sinFicha = true; }
+  }
+
+  // iPhone fuera de la pantalla de inicio: Safari no da push. No se carga nada.
+  if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+    pintarCampana_();
+    return;
+  }
+
+  window.OneSignalDeferred = window.OneSignalDeferred || [];
+  const s = document.createElement('script');
+  s.src = 'https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js';
+  s.defer = true;
+  /* El caso del Chrome de Ángel (26-oct-2026): el CDN bloqueado por DNS privado
+     o bloqueador. Sin esto la campana se quedaría «cargando» para siempre. */
+  s.onerror = () => { _avisos.error = 'bloqueado'; pintarCampana_(); };
+  document.head.appendChild(s);
+  _avisos.cargado = true;
+
+  OneSignalDeferred.push(async function (OneSignal) {
+    try {
+      const base = location.pathname.replace(/[^/]*$/, '');   // '/tablero-hes1217/', igual que el tablero
+      await OneSignal.init({
+        appId: AVISOS_APP,
+        serviceWorkerPath: (base + 'sw.js').replace(/^\//, ''),
+        serviceWorkerParam: { scope: base },
+        notifyButton: { enable: false }
+      });
+      _avisos.listo = true;
+      OneSignal.User.PushSubscription.addEventListener('change', () => { ligarAvisos_(); pintarCampana_(); });
+      await ligarAvisos_();
+    } catch (e) {
+      _avisos.error = (e && e.message) || String(e);
+    }
+    pintarCampana_();
+  });
+}
+
+/* Se liga en cada arranque, no solo al activar: los 5 celulares que ya estaban
+   suscritos desde el tablero quedan con dueño la primera vez que abren el
+   horario, sin tocar nada. Si el celular cambió de manos (otro número), el
+   último que entra se lo queda — es lo que se quiere. */
+async function ligarAvisos_() {
+  if (!_avisos.listo || !_avisos.id || !avisosSuscrito_()) return;
+  if (_avisos.ligado === _avisos.id) return;
+  try {
+    await OneSignal.login(_avisos.id);
+    _avisos.ligado = _avisos.id;
+  } catch (e) {
+    _avisos.error = 'No se pudo ligar el celular: ' + ((e && e.message) || e);
+  }
+  pintarCampana_();
+}
+
+/* Un solo lugar decide qué dice la campana: el ícono y el renglón de abajo
+   salen del mismo estado, así no puede decir «activados» uno y «no» el otro. */
+function estadoAvisos_() {
+  const soporta = ('Notification' in window) && ('serviceWorker' in navigator) && ('PushManager' in window);
+  if (!soporta) return esIphone_() && !esInstalada_()
+    ? { k: 'ios',  txt: 'En iPhone los avisos solo llegan si abres la app desde la pantalla de inicio: en Safari toca Compartir → «Agregar a inicio» y entra desde ese ícono.' }
+    : { k: 'no',   txt: 'Este navegador no puede recibir avisos. Abre el horario en Chrome.' };
+  if (_avisos.error === 'bloqueado') return { k: 'cdn', txt: 'Este celular bloquea el servicio de avisos (DNS privado o bloqueador de anuncios). Desactívalo para esta página o no te llegarán los recordatorios.' };
+  if (_avisos.error) return { k: 'err', txt: 'Los avisos fallaron: ' + _avisos.error };
+  if (Notification.permission === 'denied') return { k: 'bloq', txt: 'Bloqueaste los avisos. Candado junto a la dirección → Permisos → Notificaciones → Permitir, y vuelve a tocar 🔔.' };
+  if (!_avisos.listo) return { k: 'carga', txt: '' };
+  if (!avisosSuscrito_()) return { k: 'off', txt: 'Toca 🔔 para que te avisemos antes de tu comida y tu Ley Silla.' };
+  if (_avisos.sinFicha) return { k: 'sinficha', txt: 'Los avisos están activados, pero esta cuenta no tiene ficha de empleado: no sabremos de quién son tus recordatorios. Entra con tu propia cuenta o con tu número.' };
+  if (_avisos.ligado) return { k: 'on', txt: '' };
+  return { k: 'carga', txt: '' };
+}
+
+function pintarCampana_() {
+  const b = document.getElementById('btn-avisos');
+  const t = document.getElementById('avisos-txt');
+  if (!b || !_avisos.activo) return;
+  const e = estadoAvisos_();
+  b.textContent = (e.k === 'on' || e.k === 'sinficha') ? '🔔' : '🔕';
+  b.classList.toggle('on', e.k === 'on');
+  b.classList.toggle('alerta', !['on', 'carga'].includes(e.k));
+  b.title = e.k === 'on' ? 'Avisos activados' : (e.txt || 'Cargando avisos…');
+  /* El renglón solo sale cuando hay algo que hacer. Si ya está activado no
+     estorba; el «off» sí se enseña, porque si no nadie descubre la campana. */
+  t.style.display = e.txt ? '' : 'none';
+  t.textContent = e.txt;
+  t.classList.toggle('on', e.k === 'on');
+}
+
+async function tocarCampana() {
+  const e = estadoAvisos_();
+  if (e.k === 'on') {
+    mostrarAvisoCampana_('✅ Avisos activados en este celular. Te llegarán tus recordatorios de comida y Ley Silla.');
+    return;
+  }
+  if (['ios', 'no', 'cdn', 'err', 'bloq', 'sinficha'].includes(e.k)) { mostrarAvisoCampana_(e.txt); return; }
+  if (!_avisos.listo) { mostrarAvisoCampana_('Los avisos aún se están cargando. Espera unos segundos y vuelve a tocar 🔔.'); return; }
+  try {
+    /* Primera línea del bloque y sin `await` delante: el navegador descarta la
+       petición si el gesto del toque ya se consumió (lección del 7-ago-2026 en
+       el tablero, donde el wrapper del SDK nunca mostraba el diálogo). */
+    const permiso = await Notification.requestPermission();
+    if (permiso !== 'granted') {
+      mostrarAvisoCampana_(permiso === 'denied'
+        ? 'Bloqueaste los avisos. Para activarlos: candado junto a la dirección → Permisos → Notificaciones → Permitir.'
+        : 'El navegador no llegó a preguntar. En Chrome: ⋮ → Configuración → Notificaciones → desactiva «Usar mensajes más discretos», y vuelve a tocar 🔔.');
+      pintarCampana_();
+      return;
+    }
+    // Dar permiso NO suscribe: hay que darse de alta (fallo 4 del 7-ago-2026).
+    await OneSignal.User.PushSubscription.optIn();
+    await ligarAvisos_();
+  } catch (err) {
+    _avisos.error = (err && err.message) || String(err);
+  }
+  pintarCampana_();
+  const ahora = estadoAvisos_();
+  mostrarAvisoCampana_(ahora.k === 'on'
+    ? '✅ Listo. Te avisaremos antes de tu comida y de cada Ley Silla.'
+    : (ahora.txt || 'No quedó activado. Vuelve a tocar 🔔 en unos segundos.'));
+}
+
+/* Sin alert(): el mensaje se queda en el renglón de la campana unos segundos. */
+function mostrarAvisoCampana_(msg) {
+  const t = document.getElementById('avisos-txt');
+  if (!t) return;
+  t.style.display = '';
+  t.textContent = msg;
+  t.classList.toggle('on', /^✅/.test(msg));
+  clearTimeout(mostrarAvisoCampana_._t);
+  mostrarAvisoCampana_._t = setTimeout(pintarCampana_, 8000);
 }
 
 async function doLogin() {
@@ -883,6 +1071,10 @@ async function doLoginEmpleado() {
 }
 
 async function doLogout() {
+  /* Al cerrar sesión el celular deja de ser de esa persona: si no, en una tablet
+     de piso le seguirían llegando a ella los recordatorios de quien entró. */
+  // Callar es correcto aquí: si OneSignal falla, la sesión se cierra igual.
+  try { if (_avisos.listo && _avisos.ligado) await OneSignal.logout(); } catch (e) { /* ver arriba */ }
   await _sb.auth.signOut();
   /* Quien llegó desde el tablero comparte sesión con él: cerrarla aquí lo saca
      de toda la app, que es justo lo que espera al pulsar "Cerrar sesión". */
