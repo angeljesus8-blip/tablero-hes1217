@@ -1093,8 +1093,10 @@ function actualizarBotonGuardar() {
   if (!b) return;
   if (_tabAdmin === 'proxima') {
     const semTarget = _semana + _semProxOffset;
-    const tieneConfig = !!_datosAdmin.excepciones?.[`semana_${semTarget}`] || !!_cache.semanas_guardadas?.[`semana_${semTarget}`];
-    b.textContent = tieneConfig ? '💾 Guardar cambios' : '📅 Generar planeador';
+    // El botón dice lo que va a pasar: sin publicar, generar = publicar;
+    // ya publicada, solo se guarda la configuración (no se pisa el horario).
+    const publicada = !!_cache.semanas_guardadas?.[`semana_${semTarget}`];
+    b.textContent = publicada ? '💾 Guardar configuración' : '📅 Generar y publicar';
   } else if (_tabAdmin === 'equipo') {
     b.textContent = '💾 Guardar cambios';
   } else {
@@ -1545,11 +1547,23 @@ async function guardarAdmin() {
       /* Semana ya guardada = manda el horario guardado, y lo que se acaba de
          cambiar (un 2º descanso puesto o quitado, vacaciones…) no se vería.
          Antes se quedaba callado; ahora lo dice. */
-      if (_cache.semanas_guardadas?.[`semana_${sem}`])
-        avisos.push(`🟠 La Semana ${sem} ya estaba guardada: para que se vea el cambio, ábrela y pulsa «Desbloquear» y luego «Guardar semana».`);
+      const yaGuardada = !!_cache.semanas_guardadas?.[`semana_${sem}`];
+      if (yaGuardada)
+        avisos.push(`🟠 La Semana ${sem} ya está publicada y no se pisa: para que salga este cambio, ábrela, pulsa «🔓 Desbloquear» y vuelve a generarla aquí. (Para un solo día, toca la celda.)`);
       _datosAdmin.excepciones = exc;
+      _cache.excepciones = exc;
       await guardarConfig('excepciones', exc);
-      msg.innerHTML = `✓ Semana ${sem} guardada.` + (avisos.length ? '<br>' + avisos.join('<br>') : '');
+      /* Generar = publicar (24-nov-2026). Antes esto guardaba solo la
+         configuración y el horario esperaba a que alguien pulsara «Guardar
+         semana»: mientras, el equipo no veía nada. Ahora se arma y se guarda
+         aquí mismo. Una semana ya publicada NO se pisa: para rehacerla se
+         desbloquea, que es el paso que avisa que se pierden los cambios a mano. */
+      if (!yaGuardada) {
+        const dias = generarSemana(sem, _cache.historial, exc);
+        await guardarDiasSemana_(dias, null, sem);
+      }
+      msg.innerHTML = (yaGuardada ? `✓ Configuración de la Semana ${sem} guardada.` : `✓ Semana ${sem} generada y publicada: el equipo ya la ve.`) +
+        (avisos.length ? '<br>' + avisos.join('<br>') : '');
       msg.style.color = avisos.length ? 'var(--atencion)' : 'var(--ok)';
     } else {
       let parsed;
@@ -1559,7 +1573,10 @@ async function guardarAdmin() {
       await guardarConfig(_tabAdmin, parsed);
       msg.textContent='✓ Guardado.'; msg.style.color='var(--ok)';
     }
-    setTimeout(() => { cerrarAdmin(); init(); }, 1000);
+    // Con avisos, la ventana se queda lo bastante para leerlos: cerraba al
+    // segundo y el «ya está publicada, desbloquéala» no lo alcanzaba a ver nadie.
+    const conAvisos = /🟡|🟠|🔴/.test(msg.textContent);
+    setTimeout(() => { cerrarAdmin(); init(); }, conAvisos ? 7000 : 1000);
   } catch(e) { msg.textContent='⚠ Error: '+e.message; msg.style.color='var(--alerta)'; }
 }
 
@@ -3392,20 +3409,34 @@ function renderSemana() {
    completo a `semanas_guardadas` (máx 4 semanas). Lo usan el botón
    «Guardar semana» y el cambio de un solo día. `cambios` = lo que se movió a
    mano día por día; se guarda junto al horario para poder marcarlo y deshacerlo. */
-async function guardarDiasSemana_(dias, cambios) {
+async function guardarDiasSemana_(dias, cambios, semana) {
+  const semN = semana ?? _semana;
   const extract = d => ({
     apertura: PERSONAS.filter(p => ['apertura','apertura_10','doble','comp_apertura'].includes(dias[d][p])),
     cierre:   PERSONAS.filter(p => ['cierre','doble','comp_cierre'].includes(dias[d][p])),
   });
-  const historial = { ..._cache.historial, [`semana_${_semana}`]: { sabado: extract(6), domingo: extract(0) } };
+  const historial = { ..._cache.historial, [`semana_${semN}`]: { sabado: extract(6), domingo: extract(0) } };
   await guardarConfig('historial', historial);
   _cache.historial = historial;
 
   const sem = { dias };
   if (cambios && cambios.length) sem.cambios = cambios;
-  const sg = { ..._cache.semanas_guardadas, [`semana_${_semana}`]: sem };
-  const claves = Object.keys(sg).map(k => parseInt(k.replace('semana_',''))).sort((a,b) => b-a);
-  claves.slice(4).forEach(k => delete sg[`semana_${k}`]); // borrar más antiguas
+  const sg = { ..._cache.semanas_guardadas, [`semana_${semN}`]: sem };
+  /* Se borran solo las PASADAS más viejas: se quedan las 7 anteriores a la
+     actual (gerencia, 24-nov-2026), además de la actual y todas las futuras.
+     Antes se quedaban «las 4 más nuevas», y desde que generar = publicar eso se
+     volvía un riesgo: generar 4 semanas por adelantado borraba la semana actual
+     y el equipo se quedaba sin horario, sin ningún aviso. */
+  const SEMANAS_PASADAS = 7;
+  const actual = _base?.semana ?? semN;
+  /* Las claves son solo el número de semana, sin año. En enero la 52 de
+     diciembre «es mayor» que la 1, y sin esto parecería futura: nunca se
+     borraría y en noviembre del año siguiente saldría como si fuera de ese año.
+     Una semana más de medio año «adelante» es en realidad del año pasado. */
+  const atras = k => (k > actual + 26) ? actual - k + 53 : actual - k;   // >0 = pasada
+  Object.keys(sg).map(k => parseInt(k.replace('semana_','')))
+    .filter(k => atras(k) > 0).sort((a,b) => atras(a) - atras(b))
+    .slice(SEMANAS_PASADAS).forEach(k => delete sg[`semana_${k}`]);
   await guardarConfig('semanas_guardadas', sg);
   _cache.semanas_guardadas = sg;
 }
@@ -3431,7 +3462,7 @@ async function guardarSemana() {
 async function desbloquearSemana() {
   const nCamb = _cache.semanas_guardadas?.[`semana_${_semana}`]?.cambios?.length || 0;
   const extra = nCamb ? `\n\n⚠ Se pierden ${nCamb} cambio${nCamb > 1 ? 's' : ''} de día hecho${nCamb > 1 ? 's' : ''} a mano (los marcados con ✎).` : '';
-  if (!confirm(`¿Desbloquear Semana ${_semana}? El horario se regenerará desde el historial.${extra}`)) return;
+  if (!confirm(`¿Desbloquear Semana ${_semana}?\n\nMientras esté desbloqueada el equipo NO la ve. Haz tu cambio en ⚙ Admin y pulsa Generar: se vuelve a publicar sola.${extra}`)) return;
   const sg = { ..._cache.semanas_guardadas };
   delete sg[`semana_${_semana}`];
   await guardarConfig('semanas_guardadas', sg);
@@ -3468,7 +3499,7 @@ async function quitarSemanaProx() {
   }
   renderFormProxima();
   const msg = document.getElementById('admin-msg');
-  msg.innerHTML = `↩ La Semana ${semTarget} quedó sin asignar y <strong>ya se guardó automáticamente</strong>.<br>No vuelvas a pulsar "📅 Generar planeador" o la crearías de nuevo. Puedes cerrar con "Cancelar".`;
+  msg.innerHTML = `↩ La Semana ${semTarget} quedó sin asignar y <strong>ya se guardó automáticamente</strong>.<br>No vuelvas a pulsar "📅 Generar y publicar" o la crearías de nuevo. Puedes cerrar con "Cancelar".`;
   msg.style.color = 'var(--atencion)';
 }
 
