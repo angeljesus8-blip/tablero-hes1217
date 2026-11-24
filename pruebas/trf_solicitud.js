@@ -107,7 +107,7 @@ ok('CORREO · una sola nace marcada', correr('_trfMail.sel.size') === 1 && /Lind
   ok('COMPARTIR · compu, wa.me', global.__abierto.length === 2 && global.__menu.length === 1);
 
   const prep = filas => {
-    correr('APARTADOS=[]; PREVENTA=[]; _apartSku="S1"; _apartCtx={producto:"Uno",precio:10}; _apFilas=' + JSON.stringify(filas));
+    correr('APARTADOS=[]; PREVENTA=[]; _apartSku="S1"; _apartCtx={producto:"Uno",precio:10}; _apVend="Prueba Uno"; _apFilas=' + JSON.stringify(filas));
     el('apCliente').value = 'Cliente'; el('apPromesa').value = '2026-12-01';
   };
   global.__env = []; global.__avisos = [];
@@ -124,6 +124,20 @@ ok('CORREO · una sola nace marcada', correr('_trfMail.sel.size') === 1 && /Lind
   await correr('guardarApartado()');
   ok('GUARDAR · un apartado por pieza, con su tienda y su seguro',
      JSON.stringify(global.__env.map(p => [p.p_origen, p.p_seguro])) === JSON.stringify([[D, true], [L, false]]), global.__env);
+
+  // A nombre de quién
+  ok('VENDEDOR · por defecto, el de la sesión', global.__env.every(p => p.p_vendedor === 'Prueba Uno'));
+  prep([F(D)]); global.__env = []; global.__avisos = []; correr('_apVend=""');
+  await correr('guardarApartado()');
+  ok('VENDEDOR · gerencia sin ficha tiene que elegir', !global.__env.length && /nombre de qui/.test(global.__avisos[0] || ''));
+  correr('_apVend="Prueba Dos"'); await correr('guardarApartado()');
+  ok('VENDEDOR · gerencia aparta por otro', (global.__env[0] || {}).p_vendedor === 'Prueba Dos');
+  prep([F(D)]); global.__env = []; correr('PUEDE_GESTIONAR=false; _apVend="Prueba Dos"');
+  await correr('guardarApartado()');
+  ok('VENDEDOR · el asesor solo a su nombre', (global.__env[0] || {}).p_vendedor === 'Prueba Uno');
+  correr('PUEDE_GESTIONAR=true');
+  el('apVend').innerHTML = ''; correr('_apVend=""; VENDEDORES_TB.push("Prueba Dos"); apVendPintar()');
+  ok('VENDEDOR · la lista sale', /Prueba Dos/.test(el('apVend').innerHTML));
 
   // Falla la 2ª: la 1ª no se repite al reintentar
   prep([F(D), F(L)]); global.__env = []; global.__avisos = [];

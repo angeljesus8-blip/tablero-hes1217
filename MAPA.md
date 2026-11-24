@@ -5785,6 +5785,8 @@ gerencia confirma → el asesor vende y aparta → gerencia manda el correo form
 - **Apartar con existencia:** `botonApartar` ya sale en 'hay' si NO es EOL (el
   cliente quiere 5, hay 3). Un apartado = una pieza = una serie: `_apFilas`
   guarda una por una y al reintentar no repite las que ya tienen palomita.
+- **A nombre de quién:** gerencia elige de `cfg.vendedores` (también sin ficha,
+  entrando por correo); el asesor queda fijo a su sesión.
 - **Tienda obligatoria**, salvo en preventa, que usa el mismo modal.
 - **`trfOrigen`** normaliza la tienda: los apartados viejos traen «Delta» a mano.
 - **No se lleva cuenta de lo solicitado** (sin SQL, decisión de Ángel). Mientras

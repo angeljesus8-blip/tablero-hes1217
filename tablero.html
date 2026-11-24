@@ -516,6 +516,7 @@
   .ap-toggle input { width:20px; height:20px; accent-color:var(--ok); }
   /* Traspasos entre tiendas (24-nov-2026) */
   .btn-pedir { background:var(--info-bg); color:var(--azul); margin-top:7px; }
+  .ap-quien:has(select) { padding:0; border:none; background:none; }
   .ap-pieza, .trf-lin, .trf-fila { display:flex; align-items:center; gap:8px; margin-top:8px; }
   .ap-pieza b { font-size:var(--t-sm); white-space:nowrap; }
   .ap-pieza select { flex:1; min-width:0; padding:10px; font-size:var(--t-md); }
@@ -2584,6 +2585,19 @@ function apFilasPintar(){
     ${_apFilas.length > 1 && !f.ok ? `<button class="cot-quitar" aria-label="Quitar pieza" onclick="apFilaQuitar(${i})">×</button>` : ''}
   </div>`).join('');
 }
+/* Gerencia aparta por cualquiera de su equipo (24-nov-2026). Entrando con el
+   correo de la tienda no hay ficha de empleado, y antes eso impedía apartar.
+   Sin ficha no se propone a nadie: hay que elegir, porque decide de quién
+   cuenta el seguro. */
+let _apVend = '';
+function apVendPintar(){
+  const c = document.getElementById('apVend');
+  if(!PUEDE_GESTIONAR){ c.textContent = _apVend || '⚠️ sin sesión de empleado'; return; }
+  const nombres = [...new Set(VENDEDORES_TB.concat(_apVend ? [_apVend] : []))];
+  c.innerHTML = `<select class="ap-inp" aria-label="Lo aparta" onchange="_apVend=this.value;_apartBorradorGuardar()">
+    <option value="">¿A nombre de quién?</option>`
+    + nombres.map(n => `<option value="${esc(n)}"${n === _apVend ? ' selected' : ''}>${esc(n)}</option>`).join('') + '</select>';
+}
 function apFilaTienda(i, sel){ _apFilas[i].origen = trfElegir(sel); _apartBorradorGuardar(); }
 function apFilaSeguro(i, si){ _apFilas[i].seguro = si; _apartBorradorGuardar(); }
 function apFilaMas(){
@@ -2639,13 +2653,14 @@ function abrirApartado(sku, prodEnc, precio){
   document.getElementById('apTel').value='';
   /* El vendedor sale de la sesión, no se teclea: es la misma persona que entró
      con su número de empleado. Se muestra para que se vea a nombre de quién
-     queda, pero no se puede cambiar — cambiarlo sería registrar una venta a
-     nombre de otro. */
-  document.getElementById('apVend').textContent = YO && YO.nombre ? YO.nombre : '⚠️ sin sesión de empleado';
+     queda, pero el asesor no lo puede cambiar — sería registrar una venta a
+     nombre de otro. Gerencia sí (apVendPintar). */
+  _apVend = (YO && YO.nombre) || '';
   document.getElementById('apTransaccion').value='';
   document.getElementById('apModal').classList.add('show');
   _apartBorradorRestaurar(sku);
   apFilasPintar();
+  apVendPintar();
 }
 
 /* ── El apartado a medio llenar sobrevive al cambio de app ──────
@@ -2659,7 +2674,7 @@ const AP_BORRADOR = 'hes_apartado_borrador';
 const AP_CAMPOS = ['apPromesa','apCliente','apTel','apTransaccion'];
 function _apartBorradorGuardar(){
   if(!_apartSku) return;
-  const d = { sku:_apartSku, ts:Date.now(), filas:_apFilas };
+  const d = { sku:_apartSku, ts:Date.now(), filas:_apFilas, vend:_apVend };
   AP_CAMPOS.forEach(id => { d[id] = document.getElementById(id).value; });
   try{ localStorage.setItem(AP_BORRADOR, JSON.stringify(d)); }catch(e){}   // sin cuota se pierde el borrador, no el apartado
 }
@@ -2675,6 +2690,7 @@ function _apartBorradorRestaurar(sku){
   if(!AP_CAMPOS.some(id => (d[id]||'').trim())) return;   // borrador vacío: nada que restaurar
   AP_CAMPOS.forEach(id => { if(d[id]) document.getElementById(id).value = d[id]; });
   if(Array.isArray(d.filas) && d.filas.length) _apFilas = d.filas;
+  if(PUEDE_GESTIONAR && d.vend) _apVend = d.vend;
 }
 AP_CAMPOS.forEach(id => {
   const el = document.getElementById(id);
@@ -2694,7 +2710,8 @@ async function guardarApartado(){
   const sku=_apartSku; if(!sku || _apGuardando) return;
   const cliente=document.getElementById('apCliente').value.trim();
   const tel=document.getElementById('apTel').value.trim();
-  const vend = (YO && YO.nombre) ? YO.nombre : '';
+  const vend = PUEDE_GESTIONAR ? _apVend : ((YO && YO.nombre) || '');
+  if(!vend && PUEDE_GESTIONAR){ alert('Elige a nombre de quién se aparta.'); return; }
   if(!vend){
     // Sin nombre, el apartado no cuenta para el attach de nadie ni se sabe quién
     // lo hizo. Mejor parar que guardar una venta huérfana.
