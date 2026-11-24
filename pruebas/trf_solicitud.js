@@ -46,6 +46,14 @@ ok('CORREO · uno solo va sin numerar ni total', /^Buenos días/.test(uno) && /\
 ok('WA · sin saludo, solo datos', correr('trfTextoWA("", __l)') === '📦 Uno\nSKU 1 · *2 piezas*\n\n📦 Dos\nSKU 2 · *1 pieza*');
 ok('WA · saludo arriba', correr('trfTextoWA(" Hola ", [__l[1]])') === 'Hola\n\n📦 Dos\nSKU 2 · *1 pieza*');
 
+correr('TRF.lineas=[{sku:"1",origen:"A",piezas:1}]; TRF.msgs={};');
+ok('SALUDO · uno', correr('trfMensaje("A",15)') === 'Hola, buenas tardes, ¿me podrías apoyar con el siguiente SKU, por favor?', correr('trfMensaje("A",15)'));
+correr('TRF.lineas.push({sku:"2",origen:"A",piezas:1});');
+ok('SALUDO · varios y de mañana', correr('trfMensaje("A",9)') === 'Hola, buenos días, ¿me podrías apoyar con los siguientes SKU, por favor?');
+correr('TRF.msgs.A="";');
+ok('SALUDO · borrado a propósito se respeta', correr('trfMensaje("A",9)') === '');
+correr('TRF={lineas:[],msgs:{}}');
+
 // ── Tiendas ──
 for(const t of ['Delta', 'parque delta', '1187', 'de la 1187 delta'])
   ok('ORIGEN · ' + t, correr('trfOrigen(' + JSON.stringify(t) + ')') === '1187 Parque Delta');

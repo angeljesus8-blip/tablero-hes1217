@@ -2074,9 +2074,17 @@ function trfVaciar(g){
   delete TRF.msgs[o];
   trfGuardar(); trfPintar();
 }
+/* El saludo de arranque, mientras no lo cambien. Borrarlo a propósito ('') se
+   respeta: solo se propone cuando nunca se tocó. */
+function trfMensaje(o, hora){
+  if(TRF.msgs[o] !== undefined) return TRF.msgs[o];
+  const varios = TRF.lineas.filter(l => l.origen === o).length > 1;
+  return 'Hola, ' + trfSaludo(hora === undefined ? new Date().getHours() : hora).toLowerCase()
+    + ', ¿me podrías apoyar con ' + (varios ? 'los siguientes SKU' : 'el siguiente SKU') + ', por favor?';
+}
 function trfWA(g){
   const o = _trfGrupos[g];
-  const t = trfTextoWA(TRF.msgs[o] || '', TRF.lineas.filter(l => l.origen === o));
+  const t = trfTextoWA(trfMensaje(o), TRF.lineas.filter(l => l.origen === o));
   compartirTexto(t);
 }
 /* Por aquí salen TODOS los WhatsApp del tablero.
@@ -2109,7 +2117,7 @@ function trfPintar(){
         <button aria-label="Quitar una" onclick="trfPiezas(${i},-1)">−</button><b>${l.piezas}</b>
         <button aria-label="Agregar una" onclick="trfPiezas(${i},1)">＋</button></div>`).join('')
     + `<label class="ap-lbl">Tu mensaje</label>
-      <textarea class="ap-inp" rows="2" oninput="trfMsg(${g},this.value)">${esc(TRF.msgs[o] || '')}</textarea>
+      <textarea class="ap-inp" rows="2" oninput="trfMsg(${g},this.value)">${esc(trfMensaje(o))}</textarea>
       <div class="trf-fila"><button class="trf-btn trf-wa" onclick="trfWA(${g})">📲 Consultar por WhatsApp</button>
       <button class="trf-btn trf-gris" onclick="trfVaciar(${g})">Quitar</button></div></div>`).join('');
   caja.innerHTML = h || '<div class="empty">No hay nada por consultar.<br>Busca el producto y toca «Consultar a otra tienda».</div>';
