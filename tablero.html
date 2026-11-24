@@ -2734,6 +2734,13 @@ async function guardarApartado(){
   }
   const transaccion=document.getElementById('apTransaccion').value.trim();
   if(!cliente){ alert('Escribe el nombre del cliente.'); return; }
+  /* Obligatoria (24-nov-2026): separa una compra de otra del mismo cliente al
+     pedir el traspaso. Se exige un número para que no se brinque con un punto. */
+  if(!/[0-9]/.test(transaccion)){
+    alert('Captura el N° de transacción del ticket. Sin él no se puede apartar.');
+    document.getElementById('apTransaccion').focus();
+    return;
+  }
   /* Sin tienda no hay a quién mandarle el correo. En preventa no aplica: el
      equipo viene de Huawei y pasa por esta misma ventana. */
   const esPreventa = PREVENTA.some(p => p.sku === sku);

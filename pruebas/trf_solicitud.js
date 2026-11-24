@@ -121,7 +121,7 @@ correr('PUEDE_GESTIONAR=true');
 
   const prep = filas => {
     correr('APARTADOS=[]; PREVENTA=[]; _apartSku="S1"; _apartCtx={producto:"Uno",precio:10}; _apVend="Prueba Uno"; _apFilas=' + JSON.stringify(filas));
-    el('apCliente').value = 'Cliente'; el('apPromesa').value = '2026-12-01';
+    el('apCliente').value = 'Cliente'; el('apTransaccion').value = '123'; el('apPromesa').value = '2026-12-01';
   };
   global.__env = []; global.__avisos = [];
   global.alert = m => global.__avisos.push(m);
@@ -137,6 +137,13 @@ correr('PUEDE_GESTIONAR=true');
   await correr('guardarApartado()');
   ok('GUARDAR · un apartado por pieza, con su tienda y su seguro',
      JSON.stringify(global.__env.map(p => [p.p_origen, p.p_seguro])) === JSON.stringify([[D, true], [L, false]]), global.__env);
+
+  for(const t of ['', '  ', '.']){
+    prep([F(D)]); global.__env = []; global.__avisos = []; el('apTransaccion').value = t;
+    await correr('guardarApartado()');
+    ok('TRANSACCIÓN · no avanza con «' + t + '»', !global.__env.length && /transacci/.test(global.__avisos[0] || ''));
+  }
+  prep([F(D)]); await correr('guardarApartado()');
 
   // A nombre de quién
   ok('VENDEDOR · por defecto, el de la sesión', global.__env.every(p => p.p_vendedor === 'Prueba Uno'));
