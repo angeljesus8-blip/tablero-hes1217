@@ -2077,6 +2077,16 @@ function trfVaciar(g){
 function trfWA(g){
   const o = _trfGrupos[g];
   const t = trfTextoWA(TRF.msgs[o] || '', TRF.lineas.filter(l => l.origen === o));
+  trfCompartir(t);
+}
+/* En el celular va por el menú Compartir: con WhatsApp y Business instalados,
+   `wa.me` abre siempre el que Android tenga por defecto y no deja escoger. En la
+   compu, y donde no exista el menú, sigue `wa.me`. */
+async function trfCompartir(t){
+  if(navigator.share && /Android|iPhone|iPad/.test(navigator.userAgent || '')){
+    try{ await navigator.share({ text:t }); return; }
+    catch(e){ if(e && e.name === 'AbortError') return; }   // la persona cerró el menú: no se abre nada más
+  }
   window.open('https://wa.me/?text=' + encodeURIComponent(t), '_blank');
 }
 function trfPintar(){
