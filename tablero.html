@@ -2126,7 +2126,7 @@ function trfPintar(){
 
 /* ── Correo formal ─────────────────────────────────────────────────────
    No se lleva la cuenta de qué se pidió (Ángel, 24-nov-2026: sin
-   confirmaciones). Por eso solo nacen marcadas las del cliente: con
+   confirmaciones). Por eso solo nacen marcadas las de esa compra: con
    todo marcado, pedir una nueva volvería a pedir las de ayer. */
 let _trfMail = null;
 /* Con serie ya llegó: no hay nada que pedir. */
@@ -2147,18 +2147,26 @@ function trfBloque(){
   if(!PUEDE_GESTIONAR) return '';
   return `<div class="trf-bloque"><button class="trf-btn trf-gris" onclick="trfAbrir('')">🚚 Mis consultas${TRF.lineas.length ? ' (' + TRF.lineas.length + ')' : ''}</button></div>`;
 }
-/* En la tarjeta (24-nov-2026). Abre con las piezas de ESE cliente en esa tienda. */
+/* En la tarjeta (24-nov-2026). Abre con las piezas de ESA compra en esa tienda. */
 function trfBotonCorreo(a){
   if(!PUEDE_GESTIONAR || !trfVivo(a)) return '';
   return `<button class="btn-apartar btn-pedir" onclick="trfMailAbrir('${a.id}')">✉️ Solicitar traspaso por correo</button>`;
+}
+/* Misma compra = mismo cliente y mismo ticket. Sin ticket en alguna de las dos,
+   decide el día. Con tickets distintos son dos compras aunque sea el mismo día. */
+function trfMismaCompra(a, b){
+  if(trfNorm_(a.cliente) !== trfNorm_(b.cliente) || String(a.telefono||'') !== String(b.telefono||'')) return false;
+  const ta = String(a.transaccion||'').trim(), tb = String(b.transaccion||'').trim();
+  if(ta && tb) return ta === tb;
+  return String(a.fecha||'').slice(0,10) === String(b.fecha||'').slice(0,10);
 }
 function trfMailAbrir(id){
   const a0 = APARTADOS.find(a => String(a.id) === String(id));
   if(!a0 || !trfVivo(a0)) return;
   const o = trfOrigen(a0.origen);
-  /* Lo normal es un correo por cliente: los suyos van marcados y los de otros
-     clientes, plegados, por si algún día conviene juntarlos. */
-  const suyo = a => trfNorm_(a.cliente) === trfNorm_(a0.cliente) && String(a.telefono||'') === String(a0.telefono||'');
+  /* Un correo por COMPRA: si el cliente regresa días después, lo de antes ya se
+     pidió y no debe volver a salir marcado. Lo demás va plegado. */
+  const suyo = a => a === a0 || trfMismaCompra(a, a0);
   const todos = trfPendientes().get(o) || [];
   const mios = todos.filter(suyo), otros = todos.filter(a => !suyo(a));
   _trfMail = { origen:o, aps:mios.concat(otros), sel:new Set(mios.map(a => String(a.id))) };
@@ -2167,7 +2175,7 @@ function trfMailAbrir(id){
     <input type="checkbox" ${si ? 'checked' : ''} onchange="trfMailSel('${a.id}',this.checked)">
     <span>${esc(trfProd(a.sku, a.color))}<br><small>${si ? '' : esc(a.cliente||'') + ' · '}${a.fecha ? 'apartado el ' + esc(fechaCortaAp_(a.fecha)) : ''}</small></span></label>`;
   document.getElementById('trfMailLista').innerHTML = mios.map(a => fila(a, true)).join('')
-    + (otros.length ? `<details><summary class="ap-lbl">Agregar de otros clientes (${otros.length})</summary>${otros.map(a => fila(a, false)).join('')}</details>` : '');
+    + (otros.length ? `<details><summary class="ap-lbl">Agregar de otras compras (${otros.length})</summary>${otros.map(a => fila(a, false)).join('')}</details>` : '');
   document.getElementById('trfMail').classList.add('show');
   trfMailTexto();
 }

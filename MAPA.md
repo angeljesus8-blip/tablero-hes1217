@@ -5791,8 +5791,8 @@ gerencia confirma → el asesor vende y aparta → gerencia manda el correo form
 - **`trfOrigen`** normaliza la tienda: los apartados viejos traen «Delta» a mano.
 - **No se lleva cuenta de lo solicitado** (sin SQL, decisión de Ángel). Mientras
   el apartado no tenga serie sigue en la lista; el correo se abre desde la
-  tarjeta con las piezas de ESE cliente en esa tienda (un correo por cliente);
-  las de otros clientes van plegadas.
+  tarjeta con las piezas de ESA compra en esa tienda (`trfMismaCompra`: cliente +
+  ticket, o el día si falta el ticket); las demás van plegadas.
 - **Los correos no se guardan:** Para y CC van vacíos. El repo es público.
 - La lista de consultas es de cada equipo (`hes1217_trf`).
 - Prueba: `pruebas/trf_solicitud.js` (textos aprobados por Ángel, literales).
