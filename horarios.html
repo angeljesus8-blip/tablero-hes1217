@@ -209,6 +209,27 @@ body.solo-mi-horario .leyenda { display: none; }
    piso y en la computadora de la trastienda. Es lo único de esta página que
    mira todo el mundo por el mismo sitio. */
 #panel-tareas { display: none; }
+/* ── Ley Silla confirmada (24-nov-2026) ── */
+#panel-ls { display: none; }
+.ls-box { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.ls-btn { width: 100%; padding: 11px 10px; border: 0; border-radius: 8px; font: inherit;
+          font-size: 13px; font-weight: 700; cursor: pointer; background: var(--azul); color: #fff; }
+.ls-btn.regreso { background: var(--ok); }
+.ls-btn:disabled { opacity: 0.45; cursor: default; }
+.ls-hecho { font-size: 12px; font-weight: 600; color: var(--ok); text-align: center; }
+.ls-nota  { font-size: 11px; color: var(--tinta-2); text-align: center; }
+.ls-err   { font-size: 11px; font-weight: 600; color: var(--alerta); text-align: center; }
+.ls-fila  { padding: 9px 12px; border-top: 1px solid var(--linea); font-size: 12px; }
+.ls-nom   { font-weight: 700; color: var(--tinta); }
+.ls-per   { display: flex; align-items: center; gap: 8px; margin-top: 4px; color: var(--tinta-2); }
+.ls-per .ls-txt { flex: 1; line-height: 1.35; }
+.ls-per button { border: 1px solid var(--linea); background: var(--superficie); border-radius: 6px;
+                 font: inherit; font-size: 12px; padding: 3px 8px; cursor: pointer; }
+.ls-cap { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 6px 0 2px 26px; font-size: 11px; }
+.ls-cap input { font: inherit; font-size: 12px; padding: 3px 4px; }
+.ls-cap button { border: 0; border-radius: 6px; padding: 5px 10px; font: inherit; font-size: 12px;
+                 font-weight: 700; cursor: pointer; background: var(--azul); color: #fff; }
+.ls-cap button.gris { background: var(--tinta-3); }
 .tar-panel {
   background: #FFF; border: 1px solid var(--linea); border-radius: 10px;
   box-shadow: 0 1px 5px rgba(0,0,0,0.06); margin-bottom: 10px; overflow: hidden;
@@ -643,6 +664,10 @@ body.modo-cambios { padding-bottom:76px; }
      MISMO horario que se acaba de pintar. Nace oculto: en las tiendas que no
      son la 1217 no se enciende nunca. -->
 <div id="panel-tareas"></div>
+
+<!-- Ley Silla de hoy (gerente): plan contra lo que marcó cada asesor. Lo llena
+     renderPanelLs_(); fuera de #vista-movil por lo mismo que las tareas. -->
+<div id="panel-ls"></div>
 
 <div class="wrapper-tabla" id="wrapper-tabla">
 <table>
@@ -1094,6 +1119,268 @@ function sincronizarAvisosAbiertas_() {
     .forEach(n => sincronizarAvisos_(n));
 }
 
+/* ── Ley Silla confirmada (fase 3) · 24-nov-2026 ───────────────────────────
+   El asesor toca «🪑 Salgo» y «✅ Ya regresé» en su tarjeta de HOY. La hora la
+   pone el servidor (now()), no el teléfono: así sirve como evidencia.
+
+   Marcar pide el token de la tienda que trae quien entró por el tablero —el
+   mismo de las ventas—, además de un número activo. Fuera del tablero (el
+   planeador público) no hay token y los botones no salen. */
+const _ls = { cargado: false, mias: {}, error: '', equipo: null, equipoHora: 0, equipoError: '', abierto: null };
+
+function tokenTienda_() {
+  const s = sesionDelTablero();
+  return (s && s.cfg && s.cfg.gas_token) || '';
+}
+function leySillaPosible_() {
+  return !!(_tienda && _tienda.store_id === AVISOS_TIENDA && _empno && tokenTienda_());
+}
+function hhmm_(iso) {
+  const f = new Date(iso);
+  return String(f.getHours()).padStart(2, '0') + ':' + String(f.getMinutes()).padStart(2, '0');
+}
+function minutos_(desde, hasta) {
+  return Math.max(0, Math.round(((hasta ? new Date(hasta) : new Date()) - new Date(desde)) / 60000));
+}
+const LS_ERRORES = {
+  no_autorizado:    'Tu sesión del tablero es vieja: cierra sesión, vuelve a entrar e inténtalo otra vez.',
+  numero_no_activo: 'Tu número no está activo en el equipo. Avísale a tu gerente.',
+  ya_salio:         'Ese descanso ya lo marcaste.',
+  otro_abierto:     'Primero marca tu regreso del otro descanso.',
+  no_estaba_fuera:  'No tenías ese descanso abierto.',
+};
+
+async function cargarLsMias_() {
+  if (!leySillaPosible_()) return;
+  try {
+    const { data, error } = await _sb.rpc('ley_silla_mias', {
+      p_store: _tienda.store_id, p_token: tokenTienda_(), p_empno: String(_empno).trim() });
+    if (error) throw error;
+    if (!data || data.ok !== true) throw new Error(LS_ERRORES[data && data.error] || (data && data.error) || 'sin respuesta');
+    _ls.mias = {};
+    (data.marcas || []).forEach(m => { _ls.mias[m.periodo] = m; });
+    _ls.error = '';
+  } catch (e) {
+    /* Sin poder leer, NO se pintan botones de «Salgo» como si no hubiera
+       marcado: podría marcar dos veces. Se dice qué pasó. */
+    _ls.error = 'No se pudo leer tu Ley Silla de hoy (' + ((e && e.message) || e) + ').';
+  }
+  _ls.cargado = true;
+  if (_pintado) renderMovil(_pintado.dias, _pintado.comidas, _pintado.domingo);
+}
+
+function lsBloque_(inf) {
+  if (!_ls.cargado) return '<div class="ls-box"><div class="ls-nota">Cargando tu Ley Silla…</div></div>';
+  if (_ls.error && !Object.keys(_ls.mias).length && /leer/.test(_ls.error))
+    return `<div class="ls-box"><div class="ls-err">${escH_(_ls.error)}</div>
+      <button class="ls-btn" onclick="cargarLsMias_()">↻ Intentar otra vez</button></div>`;
+  const abierto = [1, 2].find(p => _ls.mias[p] && !_ls.mias[p].regreso);
+  const filas = [];
+  [[1, inf.ls1], [2, inf.ls2]].forEach(([p, plan]) => {
+    if (!plan) return;
+    const m = _ls.mias[p];
+    if (m && m.regreso) {
+      filas.push(`<div class="ls-hecho">✓ Ley Silla ${p}: ${hhmm_(m.salida)} → ${hhmm_(m.regreso)} (${minutos_(m.salida, m.regreso)} min)${m.por === 'gerencia' ? ' · capturada por gerencia' : ''}</div>`);
+    } else if (m) {
+      filas.push(`<button class="ls-btn regreso" onclick="lsMarcar(${p},'regreso',this)">✅ Ya regresé de Ley Silla ${p}
+        <span class="ls-cuenta" data-salida="${escH_(m.salida)}">· saliste ${hhmm_(m.salida)}, llevas ${minutos_(m.salida)} min</span></button>`);
+    } else {
+      filas.push(`<button class="ls-btn" onclick="lsMarcar(${p},'salgo',this)"${abierto ? ' disabled' : ''}>🪑 Salgo a Ley Silla ${p} · planeada ${escH_(plan.split(' a ')[0])}</button>`);
+    }
+  });
+  if (_ls.error) filas.push(`<div class="ls-err">${escH_(_ls.error)}</div>`);
+  return `<div class="ls-box">${filas.join('')}</div>`;
+}
+
+async function lsMarcar(periodo, accion, btn) {
+  if (btn) btn.disabled = true;
+  _ls.error = '';
+  try {
+    const { data, error } = await _sb.rpc('ley_silla_marcar', {
+      p_store: _tienda.store_id, p_token: tokenTienda_(), p_empno: String(_empno).trim(),
+      p_periodo: periodo, p_accion: accion });
+    if (error) throw error;
+    if (!data || data.ok !== true) {
+      _ls.error = LS_ERRORES[data && data.error] || ('No se registró (' + ((data && data.error) || 'sin respuesta') + ').');
+      // Lo que diga el servidor manda: se relee para que la tarjeta cuadre.
+      await cargarLsMias_();
+      return;
+    }
+    _ls.mias[periodo] = { periodo, salida: data.salida, regreso: data.regreso, por: 'asesor' };
+  } catch (e) {
+    // Nunca una marca que solo existe en la pantalla (igual que las tareas).
+    _ls.error = 'No se registró: revisa tu señal e inténtalo otra vez.';
+  }
+  if (_pintado) renderMovil(_pintado.dias, _pintado.comidas, _pintado.domingo);
+}
+
+// El contador «llevas N min» avanza solo mientras está fuera.
+setInterval(() => {
+  document.querySelectorAll('.ls-cuenta').forEach(s => {
+    s.textContent = `· saliste ${hhmm_(s.dataset.salida)}, llevas ${minutos_(s.dataset.salida)} min`;
+  });
+}, 30000);
+
+/* Semáforo de un periodo. `fechaISO` decide qué es «ya pasó»: un día anterior
+   se mira completo; uno futuro, todo pendiente. Tolerancias acordadas con
+   gerencia el 24-nov-2026: ±30 min contra lo planeado y 15 min de duración. */
+function semaforoLs_(plan, m, fechaISO) {
+  const hoy = fechaLocal_(new Date());
+  const [h, mi] = plan.split(' a ')[0].split(':').map(Number);
+  const P = h * 60 + mi;
+  const ahora = new Date();
+  const nowMin = fechaISO < hoy ? 24 * 60 : fechaISO > hoy ? -1 : ahora.getHours() * 60 + ahora.getMinutes();
+  if (!m) return nowMin > P + 30 ? { c: '🔴', t: 'No marcó' } : { c: '⚪', t: 'Pendiente' };
+  const s = new Date(m.salida), dif = s.getHours() * 60 + s.getMinutes() - P;
+  const motivos = [];
+  if (Math.abs(dif) > 30) motivos.push(dif > 0 ? `salió ${dif} min tarde` : `salió ${-dif} min antes`);
+  if (m.regreso) {
+    const dur = minutos_(m.salida, m.regreso);
+    if (dur > 15) motivos.push(`duró ${dur} min`);
+  } else if (fechaISO < hoy) {
+    motivos.push('no marcó su regreso');
+  } else {
+    const dur = minutos_(m.salida);
+    if (dur > 15) motivos.push(`lleva ${dur} min fuera`);
+    else if (!motivos.length) return { c: '⏳', t: `Fuera ahora (${dur} min)` };
+  }
+  return motivos.length ? { c: '🟡', t: motivos.join(' · ') } : { c: '🟢', t: 'Bien' };
+}
+
+function textoMarcaLs_(m) {
+  if (!m) return '';
+  return ` · real ${hhmm_(m.salida)} → ${m.regreso ? hhmm_(m.regreso) + ` (${minutos_(m.salida, m.regreso)} min)` : '…'}`
+       + (m.por === 'gerencia' ? ' · capturada por gerencia' : '');
+}
+
+// El horario guardado de la semana en curso y el índice del día de hoy.
+function hoyEnHorario_() {
+  const hoy = new Date();
+  const sem = semanaISO(new Date(domingoDeSemanaDe(hoy).getTime() + 86400000));
+  const g = _cache.semanas_guardadas?.[`semana_${sem}`];
+  return g ? { dias: g.dias, d: hoy.getDay(), fecha: fechaLocal_(hoy) } : null;
+}
+
+async function renderPanelLs_(forzar) {
+  const cont = document.getElementById('panel-ls');
+  if (!cont) return;
+  const h = avisosSincronizables_() ? hoyEnHorario_() : null;
+  const quienes = h ? ASESORES.filter(p => !EQUIPO[p].vacante && h.dias[h.d] &&
+                        infoTurno(p, h.dias[h.d][p], h.d).ls1) : [];
+  if (!quienes.length) { cont.style.display = 'none'; return; }
+
+  // Se relee como mucho cada 30 s; el latido de abajo lo pide cada minuto.
+  if (forzar || !_ls.equipo || Date.now() - _ls.equipoHora > 30000) {
+    try {
+      const { data, error } = await _sb.rpc('ley_silla_equipo', { p_store: _tienda.store_id, p_desde: h.fecha, p_hasta: h.fecha });
+      if (error) throw error;
+      if (!data || data.ok !== true) throw new Error((data && data.error) || 'sin respuesta');
+      _ls.equipo = data.marcas || [];
+      _ls.equipoError = '';
+    } catch (e) {
+      _ls.equipo = _ls.equipo || [];
+      _ls.equipoError = (e && e.message) || String(e);
+    }
+    _ls.equipoHora = Date.now();
+  }
+  const marcaDe = (emp, p) => _ls.equipo.find(m => String(m.empno).trim() === emp && m.periodo === p);
+
+  let html = `<div class="tar-panel"><div class="tar-head">🪑 Ley Silla de hoy
+    <small>Plan contra lo que marcó cada asesor · se actualiza cada minuto</small></div>`;
+  if (_ls.equipoError) html += `<div class="tar-nota">⚠ No se pudieron leer las marcas: ${escH_(_ls.equipoError)}</div>`;
+  quienes.forEach(p => {
+    const emp = String(EQUIPO[p].emp || '').trim();
+    const inf = infoTurno(p, h.dias[h.d][p], h.d);
+    html += `<div class="ls-fila"><div class="ls-nom">${escH_(EQUIPO[p].nombre)}</div>`;
+    if (!emp) { html += `<div class="ls-per">Sin número de empleado en Admin → Equipo: no puede marcar.</div></div>`; return; }
+    [[1, inf.ls1], [2, inf.ls2]].forEach(([per, plan]) => {
+      if (!plan) return;
+      const m = marcaDe(emp, per), s = semaforoLs_(plan, m, h.fecha);
+      const clave = emp + '|' + per;
+      html += `<div class="ls-per"><span>${s.c}</span><span class="ls-txt">LS ${per} · plan ${escH_(plan.split(' a ')[0])}${textoMarcaLs_(m)}<br><b>${escH_(s.t)}</b></span>
+        <button onclick="lsAbrirCaptura('${escH_(clave)}')" title="Capturar a mano">✎</button></div>`;
+      if (_ls.abierto === clave) html += `<div class="ls-cap">
+          Salió <input type="time" id="ls-cap-s" value="${m ? hhmm_(m.salida) : escH_(plan.split(' a ')[0])}">
+          Regresó <input type="time" id="ls-cap-r" value="${m && m.regreso ? hhmm_(m.regreso) : ''}">
+          <button onclick="lsCapturar('${escH_(emp)}',${per},false)">Guardar</button>
+          ${m ? `<button class="gris" onclick="lsCapturar('${escH_(emp)}',${per},true)">Borrar</button>` : ''}
+          <button class="gris" onclick="lsAbrirCaptura(null)">Cancelar</button></div>`;
+    });
+    html += `</div>`;
+  });
+  cont.innerHTML = html + '</div>';
+  cont.style.display = '';
+}
+
+function lsAbrirCaptura(clave) { _ls.abierto = clave; renderPanelLs_(); }
+
+async function lsCapturar(emp, periodo, borrar) {
+  const s = document.getElementById('ls-cap-s'), r = document.getElementById('ls-cap-r');
+  if (!borrar && !(s && s.value)) { s && s.focus(); return; }
+  try {
+    const { data, error } = await _sb.rpc('ley_silla_capturar', {
+      p_store: _tienda.store_id, p_fecha: fechaLocal_(new Date()), p_empno: emp, p_periodo: periodo,
+      p_salida: borrar ? null : s.value, p_regreso: borrar ? null : (r.value || null) });
+    if (error) throw error;
+    if (!data || data.ok !== true) throw new Error(data && data.error === 'regreso_antes_de_salida'
+      ? 'El regreso no puede ser antes de la salida.' : ((data && data.error) || 'sin respuesta'));
+    _ls.abierto = null;
+  } catch (e) {
+    _ls.equipoError = 'No se guardó la captura: ' + ((e && e.message) || e);
+  }
+  renderPanelLs_(true);
+}
+
+// Latido del panel: solo con la página a la vista y el panel puesto, y sin
+// pisar una captura a medias.
+setInterval(() => {
+  const cont = document.getElementById('panel-ls');
+  if (document.visibilityState === 'visible' && cont && cont.style.display !== 'none' && !_ls.abierto)
+    renderPanelLs_(true);
+}, 60000);
+
+/* Para el Excel: una hoja aparte con plan y real de la semana. La hoja oficial
+   no se toca —es el formato de la cadena—. Si no se pueden leer las marcas, el
+   Excel sale igual y la hoja lo dice. */
+async function hojaLeySilla_(wb, dom) {
+  if (!avisosSincronizables_() || !_diasActuales) return;
+  const fin = new Date(dom); fin.setDate(fin.getDate() + 6);
+  const ws = wb.addWorksheet('Ley Silla real');
+  ws.columns = [{ width: 12 }, { width: 11 }, { width: 22 }, { width: 8 }, { width: 10 },
+                { width: 9 }, { width: 9 }, { width: 9 }, { width: 34 }, { width: 12 }];
+  ws.addRow(['Fecha', 'Día', 'Asesor', 'Periodo', 'Planeada', 'Salida', 'Regreso', 'Minutos', 'Estado', 'Capturó'])
+    .font = { bold: true };
+  let marcas = [];
+  try {
+    const { data, error } = await _sb.rpc('ley_silla_equipo', {
+      p_store: _tienda.store_id, p_desde: fechaLocal_(dom), p_hasta: fechaLocal_(fin) });
+    if (error) throw error;
+    if (!data || data.ok !== true) throw new Error((data && data.error) || 'sin respuesta');
+    marcas = data.marcas || [];
+  } catch (e) {
+    ws.addRow(['⚠ No se pudieron leer las marcas: ' + ((e && e.message) || e)]);
+    return;
+  }
+  for (let d = 0; d < 7; d++) {
+    const f = new Date(dom); f.setDate(f.getDate() + d);
+    const iso = fechaLocal_(f);
+    ASESORES.forEach(p => {
+      if (EQUIPO[p].vacante) return;
+      const inf = infoTurno(p, _diasActuales[d][p], d);
+      const emp = String(EQUIPO[p].emp || '').trim();
+      [[1, inf.ls1], [2, inf.ls2]].forEach(([per, plan]) => {
+        if (!plan) return;
+        const m = marcas.find(x => x.fecha === iso && String(x.empno).trim() === emp && x.periodo === per);
+        const s = semaforoLs_(plan, m, iso);
+        ws.addRow([iso, DIAS_NOMBRES[d], EQUIPO[p].nombre, per, plan.split(' a ')[0],
+                   m ? hhmm_(m.salida) : '', m && m.regreso ? hhmm_(m.regreso) : '',
+                   m && m.regreso ? minutos_(m.salida, m.regreso) : '',
+                   s.c + ' ' + s.t, m ? (m.por === 'gerencia' ? 'Gerencia' : 'Asesor') : '']);
+      });
+    });
+  }
+}
+
 /* Sin alert(): el mensaje se queda en el renglón de la campana unos segundos. */
 function mostrarAvisoCampana_(msg) {
   const t = document.getElementById('avisos-txt');
@@ -1237,6 +1524,7 @@ function mostrarHorarioEquipo(data) {
                                      data.semanas_guardadas || {})
   };
   renderSemana();
+  cargarLsMias_();
 }
 
 /* ── Datos Supabase ──
@@ -3371,11 +3659,14 @@ function mvDias(persona, dias, comidas, domingo, hoyISO) {
       extras.push(`<span>${t.icono} ${t.nombre}${tareaHecha_(t.id, t.dia) ? ' ✓' : ''}</span>`));
     encargosDe_(persona, d).forEach(e =>
       extras.push(`<span>📌 ${escH_(e.texto)}${e.hecha ? ' ✓' : ''}</span>`));
+    // Los botones de Ley Silla: solo en la tarjeta PROPIA y solo HOY.
+    const ls = (esHoy && persona === quienSoy() && leySillaPosible_() && (inf.ls1 || inf.ls2)) ? lsBloque_(inf) : '';
     out += `<div class="mv-dia${esHoy ? ' mv-hoy' : ''}">
       <div class="mv-fecha">${DIAS_CORTOS[d]}<b>${String(f.getDate()).padStart(2,'0')}</b></div>
       <div>
         <div class="mv-turno ${inf.cls || ''}${puedeTocar_(persona) ? ' editable' : ''}"${puedeTocar_(persona) ? ` onclick="abrirCambioDia('${persona}',${d})"` : ''}>${inf.label || '—'}${marcaCambio_(persona, d)}</div>
         ${extras.length ? `<div class="mv-extra">${extras.join('')}</div>` : ''}
+        ${ls}
       </div>
     </div>`;
   }
@@ -3703,6 +3994,7 @@ function renderSemana() {
        la semana anterior bajo el rótulo de esta. Es el mismo motivo por el que
        aquí se esconden la tabla y el pie. */
     _reparto = []; _tareasCtx = null; renderTareas();
+    renderPanelLs_();   // el de HOY no depende de la semana que se esté viendo
     const fi = new Date(_domingo); fi.setDate(fi.getDate() + 1);
     const ff = new Date(_domingo); ff.setDate(ff.getDate() + 6);
     document.getElementById('badge-semana').textContent =
@@ -3715,6 +4007,7 @@ function renderSemana() {
   _espActual = _cache.excepciones?.[`semana_${_semana}`]?.turno_especial ?? {};
   const comidas = calcularComidas(dias);
   renderTabla(_semana, _domingo, dias, comidas);
+  renderPanelLs_();
 }
 
 /* Guarda `dias` como el horario publicado de la semana `_semana`: el Sáb/Dom
@@ -3927,6 +4220,9 @@ async function exportarExcel() {
 
   // Bordes en toda la rejilla
   for(let rr=6; rr<r; rr++) for(let cc=3; cc<=18; cc++) ws.getCell(rr,cc).border=box;
+
+  // Hoja aparte con la Ley Silla real (la oficial queda tal cual).
+  await hojaLeySilla_(wb, dom);
 
   // Descargar
   const buf  = await wb.xlsx.writeBuffer();
