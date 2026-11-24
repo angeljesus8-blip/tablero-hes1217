@@ -82,12 +82,16 @@ ok('PENDIENTES · agrupa por tienda y quita lo llegado y cancelado',
    correr('JSON.stringify([...trfPendientes()].map(x=>[x[0],x[1].map(a=>a.id)]))'));
 ok('SUMA · tres apartados del mismo SKU = 3 piezas', correr('trfSumar(trfPendientes().get("1187 Parque Delta"))[0].piezas') === 3);
 
-correr('trfMailAbrir("1187 Parque Delta")');
-ok('CORREO · varias piezas nacen sin marcar', correr('_trfMail.sel.size') === 0 && el('trfMailTxt').value === '');
-correr('trfMailSel("2",true)');
-ok('CORREO · solo lo marcado', /Piezas: 1$/m.test(el('trfMailTxt').value), el('trfMailTxt').value);
-correr('trfMailAbrir("1207 Parque Lindavista")');
-ok('CORREO · una sola nace marcada', correr('_trfMail.sel.size') === 1 && /Lindavista/.test(el('trfMailTxt').value));
+correr('trfMailAbrir("2")');
+ok('CORREO · nace marcada solo la de la tarjeta', correr('[..._trfMail.sel].join()') === '2' && /Piezas: 1$/m.test(el('trfMailTxt').value));
+ok('CORREO · ofrece las demás de esa tienda', correr('_trfMail.aps.map(a=>a.id).join()') === '2,1,8', correr('_trfMail.aps.map(a=>a.id).join()'));
+correr('trfMailSel("8",true)');
+ok('CORREO · se suman al mismo', /Piezas: 2$/m.test(el('trfMailTxt').value), el('trfMailTxt').value);
+const conBoton = correr('APARTADOS.filter(a => /trfMailAbrir/.test(cardApartado(a))).map(a=>a.id).join()');
+ok('TARJETA · botón solo en traspasos por llegar', conBoton === '1,2,3,8', conBoton);
+correr('PUEDE_GESTIONAR=false');
+ok('TARJETA · el asesor no lo ve', !/trfMailAbrir/.test(correr('cardApartado(APARTADOS[0])')));
+correr('PUEDE_GESTIONAR=true');
 
 // ── Guardado de varias piezas ──
 (async () => {

@@ -2126,7 +2126,7 @@ function trfPintar(){
 
 /* ── Correo formal ─────────────────────────────────────────────────────
    No se lleva la cuenta de qué se pidió (Ángel, 24-nov-2026: sin
-   confirmaciones). Por eso las piezas nacen DESMARCADAS cuando hay varias: con
+   confirmaciones). Por eso solo nace marcada la pieza de la tarjeta: con
    todo marcado, pedir una nueva volvería a pedir las de ayer. */
 let _trfMail = null;
 /* Con serie ya llegó: no hay nada que pedir. */
@@ -2145,23 +2145,23 @@ function trfPendientes(){
 }
 function trfBloque(){
   if(!PUEDE_GESTIONAR) return '';
-  let h = `<div class="trf-bloque"><button class="trf-btn trf-gris" onclick="trfAbrir('')">🚚 Mis consultas${TRF.lineas.length ? ' (' + TRF.lineas.length + ')' : ''}</button>`;
-  const g = trfPendientes();
-  if(g.size) h += '<h4>✉️ Solicitar traspaso por correo</h4>';
-  [...g.keys()].forEach(o => {
-    h += `<div class="trf-lin"><span>${esc(o)}<small>${trfPzas(g.get(o).length)}</small></span>
-      <button class="trf-btn" data-o="${esc(o)}" onclick="trfMailAbrir(this.dataset.o)">✉️ Solicitar</button></div>`;
-  });
-  return h + '</div>';
+  return `<div class="trf-bloque"><button class="trf-btn trf-gris" onclick="trfAbrir('')">🚚 Mis consultas${TRF.lineas.length ? ' (' + TRF.lineas.length + ')' : ''}</button></div>`;
 }
-function trfMailAbrir(o){
-  const aps = trfPendientes().get(o) || [];
-  if(!aps.length) return;
-  const sola = aps.length === 1;
-  _trfMail = { origen:o, aps:aps, sel:new Set(sola ? [String(aps[0].id)] : []) };
+/* En la tarjeta (24-nov-2026). Abre con ESA pieza marcada; las demás de la misma
+   tienda van debajo, sin marcar, para sumarlas al mismo correo. */
+function trfBotonCorreo(a){
+  if(!PUEDE_GESTIONAR || !trfVivo(a)) return '';
+  return `<button class="btn-apartar btn-pedir" onclick="trfMailAbrir('${a.id}')">✉️ Solicitar traspaso por correo</button>`;
+}
+function trfMailAbrir(id){
+  const a0 = APARTADOS.find(a => String(a.id) === String(id));
+  if(!a0 || !trfVivo(a0)) return;
+  const o = trfOrigen(a0.origen);
+  const aps = [a0].concat((trfPendientes().get(o) || []).filter(a => a !== a0));
+  _trfMail = { origen:o, aps:aps, sel:new Set([String(a0.id)]) };
   document.getElementById('trfMailSub').textContent = o;
   document.getElementById('trfMailLista').innerHTML = aps.map(a => `<label class="ap-toggle">
-    <input type="checkbox" ${sola ? 'checked' : ''} onchange="trfMailSel('${a.id}',this.checked)">
+    <input type="checkbox" ${a === a0 ? 'checked' : ''} onchange="trfMailSel('${a.id}',this.checked)">
     <span>${esc(trfProd(a.sku, a.color))}<br><small>${esc(a.cliente||'')}${a.fecha ? ' · apartado el ' + esc(fechaCortaAp_(a.fecha)) : ''}</small></span></label>`).join('');
   document.getElementById('trfMail').classList.add('show');
   trfMailTexto();
@@ -2458,6 +2458,7 @@ function cardApartado(a){
       <span class="ap-est${cls}">${esc(est)}</span>
     </div>
     ${acciones}
+    ${trfBotonCorreo(a)}
   </div>`;
 }
 

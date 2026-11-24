@@ -5790,8 +5790,8 @@ gerencia confirma → el asesor vende y aparta → gerencia manda el correo form
 - **Tienda obligatoria**, salvo en preventa, que usa el mismo modal.
 - **`trfOrigen`** normaliza la tienda: los apartados viejos traen «Delta» a mano.
 - **No se lleva cuenta de lo solicitado** (sin SQL, decisión de Ángel). Mientras
-  el apartado no tenga serie sigue en la lista; las piezas nacen desmarcadas
-  cuando hay varias, para no volver a pedir las de ayer.
+  el apartado no tenga serie sigue en la lista; el correo se abre desde la
+  tarjeta con SU pieza marcada y las demás de esa tienda sin marcar.
 - **Los correos no se guardan:** Para y CC van vacíos. El repo es público.
 - La lista de consultas es de cada equipo (`hes1217_trf`).
 - Prueba: `pruebas/trf_solicitud.js` (textos aprobados por Ángel, literales).
