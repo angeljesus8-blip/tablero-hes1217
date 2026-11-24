@@ -82,11 +82,13 @@ ok('PENDIENTES · agrupa por tienda y quita lo llegado y cancelado',
    correr('JSON.stringify([...trfPendientes()].map(x=>[x[0],x[1].map(a=>a.id)]))'));
 ok('SUMA · tres apartados del mismo SKU = 3 piezas', correr('trfSumar(trfPendientes().get("1187 Parque Delta"))[0].piezas') === 3);
 
-correr('trfMailAbrir("2")');
-ok('CORREO · nace marcada solo la de la tarjeta', correr('[..._trfMail.sel].join()') === '2' && /Piezas: 1$/m.test(el('trfMailTxt').value));
-ok('CORREO · ofrece las demás de esa tienda', correr('_trfMail.aps.map(a=>a.id).join()') === '2,1,8', correr('_trfMail.aps.map(a=>a.id).join()'));
+correr('APARTADOS[7].cliente="Otro"; trfMailAbrir("2")');
+ok('CORREO · marcadas las de ese cliente', correr('[..._trfMail.sel].join()') === '1,2' && /Piezas: 2$/m.test(el('trfMailTxt').value), correr('[..._trfMail.sel].join()'));
+ok('CORREO · otros clientes plegados', /<details>[\s\S]*Otro/.test(el('trfMailLista').innerHTML));
 correr('trfMailSel("8",true)');
-ok('CORREO · se suman al mismo', /Piezas: 2$/m.test(el('trfMailTxt').value), el('trfMailTxt').value);
+ok('CORREO · se pueden sumar', /Piezas: 3$/m.test(el('trfMailTxt').value), el('trfMailTxt').value);
+correr('APARTADOS[1].telefono="222"; trfMailAbrir("2")');
+ok('CORREO · mismo nombre y otro teléfono es otro cliente', correr('[..._trfMail.sel].join()') === '2');
 const conBoton = correr('APARTADOS.filter(a => /trfMailAbrir/.test(cardApartado(a))).map(a=>a.id).join()');
 ok('TARJETA · botón solo en traspasos por llegar', conBoton === '1,2,3,8', conBoton);
 correr('PUEDE_GESTIONAR=false');

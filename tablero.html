@@ -2126,7 +2126,7 @@ function trfPintar(){
 
 /* ── Correo formal ─────────────────────────────────────────────────────
    No se lleva la cuenta de qué se pidió (Ángel, 24-nov-2026: sin
-   confirmaciones). Por eso solo nace marcada la pieza de la tarjeta: con
+   confirmaciones). Por eso solo nacen marcadas las del cliente: con
    todo marcado, pedir una nueva volvería a pedir las de ayer. */
 let _trfMail = null;
 /* Con serie ya llegó: no hay nada que pedir. */
@@ -2147,8 +2147,7 @@ function trfBloque(){
   if(!PUEDE_GESTIONAR) return '';
   return `<div class="trf-bloque"><button class="trf-btn trf-gris" onclick="trfAbrir('')">🚚 Mis consultas${TRF.lineas.length ? ' (' + TRF.lineas.length + ')' : ''}</button></div>`;
 }
-/* En la tarjeta (24-nov-2026). Abre con ESA pieza marcada; las demás de la misma
-   tienda van debajo, sin marcar, para sumarlas al mismo correo. */
+/* En la tarjeta (24-nov-2026). Abre con las piezas de ESE cliente en esa tienda. */
 function trfBotonCorreo(a){
   if(!PUEDE_GESTIONAR || !trfVivo(a)) return '';
   return `<button class="btn-apartar btn-pedir" onclick="trfMailAbrir('${a.id}')">✉️ Solicitar traspaso por correo</button>`;
@@ -2157,12 +2156,18 @@ function trfMailAbrir(id){
   const a0 = APARTADOS.find(a => String(a.id) === String(id));
   if(!a0 || !trfVivo(a0)) return;
   const o = trfOrigen(a0.origen);
-  const aps = [a0].concat((trfPendientes().get(o) || []).filter(a => a !== a0));
-  _trfMail = { origen:o, aps:aps, sel:new Set([String(a0.id)]) };
-  document.getElementById('trfMailSub').textContent = o;
-  document.getElementById('trfMailLista').innerHTML = aps.map(a => `<label class="ap-toggle">
-    <input type="checkbox" ${a === a0 ? 'checked' : ''} onchange="trfMailSel('${a.id}',this.checked)">
-    <span>${esc(trfProd(a.sku, a.color))}<br><small>${esc(a.cliente||'')}${a.fecha ? ' · apartado el ' + esc(fechaCortaAp_(a.fecha)) : ''}</small></span></label>`).join('');
+  /* Lo normal es un correo por cliente: los suyos van marcados y los de otros
+     clientes, plegados, por si algún día conviene juntarlos. */
+  const suyo = a => trfNorm_(a.cliente) === trfNorm_(a0.cliente) && String(a.telefono||'') === String(a0.telefono||'');
+  const todos = trfPendientes().get(o) || [];
+  const mios = todos.filter(suyo), otros = todos.filter(a => !suyo(a));
+  _trfMail = { origen:o, aps:mios.concat(otros), sel:new Set(mios.map(a => String(a.id))) };
+  document.getElementById('trfMailSub').textContent = o + ' · ' + (a0.cliente || '');
+  const fila = (a, si) => `<label class="ap-toggle">
+    <input type="checkbox" ${si ? 'checked' : ''} onchange="trfMailSel('${a.id}',this.checked)">
+    <span>${esc(trfProd(a.sku, a.color))}<br><small>${si ? '' : esc(a.cliente||'') + ' · '}${a.fecha ? 'apartado el ' + esc(fechaCortaAp_(a.fecha)) : ''}</small></span></label>`;
+  document.getElementById('trfMailLista').innerHTML = mios.map(a => fila(a, true)).join('')
+    + (otros.length ? `<details><summary class="ap-lbl">Agregar de otros clientes (${otros.length})</summary>${otros.map(a => fila(a, false)).join('')}</details>` : '');
   document.getElementById('trfMail').classList.add('show');
   trfMailTexto();
 }
