@@ -2541,6 +2541,19 @@ function generarSemana(semana, historial, excepciones) {
         break;
       }
     }
+    /* Pareja descansa el SÁBADO (26-nov-2026, gerencia): el doble cae el último
+       día de la semana y ya no queda un día después para pagar las 2 h, así
+       que se pagan UN DÍA ANTES (o el anterior más cercano que trabaje sin
+       doble ni compensación ya puesta). Solo en este caso se paga antes. */
+    if (dias[6][ger] === 'doble' && dias[6][partner] === 'descanso'
+        && descExtra[partner] !== 6) {
+      for (let pd = 5; pd >= 0; pd--) {
+        const t = dias[pd][ger];
+        if (['descanso','vacante','doble','comp_apertura','comp_cierre'].includes(t)) continue;
+        dias[pd][ger] = abre(t) ? 'comp_apertura' : 'comp_cierre';
+        break;
+      }
+    }
   }
 
   if (_descMovidos.length) dias._descMovidos = _descMovidos;
