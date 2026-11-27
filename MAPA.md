@@ -61,6 +61,16 @@ tiene que aparecer en algún `RETURNS TABLE` de `login_asesor`.
 guardado en `hes_store` no se actualiza solo. Lo mismo al correr el SQL de
 arriba: la sesión vieja no trae los campos nuevos.
 
+**Límite de intentos y PIN de tienda cerrado (26-nov-2026, v323).** Desde
+`supabase_login_limite.sql`, `login_empleado` es una **puerta**: la función de
+verdad se llama `login_empleado_filas_` (sin permisos) y la puerta bloquea la IP
+15 minutos tras 15 fallos en 10, respondiendo el error `demasiados_intentos`.
+`login_asesor` (el PIN de tienda) ya no tiene permiso: la app cae al camino
+viejo, que la RLS deja vacío. **Nunca repegar `supabase_hoja_auth.sql`**: su
+`DROP` se lleva la puerta sin un error. Y una sesión sin `gas_token` vuelve a
+pedir el número (`queFaltaEnLaSesion`). Es la Fase 0 del plan del login; el
+arreglo de fondo es el PIN personal.
+
 ### Cadena 1-bis · Quién ve qué *(9-ago-2026, v167)*
 
 La sección **🔄 Resurtir** es de gerente y subgerente. Pedirle mercancía al CD

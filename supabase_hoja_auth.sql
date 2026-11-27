@@ -1,4 +1,8 @@
 -- ============================================================
+-- ⛔ NO VOLVER A PEGAR (26-nov-2026). Su DROP de `login_empleado` se llevaría
+--    la puerta con límite de intentos de supabase_login_limite.sql, sin un
+--    solo error, y reabriría el PIN de tienda. Se queda como historia.
+-- ============================================================
 -- El login debe entregar hoja_auth y sheet_url
 -- APLICADO EN PRODUCCIÓN el 2-ago-2026. Ver "Lo que salió" abajo.
 -- ============================================================
