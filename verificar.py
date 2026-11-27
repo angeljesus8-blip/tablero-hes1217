@@ -1828,7 +1828,7 @@ def r_pruebas():
                'horario_solo_mio.js', 'horario_sesion_ajena.js', 'tareas_rotacion.js',
                'tareas_asignadas.js',
                'comisiones_solo_mia.js',
-               'login_por_correo.js', 'admin_sesion_ajena.js',
+               'login_por_correo.js', 'login_limite.js', 'admin_sesion_ajena.js',
                'mrfix_corregir.js', 'cea_precio_nuevo.js', 'cea_vigencia.js',
                'concurso_oro_plata.js', 'admin_preventa.js',
                'lector_etiqueta.js', 'venta_borrar.js',
@@ -2343,8 +2343,11 @@ def r_candado_anon():
     casa en el cuerpo, con los comentarios quitados."""
     ESCRIBE = re.compile(r'\b(?:INSERT\s+INTO|DELETE\s+FROM|UPDATE)\s+[\w"]', re.I)
     CLIENTE = re.compile(r'\b(cliente|telefono)\s+text\b', re.I)
+    # `login_bloqueos`: `login_empleado` escribe (anota los fallos) y NO puede
+    # pedir token, porque es la función que lo entrega. Su defensa es el límite
+    # de intentos por IP (supabase_login_limite.sql, 26-nov-2026; odemás igual).
     CANDADO = re.compile(r'\b(escritura_ok_|candado_ok_|admin_de|puede_admin|'
-                         r'tecnico_ok_)\s*\(|auth\.uid\s*\(|\.gas_token\b', re.I)
+                         r'tecnico_ok_)\s*\(|auth\.uid\s*\(|\.gas_token\b|\blogin_bloqueos\b', re.I)
     DEF = re.compile(r'CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+public\.(\w+)\s*\(', re.I)
 
     archivos = {}

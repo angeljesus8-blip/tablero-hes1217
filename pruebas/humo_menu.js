@@ -43,8 +43,11 @@ const queFalta = caja.__f;
 
 const EQUIPO = ['Jorge Medina Rejón', 'Luis de Jesús Ortega Vidal',
                 'Elena Navarro Gálvez', 'María Fuentes Bravo', 'Ana Ramírez Solís'];
-const conLista = { store_id:'1217', vendedores:EQUIPO };
-const sinLista = { store_id:'1217', vendedores:[] };
+// La llave es de mentira: este repo es público.
+const conLista = { store_id:'1217', vendedores:EQUIPO, gas_token:'llave-de-prueba' };
+const sinLista = { store_id:'1217', vendedores:[],     gas_token:'llave-de-prueba' };
+// Una sesión de antes del 1-ago-2026: todo, menos la llave (26-nov-2026).
+const sinLlave = { store_id:'1217', vendedores:EQUIPO };
 const EMP = JSON.stringify({ empno:'1000004', nombre:'Jorge Medina Rejón' });
 
 /* Se comprueba QUÉ dice que falta, no solo si falta algo: ese texto es lo que
@@ -58,6 +61,8 @@ const CASOS = [
   ['asesor sin ninguna de las dos cosas',           sinLista, 'asesor',   null,             'quién entró y la lista del equipo'],
   ['asesor con el empleado guardado a medias',      conLista, 'asesor',   '{"empno":"1"}',  'quién entró'],
   ['asesor con el empleado ilegible',               conLista, 'asesor',   '{roto',          'quién entró'],
+  ['asesor con sesión vieja, sin la llave',         sinLlave, 'asesor',   EMP,              'la llave de la tienda'],
+  ['asesor sin quién entró ni la llave',            sinLlave, 'asesor',   null,             'quién entró y la llave de la tienda'],
   ['gerente: entra con su correo, no se le pide',   sinLista, 'gerente',  null,             ''],
 ];
 
